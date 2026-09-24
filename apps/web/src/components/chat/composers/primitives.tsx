@@ -1,5 +1,6 @@
 "use client";
 
+import { useLayoutEffect, useRef } from "react";
 import { Mic, SkipForward, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InputSemantics } from "./input-semantics";
@@ -63,6 +64,24 @@ export function modKeyLabel(): string {
   if (typeof navigator === "undefined") return "⌘";
   return /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent) ? "⌘" : "Ctrl+";
 }
+
+/**
+ * The dictation shortcut: M, whenever the respondent is not typing.
+ *
+ * Plain M, because it is the one people guess. It stands down inside any text
+ * field (or anything editable), where an M is a letter of the answer, and with
+ * a modifier held, so Cmd+M and friends keep meaning what the system says.
+ */
+export function isDictateShortcut(e: KeyboardEvent): boolean {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.repeat) return false;
+  if (e.code !== "KeyM" && e.key.toLowerCase() !== "m") return false;
+  const el = e.target as HTMLElement | null;
+  if (el?.isContentEditable) return false;
+  const tag = el?.tagName;
+  return tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT";
+}
+
+export const DICTATE_KEY = "M";
 
 /**
  * A button that must not take the caret off the message box.
@@ -267,10 +286,13 @@ export function SendRow({
 export function DictateButton({
   listening,
   onToggle,
+  shortcut,
   className,
 }: {
   listening: boolean;
   onToggle: () => void;
+  /** The key that toggles it, drawn beside the mic where there is a keyboard. */
+  shortcut?: string;
   className?: string;
 }) {
   return (
@@ -280,8 +302,13 @@ export function DictateButton({
       onMouseDown={keepFocus}
       aria-pressed={listening}
       aria-label={listening ? "Stop dictating" : "Dictate your answer"}
+      aria-keyshortcuts={shortcut ? DICTATE_KEY : undefined}
+      title={shortcut ? `${listening ? "Stop dictating" : "Dictate"} (${shortcut})` : undefined}
       className={cn(
-        "inline-flex size-9 items-center justify-center rounded-full",
+        // One pill, key and mic together, so the M reads as this button's key
+        // rather than a stray label beside it. Where `kbd-hint` draws nothing
+        // (no keyboard), `min-w-9` keeps it the round 36px button it was.
+        "inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-full px-2",
         "transition-[background-color,opacity] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
         listening
           ? "bg-[color-mix(in_oklch,var(--cf-accent)_14%,transparent)] text-[var(--cf-accent)]"
@@ -289,6 +316,7 @@ export function DictateButton({
         className,
       )}
     >
+      {shortcut && <KeyHint className="w-auto min-w-4 px-1">{shortcut}</KeyHint>}
       {listening ? (
         <span className="relative flex size-4 items-center justify-center">
           {/* The one thing in the composer that moves on its own: an open
@@ -312,6 +340,7 @@ export function TextInput({
   autoFocus,
   multiline,
   trailing,
+  trailingHasHint,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -327,11 +356,16 @@ export function TextInput({
   multiline?: boolean;
   /** A control drawn inside the box at its trailing edge — the mic. */
   trailing?: React.ReactNode;
+  /** The trailing control also shows a key hint, so it is wider where hints are drawn. */
+  trailingHasHint?: boolean;
 }) {
+  const growRef = useAutoGrow(multiline ? value : null);
   const shared = cn(
     "w-full rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 py-3 text-[0.9375rem] outline-none transition-colors placeholder:opacity-50 focus:border-[var(--cf-accent)]",
-    // Room for the trailing control, so text never runs underneath it.
+    // Room for the trailing control, so text never runs underneath it. Wider
+    // exactly where `kbd-hint` draws the key beside the mic.
     trailing && "pr-12",
+    trailing && trailingHasHint && "[@media(hover:hover)_and_(pointer:fine)]:pr-[4.5rem]",
   );
 
   /* Enter sends here, so the phone's return key should say so rather than
@@ -350,6 +384,7 @@ export function TextInput({
   if (multiline) {
     const box = (
       <textarea
+        ref={growRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
@@ -360,18 +395,25 @@ export function TextInput({
             onSubmit();
           }
         }}
-        rows={3}
+        /*
+          One line to start, the same height as every other answer box, and
+          taller only as the words need it. It opened at three rows, which
+          made a long-text question look unlike every other one and left Skip
+          and Send floating level with its bottom edge rather than its text.
+        */
+        rows={1}
         inputMode={semantics.inputMode}
         {...shell}
-        className={cn(shared, "resize-none")}
+        className={cn(shared, "block max-h-48 min-h-11 resize-none py-[0.6875rem] leading-[1.375rem]")}
       />
     );
     if (!trailing) return box;
-    // Pinned to the last line, beside where the words are landing.
+    // Pinned to the last line, beside where the words are landing. Four pixels
+    // from the bottom centres the 36px mic in the 44px single-line box.
     return (
       <div className="relative">
         {box}
-        <div className="absolute right-1.5 bottom-1.5">{trailing}</div>
+        <div className="absolute right-1 bottom-1">{trailing}</div>
       </div>
     );
   }
@@ -399,4 +441,21 @@ export function TextInput({
       <div className="absolute inset-y-0 right-1 flex items-center">{trailing}</div>
     </div>
   );
+}
+
+/**
+ * A textarea that is as tall as its text, up to its CSS `max-height`.
+ *
+ * Measured rather than `field-sizing: content`, which Firefox and older Safari
+ * ignore and would leave at one row with a scrollbar.
+ */
+function useAutoGrow(value: string | null) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || value === null) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`;
+  }, [value]);
+  return ref;
 }

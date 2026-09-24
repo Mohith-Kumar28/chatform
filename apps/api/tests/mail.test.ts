@@ -373,6 +373,44 @@ describe("submission notifications", () => {
     expect(sent[0]!.html).not.toContain("{{form.title}}");
   });
 
+  /**
+   * The same offer the form's own ending makes, for whoever closed that tab: a
+   * quiet link back to the form, and only where the form would take another
+   * response. Offering it on a one-response form would send people to a
+   * "you have already answered" wall.
+   */
+  it("links back to the form for another response, only where the form allows one", async () => {
+    const slug = (await env.DB.prepare(`SELECT slug FROM forms WHERE id = ?`).bind(t.formId).first<{ slug: string }>())!.slug;
+
+    await publish(DOC);
+    await seedResponse("sbm_mail_again_yes");
+    const open = captureBinding();
+    await runMailJob(withMail({ EMAIL: open.binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_again_yes",
+      isTest: false,
+    });
+    expect(open.sent[0]!.html).toContain("Submit another response");
+    expect(open.sent[0]!.html).toContain(`/f/${slug}"`);
+    expect(open.sent[0]!.text).toContain(`Submit another response: `);
+
+    await publish({ ...DOC, settings: { ...(DOC as { settings?: object }).settings, allowResubmissions: false } });
+    await seedResponse("sbm_mail_again_no");
+    const once = captureBinding();
+    await runMailJob(withMail({ EMAIL: once.binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_again_no",
+      isTest: false,
+    });
+    expect(once.sent).toHaveLength(1);
+    expect(once.sent[0]!.html).not.toContain("Submit another response");
+    expect(once.sent[0]!.text).not.toContain("Submit another response");
+  });
+
   it("leaves the answers out when the author switches the summary off", async () => {
     await publish({
       ...DOC,

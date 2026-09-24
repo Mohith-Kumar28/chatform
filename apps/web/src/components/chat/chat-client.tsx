@@ -26,7 +26,7 @@ import { asEmail } from "./respondent-hint";
 import { VerifyCard } from "./verify-card";
 import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
 import { useChat, type ChatMessage } from "./use-chat";
-import { DictateButton, KeyHint, SendRow, TextInput, keepFocus, modKeyLabel } from "./composers/primitives";
+import { DictateButton, KeyHint, SendRow, TextInput, DICTATE_KEY, isDictateShortcut, keepFocus, modKeyLabel } from "./composers/primitives";
 import { useDictation } from "@/hooks/use-dictation";
 import { FREE_TEXT, inputSemanticsFor } from "./composers/input-semantics";
 import { PhoneInput } from "./composers/phone";
@@ -2165,6 +2165,22 @@ const Composer = memo(function Composer({
     stopDictation();
   }, [block?.ref, stopDictation]);
 
+  // M starts and stops the mic when the respondent is not typing. See `isDictateShortcut`.
+  const toggleDictation = dictation.toggle;
+  // `status` rather than `disabled`, which is declared below the early returns.
+  const canDictate = dictation.supported && status !== "error" && !isPhone;
+  useEffect(() => {
+    if (!canDictate) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!isDictateShortcut(e)) return;
+      e.preventDefault();
+      setMicError(null);
+      toggleDictation();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canDictate, toggleDictation]);
+
   /** Everything remembered for this question except whatever is already typed. */
   const alternatives = suggestions.filter((s) => s !== text);
 
@@ -2404,9 +2420,11 @@ const Composer = memo(function Composer({
             /* Nothing where the browser has no recogniser — a mic that cannot
                listen is worse than no mic. Not on the phone field, which
                takes digits a recogniser would spell out as words. */
+            trailingHasHint
             trailing={
               dictation.supported && !disabled ? (
                 <DictateButton
+                  shortcut={DICTATE_KEY}
                   listening={dictation.listening}
                   onToggle={() => {
                     setMicError(null);

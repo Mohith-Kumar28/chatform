@@ -156,6 +156,19 @@ export function SettingsPanel({
               >
                 <FormNameField title={formTitle ?? ""} onChange={onTitleChange} />
               </SettingRow>
+              {/*
+                The name in the chat header, when it should not be the form's.
+                It lived in the Agent tab's persona section, but it is a label
+                on the page, not something the agent says or does.
+              */}
+              <SettingRow label="Chat header name" description="Leave empty to show the form name." stacked>
+                <BufferedInput
+                  value={settings.agent.displayName ?? ""}
+                  placeholder={formTitle}
+                  maxLength={60}
+                  onCommit={(v) => patch({ agent: { ...settings.agent, displayName: v.trim() || undefined } })}
+                />
+              </SettingRow>
             </SettingGroup>
           </SettingSection>
         )}

@@ -73,7 +73,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 21;
+export const DEMO_REVISION = 22;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -467,7 +467,13 @@ export const DEMO_FORM = buildAuthoredDoc({
     },
 
     agent: {
-      mode: "ai",
+      /*
+       * Hybrid, like every form since the answer gate: the questions below are
+       * asked as written and a plain answer moves on at once, with no model turn
+       * in between. The agent still steps in the moment someone asks it
+       * something, which is the part of the demo that sells.
+       */
+      mode: "hybrid",
       tone: "friendly",
       /*
        * Named for what it is, because this string is the header.

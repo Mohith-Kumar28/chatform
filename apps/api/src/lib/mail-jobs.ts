@@ -598,6 +598,13 @@ async function meterEmail(env: Bindings, orgId: string, n = 1): Promise<void> {
   }
 }
 
+/** The form's link for another response, or null where it would not take one (or has no slug). */
+async function submitAgainUrl(env: Bindings, doc: FormDoc, origin: string, formId: string): Promise<string | null> {
+  if (doc.settings.allowResubmissions === false) return null;
+  const slug = await slugOf(env, formId);
+  return slug ? `${origin}/f/${encodeURIComponent(slug)}` : null;
+}
+
 /** The form's public slug, for the resume link. */
 async function slugOf(env: Bindings, formId: string): Promise<string> {
   const row = await env.DB.prepare(`SELECT slug FROM forms WHERE id = ?`)
@@ -768,6 +775,13 @@ async function runSubmissionJob(
          */
         ...(autoReply.includeAnswers ? { answers: lines } : {}),
         showPoweredBy: !doc.settings.branding?.hidePoweredBy,
+        /*
+         * Only where the form takes another response from the same person, so
+         * the email never offers what the form would then refuse. The slug is
+         * read here rather than joined above: it is the one field this needs
+         * and the query is shared with the owner's notification.
+         */
+        submitAgainUrl: await submitAgainUrl(env, doc, origin, job.formId),
       });
       try {
         // Replies reach the form's owner, where they gave us an address to use.
