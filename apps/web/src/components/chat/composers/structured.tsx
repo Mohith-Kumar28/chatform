@@ -345,7 +345,7 @@ export function RankingComposer({
           ? order.length > 1
             ? "Tap in order, best first · drag a handle to rearrange."
             : "Tap in order, best first."
-          : "All ranked — drag a handle to rearrange."}
+          : "All ranked. Drag a handle to rearrange."}
       </p>
 
       <button
@@ -645,7 +645,7 @@ export function GroupComposer({
                   : String(v);
             return [`${f.label}: ${text}`];
           });
-          return `${itemLabel} ${i + 1} — ${parts.join(", ")}`;
+          return `${itemLabel} ${i + 1}: ${parts.join(", ")}`;
         })
         .join(" · "),
     );

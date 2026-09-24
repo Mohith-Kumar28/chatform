@@ -55,7 +55,6 @@ import { cn } from "@/lib/utils";
 export function TemplateDetail({ slug }: { slug: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [expanded, setExpanded] = useState(false);
 
   const { data, isLoading, error } = useGetApiTemplatesBySlug(slug, {
     query: { queryKey: getGetApiTemplatesBySlugQueryKey(slug), staleTime: 5 * 60_000 },
@@ -99,6 +98,7 @@ export function TemplateDetail({ slug }: { slug: string }) {
   // it a second time in the browser would buy nothing and cost every visitor
   // the schema.
   const doc = detail.doc as FormDoc;
+  const onUse = () => use.mutate({ slug });
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
@@ -110,14 +110,52 @@ export function TemplateDetail({ slug }: { slug: string }) {
         All templates
       </Link>
 
-      <TemplateHero
-        detail={detail}
-        doc={doc}
-        pending={use.isPending}
-        onUse={() => use.mutate({ slug })}
-      />
+      <TemplateHero detail={detail} doc={doc} action={<UseButton pending={use.isPending} onUse={onUse} />} />
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+      <TemplatePanes doc={doc} title={detail.title} className="mt-8" />
+
+      <div className="border-border mt-8 flex flex-wrap items-center justify-between gap-4 border-t pt-6">
+        <p className="text-muted-foreground text-sm">
+          Start from this and change anything — questions, wording, routes, endings.
+        </p>
+        <UseButton pending={use.isPending} onUse={onUse} />
+      </div>
+
+      <Related category={detail.category} slug={slug} />
+    </div>
+  );
+}
+
+/**
+ * The two panes — the conversation and the flow — with the full-screen flow
+ * dialog behind "Expand".
+ *
+ * Exported on its own because the public template pages and the use-case
+ * guides show exactly this, and a second drawing of "what this template asks"
+ * would drift from the one the app shows the moment a template changed.
+ */
+export function TemplatePanes({
+  doc,
+  title,
+  className,
+}: {
+  doc: FormDoc;
+  title: string;
+  className?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      {/* An explicit `minmax(0,1fr)` below `lg` too: an implicit grid column
+          sizes to its widest child, and on a phone that was a condition chip,
+          which pushed the conversation pane off the right edge of the screen. */}
+      <div
+        className={cn(
+          "grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]",
+          className,
+        )}
+      >
         <Conversation doc={doc} />
 
         {/* Sticky, because the list beside it is the long column: scrolling to
@@ -141,39 +179,38 @@ export function TemplateDetail({ slug }: { slug: string }) {
         </div>
       </div>
 
-      <div className="border-border mt-8 flex flex-wrap items-center justify-between gap-4 border-t pt-6">
-        <p className="text-muted-foreground text-sm">
-          Start from this and change anything — questions, wording, routes, endings.
-        </p>
-        <UseButton pending={use.isPending} onUse={() => use.mutate({ slug })} />
-      </div>
-
-      <Related category={detail.category} slug={slug} />
-
       <Dialog open={expanded} onOpenChange={setExpanded}>
         <DialogContent size="full" layout="panel">
           <DialogHeader className="border-border border-b p-4">
-            <DialogTitle className="font-display text-base">{detail.title} — flow</DialogTitle>
+            <DialogTitle className="font-display text-base">{title} — flow</DialogTitle>
           </DialogHeader>
           <div className="min-h-0 flex-1 p-4">
             <TemplateFlow doc={doc} height="fill" />
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
 
-function TemplateHero({
+/**
+ * The header: icon, title, blurb, what it costs to answer, and one action.
+ *
+ * `heading` overrides the h1 for the public page, where the title has to be
+ * the phrase somebody searched ("Client intake form template") rather than
+ * the catalogue's own short name. `action` is whatever that surface can do —
+ * create the form in the app, sign up first on the marketing site.
+ */
+export function TemplateHero({
   detail,
   doc,
-  pending,
-  onUse,
+  action,
+  heading,
 }: {
   detail: TemplateDetailPayload;
   doc: FormDoc;
-  pending: boolean;
-  onUse: () => void;
+  action: React.ReactNode;
+  heading?: string;
 }) {
   const accent = templateAccent(detail.category, detail.accent, detail.icon);
   const Icon = accent.icon;
@@ -201,7 +238,7 @@ function TemplateHero({
           <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
             {detail.category}
           </p>
-          <h1 className="text-h1 font-display mt-0.5">{detail.title}</h1>
+          <h1 className="text-h1 font-display mt-0.5">{heading ?? detail.title}</h1>
           <p className="text-muted-foreground text-body mt-2 leading-relaxed">
             {detail.blurb || detail.description}
           </p>
@@ -230,7 +267,7 @@ function TemplateHero({
         </div>
       </div>
 
-      <UseButton pending={pending} onUse={onUse} />
+      {action}
     </div>
   );
 }

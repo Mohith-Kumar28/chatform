@@ -1,12 +1,14 @@
 import { Hono, type Context } from "hono";
 import { APICallError } from "ai";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../lib/validator.js";
 import { z } from "zod";
 import { FormDoc, buildFlowRules, lintFormDoc, hasErrors, migrateFormDoc, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, assertFormAccess, keyOwnsForm, type GuardVars } from "../lib/guards.js";
 import { requirePermission, requireQuota, requireGauge, type AuthzVars } from "../lib/authorize.js";
 import { meter } from "../lib/entitlements.js";
+import { isInternalCall } from "../lib/internal-call.js";
 import {
   generateFormDraft,
   generateEdit,
@@ -17,7 +19,9 @@ import {
   clarifyRequest,
   isSchemaRejection,
   clampDraft,
+  newTrace,
   MODELS,
+  type AiTrace,
   type GenerationDraft,
   type TokenUsage,
   addUsage,
@@ -122,6 +126,16 @@ interface Generated {
 }
 
 /**
+ * Where an AI action came from, for the `source` its calls carry to Langfuse.
+ * The MCP server re-enters this app with the internal marker, so it is told
+ * apart from a customer's own `/v1` key by that, not by the path.
+ */
+function callSource(c: { req: { path: string; header(name: string): string | undefined } }): string {
+  if (isInternalCall(c)) return "mcp";
+  return c.req.path.startsWith("/v1/") ? "api" : "dashboard";
+}
+
+/**
  * Turn a draft into a document, retrying once with the linter's complaints fed
  * back in. Shared by both generation routes.
  */
@@ -130,6 +144,7 @@ async function generateWithRetry(opts: {
   /** Carried only so the call reaches OpenRouter tagged with who is paying. */
   organizationId?: string | null;
   formId?: string | null;
+  trace?: AiTrace;
   prompt: string;
   /** Undefined means "you decide" — see `GenerateBody`. */
   questionCount?: number;
@@ -164,12 +179,14 @@ async function generateWithRetry(opts: {
             onBlock: opts.onBlock,
             organizationId: opts.organizationId,
             formId: opts.formId,
+            trace: opts.trace,
           })
         : await generateFormDraft({
             env: opts.env,
             system: FORM_DESIGNER_SYSTEM,
             prompt,
             organizationId: opts.organizationId,
+            trace: opts.trace,
           });
       draft = result.draft;
       tokens += result.tokens;
@@ -267,12 +284,15 @@ export const generateFormHandler = async (c: AiCtx) => {
     const { prompt: rawPrompt, questionCount, clarifications } = validBody<z.infer<typeof GenerateBody>>(c);
     const prompt = withClarifications(rawPrompt, clarifications ?? []);
 
-    const research = await researchFor(c.env, prompt, c.get("orgId"));
+    // One Langfuse trace for the whole generation: research, draft, any retry.
+    const trace = newTrace("generate_form", c.get("userId"), callSource(c));
+    const research = await researchFor(c.env, prompt, c.get("orgId"), trace);
     try {
       const started = Date.now();
       const { doc, issues, tokens, usage, model } = await generateWithRetry({
         env: c.env,
         organizationId: c.get("orgId"),
+        trace,
         prompt,
         questionCount,
         research: research.brief,
@@ -399,6 +419,7 @@ export async function clarifyFormHandler(c: AiCtx) {
       prompt,
       system: CLARIFY_SYSTEM,
       organizationId: c.get("orgId"),
+      trace: { userId: c.get("userId"), source: callSource(c) },
     });
     const orgId = c.get("orgId");
     if (orgId && usage.input + usage.output > 0) {
@@ -420,13 +441,14 @@ async function researchFor(
   env: Bindings,
   prompt: string,
   organizationId?: string | null,
+  trace?: AiTrace,
 ): Promise<{ brief: { brief: string; sources: string[] } | null; urls: string[]; tokens: number; usage: TokenUsage }> {
   const none = NO_USAGE;
   const urls = extractUrls(prompt);
   if (urls.length === 0) return { brief: null, urls, tokens: 0, usage: none };
   const sites = await readSites(urls);
   if (sites.length === 0) return { brief: null, urls, tokens: 0, usage: none };
-  const brief = await researchBrief({ env, request: prompt, sites, organizationId });
+  const brief = await researchBrief({ env, request: prompt, sites, organizationId, trace });
   return {
     brief: brief ? { brief: brief.brief, sources: brief.sources } : null,
     urls,
@@ -495,6 +517,8 @@ aiRouter.post(
     }
     const userId = c.get("userId") as string;
     const orgId = c.get("orgId");
+    // One Langfuse trace for the whole generation: research, draft, any retry.
+    const trace = newTrace("generate_form", userId, callSource(c));
 
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
     const writer = writable.getWriter();
@@ -530,7 +554,7 @@ aiRouter.post(
           if (sites.length > 0) {
             await send("sources", { pages: sites.map((s) => ({ url: s.url, title: s.title })) });
             await stage("researching", "start");
-            const brief = await researchBrief({ env: c.env, request: prompt, sites, organizationId: orgId });
+            const brief = await researchBrief({ env: c.env, request: prompt, sites, organizationId: orgId, trace });
             if (brief) {
               research = { brief: brief.brief, sources: brief.sources };
               researchTokens = brief.tokens;
@@ -554,6 +578,7 @@ aiRouter.post(
         const { doc, issues, tokens, usage: genUsage, model: genModel } = await generateWithRetry({
           env: c.env,
           organizationId: orgId,
+          trace,
           prompt,
           questionCount,
           research,
@@ -729,6 +754,8 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
       return { status: 503, body: { error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } } };
     }
   const { formId, prompt, history } = validBody<z.infer<typeof EditFormBody>>(c);
+  // One Langfuse trace for the whole edit: tool loop, review, any retry.
+  const trace = newTrace("edit_form", c.get("userId"), callSource(c));
     /**
      * `formId` arrives in the body, so path middleware cannot guard it — check here.
      *
@@ -823,6 +850,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
           tools: buildEditTools(ctx, (o) => outcomes.push(o)),
           organizationId: c.get("orgId"),
           formId,
+          trace,
           // `finish_edit` is the model checking its own work, so it is the one
           // tool call worth a different word on screen.
           onStep: ({ toolNames }) =>
@@ -864,6 +892,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
           prompt: buildEditPrompt(base, prompt, history as BuilderTurn[]),
           organizationId: c.get("orgId"),
           formId,
+          trace,
         });
         draft = result.draft;
         tokens = result.tokens;
@@ -951,6 +980,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
         diff: describeEditChanges(base, attempt),
         organizationId: c.get("orgId"),
         formId,
+        trace,
       });
       tokens += reviewTokens;
       usage = addUsage(usage, reviewUsage);
@@ -977,6 +1007,8 @@ Answer the same request again, addressing that.`,
             tools: buildEditTools(retryCtx, () => {}),
             organizationId: c.get("orgId"),
             formId,
+            kind: "edit_retry",
+            trace,
           });
           tokens += retry.tokens;
           usage = addUsage(usage, retry.usage);
@@ -1021,6 +1053,8 @@ Answer the same request again, addressing that.`,
           prompt: buildEditPrompt(base, feedback, history as BuilderTurn[]),
           organizationId: c.get("orgId"),
           formId,
+          kind: "edit_retry",
+          trace,
         });
         tokens += retry.tokens;
         usage = addUsage(usage, retry.usage);

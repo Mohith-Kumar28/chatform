@@ -13,6 +13,7 @@
     "test": "vitest run",
     "check:schemas": "tsx scripts/check-model-schemas.ts",
     "bench:edit": "tsx scripts/bench-edit.ts",
+    "eval:gate": "tsx scripts/eval-answer-gate.ts",
     "test:watch": "vitest",
     "gen:openapi": "tsx scripts/gen-openapi.ts"
   },
@@ -29,6 +30,7 @@
     "@repo/db": "workspace:*",
     "@repo/entitlements": "workspace:*",
     "@repo/form-schema": "workspace:*",
+    "@repo/guard": "workspace:*",
     "@scalar/hono-api-reference": "^0.11.16",
     "ai": "^7.0.77",
     "better-auth": "^1.7.2",

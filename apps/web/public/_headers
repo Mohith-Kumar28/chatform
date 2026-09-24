@@ -1,0 +1,35 @@
+# Served by Cloudflare Workers Assets. `public/` lands flat in `.open-next/assets`,
+# so this file ships as `.open-next/assets/_headers`.
+#
+# Without it Workers Assets serves everything `public, max-age=0, must-revalidate`,
+# which revalidates content-hashed bundles on every repeat visit. Next fingerprints
+# everything under `/_next/static/`, so those are safe to pin forever.
+#
+# This cannot live in next.config.ts. Workers Assets matches before the worker
+# runs, so `headers()` there never sees a request for `/_next/static` or for
+# anything out of `public/` — which is why the `Access-Control-Allow-Origin`
+# that file declares for `/embed.js` has never actually been sent. Verified
+# live: the response carried no CORS header and `max-age=0`.
+
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The embed loader. A live contract with pages we do not control, so a stale
+# copy on somebody else's site is a bug we cannot deploy our way out of — this
+# stays short. The CORS header is the one next.config.ts has been promising and
+# not delivering; a cross-origin `fetch` or module import of it needs it.
+/embed.js
+  Cache-Control: public, max-age=300, must-revalidate
+  Access-Control-Allow-Origin: *
+
+/brand/*
+  Cache-Control: public, max-age=604800
+
+/favicon.ico
+  Cache-Control: public, max-age=604800
+
+/icon.svg
+  Cache-Control: public, max-age=604800
+
+/og.jpg
+  Cache-Control: public, max-age=604800

@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "appointment-booking-form",
   name: "Appointment booking",
+  keyword: "Appointment booking form",
   group: "Fill your calendar",
   audience: "Salons, clinics, tutors, coaches, garages — anyone with a diary",
   navBlurb: "Take bookings from a link or a QR code, with the details you need before they arrive.",
@@ -110,7 +111,7 @@ Keep the tone warm and unfussy, the way you would talk to someone at the desk. I
   steps: [
     {
       title: "Open chatform and make an account",
-      body: "Go to chatform.in and sign up. It takes about thirty seconds, there is no card, and the free plan is genuinely free — unlimited forms, unlimited bookings.",
+      body: "Go to chatform.in and sign up. It takes about thirty seconds, there is no card, and the free plan is genuinely free, with unlimited bookings.",
     },
     {
       title: "Describe the booking form in your own words",

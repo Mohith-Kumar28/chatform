@@ -24,6 +24,7 @@ import type { ChatState } from "./chat-client";
 export type ScreenState = Pick<
   ChatState,
   | "messages"
+  | "pollResults"
   | "question"
   | "review"
   | "submitted"
@@ -34,6 +35,7 @@ export type ScreenState = Pick<
   | "answering"
   | "resolving"
   | "rateLimited"
+  | "closed"
   | "resumed"
   | "auth"
   | "verify"
@@ -62,6 +64,8 @@ export interface ChatSnapshotV1 {
   capturedAt: number;
   config: PublicFormConfig;
   messages: ScreenState["messages"];
+  /** Optional: a report filed before polls existed, or a form with none, has no bars to replay. */
+  pollResults?: ScreenState["pollResults"];
   question: ScreenState["question"];
   review: ScreenState["review"];
   ending: ScreenState["ending"];
@@ -94,6 +98,7 @@ export function captureSnapshot(config: PublicFormConfig, chat: ChatState): Chat
     config,
     state: {
       messages: chat.messages.map((m) => ({ ...m, streaming: false, optimistic: false })),
+      pollResults: chat.pollResults,
       question: chat.question,
       review: chat.review,
       submitted: chat.submitted,
@@ -104,6 +109,13 @@ export function captureSnapshot(config: PublicFormConfig, chat: ChatState): Chat
       answering: chat.answering,
       resolving: false,
       rateLimited: chat.rateLimited,
+      /*
+        Always null in practice: the closed screen has no "Report a bug" link,
+        so there is no way to capture from it. Carried anyway so the replay is
+        a complete `ScreenState` rather than one with a hole the console has to
+        know about.
+      */
+      closed: chat.closed,
       resumed: chat.resumed,
       auth: chat.auth,
       verify: chat.verify ? { ...chat.verify, devCode: undefined } : null,
@@ -138,9 +150,13 @@ const noopAsync = async () => {};
 export function toChatState(snapshot: ChatSnapshot): ChatState {
   const state: ScreenState =
     snapshot.v === 2
-      ? snapshot.state
+      ? // `closed` was added after v2 shipped, so a report filed before it has
+        // no such field — and `undefined` there would make `chat-client` draw
+        // the closed screen over somebody's replayed conversation.
+        { ...snapshot.state, closed: snapshot.state.closed ?? null }
       : {
           messages: snapshot.messages,
+          pollResults: snapshot.pollResults ?? {},
           question: snapshot.question,
           review: snapshot.review,
           ending: snapshot.ending,
@@ -152,6 +168,7 @@ export function toChatState(snapshot: ChatSnapshot): ChatState {
           answering: false,
           resolving: false,
           rateLimited: null,
+          closed: null,
           resumed: false,
           auth: snapshot.auth
             ? {

@@ -8,7 +8,7 @@ export const MARKETING: TemplateSeed[] = [
     icon: "ListOrdered",
     description: "Collect signups, segment by platform, and find your first testers.",
     blurb:
-      "An email address alone gives you a number to announce and nothing to act on. This asks what someone is waiting for and which platform they are on, then follows that answer down its own path — so launch day starts with a list already sorted into the builds you have to ship.",
+      "An email address alone gives you a number to announce and nothing to act on. This asks what someone is waiting for and which platform they are on, then follows that answer down its own path, so launch day starts with a list already sorted into the builds you have to ship.",
     tags: ["waitlist", "launch", "growth", "beta"],
     greeting: "Thanks for your interest! Get on the list and we'll let you know the moment we're live.",
     questions: [
@@ -66,7 +66,7 @@ export const MARKETING: TemplateSeed[] = [
         ref: "android_device",
         type: "short_text",
         title: "Which Android phone do you use?",
-        description: "Pixel 8, Galaxy S24 — anything specific helps us test on the right hardware.",
+        description: "Pixel 8, Galaxy S24: anything specific helps us test on the right hardware.",
         required: false,
       },
       {
@@ -173,7 +173,7 @@ export const MARKETING: TemplateSeed[] = [
     icon: "Mail",
     description: "Subscribe people to the topics they actually want.",
     blurb:
-      "A single list means every send is wrong for someone. Asking which topics and how often, at the moment of signing up, is the cheapest unsubscribe prevention there is — and someone who came for one specific thing gets asked what it was.",
+      "A single list means every send is wrong for someone. Asking which topics and how often, at the moment of signing up, is the cheapest unsubscribe prevention there is, and someone who came for one specific thing gets asked what it was.",
     tags: ["newsletter", "email", "consent", "segmentation"],
     greeting: "Want the newsletter? Tell us what to send and how often.",
     questions: [
@@ -201,7 +201,7 @@ export const MARKETING: TemplateSeed[] = [
         ref: "evaluating_against",
         type: "short_text",
         title: "What else are you looking at?",
-        description: "No wrong answer — it tells us which comparisons are worth writing.",
+        description: "No wrong answer. It tells us which comparisons are worth writing.",
         required: false,
       },
       {
@@ -257,9 +257,9 @@ export const MARKETING: TemplateSeed[] = [
     icon: "Video",
     description: "Register attendees, and ask the no-shows what would have helped.",
     blurb:
-      "The best webinar Q&A is written before the webinar starts. This asks what they want covered, and splits the people joining live from the ones who only want the recording — because those two get different emails afterwards and should be told so now.",
+      "The best webinar Q&A is written before the webinar starts. This asks what they want covered, and splits the people joining live from the ones who only want the recording, because those two get different emails afterwards and should be told so now.",
     tags: ["webinar", "events", "leads"],
-    greeting: "Save your seat — takes about a minute.",
+    greeting: "Save your seat. It takes about a minute.",
     questions: [
       { ref: "name", type: "short_text", title: "Your name?", required: true },
       { ref: "email", type: "email", title: "Where should we send the joining link?", required: true, businessOnly: true },
@@ -282,7 +282,7 @@ export const MARKETING: TemplateSeed[] = [
         type: "single_select",
         title: "Will you join live?",
         required: true,
-        options: [{ label: "Yes, live" }, { label: "No — send me the recording" }],
+        options: [{ label: "Yes, live" }, { label: "No, send me the recording" }],
       },
 
       // ── joining live ──
@@ -320,7 +320,7 @@ export const MARKETING: TemplateSeed[] = [
     ],
     branches: [
       { when: "attendance", is: "Yes, live", then: "question" },
-      { when: "attendance", is: "No — send me the recording", then: "cannot_attend_reason" },
+      { when: "attendance", is: "No, send me the recording", then: "cannot_attend_reason" },
       { when: "reminder", always: true, then: "end_thanks" },
       { when: "timezone", always: true, then: "end_recording" },
     ],
@@ -341,9 +341,9 @@ export const MARKETING: TemplateSeed[] = [
     icon: "Download",
     description: "Gate a guide without making it feel like a toll booth.",
     blurb:
-      "Every extra field costs downloads faster than it gains lead quality — so the file is unlocked after four questions, and the two that qualify are asked only of the people already researching a purchase. Everyone else gets their guide and is left alone.",
+      "Every extra field costs downloads faster than it gains lead quality, so the file is unlocked after four questions, and the two that qualify are asked only of the people already researching a purchase. Everyone else gets their guide and is left alone.",
     tags: ["lead magnet", "content", "gated"],
-    greeting: "Almost there — tell us where to send it.",
+    greeting: "Almost there. Tell us where to send it.",
     questions: [
       { ref: "email", type: "email", title: "Your email?", required: true, businessOnly: true },
       { ref: "name", type: "short_text", title: "Your name?", required: true },
@@ -424,6 +424,6 @@ export const MARKETING: TemplateSeed[] = [
         body: "Someone who knows this properly will email you within a working day.",
       },
     ],
-    ending: { title: "On its way 📄", body: "Check your inbox — it should arrive within a minute." },
+    ending: { title: "On its way 📄", body: "Check your inbox. It should arrive within a minute." },
   }),
 ];

@@ -76,7 +76,7 @@ import {
   extractAnswer,
   MODELS,
   INTERVIEW_PROVIDER_OPTIONS,
-  callTag,
+  telemetry,
   REASONING_HEADROOM_TOKENS,
   reportedUsage,
   NO_USAGE,
@@ -92,10 +92,12 @@ import {
 import { buildAgentTools, nextStepAfter, resumeAfterChange, revisionOf, type ToolOutcome } from "./agent-tools.js";
 import { knowledgeStore, knowledgeAvailable } from "../lib/knowledge/index.js";
 import { getEntitlements } from "../lib/entitlements.js";
+import { movePollVote, readPollTally } from "../lib/poll-tallies.js";
 import { clampForRuntime } from "../lib/doc-entitlements.js";
 import { can } from "@repo/entitlements";
 import { meter } from "../lib/entitlements.js";
 import { logAiGeneration } from "../lib/ai-usage.js";
+import { gateAnswer } from "../lib/answer-gate.js";
 import {
   newResponseId,
   openResponse,
@@ -112,7 +114,8 @@ import {
 import { startEmailChallenge, verifyEmailChallenge } from "../lib/respondent-auth.js";
 import { findOpenResponseId } from "../lib/respondent-history.js";
 import type { RespondentKeySource } from "../lib/respondent-key.js";
-import type { RespondentIdentity, RespondentAuthMethod } from "@repo/form-schema";
+import type { RespondentIdentity, RespondentAuthMethod, FileDescriptor } from "@repo/form-schema";
+import { holesFor } from "../lib/d1-bindings.js";
 import { streamText, stepCountIs } from "ai";
 
 interface DoSessionMeta {
@@ -372,6 +375,11 @@ function errorInfo(err: unknown): { errName: string; errMessage: string; errStac
 
 const IDLE_ALARM_MS = 30 * 60 * 1000;
 const MAX_REPLAY = 200;
+/**
+ * Descriptors a single file answer may carry, matching the ceiling on the
+ * block schema's own `maxFiles` (`z.number().int().min(1).max(10)`).
+ */
+const MAX_FILES_PER_ANSWER = 10;
 /**
  * Screen-outs one session may take back.
  *
@@ -1058,7 +1066,7 @@ export class SessionDO extends DurableObject<Bindings> {
           // As below: the verification stands. Do not report this as a failed
           // sign-in, or they are sent back to a gate they have already cleared.
           console.error("gated_resume_failed", { sessionId: this.meta.sessionId, err });
-          await this.failTurn("interview_resume_failed", "You're verified — give it another moment.");
+          await this.failTurn("interview_resume_failed", "You're verified. Give it another moment.");
         }
       }
       return { accepted: true };
@@ -2779,6 +2787,23 @@ export class SessionDO extends DurableObject<Bindings> {
     this.writers.add(writer);
 
     /**
+     * A write to a reader that has gone away is a disconnect, not an error.
+     *
+     * These four writes — the retry hint, the replay, the readiness frame and
+     * the keep-alive ping — were bare `void writer.write(...)` calls. A
+     * respondent closing the tab rejects every one of them, and an unhandled
+     * rejection is what that looked like from the outside: noise in the logs
+     * for the most ordinary thing a person can do. `emit` already prunes a
+     * writer that fails (see `writeFrame`); this is the same courtesy for the
+     * frames sent before any turn has run.
+     */
+    const push = (bytes: Uint8Array): void => {
+      void writer.write(bytes).catch(() => {
+        this.writers.delete(writer);
+      });
+    };
+
+    /**
      * Replay from durable storage — the newest events, not the oldest.
      *
      * `list` is ascending, so a bare `limit` returns the *first* N keys. Past N
@@ -2803,9 +2828,9 @@ export class SessionDO extends DurableObject<Bindings> {
     });
     const replay = [...stored.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([, v]) => v);
     const init = this.encoder.encode(`retry: 3000\n\n`);
-    void writer.write(init);
+    push(init);
     for (const evt of replay) {
-      void writer.write(this.encoder.encode(this.serialize(evt)));
+      push(this.encoder.encode(this.serialize(evt)));
     }
     // per-connection readiness signal (not persisted, sent after replay)
     if (this.meta) {
@@ -2836,7 +2861,7 @@ export class SessionDO extends DurableObject<Bindings> {
             : null,
         },
       };
-      void writer.write(this.encoder.encode(this.serialize(ready)));
+      push(this.encoder.encode(this.serialize(ready)));
     }
 
     /**
@@ -2875,7 +2900,7 @@ export class SessionDO extends DurableObject<Bindings> {
 
     // periodic ping to keep connection alive
     const ping = setInterval(() => {
-      void writer.write(this.encoder.encode(this.serialize({ v: 1, seq: 0, ts: Date.now(), type: "ping", data: {} })));
+      push(this.encoder.encode(this.serialize({ v: 1, seq: 0, ts: Date.now(), type: "ping", data: {} })));
     }, 15000);
     void writer.closed
       .finally(() => {
@@ -3025,12 +3050,33 @@ export class SessionDO extends DurableObject<Bindings> {
     }
   }
 
+  /**
+   * The form's interview style. A session with no doc is treated as scripted,
+   * the one mode that never reaches for a model on its own.
+   */
+  private mode(): "ai" | "hybrid" | "template" {
+    return this.doc?.settings.agent.mode ?? "template";
+  }
+
+  /**
+   * Whether the agent words the questions, as opposed to only stepping in when
+   * a reply needs it.
+   *
+   * Agentic only. Hybrid asks every question in the author's words and spends a
+   * model turn only on a reply the answer gate would not take, which is where
+   * nearly all of Agentic's cost was: an "acknowledge and ask the next one" turn
+   * after every answer, a tapped chip included.
+   */
+  private agentPhrases(): boolean {
+    return this.mode() === "ai" && this.aiEnabled();
+  }
+
   /** True when the LLM layer should phrase this turn. */
   private aiEnabled(): boolean {
     if (this.degraded) return false;
     const mode = this.doc?.settings.agent.mode ?? "template";
     return (
-      this.env.OPENROUTER_API_KEY !== undefined &&
+      Boolean(this.env.OPENROUTER_API_KEY) &&
       mode !== "template" &&
       this.sessionTokensUsed < (this.doc?.settings.agent.sessionTokenBudget ?? FALLBACK_TOKEN_BUDGET)
     );
@@ -3054,7 +3100,7 @@ export class SessionDO extends DurableObject<Bindings> {
   private comprehensionEnabled(): boolean {
     const mode = this.doc?.settings.agent.mode ?? "template";
     return (
-      this.env.OPENROUTER_API_KEY !== undefined &&
+      Boolean(this.env.OPENROUTER_API_KEY) &&
       mode !== "template" &&
       this.extractionCalls < MAX_EXTRACTION_CALLS
     );
@@ -3168,13 +3214,14 @@ export class SessionDO extends DurableObject<Bindings> {
         // The author's setting governs the visible reply; reasoning gets its
         // own headroom on top so it can never starve the answer.
         maxOutputTokens: this.doc.settings.agent.responseMaxTokens + REASONING_HEADROOM_TOKENS,
-        providerOptions: {
-          openrouter: {
-            ...INTERVIEW_PROVIDER_OPTIONS.openrouter,
-            // Which feature, whose org, which conversation — see `callTag`.
-            user: callTag("interview_turn", this.meta.organizationId, this.meta.sessionId),
-          },
-        },
+        // Which feature, whose org, which conversation: see `telemetry`.
+        providerOptions: telemetry(this.env, INTERVIEW_PROVIDER_OPTIONS, {
+          kind: "interview_turn",
+          organizationId: this.meta.organizationId,
+          sessionId: this.meta.sessionId,
+          formId: this.meta.formId,
+          source: "chat",
+        }),
         // A turn that never returns is worse than a turn phrased by template.
         // See AI_TURN_TIMEOUT_MS.
         abortSignal: AbortSignal.timeout(AI_TURN_TIMEOUT_MS),
@@ -3313,6 +3360,8 @@ export class SessionDO extends DurableObject<Bindings> {
         env: this.env,
         organizationId: this.meta?.organizationId,
         sessionId: this.meta?.sessionId,
+        formId: this.meta?.formId,
+        trace: { source: "chat" },
         schema: schema as never,
         question: block.title,
         guidance: extractionGuidance(block, new Date().toISOString().slice(0, 10)),
@@ -3812,7 +3861,27 @@ export class SessionDO extends DurableObject<Bindings> {
 
     const direct = validateAnswer(block, text);
 
-    // ── 2. Otherwise, let the agent read it.
+    // ── 2. Hybrid and Scripted: is this simply the answer?
+    //
+    // One classifier call, a tiny fraction of an agent turn, settles most
+    // replies. What it will not take goes on to the agent in Hybrid.
+    //
+    // Scripted has no agent to pass it to, so a reply the gate judged not to
+    // be an answer ("why do you need this?") gets the same question again.
+    // Only a judgement does that, though. When the gate could not decide, or
+    // could not be asked at all, Scripted keeps what it always had: the
+    // validator's word, so a form with the classifier down still takes a
+    // typed name.
+    const mode = this.mode();
+    let notAnAnswer = false;
+    if (mode !== "ai") {
+      const gated = await this.gate(block, text);
+      if (gated.kind === "answer") return this.record(block, gated.value);
+      notAnAnswer = gated.reason === "question" || gated.reason === "not_direct";
+      if (mode === "template" && notAnAnswer) return this.offScript(block, text, direct);
+    }
+
+    // ── 3. Otherwise, let the agent read it.
     //
     // People do not speak in form fields. They answer and ask in the same
     // breath ("Nothing else — also, do I get any offers for this?"), they
@@ -3828,18 +3897,18 @@ export class SessionDO extends DurableObject<Bindings> {
         : "";
       const options =
         "options" in block && block.options
-          ? ` The allowed values are: ${block.options.map((o) => `${o.id} (${o.label})`).join(", ")} — use the id.`
+          ? ` The allowed values are: ${block.options.map((o) => `${o.id} (${o.label})`).join(", ")}. Use the id.`
           : "";
 
       const ok = await this.aiStreamMessage(
         `The respondent replied: "${text}"\n\n` +
-          `Their message may contain an answer, a question of their own, or both — handle everything in it.\n` +
+          `Their message may contain an answer, a question of their own, or both, so handle everything in it.\n` +
           `1. If any part of it answers "${block.title}", call record_answer with ref=${block.ref}.${shape}${options}\n` +
           `2. If they also asked something, answer that too, in one or two sentences.\n` +
           `   If instead they want to change an answer they gave EARLIER, call change_earlier_answer for that ` +
           `question and follow its result rather than steps 1 and 3.\n` +
           `3. Then, if you recorded an answer, go straight on in the same message to the question ` +
-          `record_answer names in its result — not the one that follows in the list, which on a branching ` +
+          `record_answer names in its result, not the one that follows in the list, which on a branching ` +
           `form is a different question. ` +
           `If you did not, ask "${block.title}" again.\n` +
           `Never ignore a question they asked, even when they also answered.`,
@@ -3857,11 +3926,14 @@ export class SessionDO extends DurableObject<Bindings> {
       // Model unavailable — fall through rather than strand the respondent.
     }
 
-    // ── 3. Deterministic fallback: template mode, degraded sessions, or a
+    // ── 4. Deterministic fallback: degraded sessions, a spent budget, or a
     //    failed turn.
-    if (direct.ok) return this.record(block, text);
+    // Not when the gate has already said this is no answer. A short-text
+    // question validates any string, so "why do you need my name?" was being
+    // stored as the name whenever the agent it was sent to could not reply.
+    if (direct.ok && !notAnAnswer) return this.record(block, text);
 
-    const extracted = await this.extractTypedAnswer(block, text);
+    const extracted = notAnAnswer ? null : await this.extractTypedAnswer(block, text);
     if (extracted !== null) return this.record(block, extracted);
 
     /**
@@ -3875,17 +3947,57 @@ export class SessionDO extends DurableObject<Bindings> {
      * respondent into the "let's make this easier" widget as though they
      * could not work the form.
      */
+    return this.offScript(block, text, direct);
+  }
+
+  /**
+   * A reply nothing could take as the answer, with no agent to hand it to.
+   *
+   * Scripted lands here straight from the gate. A question is told, kindly,
+   * that it cannot be answered here; anything else is an attempt that did not
+   * land, and counts towards `escalateAfterInvalid` like any other. Both end on
+   * the same question, asked again in the author's words.
+   */
+  private async offScript(
+    block: Block,
+    text: string,
+    direct: { code?: string; hint?: string },
+  ): Promise<{ accepted: boolean; error?: string }> {
     if (looksLikeQuestion(text)) {
       await this.emitMessage(asideText(block));
+      await this.emitMessage(questionText(block));
       await this.emitQuestion();
       return { accepted: true };
     }
-
     return this.recordInvalid(
       block,
       direct.code ?? "unclear",
       direct.hint ?? "I didn't quite catch that one.",
     );
+  }
+
+  /**
+   * Ask the answer gate, and write down what it cost and what it decided.
+   *
+   * The outcome goes to the logs rather than the event stream: it is for us,
+   * to see how often the gate takes a reply and why it passes the rest on.
+   */
+  private async gate(block: Block, text: string) {
+    const { outcome, call } = await gateAnswer(this.env, block, text, {
+      organizationId: this.meta?.organizationId,
+      sessionId: this.meta?.sessionId,
+      formId: this.meta?.formId,
+      source: "chat",
+    });
+    if (call) await this.logAiUsage("answer_gate", call.usage, call.model, call.latencyMs);
+    console.log("answer_gate", {
+      sessionId: this.meta?.sessionId,
+      mode: this.mode(),
+      blockType: block.type,
+      outcome: outcome.kind === "answer" ? "answer" : outcome.reason,
+      latencyMs: call?.latencyMs ?? null,
+    });
+    return outcome;
   }
 
   /**
@@ -3906,7 +4018,7 @@ export class SessionDO extends DurableObject<Bindings> {
           `- If they want to change an answer, call change_earlier_answer for that question and follow its result.\n` +
           `- If they asked something, answer it briefly.\n` +
           `- Otherwise, say in one short line that they can tap any answer above to change it, or send the form.\n` +
-          `Never ask any other question from the form — every one is answered.`,
+          `Never ask any other question from the form. Every one is answered.`,
         { review: true },
       );
       if (ok) {
@@ -3990,9 +4102,63 @@ export class SessionDO extends DurableObject<Bindings> {
   }
 
   /**
+   * File answers, re-read from the database rather than taken on trust.
+   *
+   * The client posts an array of descriptors — `fileId`, `filename`, `mime`,
+   * `size`, `r2Key` — and `validateAnswer` could only ever check their shape:
+   * it is a pure function in a package with no database. So every field was
+   * whatever was posted. A respondent could name another session's `fileId`,
+   * claim a 2 KB file was 40 MB, or label an executable `image/png`, and the
+   * answer would be stored saying so — and it is the stored `mime` the
+   * download route reads when deciding what to serve.
+   *
+   * The same shape as the uniqueness check below: a second, database-backed
+   * gate for the one rule that cannot be decided from the block and the value.
+   * Returns the rows as they really are, in the order the respondent sent
+   * them, or null if any id is not a confirmed upload of this session.
+   */
+  private async authenticFiles(value: unknown): Promise<FileDescriptor[] | null> {
+    if (!this.meta || !Array.isArray(value) || value.length === 0) return null;
+    const ids = value.map((v) => (v as { fileId?: unknown }).fileId);
+    if (!ids.every((id): id is string => typeof id === "string" && id.length > 0)) return null;
+    /**
+     * One bound parameter per id, and D1 takes a hundred per statement.
+     *
+     * `maxFiles` caps a block at ten and `validateAnswer` has already enforced
+     * it before this runs — but the bound is restated here rather than
+     * inherited, because a statement whose length depends on a caller's array
+     * is exactly the shape that produced `too many SQL variables` in
+     * production once already.
+     */
+    if (ids.length > MAX_FILES_PER_ANSWER) return null;
+
+    const rows = await this.env.DB.prepare(
+      `SELECT id, r2_key, filename, mime, size_bytes FROM files
+        WHERE session_id = ? AND status = 'confirmed' AND id IN (${holesFor(ids)})`,
+    )
+      .bind(this.meta.sessionId, ...ids)
+      .all<{ id: string; r2_key: string; filename: string; mime: string; size_bytes: number }>();
+
+    const byId = new Map((rows.results ?? []).map((r) => [r.id, r]));
+    // Every id has to resolve. A partial match is a forged answer, not a
+    // partially valid one.
+    if (byId.size !== new Set(ids).size) return null;
+    return ids.map((id) => {
+      const row = byId.get(id)!;
+      return {
+        fileId: row.id,
+        filename: row.filename,
+        mime: row.mime,
+        size: row.size_bytes,
+        r2Key: row.r2_key,
+      };
+    });
+  }
+
+  /**
    * `opts.settledPayment` is the server's own payment record, and only
-   * `settleFromRecord` passes one. Every other caller — the agent's tools, a
-   * structured answer, free text — reaches a verified payment block without it
+   * `settleFromRecord` passes one. Every other caller, whether the agent's tools,
+   * a structured answer or free text, reaches a verified payment block without it
    * and is refused, whatever it claims.
    */
   private async record(
@@ -4000,7 +4166,16 @@ export class SessionDO extends DurableObject<Bindings> {
     raw: unknown,
     opts: ValidateOptions = {},
   ): Promise<{ accepted: boolean; error?: string }> {
-    const result = validateAnswer(block, raw, opts);
+    let result = validateAnswer(block, raw, opts);
+
+    if (result.ok && block.type === "file_upload") {
+      const authentic = await this.authenticFiles(result.value);
+      if (!authentic) {
+        return this.recordInvalid(block, "invalid", "We could not find those uploads. Try attaching the file again.");
+      }
+      // The stored rows replace what the client sent, field for field.
+      result = { ...result, value: authentic };
+    }
 
     /**
      * Uniqueness, checked here rather than inside `validateAnswer`.
@@ -4076,12 +4251,15 @@ export class SessionDO extends DurableObject<Bindings> {
       return this.beginVerification(block, String(result.value), channel, echoId);
     }
 
+    /** What they had picked before this answer, which only a poll's tally cares about. */
+    let previousValue: unknown;
     if (result.value !== undefined) {
       // Counted once per question, not once per answer. Re-answering after an
       // edit used to add a second tally for the same ref, which put the
       // progress bar past 100% and told `finalize` that more questions were
       // answered than the form has.
       if (this.state.answers[block.ref] === undefined) this.collectedCount += 1;
+      previousValue = this.state.answers[block.ref];
       this.state.answers[block.ref] = result.value;
     }
     this.invalidCounts.delete(block.ref);
@@ -4108,7 +4286,19 @@ export class SessionDO extends DurableObject<Bindings> {
     await this.emit("answer_recorded", { ref: block.ref, pct: this.progressPct(), messageId: answerMessageId });
 
     // projection write (async, non-blocking for the stream)
-    this.ctx.waitUntil(this.projectAnswer(block, result.value));
+    this.ctx.waitUntil(this.projectAnswer(block, result.value, previousValue));
+
+    /*
+     * The poll's split, and the one thing in this method that is deliberately
+     * awaited rather than backgrounded.
+     *
+     * The respondent has just been promised a number. Writing their vote in
+     * `waitUntil` and reading the tally at the same time is a race they would
+     * lose about half the time, and losing it means being shown a total that
+     * does not include the answer they are looking at. One D1 round trip, on
+     * the one block type that asks for it.
+     */
+    if (block.type === "poll") await this.emitPollResult(block, previousValue, result.value);
 
     await this.advanceTo(next, block.ref);
     return { accepted: true };
@@ -4304,6 +4494,22 @@ export class SessionDO extends DurableObject<Bindings> {
         return;
       }
 
+      /*
+       * Hybrid and Scripted: the author's words, and no model.
+       *
+       * This turn was the single largest cost in a conversation. It ran after
+       * every answer, a tapped chip included, to say "Got it!" and reword a
+       * question the author had already written. Outside Agentic the agent
+       * speaks only when a reply needs it, and that path arrives here with
+       * `suppressNextAsk` set, above.
+       */
+      if (!this.agentPhrases()) {
+        await this.emitMessage(questionText(next.block));
+        await this.emitQuestion();
+        await this.persistMeta();
+        return;
+      }
+
       /**
        * The agent's phrasing is a nicety. The question is the product.
        *
@@ -4323,9 +4529,9 @@ export class SessionDO extends DurableObject<Bindings> {
         aiOk = await this.aiStreamMessage(
           verbatim
             ? `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
-                `Acknowledge it in one short sentence and answer anything they asked. Do NOT ask the next question — it follows immediately, word for word.`
+                `Acknowledge it in one short sentence and answer anything they asked. Do NOT ask the next question. It follows immediately, word for word.`
             : `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
-                `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref} — which is: "${next.block.title}" (${next.block.type}) — in your own words. Ask ONLY that question.` +
+                `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref}, which is "${next.block.title}" (${next.block.type}), in your own words. Ask ONLY that question.` +
                 (affordance ? ` ${affordance}` : ""),
         );
         if (aiOk) await this.applyPendingEffects();
@@ -4465,8 +4671,8 @@ export class SessionDO extends DurableObject<Bindings> {
     await this.persistMeta();
     await this.emitMessage(
       missing.length === 1
-        ? `Almost — I still need one answer before I can send this.`
-        : `Almost — there are ${missing.length} answers still missing before I can send this.`,
+        ? `Almost there. I still need one answer before I can send this.`
+        : `Almost there. ${missing.length} answers are still missing before I can send this.`,
     );
     await this.emitMessage(questionText(target));
     await this.emitQuestion();
@@ -5051,8 +5257,8 @@ export class SessionDO extends DurableObject<Bindings> {
       this.reopenQuestion(target);
       await this.persistMeta();
 
-      await this.emitMessage(`Sure — let's redo that one.`);
-      if (this.doc.settings.agent.rephraseQuestions === false || !this.aiEnabled()) {
+      await this.emitMessage(`Sure, let's redo that one.`);
+      if (this.doc.settings.agent.rephraseQuestions === false || !this.agentPhrases()) {
         await this.emitMessage(questionText(target));
       } else {
         const ok = await this.aiStreamMessage(
@@ -5169,9 +5375,13 @@ export class SessionDO extends DurableObject<Bindings> {
      * the `edit` action.
      */
     if (this.state.answers[target.ref] !== undefined) {
+      const retracted = this.state.answers[target.ref];
       delete this.state.answers[target.ref];
       this.collectedCount = Math.max(0, this.collectedCount - 1);
       this.ctx.waitUntil(this.unprojectAnswer(target.ref));
+      // A retracted poll vote leaves the tally, or the bar keeps a choice the
+      // respondent has just taken back.
+      this.ctx.waitUntil(this.tallyPollVote(target, retracted, undefined));
     }
 
     /*
@@ -5644,7 +5854,7 @@ export class SessionDO extends DurableObject<Bindings> {
     }
   }
 
-  private async projectAnswer(block: Block, value: unknown): Promise<void> {
+  private async projectAnswer(block: Block, value: unknown, previous?: unknown): Promise<void> {
     try {
       if (!this.meta) return;
       if (this.meta.formVersionId === "preview") return; // preview sessions never project to D1
@@ -5656,6 +5866,78 @@ export class SessionDO extends DurableObject<Bindings> {
         blockRef: block.ref,
         ...errorInfo(err),
       });
+    }
+  }
+
+  /**
+   * Cast the vote, read the room, tell the respondent.
+   *
+   * The options nobody picked are filled in as zero here rather than in the
+   * client: the tally table only holds rows for options that have been chosen,
+   * and a bar chart missing its empty bars reads as a different question.
+   */
+  private async emitPollResult(block: Block, previous: unknown, value: unknown): Promise<void> {
+    if (block.type !== "poll" || !this.meta) return;
+    await this.tallyPollVote(block, previous, value);
+    if (!block.showResults) return;
+    try {
+      const tally = await readPollTally(this.env, this.meta.formId, block.ref);
+      await this.emit("poll_result", {
+        ref: block.ref,
+        total: tally.total,
+        ...(typeof value === "string" ? { picked: value } : {}),
+        /*
+         * Held back below the floor: at one answer the only vote on screen is
+         * the respondent's own, which tells them nothing and tells the next
+         * person exactly what the last one said.
+         *
+         * The labels travel with the counts so the card is self-contained. The
+         * alternative is the client joining ids against a block it may not
+         * have in hand, which is the sort of lookup that renders an empty
+         * chart the day a question is edited between two answers.
+         */
+        ...(tally.total >= block.minResponsesToReveal
+          ? {
+              options: block.options.map((option) => ({
+                id: option.id,
+                label: option.label,
+                count: tally.counts[option.id] ?? 0,
+              })),
+            }
+          : {}),
+      });
+    } catch (err) {
+      // No numbers is a worse answer than wrong numbers is a worse form. The
+      // vote is recorded either way; the respondent simply moves on.
+      console.error("poll_result_failed", { blockRef: block.ref, ...errorInfo(err) });
+    }
+  }
+
+  /**
+   * Move this session's vote on a poll, if the block is one.
+   *
+   * Called with both the old value and the new, so the three things that can
+   * happen to a vote are one operation: cast it, move it to another option, or
+   * take it back. An increment on one path and a decrement on another is how a
+   * counter ends up disagreeing with the answers it is supposed to summarise.
+   *
+   * Test sessions are excluded here as well as in `projectAnswer`, which skips
+   * only previews. A test response is a real row in `responses` and is filtered
+   * out of the author's own analytics; it must not be able to move a bar that
+   * every respondent after it will see.
+   */
+  private async tallyPollVote(block: Block, previous: unknown, value: unknown): Promise<void> {
+    if (block.type !== "poll") return;
+    if (!this.meta || this.meta.isTest === true || this.meta.formVersionId === "preview") return;
+    const from = typeof previous === "string" ? previous : null;
+    const to = typeof value === "string" ? value : null;
+    if (from === to) return;
+    try {
+      await movePollVote(this.env, { formId: this.meta.formId, blockRef: block.ref, from, to });
+    } catch (err) {
+      // A lost vote is a wrong bar, not a lost answer: the response row is
+      // already written and the tally can be rebuilt from it.
+      console.error("poll_tally_failed", { blockRef: block.ref, ...errorInfo(err) });
     }
   }
 

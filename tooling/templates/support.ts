@@ -8,7 +8,7 @@ export const SUPPORT: TemplateSeed[] = [
     icon: "Bug",
     description: "Get reproducible reports instead of “it's broken”.",
     blurb:
-      "Asks for the three things an engineer needs and a reporter always forgets: what they expected, what happened, and the exact steps between. Where it happened decides what is asked next — a browser gets asked about the console, a phone about its model and OS — and anyone who says they cannot work at all is routed straight to a human.",
+      "Asks for the three things an engineer needs and a reporter always forgets: what they expected, what happened, and the exact steps between. Where it happened decides what is asked next (a browser gets asked about the console, a phone about its model and OS), and anyone who says they cannot work at all is routed straight to a human.",
     tags: ["bugs", "engineering", "triage", "branching"],
     greeting: "Sorry something's broken. Let's get the details down.",
     questions: [
@@ -127,7 +127,7 @@ export const SUPPORT: TemplateSeed[] = [
         body: "Send a screenshot to support if you have one. Someone is looking at this now.",
       },
     ],
-    ending: { title: "Reported 🐛", body: "Thanks — a real person reads every one of these." },
+    ending: { title: "Reported 🐛", body: "Thanks. A real person reads every one of these." },
   }),
 
   defineTemplate({
@@ -137,7 +137,7 @@ export const SUPPORT: TemplateSeed[] = [
     icon: "LifeBuoy",
     description: "Route requests to the right queue, with the details that queue needs.",
     blurb:
-      "Category asked up front is what lets a ticket reach the right person without a triage pass — and each category can then ask its own thing. Billing gets an invoice number, login gets the error text, a how-to gets a chance to be answered by a link instead of a person.",
+      "Category asked up front is what lets a ticket reach the right person without a triage pass, and each category can then ask its own thing. Billing gets an invoice number, login gets the error text, a how-to gets a chance to be answered by a link instead of a person.",
     tags: ["support", "helpdesk", "triage", "branching"],
     greeting: "How can we help? Tell us what's going on.",
     questions: [
@@ -209,7 +209,7 @@ export const SUPPORT: TemplateSeed[] = [
         ref: "trying_to_do",
         type: "long_text",
         title: "What are you trying to get done?",
-        description: "Describe the outcome, not the button — we'll often know a shorter way.",
+        description: "Describe the outcome, not the button. We'll often know a shorter way.",
         required: true,
         maxLength: 1000,
       },
@@ -221,7 +221,7 @@ export const SUPPORT: TemplateSeed[] = [
         title: "How urgent is it?",
         required: true,
         options: [
-          { label: "Blocking — I can't work" },
+          { label: "Blocking: I can't work" },
           { label: "Important, but I can wait a day" },
           { label: "Whenever you get to it" },
         ],
@@ -257,7 +257,7 @@ export const SUPPORT: TemplateSeed[] = [
     icon: "MessageCircle",
     description: "A general enquiry form that sorts the inbox as it fills it.",
     blurb:
-      "The one form every site needs. What the message is about decides the two or three follow-ups worth asking — a sales enquiry gets company and size, press gets a deadline, careers gets pointed at the actual openings — so nothing arrives needing a reply that just asks for more.",
+      "The one form every site needs. What the message is about decides the two or three follow-ups worth asking (a sales enquiry gets company and size, press gets a deadline, careers gets pointed at the actual openings), so nothing arrives needing a reply that just asks for more.",
     tags: ["contact", "general", "inbox", "branching"],
     greeting: "Hi! What can we help you with?",
     questions: [
@@ -344,7 +344,7 @@ export const SUPPORT: TemplateSeed[] = [
     icon: "ReceiptText",
     description: "Handle refunds with the evidence a finance team needs.",
     blurb:
-      "Order reference, date, reason and preferred resolution — collected once so nobody has to email back asking for them. A damaged item is asked for a photo; a missing one for the tracking status; a duplicate charge for the second transaction. The reason list doubles as a running count of why people ask.",
+      "Order reference, date, reason and preferred resolution, collected once so nobody has to email back asking for them. A damaged item is asked for a photo; a missing one for the tracking status; a duplicate charge for the second transaction. The reason list doubles as a running count of why people ask.",
     tags: ["refund", "billing", "ecommerce", "branching"],
     greeting: "Let's sort this out. A few details about the order.",
     questions: [

@@ -8,7 +8,7 @@ export const COMMUNITY: TemplateSeed[] = [
     icon: "HandHeart",
     description: "Match volunteers to shifts they can actually make.",
     blurb:
-      "Availability and skills as structured choices, so a coordinator fills a rota by filtering rather than by reading. Anyone offering to drive is asked about their licence and insurance; anyone offering to work with people directly is asked about their DBS check — the two questions that otherwise hold up a whole rota.",
+      "Availability and skills as structured choices, so a coordinator fills a rota by filtering rather than by reading. Anyone offering to drive is asked about their licence and insurance; anyone offering to work with people directly is asked about their DBS check. Those are the two questions that otherwise hold up a whole rota.",
     tags: ["volunteers", "nonprofit", "rota", "branching"],
     greeting: "Thanks for offering to help! Tell us when you're free and what you'd like to do.",
     questions: [
@@ -87,7 +87,7 @@ export const COMMUNITY: TemplateSeed[] = [
         options: [
           { label: "Yes, on the update service" },
           { label: "Yes, but not on the update service" },
-          { label: "No — I'd need one" },
+          { label: "No, I'd need one" },
           { label: "I'm not sure" },
         ],
       },
@@ -124,7 +124,7 @@ export const COMMUNITY: TemplateSeed[] = [
         required: false,
         maxLength: 600,
       },
-      { ref: "emergency_contact", type: "short_text", title: "Emergency contact — name and number", required: true },
+      { ref: "emergency_contact", type: "short_text", title: "Emergency contact: name and number", required: true },
       {
         ref: "policies",
         type: "legal_consent",
@@ -156,7 +156,7 @@ export const COMMUNITY: TemplateSeed[] = [
     icon: "BadgeCheck",
     description: "Take applications with the tier, the evidence and the terms in one pass.",
     blurb:
-      "Everything a membership secretary would otherwise chase over three emails. A concession is asked for the evidence that supports it, a household membership for the other names on it, and a life membership is handed straight to the committee — so the reply is a decision rather than another question.",
+      "Everything a membership secretary would otherwise chase over three emails. A concession is asked for the evidence that supports it, a household membership for the other names on it, and a life membership is handed straight to the committee, so the reply is a decision rather than another question.",
     tags: ["membership", "club", "community", "branching"],
     greeting: "Glad you want to join us. A few questions and we'll take it from there.",
     questions: [
@@ -196,7 +196,7 @@ export const COMMUNITY: TemplateSeed[] = [
         ref: "concession_evidence",
         type: "file_upload",
         title: "Something that shows it",
-        description: "A student card, a letter, a screenshot — anything dated in the last year.",
+        description: "A student card, a letter, a screenshot: anything dated in the last year.",
         required: false,
         accept: ["image/*", "application/pdf"],
         maxFiles: 2,
@@ -287,7 +287,7 @@ export const COMMUNITY: TemplateSeed[] = [
     icon: "Quote",
     description: "Collect quotes you're actually allowed to publish.",
     blurb:
-      "Most testimonials never get used because nobody asked permission in writing. The quote, the attribution and the consent are collected together — and how they want to be credited decides what else is asked, so an anonymous quote is never chased for a headshot.",
+      "Most testimonials never get used because nobody asked permission in writing. The quote, the attribution and the consent are collected together, and how they want to be credited decides what else is asked, so an anonymous quote is never chased for a headshot.",
     tags: ["testimonial", "social proof", "marketing", "branching"],
     greeting: "Would you say a few words about working with us? It really helps.",
     questions: [
@@ -299,7 +299,7 @@ export const COMMUNITY: TemplateSeed[] = [
         title: "What did we work on together?",
         required: false,
       },
-      { ref: "quote", type: "long_text", title: "In your own words — what was it like?", required: true, maxLength: 1200 },
+      { ref: "quote", type: "long_text", title: "In your own words: what was it like?", required: true, maxLength: 1200 },
       {
         ref: "before_after",
         type: "long_text",
@@ -368,6 +368,6 @@ export const COMMUNITY: TemplateSeed[] = [
       { when: "linkedin", always: true, then: "where_ok" },
       { when: "company_only", always: true, then: "where_ok" },
     ],
-    ending: { title: "Thank you ⭐", body: "That means a lot — we'll let you know where it ends up." },
+    ending: { title: "Thank you ⭐", body: "That means a lot. We'll let you know where it ends up." },
   }),
 ];

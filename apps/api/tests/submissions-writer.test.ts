@@ -326,6 +326,62 @@ describe("chat and API writers agree", () => {
   });
 
   /**
+   * Every response names a person, including one with nothing to recognise
+   * them by: an API caller, or a browser that refused the fingerprint.
+   */
+  it("mints a respondent for a response that arrived with none, and folds it in at sign-in", async () => {
+    const owner: ResponseOwner = {
+      env: env as never,
+      formId: t.formId,
+      formVersionId: VERSION_ID,
+      organizationId: t.orgId,
+      sessionId: null,
+      source: "api",
+    };
+    const id = await openResponse(owner, {
+      hiddenFields: {},
+      variables: {},
+      userAgent: null,
+      country: null,
+      startedAt: Date.now(),
+    });
+    const minted = await env.DB.prepare(`SELECT respondent_id FROM submissions WHERE id = ?`)
+      .bind(id)
+      .first<{ respondent_id: string | null }>();
+    expect(minted?.respondent_id).toMatch(/^rsp_[0-9a-f]{20}$/);
+
+    // The same person already exists under a sign-in; signing in here must not
+    // leave the minted one behind as a second person.
+    const identity = {
+      provider: "google" as const,
+      subject: "google-sub-minted",
+      email: "minted@northwind.example",
+      phone: null,
+      name: null,
+      pictureUrl: null,
+      verifiedAt: Date.now(),
+    };
+    const known = await attachRespondent(env as never, null, identity);
+    const resolved = await attachRespondent(env as never, id, identity);
+
+    // One person, whichever id survived the merge: the sign-in's key and the
+    // response both name it, and the other row is a tombstone pointing at it.
+    const key = await env.DB.prepare(`SELECT respondent_id FROM respondent_keys WHERE kind = 'identity' AND value = ?`)
+      .bind("google:google-sub-minted")
+      .first<{ respondent_id: string }>();
+    const after = await env.DB.prepare(`SELECT respondent_id FROM submissions WHERE id = ?`)
+      .bind(id)
+      .first<{ respondent_id: string }>();
+    expect(after?.respondent_id).toBe(resolved);
+    expect(key?.respondent_id).toBe(resolved);
+    const loser = resolved === known ? minted!.respondent_id : known;
+    const tomb = await env.DB.prepare(`SELECT merged_into FROM respondents WHERE id = ?`)
+      .bind(loser)
+      .first<{ merged_into: string | null }>();
+    expect(tomb?.merged_into).toBe(resolved);
+  });
+
+  /**
    * The constraint `0027` added, met from the writer's side.
    *
    * The lookup in `ensureSubmissionRow` runs before this and catches nearly

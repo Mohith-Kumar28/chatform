@@ -208,6 +208,24 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
     codes: ["required", "type"],
   },
 
+  poll: {
+    shape: "The chosen option's id. Identical to `single_select`: the tally is a read, never an answer.",
+    tsType: "string",
+    block: {
+      id: "blk_poll0001", ref: "q_stack", type: "poll", title: "Which do you reach for?", required: true,
+      options: [
+        { id: "opt_react0001", label: "React" },
+        { id: "opt_svelte001", label: "Svelte" },
+      ],
+    },
+    examples: [
+      { value: "opt_react0001", canonical: "opt_react0001" },
+      { value: "React", canonical: "opt_react0001", note: "a label resolves to its id" },
+    ],
+    counterExamples: [{ value: "opt_nope", code: "invalid_option" }],
+    codes: ["required", "invalid_option"],
+  },
+
   single_select: {
     shape: "The chosen option's id.",
     tsType: "string",

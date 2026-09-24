@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240" role="img" aria-label="A spreadsheet of rows and columns">
+  <rect width="320" height="240" fill="#f4efe8"/>
+  <rect x="20" y="24" width="280" height="192" rx="12" fill="#ffffff"/>
+  <rect x="20" y="24" width="280" height="32" rx="12" fill="#e7e0d6"/>
+  <rect x="20" y="44" width="280" height="12" fill="#e7e0d6"/>
+  <g fill="#a8a29e">
+    <rect x="36" y="36" width="44" height="8" rx="4"/>
+    <rect x="112" y="36" width="44" height="8" rx="4"/>
+    <rect x="188" y="36" width="44" height="8" rx="4"/>
+  </g>
+  <g fill="#d6d3d1">
+    <rect x="36" y="74" width="52" height="8" rx="4"/><rect x="112" y="74" width="60" height="8" rx="4"/><rect x="188" y="74" width="36" height="8" rx="4"/>
+    <rect x="36" y="106" width="44" height="8" rx="4"/><rect x="112" y="106" width="48" height="8" rx="4"/><rect x="188" y="106" width="60" height="8" rx="4"/>
+    <rect x="36" y="138" width="60" height="8" rx="4"/><rect x="112" y="138" width="36" height="8" rx="4"/><rect x="188" y="138" width="44" height="8" rx="4"/>
+    <rect x="36" y="170" width="40" height="8" rx="4"/><rect x="112" y="170" width="56" height="8" rx="4"/><rect x="188" y="170" width="52" height="8" rx="4"/>
+  </g>
+  <g stroke="#ece6dd" stroke-width="2">
+    <path d="M100 56v160M176 56v160M252 56v160"/>
+    <path d="M20 90h280M20 122h280M20 154h280M20 186h280"/>
+  </g>
+</svg>

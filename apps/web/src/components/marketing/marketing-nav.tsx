@@ -15,7 +15,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { useSession } from "@/lib/auth/auth-client";
+import { useSignedIn } from "@/lib/auth/use-signed-in";
 import { Logo } from "@/components/brand/logo";
 import { UseCasesMenu } from "./use-cases-menu";
 import { USE_CASE_GROUPS } from "@/content/use-cases";
@@ -61,7 +61,7 @@ export function MarketingNav() {
    * a moment later is what made a signed-in user think every refresh had
    * logged them out.
    */
-  const { data: session, isPending } = useSession();
+  const signedIn = useSignedIn();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -139,9 +139,9 @@ export function MarketingNav() {
 
               `on-brand` while the bar is transparent over the hero wash: the
               orange fill would be an orange pill on an orange ground. */}
-          {isPending ? (
+          {signedIn === null ? (
             <div className="shimmer hidden h-8 w-24 rounded-full sm:block" aria-hidden />
-          ) : session ? (
+          ) : signedIn ? (
             <Button asChild size="sm" shape="pill" variant={ctaVariant} className="hidden sm:inline-flex">
               <Link href="/dashboard">Dashboard</Link>
             </Button>
@@ -198,12 +198,22 @@ export function MarketingNav() {
                       </SheetClose>
                     </li>
                   ))}
+                  <li>
+                    <SheetClose asChild>
+                      <Link
+                        href="/form-templates"
+                        className="text-body text-primary hover:bg-accent/60 block rounded-lg px-3 py-2 font-medium"
+                      >
+                        Form templates
+                      </Link>
+                    </SheetClose>
+                  </li>
                 </ul>
               </div>
               <div className="mt-auto flex flex-col gap-2 p-4">
-                {isPending ? (
+                {signedIn === null ? (
                   <div className="shimmer h-9 rounded-full" aria-hidden />
-                ) : session ? (
+                ) : signedIn ? (
                   <SheetClose asChild>
                     <Button asChild shape="pill">
                       <Link href="/dashboard">Dashboard</Link>

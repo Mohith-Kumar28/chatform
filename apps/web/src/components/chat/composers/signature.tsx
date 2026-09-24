@@ -161,7 +161,7 @@ export function SignatureComposer({
       const file = new File([blob], "signature.png", { type: "image/png" });
       const stored = await uploadToSession({ file, blockRef, uploadBase, respondentToken });
       const signedName = requireName ? name.trim() : undefined;
-      onSubmit({ ...stored, signedName }, signedName ? `Signed — ${signedName}` : "Signed");
+      onSubmit({ ...stored, signedName }, signedName ? `Signed by ${signedName}` : "Signed");
     } catch (err) {
       // Stay on the pad with the ink intact: re-drawing a signature because a
       // network call failed is the kind of thing people abandon a form over.

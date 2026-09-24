@@ -36,7 +36,21 @@ export const VENDORS = [
   "Jotform",
   "Fillout",
   "Google Forms",
+  "SurveyMonkey",
 ] as const;
+
+/**
+ * The columns the big matrix on `/pricing` draws.
+ *
+ * Every vendor in `VENDORS` has a head-to-head page, but not every one belongs
+ * in the one table that compares them all at once: SurveyMonkey is a survey
+ * research tool first, and an eighth column would push the matrix past what a
+ * laptop screen shows without scrolling. Its cells still live in `ROWS`, so its
+ * own comparison page reads from the same verified data as everyone else's.
+ */
+export const MATRIX_VENDORS: readonly (typeof VENDORS)[number][] = VENDORS.filter(
+  (vendor) => vendor !== "SurveyMonkey",
+);
 
 export const ROWS: readonly ComparisonRow[] = [
   {
@@ -50,11 +64,12 @@ export const ROWS: readonly ComparisonRow[] = [
       true,
       { unknown: "Not documented" },
       false,
+      false,
     ],
   },
   {
     label: "Answers the respondent's questions",
-    hint: "From a knowledge base you write, mid-form, without losing its place.",
+    hint: "From documents and notes you give it, mid-form, without losing its place.",
     cells: [
       true,
       { partial: "Formless only" },
@@ -62,6 +77,7 @@ export const ROWS: readonly ComparisonRow[] = [
       false,
       true,
       { unknown: "Not documented" },
+      false,
       false,
     ],
   },
@@ -89,12 +105,13 @@ export const ROWS: readonly ComparisonRow[] = [
       { partial: "Resend the draft link by hand; no timed sequence" },
       { partial: "One email, ~30 min after abandonment" },
       false,
+      { partial: "One automatic reminder, email invitations only" },
     ],
   },
   {
     label: "Documented headless conversation API",
     hint: "Drive the interview from your own backend, not just read submissions.",
-    cells: [true, false, false, false, { unknown: "Not documented" }, false, false],
+    cells: [true, false, false, false, { unknown: "Not documented" }, false, false, false],
   },
   {
     label: "Respondent identity verification",
@@ -107,6 +124,7 @@ export const ROWS: readonly ComparisonRow[] = [
       { unknown: "Not listed" },
       "Email + SSO",
       "Google account",
+      { unknown: "Not listed" },
     ],
   },
   {
@@ -119,11 +137,12 @@ export const ROWS: readonly ComparisonRow[] = [
       "100",
       "1,000",
       "Unlimited",
+      { partial: "Limited per survey; 10 questions per survey" },
     ],
   },
   {
     label: "Free AI conversations per month",
-    cells: ["200", false, false, false, "100", false, false],
+    cells: ["200", false, false, false, "100", false, false, false],
   },
   {
     /*
@@ -145,6 +164,7 @@ export const ROWS: readonly ComparisonRow[] = [
       "$34",
       "$15",
       { unknown: "Workspace, priced per user by region" },
+      { unknown: "Priced by region" },
     ],
   },
 ];

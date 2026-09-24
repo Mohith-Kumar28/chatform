@@ -1,7 +1,10 @@
+import fillout from "./fillout";
 import googleForms from "./google-forms";
 import jotform from "./jotform";
+import surveymonkey from "./surveymonkey";
 import tally from "./tally";
 import typeform from "./typeform";
+import youform from "./youform";
 import type { Comparison } from "./define";
 
 /**
@@ -11,7 +14,15 @@ import type { Comparison } from "./define";
  * alphabetically, because this array is also the `ItemList` graph on `/compare`
  * and the order there is a claim about relevance.
  */
-export const COMPARISONS: readonly Comparison[] = [typeform, googleForms, jotform, tally];
+export const COMPARISONS: readonly Comparison[] = [
+  typeform,
+  googleForms,
+  surveymonkey,
+  jotform,
+  tally,
+  fillout,
+  youform,
+];
 
 export function getComparison(slug: string): Comparison | undefined {
   return COMPARISONS.find((entry) => entry.slug === slug);

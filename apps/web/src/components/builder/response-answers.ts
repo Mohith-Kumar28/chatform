@@ -29,7 +29,7 @@ function blockCurrency(column: ResultColumn): string | undefined {
  * reconciling from one and checking against the other finds columns missing.
  */
 export function csvHeadersFor(column: ResultColumn): string[] {
-  const title = column.retired ? `${column.title} (removed)` : column.title;
+  const title = column.retired ? `${column.title} (archived)` : column.title;
   return column.type === "payment" ? [title, ...paymentColumnTitles(title)] : [title];
 }
 

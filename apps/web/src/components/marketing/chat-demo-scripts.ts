@@ -84,7 +84,7 @@ export interface DemoTurn {
 export const HERO_SCRIPT: readonly DemoTurn[] = [
   {
     role: "bot",
-    text: "Hey! I'm Ada — I help new teams get set up at Northwind. 👋 What should I call you?",
+    text: "Hey! I'm Ada, and I help new teams get set up at Northwind. 👋 What should I call you?",
   },
   { role: "user", text: "Maya", waitMs: 800 },
   {
@@ -99,7 +99,7 @@ export const HERO_SCRIPT: readonly DemoTurn[] = [
 
   {
     role: "bot",
-    text: "Twelve — noted. How's the setup you're on now doing on these?",
+    text: "Twelve, noted. How's the setup you're on now doing on these?",
     waitMs: 450,
     card: {
       kind: "matrix",
@@ -123,7 +123,7 @@ export const HERO_SCRIPT: readonly DemoTurn[] = [
 
   // The interjection. The respondent takes the wheel mid-form, and the agent
   // answers before handing it back — this is the whole pitch, played inline.
-  { role: "user", text: "quick one before I go on — do you post to Slack?", waitMs: 1100 },
+  { role: "user", text: "quick one before I go on, do you post to Slack?", waitMs: 1100 },
   {
     role: "bot",
     text: "We do. Every response can land in a Slack channel the second it comes in, and Zapier covers anything else.",
@@ -133,7 +133,7 @@ export const HERO_SCRIPT: readonly DemoTurn[] = [
 
   {
     role: "bot",
-    text: "Back to it — want twenty minutes with an onboarding lead?",
+    text: "Back to it. Want twenty minutes with an onboarding lead?",
     waitMs: 500,
     card: {
       kind: "scheduling",
@@ -189,10 +189,10 @@ export const MOMENT_SCRIPT: readonly DemoTurn[] = [
     role: "bot",
     text: "Almost done. Where should I send your invite?",
   },
-  { role: "user", text: "hold on — how much is Pro before I commit to anything?", waitMs: 1100 },
+  { role: "user", text: "hold on, how much is Pro before I commit to anything?", waitMs: 1100 },
   {
     role: "bot",
-    text: "Pro is $24 a month, or $192 a year — that works out to $16 a month. It covers 2,000 AI conversations, your own branding, and the partial responses people leave behind.\n\nAnyway — where should I send your invite?",
+    text: "Pro is $24 a month, or $192 a year, which works out to $16 a month. It covers 2,000 AI conversations, your own branding, and the partial responses people leave behind.\n\nAnyway, where should I send your invite?",
     waitMs: 700,
   },
   { role: "user", text: "maya@northwind.co", waitMs: 1400 },

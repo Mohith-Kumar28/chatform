@@ -2,11 +2,20 @@ import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Caveat, Inter, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme/theme-provider";
-import { ApiProvider } from "@/lib/api/api-provider";
-import { AuthUIProvider } from "@/components/auth/auth-ui-provider";
 import { JsonLd } from "@/components/seo/json-ld";
+import { Clarity } from "@/components/analytics/clarity";
+import { GoogleTagManager } from "@/components/analytics/google-tag-manager";
 import { SITE_ORIGIN, organizationLd, webSiteLd } from "@/lib/seo";
 import "./globals.css";
+
+/**
+ * Read here rather than imported from the generated client's mutator module:
+ * this file is the root of every route in the app, so a dependency added here
+ * is a dependency every page carries. Same env var and same default as there.
+ */
+const API_ORIGIN = (
+  process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.in"
+).replace(/\/$/, "");
 
 const inter = Inter({
   variable: "--font-inter",
@@ -33,12 +42,23 @@ const caveat = Caveat({
   subsets: ["latin"],
   display: "swap",
   weight: ["500", "700"],
+  /**
+   * Registered everywhere so `--font-caveat` always resolves, preloaded
+   * nowhere. `next/font` emits a `<link rel="preload">` per family by default,
+   * and four of them were 191 KB of woff2 competing with the hero headline for
+   * the LCP paint. This face writes six margin notes on one page; it can load
+   * when it is first used.
+   */
+  preload: false,
 });
 const jetbrains = JetBrains_Mono({
   variable: "--font-jetbrains",
   subsets: ["latin"],
   display: "swap",
   weight: ["400", "500"],
+  // Same reasoning as `caveat`: the only thing that sets mono on a marketing
+  // page is `CodeTabs`, six viewports below the fold.
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -75,7 +95,7 @@ export const metadata: Metadata = {
    * position, where communicating is the entire job.
    */
   title: {
-    default: "chatform — AI chat forms",
+    default: "chatform — Conversational forms",
     template: "%s · chatform",
   },
   description:
@@ -119,6 +139,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           real `__name` is never overwritten.
         */}
         <script dangerouslySetInnerHTML={{ __html: "window.__name||=function(f){return f}" }} />
+        {/*
+          Every surface on this site eventually talks to the API worker on
+          another origin — the respondent runtime on `/f/*`, `/signin`, the
+          whole dashboard, the pricing page's catalogue refresh — and there was
+          no preconnect anywhere, so each of them paid a full DNS + TLS
+          handshake at the moment it first needed an answer.
+        */}
+        <link rel="preconnect" href={API_ORIGIN} crossOrigin="" />
       </head>
       <body className="min-h-svh font-sans">
         {/*
@@ -132,15 +160,32 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           few hundred bytes and removes the whole class of problem.
         */}
         <JsonLd nodes={[organizationLd(), webSiteLd()]} />
+        {/*
+          Clarity mounts here rather than in the marketing layout, because the
+          dashboard and the builder are worth watching too — and it excludes
+          itself from the respondent-facing routes. The reasoning for both is in
+          the component.
+        */}
+        <Clarity />
+        {/*
+          GTM sits beside Clarity and shares its exclusions, so the two
+          analytics loaders have one answer between them about where they are
+          allowed to run. It is mounted here rather than in the head the
+          install snippet asks for; the component says why that instruction
+          does not buy anything on a client-rendered tree.
+        */}
+        <GoogleTagManager />
+        {/*
+          Theme and toasts are the only two things the whole site shares.
+
+          The query client, better-auth and the billing dialogs used to wrap
+          `children` here too, which put the entire signed-in app shell on every
+          marketing page — 220 KB over the wire and two cross-origin calls for a
+          session an anonymous visitor does not have. They live in
+          `AppProviders` now, mounted by the route groups that need them.
+        */}
         <ThemeProvider>
-          {/*
-            Inside ApiProvider on purpose: Better Auth UI reads and writes
-            through TanStack Query, so it needs the client that already lives
-            there rather than a second one with its own cache of the session.
-          */}
-          <ApiProvider>
-            <AuthUIProvider>{children}</AuthUIProvider>
-          </ApiProvider>
+          {children}
           <Toaster />
         </ThemeProvider>
       </body>

@@ -1,11 +1,15 @@
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../lib/validator.js";
 import { z } from "zod";
+import { isSafeUrl } from "@repo/guard";
+import { ALLOWED_KNOWLEDGE_MIME, checkFileBytes, safeFilename } from "@repo/guard/files";
 import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
 import { requireSession, requireOrg, requireFormAccess, keyOwnsForm, type GuardVars } from "../lib/guards.js";
 import { requirePermission, requireScope, type AuthzVars } from "../lib/authorize.js";
-import { getEntitlements } from "../lib/entitlements.js";
+import { getEntitlements, storageBytes } from "../lib/entitlements.js";
+import { contentLength } from "../lib/inputs.js";
 import { can, limitOf, featureLocked, limitReached, GATE_STATUS, type GateErrorBody } from "@repo/entitlements";
 import {
   createSource,
@@ -89,20 +93,33 @@ export function createKnowledgeRouter(mode: KnowledgeMode) {
  * video is a legitimate answer to a file question and not a legitimate thing
  * to try to embed.
  */
-const KNOWLEDGE_MIME = new Set([
-  "application/pdf",
-  "text/plain", "text/markdown", "text/csv", "text/html", "application/xml", "text/xml", "application/json",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.oasis.opendocument.text",
-  "application/vnd.oasis.opendocument.spreadsheet",
-  "image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp", "image/svg+xml",
-  "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/webm", "audio/mp4", "audio/m4a", "audio/x-m4a",
-]);
+/**
+ * The knowledge allowlist lives in `@repo/guard/files` now, beside the byte
+ * sniffer that has to agree with it. Still a different list from the
+ * respondent-upload one, for the reason the comment above gives.
+ */
+const KNOWLEDGE_MIME = ALLOWED_KNOWLEDGE_MIME;
 
 const MAX_KNOWLEDGE_MB = 25;
+
+/**
+ * Whether a URL is one the worker may read.
+ *
+ * Shared by the link and crawl routes, and deliberately the *fetch*-side check
+ * rather than the render-side one: plain `http` is fine (plenty of
+ * documentation sites still are), a private, loopback or metadata address is
+ * not. It has to be decided here because a knowledge source is fetched by the
+ * queue consumer minutes later, from whatever `knowledge_sources.origin`
+ * holds — an unvetted URL stored now is an SSRF that fires out of band.
+ */
+function fetchable(url: string): boolean {
+  return isSafeUrl(url, { allowInsecure: true });
+}
+
+const BAD_URL = {
+  error: { code: "bad_url", message: "Only public http and https pages can be read." },
+} as const;
+
 
 const SourceOut = z.object({
   id: z.string(),
@@ -255,9 +272,10 @@ knowledgeRouter.post(
     const formId = c.req.param("id");
     if (!owns(c, formId)) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     const { url, title } = c.req.valid("json");
-    if (!/^https?:$/.test(new URL(url).protocol)) {
-      return c.json({ error: { code: "bad_url", message: "Only http and https pages can be read." } }, 400);
-    }
+    // The scheme-only check this replaces let through every address the
+    // worker should never read: `http://169.254.169.254/` is http, and so is
+    // `http://10.0.0.1/`.
+    if (!fetchable(url)) return c.json(BAD_URL, 400);
     // A page's size is unknown until it is read; charge a nominal amount so a
     // form at its ceiling cannot add unlimited links.
     const denied = await gate(c.env, c.get("orgId")!, formId, 0, 1);
@@ -292,6 +310,9 @@ knowledgeRouter.post(
     const formId = c.req.param("id");
     if (!owns(c, formId)) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     const { url, pages } = c.req.valid("json");
+    // The seed was not checked at all, and it is the more dangerous of the
+    // two: one seed becomes up to 25 fetches.
+    if (!fetchable(url)) return c.json(BAD_URL, 400);
     const cap = Math.min(pages ?? CRAWL_PAGE_CAP, CRAWL_PAGE_CAP);
     const denied = await gate(c.env, c.get("orgId")!, formId, 0, cap);
     if (denied) return c.json(denied.body, denied.status);
@@ -333,6 +354,25 @@ knowledgeRouter.post(
     // A key has no user behind it; the file is attributed to the organization.
     const userId = c.get("userId") ?? null;
 
+    /**
+     * Refused on the declared length, before a byte is read.
+     *
+     * `formData()` buffers the whole body into the worker's memory, so a
+     * length check *after* it is a check that has already paid the cost it was
+     * meant to avoid — and a 25 MB ceiling enforced on `file.size` says
+     * nothing about the 200 MB request that arrived to carry it. Multipart
+     * framing adds a boundary and per-part headers, so the allowance is a
+     * little above the per-file limit. `/api/assets` has had this shape all
+     * along; this route did not.
+     */
+    const declared = contentLength(c);
+    if (declared === null) {
+      return c.json({ error: { code: "length_required", message: "Send a Content-Length" } }, 411);
+    }
+    if (declared > MAX_KNOWLEDGE_MB * 1024 * 1024 + 64 * 1024) {
+      return c.json({ error: { code: "too_large", message: `Max ${MAX_KNOWLEDGE_MB}MB per file` } }, 413);
+    }
+
     const form = await c.req.formData();
     const file = form.get("file");
     if (!(file instanceof File)) {
@@ -341,7 +381,22 @@ knowledgeRouter.post(
     if (file.size > MAX_KNOWLEDGE_MB * 1024 * 1024) {
       return c.json({ error: { code: "too_large", message: `Max ${MAX_KNOWLEDGE_MB}MB per file` } }, 413);
     }
-    if (!KNOWLEDGE_MIME.has(file.type)) {
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    /**
+     * The bytes decide the type, not `File.type`.
+     *
+     * `file.type` is whatever the client put in the part header. The extractor
+     * routes on the stored value — a PDF goes to `toMarkdown`, an audio file
+     * to Whisper — so a wrong label here is a document silently read by the
+     * wrong parser, and the allowlist it was checked against meant nothing.
+     */
+    const verdict = await checkFileBytes({
+      declared: file.type,
+      bytes,
+      allowed: ALLOWED_KNOWLEDGE_MIME,
+    });
+    if (!verdict.ok) {
       return c.json(
         {
           error: {
@@ -352,26 +407,47 @@ knowledgeRouter.post(
         415,
       );
     }
+    const mime = verdict.mime;
 
+    /**
+     * The storage quota, which this route skipped.
+     *
+     * `gate` counts knowledge bytes and source counts — the agent's own
+     * ceilings — and not `file_storage_mb`. But this inserts a `files` row
+     * like every other upload, so it spends the organization's storage
+     * allowance while being the one path that never checked it.
+     */
     const denied = await gate(c.env, orgId, formId, file.size, 1);
     if (denied) return c.json(denied.body, denied.status);
 
+    const ent = await getEntitlements(c.env, orgId);
+    const quota = ent.limits.file_storage_mb;
+    if (quota != null) {
+      const used = await storageBytes(c.env, orgId);
+      if (used + file.size > quota * 1024 * 1024) {
+        return c.json(
+          { error: { code: "storage_full", message: "Your plan's file storage is full." } },
+          507,
+        );
+      }
+    }
+
     const fileId = `ast_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
+    const safeName = safeFilename(file.name, 120);
     const r2Key = `knowledge/${orgId}/${formId}/${fileId}-${safeName}`;
 
-    await c.env.R2.put(r2Key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+    await c.env.R2.put(r2Key, bytes, { httpMetadata: { contentType: mime } });
     await c.env.DB.prepare(
       `INSERT INTO files (id, organization_id, form_id, uploaded_by, uploader_user_id, r2_key, filename, mime, size_bytes, status, created_at, confirmed_at)
        VALUES (?, ?, ?, 'builder', ?, ?, ?, ?, ?, 'confirmed', ?, ?)`,
     )
-      .bind(fileId, orgId, formId, userId, r2Key, safeName, file.type, file.size, Date.now(), Date.now())
+      .bind(fileId, orgId, formId, userId, r2Key, safeName, mime, file.size, Date.now(), Date.now())
       .run();
 
     const id = await createSource(c.env, {
       organizationId: orgId,
       formId,
-      kind: kindForMime(file.type),
+      kind: kindForMime(mime),
       title: (form.get("title") as string | null) || safeName,
       origin: safeName,
       fileId,

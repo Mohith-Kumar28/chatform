@@ -1,3 +1,4 @@
+import { AppProviders } from "@/components/providers/app-providers";
 import { BuilderShell } from "@/components/builder/builder-shell";
 
 /**
@@ -11,5 +12,9 @@ export default async function BuilderLayout({
   params,
 }: LayoutProps<"/forms/[id]">) {
   const { id } = await params;
-  return <BuilderShell formId={id}>{children}</BuilderShell>;
+  return (
+    <AppProviders>
+      <BuilderShell formId={id}>{children}</BuilderShell>
+    </AppProviders>
+  );
 }

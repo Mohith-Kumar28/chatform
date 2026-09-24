@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "exit-interview-form",
   name: "Exit interviews",
+  keyword: "Exit interview form",
   group: "Hire and onboard",
   audience: "Solo HR leads, ops managers and founders of small teams",
   navBlurb: "Get past “personal reasons” to the thing that is about to cost you three more people.",

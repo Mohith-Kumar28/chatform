@@ -1,5 +1,6 @@
 import type { Bindings } from "../env.js";
 import type { TokenUsage } from "./ai.js";
+import { modelRates, splitCost } from "./ai-cost-split.js";
 
 /**
  * Record one model call in `ai_generations`.
@@ -54,11 +55,16 @@ export async function logAiGeneration(
    */
   if (row.usage.input + row.usage.output === 0 && row.status !== "error") return;
   try {
+    // What the money bought, apportioned from the reported total. See `ai-cost-split.ts`.
+    const split = splitCost(row.usage, await modelRates(env, row.model));
+    const u = row.usage;
     await env.DB.prepare(
       `INSERT INTO ai_generations
          (id, organization_id, user_id, session_id, form_id, kind, provider, model,
-          prompt_tokens, completion_tokens, cost_usd, generation_id, latency_ms, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'openrouter', ?, ?, ?, ?, ?, ?, ?, ?)`,
+          prompt_tokens, completion_tokens, cost_usd, generation_id, latency_ms, status, created_at,
+          cache_read_tokens, cache_write_tokens, reasoning_tokens, steps, tool_calls,
+          cost_input_usd, cost_cached_usd, cost_output_usd, cost_reasoning_usd, cost_other_usd, cost_tool_steps_usd)
+       VALUES (?, ?, ?, ?, ?, ?, 'openrouter', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         `ai_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
@@ -75,6 +81,18 @@ export async function logAiGeneration(
         row.latencyMs ?? null,
         row.status ?? "ok",
         Date.now(),
+        u.cacheReadTokens ?? null,
+        u.cacheWriteTokens ?? null,
+        u.reasoningTokens ?? null,
+        u.steps ?? null,
+        u.toolCalls ?? null,
+        split?.input ?? null,
+        split?.cached ?? null,
+        split?.output ?? null,
+        split?.reasoning ?? null,
+        split?.other ?? null,
+        // Unpriced overall means unpriced here too, whatever the steps said.
+        u.costUsd === null ? null : (u.toolStepsCostUsd ?? null),
       )
       .run();
   } catch (err) {

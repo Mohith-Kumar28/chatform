@@ -1,5 +1,5 @@
 import {
-  AlignLeft, AtSign, Baseline, Calendar, CheckSquare, ChevronDownSquare, CircleDot,
+  AlignLeft, AtSign, BarChart3, Baseline, Calendar, CheckSquare, ChevronDownSquare, CircleDot,
   CreditCard, FileUp, Gauge, Hash, Heart, Image, Link2, ListOrdered, MapPin,
   MessageSquare, PenTool, Phone, ScrollText, Sparkles, Star, Table2, ToggleLeft,
   User, CalendarClock, Rows3, Flag, GitBranch,
@@ -59,6 +59,7 @@ export const BLOCK_LIBRARY: BlockMeta[] = [
 
   { type: "yes_no", label: "Yes / No", group: "Choice", icon: ToggleLeft, tone: "choice", description: "A binary answer." },
   { type: "single_select", label: "Single select", group: "Choice", icon: CircleDot, tone: "choice", description: "Pick exactly one option." },
+  { type: "poll", label: "Poll", group: "Choice", icon: BarChart3, tone: "choice", description: "Pick one, then see how everyone answered." },
   { type: "multi_select", label: "Multi select", group: "Choice", icon: CheckSquare, tone: "choice", description: "Pick any number of options." },
   { type: "dropdown", label: "Dropdown", group: "Choice", icon: ChevronDownSquare, tone: "choice", description: "Long option lists." },
   { type: "picture_choice", label: "Picture choice", group: "Choice", icon: Image, tone: "choice", description: "Choose by image." },

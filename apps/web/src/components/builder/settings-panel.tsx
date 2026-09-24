@@ -59,6 +59,14 @@ const SECTIONS = [
 
 type SectionId = (typeof SECTIONS)[number]["id"];
 
+/**
+ * Every input that sits beside its label is this wide, so the right-hand edge of
+ * a section lines up. They were 8rem, 20rem and 28rem depending on who wrote the
+ * row, which left a number box looking cramped next to a URL field. Full width
+ * on a phone, where the row stacks.
+ */
+const CONTROL_WIDTH = "w-full sm:w-80";
+
 export function SettingsPanel({
   settings,
   onChange,
@@ -152,21 +160,32 @@ export function SettingsPanel({
             <SettingGroup>
               <SettingRow
                 label="Form name"
-                description="Shown at the top of the chat, and in your dashboard. Renaming does not change the form's link."
+                description="Renaming keeps the same link."
               >
                 <FormNameField title={formTitle ?? ""} onChange={onTitleChange} />
+              </SettingRow>
+              {/*
+                The name in the chat header, when it should not be the form's.
+                It lived in the Agent tab's persona section, but it is a label
+                on the page, not something the agent says or does.
+              */}
+              <SettingRow label="Chat header name" description="Leave empty to use the form name.">
+                <BufferedInput
+                  className={CONTROL_WIDTH}
+                  value={settings.agent.displayName ?? ""}
+                  placeholder={formTitle}
+                  maxLength={60}
+                  onCommit={(v) => patch({ agent: { ...settings.agent, displayName: v.trim() || undefined } })}
+                />
               </SettingRow>
             </SettingGroup>
           </SettingSection>
         )}
         <SettingSection title="Display">
           <SettingGroup>
-          <SettingRow
-            label="Progress bar"
-            description="Show respondents how far they are."
-          >
+          <SettingRow label="Progress bar">
             <Select value={settings.progressBar} onValueChange={(v) => patch({ progressBar: v as "percent" | "steps" | "none" })}>
-              <SelectTrigger className="w-auto min-w-40">
+              <SelectTrigger className={CONTROL_WIDTH}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -178,7 +197,6 @@ export function SettingsPanel({
           </SettingRow>
           <SettingRow
             label="Allow skipping optional questions"
-            description="Respondents can skip anything not marked required."
             checked={settings.navigation.allowSkip}
             onCheckedChange={(v) => patch({ navigation: { ...settings.navigation, allowSkip: v } })}
           />
@@ -191,7 +209,6 @@ export function SettingsPanel({
           <LockedControl feature="remove_branding">
             <SettingRow
               label='Hide "Powered by chatform"'
-              description="Remove the chatform badge from the chat."
               checked={settings.branding.hidePoweredBy}
               onCheckedChange={(v) => patch({ branding: { ...settings.branding, hidePoweredBy: v } })}
             />
@@ -209,7 +226,7 @@ export function SettingsPanel({
           <LockedControl feature="respondent_auth_google">
             <SettingRow
               label="Require sign-in"
-              description="Respondents verify who they are before they can finish."
+              description="People verify who they are first."
               checked={settings.requireAuth.enabled}
               onCheckedChange={(v) => patch({ requireAuth: { ...settings.requireAuth, enabled: v } })}
             />
@@ -222,10 +239,7 @@ export function SettingsPanel({
                 same person, so "one response per person" below could be
                 walked around by coming back through the other one.
               */}
-              <SettingRow
-                label="Verify with"
-                description="How a respondent proves who they are. Pick one."
-              >
+              <SettingRow label="Verify with">
                 <div role="radiogroup" aria-label="Sign-in method" className="flex gap-1.5">
                   {(["google", "phone"] as const).map((m) => {
                     const on = settings.requireAuth.method === m;
@@ -257,13 +271,13 @@ export function SettingsPanel({
               */}
               <SettingRow
                 label="Ask after"
-                description="Questions to answer before signing in. 0 asks before the first one."
+                description="Questions before sign-in. 0 means right away."
               >
                 <BufferedInput
                   type="number"
                   min={0}
                   max={20}
-                  className="w-32"
+                  className={CONTROL_WIDTH}
                   value={String(settings.requireAuth.afterBlocks)}
                   onCommit={(v) =>
                     patch({
@@ -277,7 +291,7 @@ export function SettingsPanel({
               </SettingRow>
               <SettingRow
                 label="What the agent says"
-                description="The sentence shown above the sign-in buttons."
+                description="Shown above the sign-in buttons."
                 stacked
               >
                 <BufferedTextarea
@@ -310,40 +324,51 @@ export function SettingsPanel({
             the branding.
           */}
           <LockedControl feature="duplicate_prevention">
+            {/*
+              Named for what it allows, the way every other switch here reads.
+              "One response per person", on meaning off, was the one row where
+              a switch had to be read twice.
+            */}
             <SettingRow
-              label="One response per person"
-              description={onePerPersonBlurb(settings.requireAuth.enabled, canVerifiedIdentity)}
-              checked={!settings.allowResubmissions}
-              onCheckedChange={(v) => patch({ allowResubmissions: !v })}
+              label="Allow multiple responses"
+              description={
+                settings.allowResubmissions
+                  ? "People can answer more than once."
+                  : settings.requireAuth.enabled && canVerifiedIdentity
+                    ? "One response per signed-in person."
+                    : "One response per browser."
+              }
+              checked={settings.allowResubmissions}
+              onCheckedChange={(v) => patch({ allowResubmissions: v })}
             />
           </LockedControl>
           <SettingRow
             label="Require password"
-            description="Only people with the password can respond."
             checked={settings.password.enabled}
             onCheckedChange={(v) => patch({ password: { ...settings.password, enabled: v, value: settings.password.value || "letmein" } })}
           />
           {settings.password.enabled && (
             <SettingRow label="Password">
               <BufferedInput
-                className="max-w-xs"
+                className={CONTROL_WIDTH}
                 value={settings.password.value}
                 onCommit={(v) => patch({ password: { ...settings.password, value: v } })}
               />
             </SettingRow>
           )}
           <SettingRow
-            label="Captcha (Turnstile)"
-            description="Verify respondents with Cloudflare Turnstile."
+            label="Captcha"
+            description="Blocks bots."
             checked={settings.captcha.enabled}
             onCheckedChange={(v) => patch({ captcha: { ...settings.captcha, enabled: v } })}
           />
           </SettingGroup>
 
           <SettingGroup label="Closing">
-          <SettingRow label="Close automatically at" description="Stop accepting responses after this date.">
+          <SettingRow label="Close on a date">
             <Input
               type="datetime-local"
+              className={CONTROL_WIDTH}
               value={toLocalInput(settings.closeRules.closeAt)}
               onChange={(e) =>
                 patch({
@@ -364,16 +389,16 @@ export function SettingsPanel({
           {settings.closeRules.closeAt && (
             <SettingRow
               label="Show a countdown"
-              description="Respondents see how long they have left, at the top of the conversation. Also puts the date on the link preview."
+              description="Shows the time left in the chat."
               checked={settings.closeRules.showCountdown}
               onCheckedChange={(v) => patch({ closeRules: { ...settings.closeRules, showCountdown: v } })}
             />
           )}
-          <SettingRow label="Close after N submissions" description="Cap the total number of responses.">
+          <SettingRow label="Response limit" description="Close after this many responses.">
             <BufferedInput
               type="number"
               min={1}
-              className="w-32"
+              className={CONTROL_WIDTH}
               placeholder="No limit"
               value={settings.closeRules.maxSubmissions === undefined ? "" : String(settings.closeRules.maxSubmissions)}
               onCommit={(v) =>
@@ -396,7 +421,7 @@ export function SettingsPanel({
                 a leak on a hiring form, and the author is the only one who
                 knows which of those this is.
               */
-              description="Respondents see how many places remain — which also tells anyone with the link how many people have answered. Best for a genuinely limited intake."
+              description="Also reveals how many people have answered."
               checked={settings.closeRules.showRemaining}
               onCheckedChange={(v) => patch({ closeRules: { ...settings.closeRules, showRemaining: v } })}
             />
@@ -441,11 +466,11 @@ export function SettingsPanel({
           <SettingGroup>
           <SettingRow
             label="Notification emails"
-            description="Get an email for every completed response."
+            description="Get an email for every response."
             issuePath="settings.onComplete.notificationEmails"
           >
             <BufferedInput
-              className="max-w-md"
+              className={CONTROL_WIDTH}
               value={settings.onComplete.notificationEmails.join(", ")}
               placeholder="you@company.com"
               onCommit={(v) =>
@@ -463,12 +488,12 @@ export function SettingsPanel({
           </SettingRow>
           <LockedControl feature="completion_redirect">
           <SettingRow
-            label="Default redirect after completion"
-            description="Where a success ending sends people when it has no redirect of its own. Set one on a particular ending to send those respondents somewhere else — accepted teams to a group chat, everyone else here. Screen-outs never inherit this."
+            label="Redirect after finishing"
+            description="Where people go after finishing."
             issuePath="settings.onComplete.redirectUrl"
           >
             <BufferedInput
-              className="max-w-md"
+              className={CONTROL_WIDTH}
               value={settings.onComplete.redirectUrl ?? ""}
               placeholder="https://yoursite.com/thanks"
               onCommit={(v) =>
@@ -555,7 +580,7 @@ function FormNameField({ title, onChange }: { title: string; onChange: (title: s
       maxLength={200}
       aria-label="Form name"
       placeholder="Untitled form"
-      className="w-72"
+      className={CONTROL_WIDTH}
       onChange={(e) => buffered.onChange(e.target.value)}
       onBlur={(e) => {
         // Put the old name back rather than leaving an empty box, which reads as
@@ -603,7 +628,7 @@ function ConfirmationEmailSettings({
     <SettingGroup label="To the respondent">
       <SettingRow
         label="Confirmation email"
-        description="Thank people for answering, at the email address they gave you. Nothing is sent if the form never asks for one."
+        description="Sent to the email they gave you."
         checked={confirmation.enabled}
         onCheckedChange={(enabled) => patch({ enabled })}
       />
@@ -611,14 +636,13 @@ function ConfirmationEmailSettings({
         <>
           <SettingRow
             label="Include their answers"
-            description="Send a copy of what they filled in. Turn this off for anything they would not want sitting in an inbox."
             checked={confirmation.includeAnswers}
             onCheckedChange={(includeAnswers) => patch({ includeAnswers })}
           />
           <LockedControl feature="auto_reply_email">
-            <SettingRow label="Subject" description="Leave it as it is, or write your own.">
+            <SettingRow label="Subject">
               <BufferedInput
-                className="max-w-md"
+                className={CONTROL_WIDTH}
                 value={confirmation.subject}
                 placeholder={DEFAULT_CONFIRMATION_SUBJECT}
                 onCommit={(v) => patch({ subject: v })}
@@ -626,7 +650,7 @@ function ConfirmationEmailSettings({
             </SettingRow>
             <SettingRow
               label="Message"
-              description="Use {{form.title}} or any question's ref to write their own answers back to them."
+              description="Write {{form.title}} to include the form name."
               stacked
             >
               <BufferedTextarea
@@ -641,25 +665,6 @@ function ConfirmationEmailSettings({
       )}
     </SettingGroup>
   );
-}
-
-/**
- * What "one response per person" actually buys, given this form and this plan.
- *
- * The author picks the rule; the key is a consequence, and the consequence is
- * worth stating because the three cases differ by a lot. Saying "one response
- * per person" over a browser fingerprint without saying so is the kind of
- * promise that gets discovered at the wrong moment — a duplicate in the
- * results, or a respondent locked out of a form they never filled in.
- */
-function onePerPersonBlurb(signInRequired: boolean, canVerifiedIdentity: boolean): string {
-  if (signInRequired && canVerifiedIdentity) {
-    return "Keyed to the identity they sign in with, so another browser or device does not get them a second response.";
-  }
-  if (signInRequired) {
-    return "We recognise the respondent's browser — it survives a cleared cache and a private window, but not a different device. Business keys this to the identity they sign in with instead.";
-  }
-  return "We recognise the respondent's browser. It survives a cleared cache and a private window, but not a different device — turn on Require sign-in for a per-person guarantee.";
 }
 
 function SettingSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -762,13 +767,21 @@ function SettingRow({
     );
   }
 
+  // A switch stays beside its label at any width; an input drops below it on a
+  // phone rather than squeezing the label into a column of single words.
+  const isSwitch = checked !== undefined && onCheckedChange !== undefined;
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+    <div
+      className={cn(
+        "flex justify-between gap-4 px-4 py-3.5",
+        isSwitch ? "items-center" : "flex-col gap-2 sm:flex-row sm:items-center sm:gap-4",
+      )}
+    >
       <div className="min-w-0">
         <p className="text-sm font-medium">{label}</p>
         {description && <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">{description}</p>}
       </div>
-      <div className="shrink-0">{withIssue}</div>
+      <div className={isSwitch ? "shrink-0" : "w-full shrink-0 sm:w-auto"}>{withIssue}</div>
     </div>
   );
 }
@@ -791,7 +804,7 @@ function HiddenFieldsEditor({
   return (
     <div className="rounded-xl border px-4 py-3.5">
       <Label>Hidden fields</Label>
-      <p className="text-muted-foreground mt-0.5 mb-2 text-xs">Capture UTM / URL params invisibly with every response.</p>
+      <p className="text-muted-foreground mt-0.5 mb-2 text-xs">Save values from the link with each response, like where people came from (?utm_source=instagram).</p>
       <div className="mb-2 flex flex-wrap gap-1.5">
         {fields.map((f) => (
           <span key={f.name} className="flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs">
@@ -830,7 +843,7 @@ function VariablesEditor({
   return (
     <div className="rounded-xl border px-4 py-3.5">
       <Label>Variables</Label>
-      <p className="text-muted-foreground mt-0.5 mb-2 text-xs">Scores, prices or tags computed during the conversation.</p>
+      <p className="text-muted-foreground mt-0.5 mb-2 text-xs">A running total, like a quiz score. Logic changes it as people answer, and can use it to pick their ending.</p>
       <div className="mb-2 flex flex-wrap gap-1.5">
         {variables.map((v) => (
           <span key={v.name} className="flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs">

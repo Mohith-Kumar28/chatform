@@ -1,7 +1,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
-import { MODELS, chatModel, reportedUsage, tagged, type TokenUsage } from "./ai.js";
+import { MODELS, chatModel, reportedUsage, telemetry, type TokenUsage } from "./ai.js";
 import { logAiGeneration } from "./ai-usage.js";
 import {
   ISSUE_CANDIDATES,
@@ -113,7 +113,7 @@ const modelDecider =
       schema: Decision,
       system: ISSUE_DECIDE_SYSTEM,
       prompt: issueDecidePrompt(note, candidates),
-      providerOptions: tagged({}, "feedback_issue", "platform"),
+      providerOptions: telemetry(env, {}, { kind: "feedback_issue", organizationId: "platform", source: "system" }),
       abortSignal: AbortSignal.timeout(15_000),
       temperature: 0,
     });

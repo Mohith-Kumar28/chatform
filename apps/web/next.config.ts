@@ -70,6 +70,26 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        /**
+         * The hosted form gets the two headers that have nothing to do with
+         * framing.
+         *
+         * The exclusion above exists so `/f/` *can* be framed — and it was
+         * dropping `nosniff` and `Referrer-Policy` along with the frame
+         * directives, on the one route that renders author-supplied content to
+         * strangers. Neither of these constrains an embedder.
+         *
+         * `Referrer-Policy` matters here specifically: a hosted form is linked
+         * from emails, QR codes and other people's pages, and without this the
+         * full referring URL travels on every asset request the page makes.
+         */
+        source: "/f/:path*",
+        headers: [
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
+      {
         // The embed loader is fetched cross-origin by definition.
         source: "/embed.js",
         headers: [

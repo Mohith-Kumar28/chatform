@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { describeRoute } from "hono-openapi";
+import { BlockCatalogueView, BlockDefinitionView, EventCatalogueView, KeyIdentityView } from "../../lib/v1-schemas.js";
+import { describeRoute, resolver } from "hono-openapi";
 import { z } from "zod";
 import {
   BLOCK_TYPES,
@@ -61,7 +62,7 @@ function blockConfigSchemas(): Record<string, unknown> {
 
 /** How an answer to this type reaches us — which is what shapes an integration. */
 function answeringMode(type: BlockType): string {
-  if (DETERMINISTIC_TYPES.has(type)) return "matched exactly — never sent to a model";
+  if (DETERMINISTIC_TYPES.has(type)) return "matched exactly, never sent to a model";
   if (OUT_OF_BAND_TYPES.has(type)) return "arrives out of band (upload, payment or booking)";
   return "extracted from free text by the agent, then re-validated";
 }
@@ -71,7 +72,7 @@ metaRouter.get(
   describeRoute({
     tags: ["v1"],
     summary: "Every block type: config schema, what you receive, what you send",
-    responses: { 200: { description: "The block catalog" } },
+    responses: { 200: { description: "The block catalog", content: { "application/json": { schema: resolver(BlockCatalogueView) } } } },
   }),
   (c) => {
     const schemas = blockConfigSchemas();
@@ -107,7 +108,10 @@ metaRouter.get(
   describeRoute({
     tags: ["v1"],
     summary: "One block type",
-    responses: { 200: { description: "Block type" }, 404: { description: "No such block type" } },
+    responses: {
+      200: { description: "Block type", content: { "application/json": { schema: resolver(BlockDefinitionView) } } },
+      404: { description: "No such block type" },
+    },
   }),
   (c) => {
     const type = c.req.param("type") as BlockType;
@@ -140,7 +144,7 @@ metaRouter.get(
   describeRoute({
     tags: ["v1"],
     summary: "The webhook event catalog",
-    responses: { 200: { description: "Events" } },
+    responses: { 200: { description: "Events", content: { "application/json": { schema: resolver(EventCatalogueView) } } } },
   }),
   (c) =>
     c.json({
@@ -158,7 +162,7 @@ metaRouter.get(
   describeRoute({
     tags: ["v1"],
     summary: "Who this key is, what it may do, and what is left of the plan",
-    responses: { 200: { description: "Key identity" } },
+    responses: { 200: { description: "Key identity", content: { "application/json": { schema: resolver(KeyIdentityView) } } } },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;

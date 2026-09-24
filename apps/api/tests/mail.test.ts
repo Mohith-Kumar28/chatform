@@ -107,7 +107,7 @@ async function publish(doc: unknown): Promise<void> {
 /** A completed response with three answers on it. */
 async function seedResponse(
   id: string,
-  opts: { respondentEmail?: string | null; status?: string } = {},
+  opts: { respondentEmail?: string | null; status?: string; name?: string } = {},
 ): Promise<void> {
   const now = Date.now();
   await env.DB.prepare(
@@ -127,7 +127,7 @@ async function seedResponse(
     .run();
 
   const answers: [string, string, unknown][] = [
-    ["q_name", "short_text", "Ada"],
+    ["q_name", "short_text", opts.name ?? "Ada"],
     ["q_email", "email", "ada@example.com"],
     ["q_pick", "single_select", "opt_coffee"],
   ];
@@ -373,6 +373,44 @@ describe("submission notifications", () => {
     expect(sent[0]!.html).not.toContain("{{form.title}}");
   });
 
+  /**
+   * The same offer the form's own ending makes, for whoever closed that tab: a
+   * quiet link back to the form, and only where the form would take another
+   * response. Offering it on a one-response form would send people to a
+   * "you have already answered" wall.
+   */
+  it("links back to the form for another response, only where the form allows one", async () => {
+    const slug = (await env.DB.prepare(`SELECT slug FROM forms WHERE id = ?`).bind(t.formId).first<{ slug: string }>())!.slug;
+
+    await publish(DOC);
+    await seedResponse("sbm_mail_again_yes");
+    const open = captureBinding();
+    await runMailJob(withMail({ EMAIL: open.binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_again_yes",
+      isTest: false,
+    });
+    expect(open.sent[0]!.html).toContain("Submit another response");
+    expect(open.sent[0]!.html).toContain(`/f/${slug}"`);
+    expect(open.sent[0]!.text).toContain(`Submit another response: `);
+
+    await publish({ ...DOC, settings: { ...(DOC as { settings?: object }).settings, allowResubmissions: false } });
+    await seedResponse("sbm_mail_again_no");
+    const once = captureBinding();
+    await runMailJob(withMail({ EMAIL: once.binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_again_no",
+      isTest: false,
+    });
+    expect(once.sent).toHaveLength(1);
+    expect(once.sent[0]!.html).not.toContain("Submit another response");
+    expect(once.sent[0]!.text).not.toContain("Submit another response");
+  });
+
   it("leaves the answers out when the author switches the summary off", async () => {
     await publish({
       ...DOC,
@@ -500,6 +538,46 @@ describe("auto-reply", () => {
     const html = sent[0]!.html;
     expect(html).not.toContain("brand/email-mark.png");
     expect(html).not.toContain("Powered by chatform");
+  });
+
+  /**
+   * An answer is data in the owner's message, not markup.
+   *
+   * `interpolate` has always been able to escape markdown in what it
+   * substitutes, and the chat runtime asks it to — but these two email paths
+   * did not, so a respondent typing `[see here](https://elsewhere.example)`
+   * into a name field got a real link in a message the form's owner signs.
+   * The plain-text part keeps the unescaped pass: a backslash before every
+   * asterisk is not an improvement in a body nobody renders.
+   */
+  it("does not let a respondent's answer become markup", async () => {
+    await publish({
+      ...DOC,
+      settings: {
+        onComplete: {
+          autoReplyEmail: { enabled: true, subject: "Thanks", bodyMd: "Hi {{q_name}}, thanks!" },
+        },
+      },
+    });
+    await seedResponse("sbm_mail_md", {
+      respondentEmail: "ada@example.com",
+      name: "[click me](https://elsewhere.example)",
+    });
+
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_md",
+      isTest: false,
+    });
+
+    const html = sent[0]!.html;
+    expect(html).not.toContain('href="https://elsewhere.example"');
+    expect(html).toContain("click me");
+    // The author's own markdown in the same template still renders.
+    expect(sent[0]!.text).toContain("[click me](https://elsewhere.example)");
   });
 
   it("goes to the respondent and interpolates their answers", async () => {

@@ -89,6 +89,10 @@ export interface CreatedFromTemplate {
   id: string;
   slug: string;
   title: string;
+  status: string;
+  published: boolean;
+  created_at: number;
+  updated_at: number;
 }
 
 /**
@@ -132,5 +136,21 @@ export async function createFormFromTemplate(
     env.DB.prepare(`UPDATE form_templates SET usage_count = usage_count + 1 WHERE slug = ?`).bind(opts.slug),
   ]);
 
-  return { id, slug: outSlug, title: row.title };
+  /**
+   * The same body `POST /v1/forms` answers with.
+   *
+   * The description on this route says it creates a draft "exactly as
+   * `POST /v1/forms` does", and it returned three of that shape's seven fields
+   * -- so a caller that handled both had to special-case the one that was
+   * supposed to be the same.
+   */
+  return {
+    id,
+    slug: outSlug,
+    title: row.title,
+    status: "draft",
+    published: false,
+    created_at: now,
+    updated_at: now,
+  };
 }

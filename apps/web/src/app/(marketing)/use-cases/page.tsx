@@ -7,7 +7,8 @@ import { JsonLd } from "@/components/seo/json-ld";
 import { USE_CASES, USE_CASE_GROUPS } from "@/content/use-cases";
 import { breadcrumbLd, canonical, itemListLd, openGraphBase } from "@/lib/seo";
 
-const TITLE = "What people use chatform for";
+/** Searchable words in the title; the h1 keeps the reader's version. */
+const TITLE = "Form examples by use case, with step-by-step guides · chatform";
 const DESCRIPTION =
   "Step-by-step guides for the things people actually build: taking bookings, chasing testimonials, screening leads, running an event, collecting feedback. Each one has a prompt you can paste in.";
 

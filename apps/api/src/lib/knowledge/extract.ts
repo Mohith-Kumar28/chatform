@@ -1,6 +1,6 @@
 import { generateText } from "ai";
 import type { Bindings } from "../../env.js";
-import { chatModel, MODELS, reportedUsage, tagged } from "../ai.js";
+import { chatModel, MODELS, reportedUsage, telemetry } from "../ai.js";
 import { logAiGeneration } from "../ai-usage.js";
 import { fetchSiteText } from "../research.js";
 import type { KnowledgeSourceInput } from "./store.js";
@@ -206,7 +206,7 @@ async function ocrFallback(
           ],
         },
       ],
-      providerOptions: tagged({}, "knowledge_ocr", ctx.organizationId, input.formId),
+      providerOptions: telemetry(env, {}, { kind: "knowledge_ocr", organizationId: ctx.organizationId, formId: input.formId, source: "system" }),
       abortSignal: AbortSignal.timeout(90_000),
     });
 

@@ -1,0 +1,30 @@
+{
+  "name": "@repo/guard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./files": "./src/files.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "file-type": "^22.1.0",
+    "ipaddr.js": "^2.5.0"
+  },
+  "devDependencies": {
+    "@repo/config": "workspace:*",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "zod": "4.4.3"
+  },
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  }
+}

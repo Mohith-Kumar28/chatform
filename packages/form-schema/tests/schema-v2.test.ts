@@ -15,6 +15,7 @@ import {
   DEFAULT_CONFIRMATION_BODY,
   DEFAULT_CONFIRMATION_SUBJECT,
   normalizeE164,
+  validateAnswer,
   type Block,
 } from "../src/index";
 
@@ -148,7 +149,7 @@ describe("readFormDoc", () => {
 
 describe("agent layer", () => {
   it("defaults new forms to ai mode", () => {
-    expect(FormDoc.parse(leadFormFixture).settings.agent.mode).toBe("ai");
+    expect(FormDoc.parse(leadFormFixture).settings.agent.mode).toBe("hybrid");
   });
 
   it("accepts a full agent config", () => {
@@ -601,5 +602,189 @@ describe("conditions that cannot fail", () => {
     for (const op of ["eq", "neq", "is_empty", "gt", "contains"]) {
       expect(conditionIsAlwaysTrue(cond(op), required)).toBe(false);
     }
+  });
+});
+
+/**
+ * A stored document is cleaned on read, never refused.
+ *
+ * This is the rule that decides whether tightening the schema is a security
+ * improvement or an outage, so it is pinned rather than left to judgement.
+ *
+ * `readFormDoc` runs on the *serving* path — the public form config, the
+ * session open, the export writer, the mail jobs — and published
+ * `form_versions` rows are append-only by design, so the documents already in
+ * the database are the ones that matter and they cannot be rewritten. A
+ * schema that rejects a bad URL therefore does not stop anyone writing one; it
+ * stops a form that already contains one from loading at all, for every
+ * respondent, mid-answer.
+ *
+ * So: a dangerous value becomes a harmless one and the form keeps working with
+ * one dead button. If a future change makes any of these throw, it has
+ * converted a stored XSS into a 500 and this test is the objection.
+ */
+describe("a hostile stored document", () => {
+  const hostile = {
+    schemaVersion: SCHEMA_VERSION,
+    title: "  Feedback​  ",
+    blocks: [
+      {
+        id: "blk_host01",
+        ref: "q_name",
+        type: "short_text",
+        title: "Your name?",
+        // The guard for this lives at the execution site, not here: a document
+        // carrying a nested quantifier still has to parse.
+        pattern: "(a+)+$",
+        media: { kind: "image", url: "javascript:alert(1)" },
+      },
+      { id: "blk_host02", ref: "q_when", type: "scheduling", title: "Pick a slot", url: "javascript:alert(1)" },
+    ],
+    endings: [
+      {
+        id: "end_host01",
+        ref: "end_thanks",
+        title: "Thanks",
+        ctaLabel: "Continue",
+        ctaUrl: "javascript:alert(1)",
+        redirectUrl: "data:text/html,<script>alert(1)</script>",
+        imageUrl: "javascript:alert(1)",
+      },
+    ],
+    settings: {
+      onComplete: { redirectUrl: "javascript:alert(1)" },
+      branding: { logoUrl: "javascript:alert(1)" },
+    },
+    theme: { accent: "red; background: url(https://tracker.example)", logoUrl: "javascript:alert(1)" },
+  };
+
+  it("parses", () => {
+    expect(() => readFormDoc(hostile)).not.toThrow();
+  });
+
+  it("drops every link that would execute", () => {
+    const doc = readFormDoc(hostile);
+    const ending = doc.endings[0]!;
+    expect(ending.ctaUrl).toBeUndefined();
+    expect(ending.redirectUrl).toBeUndefined();
+    expect(ending.imageUrl).toBeNull();
+    expect(doc.settings.onComplete.redirectUrl).toBeUndefined();
+    expect(doc.theme.logoUrl).toBeNull();
+    expect(doc.blocks[0]!.media?.url).toBeNull();
+    // A required URL falls back to empty rather than missing, so the field's
+    // type does not change — the runtime already treats a falsy url as absent.
+    expect((doc.blocks[1] as { url?: string }).url).toBe("");
+  });
+
+  it("falls back to the default for a colour that would break out of its declaration", () => {
+    expect(readFormDoc(hostile).theme.accent).toBe("#FD6F29");
+  });
+
+  it("cleans invisible characters out of the text it keeps", () => {
+    expect(readFormDoc(hostile).title).toBe("Feedback");
+  });
+
+  it("keeps the pattern in the document, because the validator is what refuses it", () => {
+    // Refusing it here would reject a form published before the guard existed.
+    expect((readFormDoc(hostile).blocks[0] as { pattern?: string }).pattern).toBe("(a+)+$");
+  });
+});
+
+/**
+ * The author's regex is executed against a stranger's text, so the guard has
+ * to be where the execution is.
+ */
+describe("a pattern the author should not have written", () => {
+  const block = {
+    id: "blk_redos1",
+    ref: "q_name",
+    type: "short_text" as const,
+    title: "Your name?",
+    pattern: "(a+)+$",
+  };
+
+  it("is skipped rather than run", () => {
+    const parsed = FormDoc.parse({
+      schemaVersion: SCHEMA_VERSION,
+      title: "ReDoS",
+      blocks: [block],
+      endings: [{ id: "end_redos1", ref: "end_thanks", title: "Thanks" }],
+    });
+    // The string that makes a nested quantifier catastrophic. If the pattern
+    // were still being run, this call would not return.
+    const answer = "a".repeat(40) + "!";
+    const started = Date.now();
+    const result = validateAnswer(parsed.blocks[0]! as Block, answer);
+    expect(Date.now() - started).toBeLessThan(200);
+    // Skipped, so the answer is accepted on its other merits.
+    expect(result.ok).toBe(true);
+  });
+
+  it("still enforces a pattern that is safe to run", () => {
+    const parsed = FormDoc.parse({
+      schemaVersion: SCHEMA_VERSION,
+      title: "Pattern",
+      blocks: [{ ...block, pattern: "^[A-Z]{3}$" }],
+      endings: [{ id: "end_redos2", ref: "end_thanks", title: "Thanks" }],
+    });
+    expect(validateAnswer(parsed.blocks[0]! as Block, "ABC").ok).toBe(true);
+    expect(validateAnswer(parsed.blocks[0]! as Block, "abc").ok).toBe(false);
+  });
+});
+
+/**
+ * Cleaning has to be idempotent.
+ *
+ * `routes/forms.ts` stores `JSON.stringify(doc)` of the *parsed* document, and
+ * `publishFingerprint` hashes that stored JSON to decide whether a form has
+ * unpublished changes. A cleaner whose output differs from its input on a
+ * second pass would make that flag oscillate: every save would look like a
+ * change, for ever.
+ */
+describe("parsing a document twice", () => {
+  it("produces the same document", () => {
+    const once = readFormDoc({
+      schemaVersion: SCHEMA_VERSION,
+      title: "  Spaced ​out  ",
+      blocks: [
+        { id: "blk_idem01", ref: "q_note", type: "long_text", title: "Notes", description: "line  \nbreak" },
+      ],
+      endings: [{ id: "end_idem01", ref: "end_thanks", title: "Thanks", bodyMd: "```\ncode\n\n\nfence\n```" }],
+    });
+    const twice = readFormDoc(JSON.parse(JSON.stringify(once)));
+    expect(twice).toEqual(once);
+  });
+});
+
+/**
+ * The payment method a stored document may carry.
+ *
+ * Found by parsing every document in the database against this schema rather
+ * than by reading it: six stored forms carry `method: "gateway"`, and
+ * `readFormDoc` threw on all six — they were not serving a wrong payment
+ * method, they were not serving at all.
+ *
+ * `gateway` is the verified-checkout method being built on the `payments`
+ * branch, so it is named in the enum rather than coerced. Coercing it would
+ * have been worse than the crash it fixed: a form set up for checkout on the
+ * owner's own gateway account would quietly render a plain payment link, and
+ * nothing would say so. The `.catch` is kept for a value genuinely from the
+ * future, and these two cases pin the halves apart.
+ */
+describe("a stored payment method", () => {
+  const withMethod = (method: string) => ({
+    schemaVersion: SCHEMA_VERSION,
+    title: "Deposit",
+    blocks: [{ id: "blk_pay0001", ref: "q_pay", type: "payment", title: "Pay the deposit", method }],
+    endings: [{ id: "end_pay0001", ref: "end_thanks", title: "Thanks" }],
+  });
+
+  it("keeps `gateway` exactly as stored", () => {
+    expect((readFormDoc(withMethod("gateway")).blocks[0] as { method: string }).method).toBe("gateway");
+  });
+
+  it("loads the form rather than refusing a method it has never heard of", () => {
+    expect(() => readFormDoc(withMethod("carrier-pigeon"))).not.toThrow();
+    expect((readFormDoc(withMethod("carrier-pigeon")).blocks[0] as { method: string }).method).toBe("link");
   });
 });

@@ -1,6 +1,7 @@
 import { source } from "@/lib/source";
 import { COMPARISONS } from "@/content/compare";
 import { USE_CASES } from "@/content/use-cases";
+import { TEMPLATES } from "@/content/templates";
 import { posts } from "@/lib/blog-source";
 import { SITE_ORIGIN } from "@/lib/seo";
 
@@ -28,7 +29,7 @@ export function GET() {
   const body = [
     "# Chatform",
     "",
-    "> A form builder whose forms are answered as a conversation. It reads what people write, asks again when an answer is too thin to use, and answers the respondent's own questions from a knowledge base the author writes.",
+    "> An AI-powered form builder whose forms are answered as a conversation. It drafts the questions from a sentence or a URL, then runs them as an interview: it reads what people write, asks again when an answer is too thin to use, and, on paid plans, answers the respondent's own questions from a knowledge base the author uploads.",
     "",
     `A fact sheet written to be quoted, including what chatform cannot do, is at ${SITE_ORIGIN}/ai-info.`,
     `The same facts as JSON are at ${SITE_ORIGIN}/.well-known/brand-facts.json.`,
@@ -48,13 +49,24 @@ export function GET() {
     "## Start here",
     "",
     `- [For AI assistants](${SITE_ORIGIN}/ai-info): What chatform is, what it costs, and the things it genuinely cannot do.`,
+    `- [AI form builder](${SITE_ORIGIN}/ai-form-builder): What the AI does before and after a form is published — drafting from a sentence or URL, then follow-ups, answers and reminders — and what it is not allowed to do.`,
+    `- [Conversational forms](${SITE_ORIGIN}/conversational-forms): What a conversational form is, the two kinds sold under the name, when a normal form is better, and how to build one.`,
     `- [Why conversation works](${SITE_ORIGIN}/why-conversation-works): The peer-reviewed research on conversational data collection, with DOIs — and what it does not show.`,
+    `- [Form statistics, traced](${SITE_ORIGIN}/form-statistics): Popular form completion and abandonment statistics followed to their original sources, with what each actually measured.`,
     `- [Pricing](${SITE_ORIGIN}/pricing): Plans, limits and the full feature matrix.`,
     "",
     "## Guides, by what you are trying to do",
     "",
     ...USE_CASES.map(
       (entry) => `- [${entry.name}](${SITE_ORIGIN}${entry.path}): ${entry.description}`,
+    ),
+    "",
+    "## Form templates",
+    "",
+    `Every template is public, with its full question list and flow. The gallery is ${SITE_ORIGIN}/form-templates.`,
+    "",
+    ...TEMPLATES.map(
+      (t) => `- [${t.searchName} template](${SITE_ORIGIN}${t.path}): ${t.description}`,
     ),
     "",
     "## Comparisons",

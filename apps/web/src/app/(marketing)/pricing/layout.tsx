@@ -13,19 +13,19 @@ import { canonical, openGraphBase } from "@/lib/seo";
  * metadata stays where people have learned to look for it.
  */
 export const metadata: Metadata = {
-  title: "Pricing",
+  title: "Pricing — free conversational forms, unlimited responses",
   /**
    * Names the product before it prices it. Someone arriving here from search
    * lands on a number with no idea what it buys — this page is often the first
    * one a comparison shopper sees, not the second.
    */
   description:
-    "Affordable pricing for chatform's AI chat forms. Unlimited forms and unlimited responses on every plan, including free. Compare limits, question types and features across Free, Pro and Business.",
+    "Free conversational forms with unlimited responses on every plan, including free. Compare limits, question types and AI-powered features across Free, Pro and Business.",
   ...canonical("/pricing"),
   openGraph: {
     ...openGraphBase("/pricing"),
     title: "chatform pricing — collect for free, pay to look closer",
-    description: "Unlimited forms and unlimited responses on every plan, including free.",
+    description: "Unlimited responses on every plan, including free.",
   },
   twitter: { card: "summary_large_image" },
 };

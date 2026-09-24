@@ -39,6 +39,36 @@ export function newRespondentId(): string {
 }
 
 /**
+ * A person we have nothing to recognise by yet.
+ *
+ * Every response names its respondent. When the visit offered no identifier —
+ * a browser that refused the fingerprint, a headless API caller — the response
+ * is still somebody's, and one fresh person per response is the honest reading
+ * of "we cannot tell who this is". No key rows, so nothing will ever resolve to
+ * it except through `knownAs`, which is how a later sign-in folds it into the
+ * person the sign-in names.
+ *
+ * Never throws; null only when the insert itself failed, and a response that
+ * could not be written because its author could not be would be the worse
+ * trade.
+ */
+export async function mintRespondent(env: Bindings): Promise<string | null> {
+  try {
+    const id = newRespondentId();
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT INTO respondents (id, first_seen_at, last_seen_at, created_at) VALUES (?1, ?2, ?2, ?2)`,
+    )
+      .bind(id, now)
+      .run();
+    return id;
+  } catch (err) {
+    console.error("respondent_mint_failed", err instanceof Error ? err.message : String(err));
+    return null;
+  }
+}
+
+/**
  * The platform-wide device key for one browser fingerprint.
  *
  * Salted, so the column is not a list of raw fingerprints and a leaked row
@@ -59,6 +89,15 @@ export interface RespondentSighting {
   email?: string | null;
   name?: string | null;
   phone?: string | null;
+  /**
+   * A respondent id this visit already carries, such as the one `openResponse`
+   * minted for a response that had nothing else to recognise it by.
+   *
+   * It has no keys, so nothing else could ever find it: without this, signing
+   * in would resolve to the person the sign-in names and leave the minted row
+   * behind as a second "person" with nothing pointing at them.
+   */
+  knownAs?: string | null;
 }
 
 interface RespondentKey {
@@ -141,9 +180,10 @@ async function mergeInto(env: Bindings, survivor: string, losers: string[]): Pro
  *
  * Returns the respondent id, or null when the visit offered nothing to
  * recognise anybody by — a headless API caller who volunteered no identity and
- * has no browser. Null rather than a fresh row every time, because a table
- * where every anonymous request is a new "person" makes the count of people
- * meaningless, which is the number this exists to produce.
+ * has no browser. Null rather than a fresh row per visit, because a session
+ * that opens and answers nothing is not a person worth counting. The response
+ * row is where somebody becomes a respondent, and `openResponse` mints one
+ * there if this returned null.
  *
  * Never throws. A response that failed to save because we could not work out
  * who its author was would be a much worse trade than an unattributed response.
@@ -153,12 +193,25 @@ export async function resolveRespondent(
   input: RespondentSighting,
 ): Promise<string | null> {
   const keys = keysOf(input);
-  if (keys.length === 0) return null;
+  const knownAs = input.knownAs?.trim() || null;
+  if (keys.length === 0) return knownAs;
 
   try {
     const now = Date.now();
     const owners = await ownersOf(env, keys);
-    const distinct = [...new Set(owners.values())];
+    /*
+      Followed to its survivor, because a merge may already have retired it,
+      and a tombstone must never be the row that wins. Dropped when it names no
+      row at all, rather than trusted into a merge.
+    */
+    const carried = knownAs
+      ? (
+          await env.DB.prepare(`SELECT COALESCE(merged_into, id) AS id FROM respondents WHERE id = ?1`)
+            .bind(knownAs)
+            .first<{ id: string }>()
+        )?.id ?? null
+      : null;
+    const distinct = [...new Set([...owners.values(), ...(carried ? [carried] : [])])];
 
     let id: string;
     if (distinct.length === 0) {

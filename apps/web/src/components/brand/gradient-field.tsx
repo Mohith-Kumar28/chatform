@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -173,6 +173,7 @@ export function GradientField({
   size = "70%",
   strength = 1,
   interactive = true,
+  defer = false,
   className,
 }: {
   tier?: GradientFieldTier;
@@ -184,6 +185,21 @@ export function GradientField({
   strength?: number;
   /** The lobe that follows the cursor. Off under reduced motion regardless. */
   interactive?: boolean;
+  /**
+   * Hold the opening frame until the page has settled, then start drifting.
+   *
+   * For the one instance that sits behind the LCP element. The five lobes
+   * animate `transform` and are cheap on their own; their parent is not. It
+   * carries `filter: blur(44px)` over a viewport-sized layer, and a filter
+   * makes the browser re-rasterise that whole surface on every frame its
+   * source changes — which, on five independent loops, is every frame,
+   * forever, directly behind the headline.
+   *
+   * Paused renders the 0% keyframe, which is the arrangement the
+   * reduced-motion path already ships and already looks finished. So the hero
+   * is pixel-identical at first paint and starts moving a beat later.
+   */
+  defer?: boolean;
   /** Positioning, masking, radius. The field is `absolute inset-0` by default. */
   className?: string;
 }) {
@@ -192,8 +208,26 @@ export function GradientField({
 
   const ground = GROUND[tier];
 
+  const [lit, setLit] = useState(!defer);
+
+  useEffect(() => {
+    if (!defer) return;
+    let handle = 0;
+    const idle = typeof window.requestIdleCallback === "function";
+    handle = idle
+      ? window.requestIdleCallback(() => setLit(true), { timeout: 2000 })
+      : window.setTimeout(() => setLit(true), 600);
+    return () => {
+      if (idle) window.cancelIdleCallback(handle);
+      else clearTimeout(handle);
+    };
+  }, [defer]);
+
   useEffect(() => {
     if (!interactive) return;
+    // The pointer loop reads `getBoundingClientRect()` once a frame, which is
+    // a second forced layout per frame. It waits for the same signal.
+    if (!lit) return;
     const root = rootRef.current;
     const blob = pointerRef.current;
     if (!root || !blob) return;
@@ -282,12 +316,13 @@ export function GradientField({
       document.removeEventListener("visibilitychange", onVisibility);
       sleep();
     };
-  }, [interactive]);
+  }, [interactive, lit]);
 
   return (
     <div
       ref={rootRef}
       aria-hidden
+      data-field={lit ? "lit" : "held"}
       className={cn("pointer-events-none absolute inset-0 overflow-hidden", className)}
       style={{
         backgroundImage: `linear-gradient(${angle ?? ground.angle}deg, ${ground.stops})`,

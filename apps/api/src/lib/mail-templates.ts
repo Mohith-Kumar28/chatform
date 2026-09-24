@@ -39,14 +39,13 @@ const ON_PRIMARY = "#201a16";
  */
 const MARK_URL = "https://chatform.in/brand/email-mark.png";
 
-export function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+/**
+ * Re-exported rather than defined: this was one of two identical copies, the
+ * other in the web app's printable-form builder, and a third would have been
+ * written the next time somebody assembled markup from data.
+ */
+export { escapeHtml } from "@repo/guard";
+import { escapeHtml } from "@repo/guard";
 
 /**
  * The shell every message is poured into.
@@ -433,8 +432,10 @@ export function submissionNotificationEmail(a: {
  * Its job is to be the artefact a chat conversation does not leave behind: proof
  * the answers arrived, and a copy of what they were. So the answers lead the
  * layout under the message rather than sitting below a call to action, and there
- * is no button at all — there is nowhere useful to send a respondent, and a link
- * would turn a receipt into a solicitation.
+ * is no button — a receipt is not a solicitation. The one link it may carry is
+ * a quiet, underlined "Submit another response" under the answers, and only
+ * when the form takes more than one response from a person: the same offer the
+ * form's own ending makes, for whoever closed that tab and needs to go again.
  */
 export function autoReplyEmail(a: {
   subject: string;
@@ -448,6 +449,8 @@ export function autoReplyEmail(a: {
   answers?: AnswerLine[];
   /** Absent when the form owner has paid to remove it. */
   showPoweredBy: boolean;
+  /** The form's link, when it accepts another response from the same person. */
+  submitAgainUrl?: string | null;
 }): Omit<MailMessage, "to"> {
   const answers = a.answers ?? [];
   const body = [
@@ -455,6 +458,9 @@ export function autoReplyEmail(a: {
     a.bodyHtml,
     answers.length
       ? `<p style="margin:22px 0 0 0;font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:${MUTED};">What you sent</p>${answerTable(answers)}`
+      : "",
+    a.submitAgainUrl
+      ? `<p style="margin:22px 0 0 0;font-size:14px;line-height:1.6;"><a href="${escapeHtml(a.submitAgainUrl)}" style="color:${MUTED};text-decoration:underline;">Submit another response</a></p>`
       : "",
   ]
     .filter(Boolean)
@@ -473,6 +479,7 @@ export function autoReplyEmail(a: {
       a.bodyText,
       answers.length ? `\nWhat you sent\n` : ``,
       ...answers.map((l) => `${l.question}\n${l.answer}\n`),
+      a.submitAgainUrl ? `Submit another response: ${a.submitAgainUrl}\n` : ``,
       `—\nIn reply to your response to ${a.formTitle}.`,
     ]
       .filter((l) => l !== ``)

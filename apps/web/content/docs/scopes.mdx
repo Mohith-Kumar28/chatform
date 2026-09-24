@@ -59,9 +59,11 @@ Publishable keys have a **ceiling**, not a default: `form:read`, `session:*` and
 to ship in a page.
 
 Because the ceiling is a hard one, an endpoint guarded by anything outside it is
-secret-key-only in fact — so each reference page lists only the key types that
-can really reach it. Twenty-one of the forty-three `/v1` endpoints accept a
-publishable key; the rest need `sk_`.
+secret-key-only in fact, so each reference page lists only the key types that
+can really reach it. Most of the `/v1` surface needs `sk_`; what a publishable
+key can reach is sessions, blocks, a published form's config, and uploading a
+file. The reference page for an endpoint is the authority on which key types it
+accepts.
 
 ## What no key can do
 

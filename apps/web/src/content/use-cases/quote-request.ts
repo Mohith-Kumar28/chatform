@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "quote-request-form",
   name: "Quote requests",
+  keyword: "Quote request form",
   group: "Win more work",
   audience: "Builders, cleaners, landscapers, movers, decorators, interior designers",
   navBlurb: "Get the photos and the scope before you drive across town to quote.",
@@ -177,7 +178,7 @@ Keep the tone straightforward and friendly — like a good tradesperson on the p
     {
       question: "How many photos can people send?",
       answer:
-        "Up to ten files per question on the free plan, five megabytes each — plenty for phone photos. Paid plans lift that to twenty-five megabytes, which matters if people are sending video from a newer phone.",
+        "Up to ten files per question on the free plan, five megabytes each — plenty for phone photos. Pro lifts that to fifty megabytes and Business to a hundred, which matters if people are sending video from a newer phone.",
     },
     {
       question: "Can it give people a price automatically?",

@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { boundedString, safeUrl, storedUrl, storedUrlOptional } from "@repo/guard";
 import { NanoId } from "./ids";
 import { RespondentAuthMethod } from "./respondent";
+import { DEFAULT_REDIRECT_DELAY_SEC } from "./defaults";
 
 /**
  * The confirmation email's copy when the author has not written their own.
@@ -16,7 +18,19 @@ export const DEFAULT_CONFIRMATION_SUBJECT = "Thanks for your response";
  * is a commitment on their behalf; "this is your copy" is only true.
  */
 export const DEFAULT_CONFIRMATION_BODY =
-  "Thanks for taking the time to fill in {{form.title}} — we've got your response. This email is your copy of it.";
+  "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.";
+
+/**
+ * What a closed form says when the author has not written anything else.
+ *
+ * Exported because the respondent-facing screen has to be able to tell the
+ * author's own words apart from this stand-in: the screen already says "This
+ * form is closed" in heading type, and printing this sentence underneath it
+ * is the same fact twice in two sizes. An author who wrote a real message —
+ * where else to register, when it reopens, who to email — gets that message
+ * under the heading; an author who left this alone gets the heading alone.
+ */
+export const CLOSED_MESSAGE_DEFAULT = "This form is no longer accepting responses.";
 
 export const SettingsDoc = z.object({
   language: z.string().length(2).default("en"),
@@ -44,7 +58,7 @@ export const SettingsDoc = z.object({
     .object({
       closeAt: z.string().optional(),
       maxSubmissions: z.number().int().min(1).optional(),
-      closedMessageMd: z.string().max(5000).default("This form is no longer accepting responses."),
+      closedMessageMd: boundedString(5000).default(CLOSED_MESSAGE_DEFAULT),
       /**
        * Show the respondent a live countdown to `closeAt`.
        *
@@ -196,8 +210,9 @@ export const SettingsDoc = z.object({
        * something before it counts as a completed response.
        */
       requireSubmit: z.boolean().default(true),
-      redirectUrl: z.string().url().optional(),
-      delaySec: z.number().int().min(0).max(120).default(5),
+      // Cleaned on read, not rejected — see the note on `Ending.ctaUrl`.
+      redirectUrl: storedUrlOptional(1000),
+      delaySec: z.number().int().min(0).max(120).default(DEFAULT_REDIRECT_DELAY_SEC),
       notificationEmails: z.array(z.string().email()).max(10).default([]),
       /**
        * The receipt the respondent gets, and the only email in this product
@@ -220,8 +235,8 @@ export const SettingsDoc = z.object({
       autoReplyEmail: z
         .object({
           enabled: z.boolean().default(true),
-          subject: z.string().max(300).default(DEFAULT_CONFIRMATION_SUBJECT),
-          bodyMd: z.string().max(10000).default(DEFAULT_CONFIRMATION_BODY),
+          subject: boundedString(300).default(DEFAULT_CONFIRMATION_SUBJECT),
+          bodyMd: boundedString(10000).default(DEFAULT_CONFIRMATION_BODY),
           /**
            * Echo their answers back under the message.
            *
@@ -268,7 +283,7 @@ export const SettingsDoc = z.object({
        * names are author-chosen, so a form using `lead_email` or `contact`
        * should work without anybody renaming anything.
        */
-      addressField: z.string().max(60).optional(),
+      addressField: boundedString(60).optional(),
       /**
        * At most three. Velocify found more than five *lowers* conversion by
        * 36%, and Klaviyo's own guidance is two to three. The third step is
@@ -279,8 +294,8 @@ export const SettingsDoc = z.object({
         .array(
           z.object({
             delayHours: z.number().int().min(1).max(720),
-            subject: z.string().max(300),
-            bodyMd: z.string().max(10000).default(""),
+            subject: boundedString(300),
+            bodyMd: boundedString(10000).default(""),
           }),
         )
         .max(3)
@@ -340,7 +355,7 @@ export const SettingsDoc = z.object({
        * Not named `quietHoursTimezone`: the day this grows a "weekdays only"
        * rule, it will be the same field.
        */
-      timezone: z.string().max(64).optional(),
+      timezone: boundedString(64).optional(),
       /** Where a reply goes. `noreply@` on a nudge is how you get marked spam. */
       replyTo: z.string().email().optional(),
       /**
@@ -348,15 +363,15 @@ export const SettingsDoc = z.object({
        * address required by CAN-SPAM is set. Stored with who and when, because
        * CASL puts the burden of proof on the sender.
        */
-      attestedBy: z.string().max(100).optional(),
+      attestedBy: boundedString(100).optional(),
       attestedAt: z.string().optional(),
     })
     .prefault({}),
 
   meta: z
     .object({
-      ogTitle: z.string().max(120).optional(),
-      ogDescription: z.string().max(300).optional(),
+      ogTitle: boundedString(120).optional(),
+      ogDescription: boundedString(300).optional(),
       ogImageKey: z.string().nullable().default(null),
       /**
        * The icon in the browser tab of the hosted form. Separate from the
@@ -388,7 +403,7 @@ export const SettingsDoc = z.object({
    */
   embed: z
     .object({
-      allowedOrigins: z.array(z.string().max(200)).max(20).default([]),
+      allowedOrigins: z.array(boundedString(200)).max(20).default([]),
     })
     .default({ allowedOrigins: [] }),
 
@@ -402,15 +417,24 @@ export const SettingsDoc = z.object({
    */
   agent: z
     .object({
-      mode: z.enum(["template", "hybrid", "ai"]).default("ai"),
+      /**
+       * How much of the conversation a model runs.
+       *
+       * - `template` (Scripted): the author's words only. A classifier maps typed
+       *   replies onto the question; anything else gets the question again.
+       * - `hybrid`: the same, except a reply that is not simply the answer goes to
+       *   the agent. The default: most replies are just the answer.
+       * - `ai` (Agentic): the agent reads every reply and words every question.
+       */
+      mode: z.enum(["template", "hybrid", "ai"]).default("hybrid"),
       tone: z.enum(["friendly", "professional", "playful"]).default("friendly"),
-      personaPrompt: z.string().max(2000).optional(),
+      personaPrompt: boundedString(2000).optional(),
       /** Display name for the interviewer, shown in the chat header. */
-      displayName: z.string().max(60).optional(),
+      displayName: boundedString(60).optional(),
       language: z.string().length(2).default("en"),
 
       /** OpenRouter model slug. Undefined = the plan's default tier. */
-      model: z.string().max(80).optional(),
+      model: boundedString(80).optional(),
 
       /**
        * Whether the agent may reword each question.
@@ -424,8 +448,8 @@ export const SettingsDoc = z.object({
       rephraseQuestions: z.boolean().default(true),
 
       /** What a good conversation achieves, beyond "every field is filled". */
-      goal: z.string().max(1000).optional(),
-      successCriteria: z.string().max(1000).optional(),
+      goal: boundedString(1000).optional(),
+      successCriteria: boundedString(1000).optional(),
 
       guardrails: z
         .object({
@@ -442,8 +466,8 @@ export const SettingsDoc = z.object({
           refusalMessage: z
             .string()
             .max(500)
-            .default("I'm not sure about that one — but I can pass it on. Back to the form:"),
-          forbiddenTopics: z.array(z.string().max(120)).max(20).default([]),
+            .default("I'm not sure about that one, but I can pass it on. Back to the form:"),
+          forbiddenTopics: z.array(boundedString(120)).max(20).default([]),
         })
         .prefault({}),
 
@@ -517,21 +541,41 @@ const BRAND_VIOLET = "#C9AEEE";
 export const THEME_DEFAULT_INK = "#201a16";
 const BRAND_INK = THEME_DEFAULT_INK;
 
+/**
+ * A theme colour: a CSS colour we are willing to interpolate, or the default.
+ *
+ * These were `z.string().max(40)` free strings and they are written straight
+ * into CSS custom properties, so the value decided what the declaration said.
+ * `#fff`, `#ffffffcc`, `rgb()`, `hsl()` and `oklch()` all belong here; a
+ * string carrying a brace, a semicolon or a `url(` does not.
+ *
+ * `.catch(...)` rather than a rejection, for the reason `storedUrl` gives:
+ * `readFormDoc` re-parses stored documents on the respondent's path, so a
+ * colour nobody can parse has to fall back to the default rather than take the
+ * form down. The runtime is already defensive about a malformed hex
+ * (`readableInk` in `apps/web/src/lib/chat-theme.ts`), which is why a form
+ * holding one renders today.
+ */
+const CSS_COLOR = /^(#[0-9a-fA-F]{3,8}|(rgb|hsl|oklch|lab|lch|color-mix)a?\([^;{}]*\)|[a-zA-Z]{3,20})$/;
+const themeColor = (fallback: string) => boundedString(40).regex(CSS_COLOR).catch(fallback);
+
 export const ThemeDoc = z.object({
   colorScheme: z.enum(["light", "dark", "auto"]).default("light"),
-  background: z.string().max(40).default("#faf7f2"),
-  surface: z.string().max(40).default("#ffffff"),
-  text: z.string().max(40).default("#1c1917"),
-  accent: z.string().max(40).default(BRAND_ORANGE),
-  accentText: z.string().max(40).default(BRAND_INK),
-  botBubble: z.string().max(40).default("#ffffff"),
-  userBubble: z.string().max(40).default(BRAND_VIOLET),
-  userBubbleText: z.string().max(40).default(BRAND_INK),
+  background: themeColor("#faf7f2").default("#faf7f2"),
+  surface: themeColor("#ffffff").default("#ffffff"),
+  text: themeColor("#1c1917").default("#1c1917"),
+  accent: themeColor(BRAND_ORANGE).default(BRAND_ORANGE),
+  accentText: themeColor(BRAND_INK).default(BRAND_INK),
+  botBubble: themeColor("#ffffff").default("#ffffff"),
+  userBubble: themeColor(BRAND_VIOLET).default(BRAND_VIOLET),
+  userBubbleText: themeColor(BRAND_INK).default(BRAND_INK),
   radius: z.enum(["none", "sm", "md", "lg", "full"]).default("lg"),
-  fontHeading: z.string().max(100).default("Bricolage Grotesque"),
-  fontBody: z.string().max(100).default("Inter"),
-  avatarKey: z.string().nullable().default(null),
-  backgroundImageKey: z.string().nullable().default(null),
+  fontHeading: boundedString(100).default("Bricolage Grotesque"),
+  fontBody: boundedString(100).default("Inter"),
+  // Bounded, deliberately not cleaned: these are R2 object keys, and a
+  // normalised key is a 404.
+  avatarKey: z.string().max(500).nullable().default(null),
+  backgroundImageKey: z.string().max(500).nullable().default(null),
   backgroundBrightness: z.number().min(0).max(1).default(1),
 
   /**
@@ -551,7 +595,7 @@ export const ThemeDoc = z.object({
    * background that reads as nobody having chosen it — and because every form
    * built before this field existed already showed its hashed tile.
    */
-  backgroundPattern: z.string().max(40).default("auto"),
+  backgroundPattern: boundedString(40).default("auto"),
 
   /**
    * Optional branding. Both are opt-in: a form with neither still looks
@@ -560,8 +604,12 @@ export const ThemeDoc = z.object({
    * `logoUrl` is a public asset URL (see `POST /api/assets`); `logoKey` keeps
    * the R2 key so the object can be replaced or cleaned up later.
    */
-  brandName: z.string().max(60).optional(),
-  logoUrl: z.string().max(1000).nullable().default(null),
+  brandName: boundedString(60).optional(),
+  /**
+   * An author's own logo URL, which had no URL validation at all — not even
+   * `.url()` — and goes straight into an `<img src>` on the respondent's page.
+   */
+  logoUrl: storedUrl(1000).default(null),
   logoKey: z.string().max(500).nullable().default(null),
 });
 

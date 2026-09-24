@@ -7,6 +7,7 @@ import { SettingGroup, SettingRow } from "@/components/ui/setting-row";
 import {  NumberField, SwitchField } from "../inspector/fields";
 import { useBuilderStore } from "@/stores/builder-store";
 import { KnowledgePanel } from "@/components/knowledge/knowledge-panel";
+import { InterviewStylePicker } from "./interview-style-picker";
 import { BufferedInput, BufferedTextarea } from "@/components/ui/buffered-input";
 
 const SECTIONS = [
@@ -17,6 +18,13 @@ const SECTIONS = [
 ] as const;
 
 type Section = (typeof SECTIONS)[number]["value"];
+
+/** What each tone sounds like, in a line. It shapes every AI reply. */
+const TONE_HINT = {
+  friendly: "Warm and casual, like a helpful person.",
+  professional: "Clear and polished, without small talk.",
+  playful: "Light and upbeat, with a bit of fun.",
+} as const;
 
 /**
  * The Agent tab — the reason this product isn't Youform.
@@ -60,47 +68,33 @@ export function AgentTab() {
 
         {section === "persona" && (
           <SettingGroup>
-            <SettingRow label="Interview style" control={
-              <SegmentedControl
-                size="sm"
-                options={[
-                  { value: "ai", label: "Agentic" },
-                  { value: "hybrid", label: "Hybrid" },
-                  { value: "template", label: "Scripted" },
-                ]}
-                value={agent.mode}
-                onChange={(mode) => patch({ mode })}
-              />
-            } />
-            <p className="text-muted-foreground text-micro -mt-1 px-1">
-              {agent.mode === "ai"
-                ? "Rephrases, answers back, handles objections."
-                : agent.mode === "hybrid"
-                  ? "Conversational, falling back to your wording if the model is down."
-                  : "Your exact wording. No AI cost."}
-            </p>
-
-            <SettingRow label="Name" description="Shown in the chat header." stacked>
-              <BufferedInput
-                value={agent.displayName ?? ""}
-                placeholder={doc.title}
-                onCommit={(v) => patch({ displayName: v || undefined }, "agentName")}
-              />
+            <SettingRow
+              label="Interview style"
+              description="How much of the conversation the AI runs. It decides what each response costs."
+              stacked
+            >
+              <InterviewStylePicker value={agent.mode} onChange={(mode) => patch({ mode })} />
             </SettingRow>
 
-            <SettingRow
-              label="Reword questions"
-              description="Off, each is asked exactly as written."
-              control={
-                <SwitchField
-                  label=""
-                  checked={agent.rephraseQuestions}
-                  onChange={(rephraseQuestions) => patch({ rephraseQuestions })}
-                />
-              }
-            />
+            {/*
+              Only Agentic rewords anything. Hybrid and Scripted always ask the
+              author's words, so the switch would do nothing there.
+            */}
+            {agent.mode === "ai" && (
+              <SettingRow
+                label="Reword questions"
+                description="Off, each is asked exactly as written."
+                control={
+                  <SwitchField
+                    label=""
+                    checked={agent.rephraseQuestions}
+                    onChange={(rephraseQuestions) => patch({ rephraseQuestions })}
+                  />
+                }
+              />
+            )}
 
-            <SettingRow label="Tone" control={
+            <SettingRow label="Tone" description={TONE_HINT[agent.tone]} className="max-sm:flex-col max-sm:gap-3" control={
               <SegmentedControl
                 size="sm"
                 options={[

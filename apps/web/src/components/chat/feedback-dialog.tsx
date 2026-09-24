@@ -213,7 +213,7 @@ export function FeedbackDialog({
             >
               <Check className="size-6" strokeWidth={2.5} />
             </div>
-            <p className="text-base font-medium">Thank you — that reached us.</p>
+            <p className="text-base font-medium">Thank you. That reached us.</p>
             <p className="max-w-xs text-sm opacity-60">
               A real person reads these. It goes to the team who build the software, not to whoever
               made this form.
@@ -231,8 +231,8 @@ export function FeedbackDialog({
             */}
             <p className="mt-1 text-sm opacity-60">
               {named
-                ? "This goes to chatform, the software running this form — not to the people who made this form."
-                : "This goes to the team who build the software running this form — not to the people who made this form."}
+                ? "This goes to chatform, the software running this form, not to the people who made this form."
+                : "This goes to the team who build the software running this form, not to the people who made this form."}
             </p>
 
             <div className="mt-5 flex items-end justify-between gap-1.5">

@@ -6,7 +6,7 @@ import { JsonLd } from "@/components/seo/json-ld";
 import { posts } from "@/lib/blog-source";
 import { breadcrumbLd, canonical, itemListLd, openGraphBase } from "@/lib/seo";
 
-const TITLE = "Writing — chatform";
+const TITLE = "Blog — conversational forms and better answers · chatform";
 const DESCRIPTION =
   "Notes on building a conversational form engine: the branching model, the constrained model behind the chat, and what we learned about asking people questions.";
 

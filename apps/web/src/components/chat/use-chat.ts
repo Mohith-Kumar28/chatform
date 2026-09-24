@@ -70,6 +70,25 @@ export interface QuestionState {
   prefill?: Record<string, string>;
 }
 
+/**
+ * What a poll answered back, keyed by the question's ref.
+ *
+ * Kept for the whole session rather than shown once and dropped: the bars sit
+ * under the answer in the transcript, and a respondent who scrolls up to check
+ * what they picked should find the numbers still there.
+ *
+ * `counts` is absent when the form is holding the split back until enough
+ * people have answered. That is a different state from "nobody has answered",
+ * which is why the total is always here.
+ */
+export interface PollResult {
+  total: number;
+  /** This respondent's own option id, so the card can mark it. */
+  picked?: string;
+  /** Every option with its count. Absent while the split is being held back. */
+  options?: { id: string; label: string; count: number }[];
+}
+
 export interface EndingState {
   title: string;
   bodyMd: string;
@@ -492,6 +511,7 @@ export function useChat({
   paymentCancelled,
 }: UseChatOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [pollResults, setPollResults] = useState<Record<string, PollResult>>({});
   const [question, setQuestion] = useState<QuestionState | null>(null);
   /** The question on screen, for callbacks that must stay stable across renders. */
   const currentQuestionRef = useRef<string | null>(null);
@@ -527,6 +547,21 @@ export function useChat({
    */
   const actionInFlightRef = useRef(false);
   const [rateLimited, setRateLimited] = useState<string | null>(null);
+  /**
+   * The form shut between this page loading and this person tapping into it.
+   *
+   * The server-rendered page already turns a closed form into its own screen,
+   * so this is the narrow case that page cannot catch: a deadline that passes
+   * while the tab sits open, or a capped intake that fills in the seconds
+   * before somebody starts. `openSession` refuses with `form_closed` and the
+   * author's own message, and that message is what this holds.
+   *
+   * It is a state rather than an error because it is not one. It used to fall
+   * through to `setError`, which drew it in red at the bottom of an empty
+   * thread next to a Retry button — a refusal the respondent was invited to
+   * argue with once a second.
+   */
+  const [closed, setClosed] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewState | null>(null);
   const [submitted, setSubmitted] = useState<SubmittedState | null>(null);
   /**
@@ -834,6 +869,26 @@ export function useChat({
        * earlier turn had failed validation, and pinned the pencil to the wrong
        * bubble.
        */
+      /**
+       * The split on a poll, pushed once when the vote lands.
+       *
+       * Stored by ref, not appended as a message: it belongs to the question
+       * it answers, and a re-answer has to replace the old numbers rather than
+       * leave two sets of bars in the transcript disagreeing with each other.
+       */
+      on("poll_result", (e) => {
+        const data = JSON.parse((e as MessageEvent).data) as {
+          ref: string;
+          total: number;
+          picked?: string;
+          options?: { id: string; label: string; count: number }[];
+        };
+        setPollResults((prev) => ({
+          ...prev,
+          [data.ref]: { total: data.total, picked: data.picked, options: data.options },
+        }));
+      });
+
       on("answer_recorded", (e) => {
         const { ref, messageId } = JSON.parse((e as MessageEvent).data) as {
           ref: string;
@@ -1006,7 +1061,7 @@ export function useChat({
 
       on("rate_limited", (e) => {
         const { message } = JSON.parse((e as MessageEvent).data) as { message?: string };
-        setRateLimited(message ?? "You're going a bit fast — give it a moment.");
+        setRateLimited(message ?? "You're going a bit fast. Give it a moment.");
         settleTurn();
       });
 
@@ -1016,6 +1071,15 @@ export function useChat({
         // card had reached — re-mounting it at "enter your number" would throw
         // away a code the respondent is in the middle of typing.
         setAuth((prev) => prev ?? { method: data.method, message: data.message, pending: false, error: null });
+        /*
+         * A gated session has no question outstanding. A gate that closes
+         * mid-form arrives right after the answer to the question before it,
+         * and the server's cursor still points there (see `projectTurn`). Kept
+         * here, that block's chips came straight back the moment sign-in
+         * cleared the gate, sitting under the typing dots until the next
+         * question arrived.
+         */
+        setQuestion(null);
         settleTurn();
       });
 
@@ -1047,8 +1111,13 @@ export function useChat({
         settleEcho();
       });
 
-      on("verify_settled", () => {
+      on("verify_settled", (e) => {
+        const { verified } = JSON.parse((e as MessageEvent).data) as { verified?: boolean };
         setVerify(null);
+        // Proved means answered: the next question is on its way, and the one
+        // that asked for the code must not flash back while it streams. A
+        // failed proof re-asks the same question, so that one stays.
+        if (verified) setQuestion(null);
         setValidationHint(null);
       });
 
@@ -1420,6 +1489,21 @@ export function useChat({
             return;
           }
           /*
+           * So is "this form is closed" — the other outcome that is the form
+           * working. Same shape as the branch above and for the same reason:
+           * an outcome gets a screen, not the failure rail and a retry.
+           *
+           * The message is the author's, straight off the refusal, because
+           * this client's config was fetched while the form was still open and
+           * therefore carries no closed message of its own.
+           */
+          if (body?.error?.code === "form_closed") {
+            setClosed(body.error.message ?? "");
+            setStatus("ended");
+            setResolving(false);
+            return;
+          }
+          /*
            * A limit is a wait, not a breakdown — and it is very often not this
            * person's fault. The window is keyed by address, so an office, a
            * campus or a phone network can spend it between them, and the
@@ -1555,7 +1639,7 @@ export function useChat({
         if (res.ok) return;
 
         if (res.status === 429) {
-          setRateLimited("You're going a bit fast — give it a moment.");
+          setRateLimited("You're going a bit fast. Give it a moment.");
           settleTurn();
           settleEcho();
           return;
@@ -2068,6 +2152,11 @@ export function useChat({
     setPendingPayment(null);
     setIdentity(null);
     setError(null);
+    // Reset with the rest of it. Unreachable today — the closed screen renders
+    // no header, so there is no "Start over" to press from it — but this
+    // function's contract is that it clears every piece of screen state, and a
+    // field left out of it is the next stale screen.
+    setClosed(null);
     setStatus("connecting");
     await start();
   }, [ephemeral, onRestart, slug, start]);
@@ -2591,6 +2680,7 @@ export function useChat({
 
   return {
     messages,
+    pollResults,
     question,
     review,
     submitted,
@@ -2601,6 +2691,7 @@ export function useChat({
     answering,
     resolving,
     rateLimited,
+    closed,
     resumed,
     auth,
     verify,

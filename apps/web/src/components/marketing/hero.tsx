@@ -92,8 +92,12 @@ export function Hero() {
 
           Two-thirds of the field is still flat colour, which is what keeps the
           headline, the buttons and the caption line on full-strength ground. */}
+      {/* `defer` because this one sits behind the LCP headline — it holds its
+          opening frame until the page settles rather than re-rasterising a
+          viewport-wide blur every frame. See `gradient-field.tsx`. */}
       <GradientField
         tier="vivid"
+        defer
         className="-top-32 [mask-image:linear-gradient(to_bottom,#000_0%,#000_66%,#000000ee_71%,#000000c2_76%,#00000093_81%,#0000006c_85%,#0000003e_89%,#0000001a_93%,#00000007_97%,transparent_100%)]"
       />
       {/* The dot grid keeps the wash from reading as a flat panel. */}
@@ -124,7 +128,28 @@ export function Hero() {
               needs a footnote is a headline still deciding what it wants to
               say.
 
-              This one skips the problem and states the result, in the two
+              A fifth drops "AI forms" for the category's own name, and that is
+              a positioning decision rather than a copy one.
+
+              "AI forms" was kept for a while on the argument that it is the
+              phrase people search with. The argument is true and it was still
+              the wrong trade: in this market the phrase already means something
+              else. Typeform, Jotform and Tally all sell "AI" as the thing that
+              WRITES your form from a prompt, so an `h1` built on it reads as a
+              prompt-to-form generator — a feature chatform has, and the least
+              interesting one it has. "Conversational forms" names what a
+              visitor is actually being offered, and it is a category term they
+              may already know from Typeform rather than a coinage we have to
+              teach.
+
+              The search traffic that the noun used to carry is not given up,
+              only moved off the headline. "AI-powered" now appears in the meta
+              description, the OG description, the lede below, `llms.txt`,
+              `brand-facts.json`, `/ai-info` and the first FAQ answer — every
+              surface that answers the query rather than the one that has to
+              carry the positioning.
+
+              The tail states the result, in the two
               words a person running a form actually measures. Everything the
               old line implied is still on the page and better placed for it:
               the band directly beneath breaks the claim into three mechanisms,
@@ -149,55 +174,61 @@ export function Hero() {
             place on the site allowed to do that.
 
             The shared utility tops out at 4.5rem, which was right for "Turn any
-            form into a chat." at 26 characters. This headline is 34, and at
+            form into a chat." at 26 characters. This headline is 51, and at
             72px a line that long overflows the 574px column and breaks with a
             word orphaned on its own. A type scale that cannot respond to the
             length of the line it is setting is a scale applied to the wrong
             thing.
 
-            The clamp is tuned so the headline holds two lines from the `lg`
-            breakpoint up, which is what keeps the ring on "more" mid-line
-            rather than stranding it. */}
-          <h1 className="font-display font-bold tracking-[-0.045em] text-balance text-[clamp(2.5rem,1.1rem+3.4vw,4rem)] leading-[1]">
-            <span className="word-rise inline-block" style={{ animationDelay: "60ms" }}>
-              AI forms that get{" "}
-              {/* The ring moved from "more" to the number.
+            The cap is 3.5rem rather than 4rem, and the half-rem is the
+            difference between three lines and four at the 574px column. The
+            breakpoint is sharp and it is between 58px and 60px: 58 sets three
+            lines, 60 sets four. That is measured against the rendered page and
+            not against a scratch harness — `next/font` serves Bricolage with
+            its `opsz` axis live, and a copy pulled from the Google Fonts CDN
+            wraps a line earlier, which is a difference big enough to have cost
+            a deploy.
 
-                  "more" is the qualitative word in the sentence and it was the
-                  one being circled, which is the opposite of what a pen does:
-                  you ring the thing that is hard to believe. With a figure in
-                  the line, the figure is that thing. */}
-              <span className="relative mx-3 inline-block">
-                {/* Tilted off the baseline, and only the figure — the ring
-                    stays level. A number written at a slight angle inside a
-                    level pen mark reads as the one word in the line somebody
-                    leaned in to write; tilting the pair instead would just
-                    look like the headline had slipped. `transform` does not
-                    change the layout box, so the ring keeps its geometry. */}
-                <span className="inline-block -rotate-[4deg]">2.3&#215;</span>
-                {/* Drawn on, and last. The words rise first; the ring starts once
-                    they have landed, which is the order it would happen if
-                    somebody were actually marking up the page. It needs no
-                    `InView` — this is the top of the document, always on screen at
-                    load — so it carries the armed attribute itself. */}
-                <span data-armed="" data-inview="" className="contents">
-                  <CircleMark
-                    draw
-                    delay={900}
-                    className="text-[var(--on-band-vivid)] opacity-80"
-                  />
+            Across the ladder that leaves 2 lines at `sm` and `md`, 4 at `lg`
+            and below 430px, 3 from `xl` up — and the ringed figure at least
+            77px into its line at every width, which is the number that actually
+            matters here. */}
+          <h1 className="font-display font-bold tracking-[-0.045em] text-balance text-[clamp(2.5rem,1.1rem+3.4vw,3.5rem)] leading-[1]">
+            <span className="word-rise inline-block" style={{ animationDelay: "60ms" }}>
+              Conversational forms people{" "}
+              {/* The ring is on "finish", the outcome word.
+
+                  This line said "that get 2.3× more submissions" and ringed the
+                  figure. The figure had no source — it matched Typeform's own
+                  47.3%-against-an-unsourced-21.5% claim, which /form-statistics
+                  calls out — so it went, and the pen went to the word that
+                  carries the promise instead.
+
+                  The pair is held on one line for the reason the figure was:
+                  the ring is drawn `-inset-x-4`, a rem wider than the word on
+                  each side, so a break next to it would hang the mark outside
+                  the `h1` box. "actually finish" as one unit gives it a word on
+                  its left whatever `text-balance` decides. */}
+              <span className="whitespace-nowrap">
+                actually{"\u00a0"}
+                <span className="relative mr-4 ml-2 inline-block">
+                  finish
+                  {/* Drawn on, and last. The words rise first; the ring starts
+                      once they have landed, which is the order it would happen
+                      if somebody were actually marking up the page. It needs no
+                      `InView` — this is the top of the document, always on
+                      screen at load — so it carries the armed attribute
+                      itself. */}
+                  <span data-armed="" data-inview="" className="contents">
+                    <CircleMark
+                      draw
+                      delay={900}
+                      className="text-[var(--on-band-vivid)] opacity-80"
+                    />
+                  </span>
                 </span>
-              </span>{" "}
-              {/* `mx-3` above because the ring is drawn `-inset-x-4` — a whole
-                  rem wider than the word on each side, which is what makes it
-                  read as a pen going round something rather than as a border.
-                  Mid-sentence that overhang eats the word space on BOTH sides,
-                  so the number keeps its normal space and the mark gets its
-                  own, symmetrically. It was `me-3`: the overhang was paid for
-                  after the number and not before it, so the ring cleared
-                  "more" by a comfortable margin and very nearly touched the
-                  "t" of "get". */}
-              more submissions.
+                .
+              </span>
             </span>
           </h1>
 
@@ -238,8 +269,8 @@ export function Hero() {
             style={{ color: "var(--on-band-vivid-muted)" }}
             className="text-body-lg mt-6 max-w-md text-balance"
           >
-            chatform turns your form into a conversation that asks again when an answer is
-            thin, and follows up with the people who leave.
+            chatform turns your form into an AI-powered conversation that asks again when an
+            answer is thin, and follows up with the people who leave.
           </p>
 
           {/*
@@ -344,7 +375,7 @@ export function Hero() {
                 href={DEMO_SLUG ? `/f/${DEMO_SLUG}` : "#how-it-works"}
                 {...(DEMO_SLUG ? { target: "_blank", rel: "noopener noreferrer" } : {})}
               >
-                {DEMO_SLUG ? "Try it yourself" : "See how it works"}
+                {DEMO_SLUG ? "Try Demo Form" : "See how it works"}
                 <ArrowRight className="size-4" strokeWidth={2.25} />
                 {/* The one thing about this link a screen reader cannot see
                     coming. Inside the label rather than an `aria-label`, which
@@ -433,7 +464,7 @@ export function Hero() {
                 been made loud on purpose — it pulled the eye down and past
                 them. The anchor still exists; the nav and the section below
                 both reach it. */}
-            Free, unlimited submissions · Unlimited forms · No card
+            Free forever · Unlimited submissions · No card
           </p>
         </div>
 

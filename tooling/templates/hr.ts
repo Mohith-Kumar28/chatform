@@ -8,7 +8,7 @@ export const HR: TemplateSeed[] = [
     icon: "Briefcase",
     description: "Screen candidates, and ask each discipline its own questions.",
     blurb:
-      "Everything a first-pass review needs and nothing it doesn't. The role someone picks decides what they are asked next — engineers get a code sample, designers a portfolio walkthrough, sales a number — so one form serves five hiring managers without asking anyone an irrelevant question.",
+      "Everything a first-pass review needs and nothing it doesn't. The role someone picks decides what they are asked next: engineers get a code sample, designers a portfolio walkthrough, sales a number. One form serves five hiring managers without asking anyone an irrelevant question.",
     tags: ["hiring", "recruiting", "candidates", "branching"],
     greeting: "Glad you're interested in joining us. Let's start.",
     questions: [
@@ -196,7 +196,7 @@ export const HR: TemplateSeed[] = [
         ref: "accommodations",
         type: "long_text",
         title: "Anything we should do to make the process work for you?",
-        description: "Interview format, timing, access — it never counts against an application.",
+        description: "Interview format, timing, access. It never counts against an application.",
         required: false,
         maxLength: 600,
       },
@@ -222,7 +222,7 @@ export const HR: TemplateSeed[] = [
     icon: "UserCheck",
     description: "Collect what a new starter needs before day one.",
     blurb:
-      "The details that otherwise arrive as five separate emails in the first week — legal name, address, kit, a signature on the handbook. Remote starters get shipping and home-setup questions; office starters get desk and access ones, and neither sees the other's.",
+      "The details that otherwise arrive as five separate emails in the first week: legal name, address, kit, a signature on the handbook. Remote starters get shipping and home-setup questions; office starters get desk and access ones, and neither sees the other's.",
     tags: ["onboarding", "people ops", "new hire", "branching"],
     greeting: "Welcome aboard! A few details so everything's ready on your first day.",
     questions: [
@@ -291,7 +291,7 @@ export const HR: TemplateSeed[] = [
       },
       { ref: "tshirt", type: "single_select", title: "T-shirt size?", required: false, options: [{ label: "XS" }, { label: "S" }, { label: "M" }, { label: "L" }, { label: "XL" }, { label: "XXL" }] },
       { ref: "dietary", type: "short_text", title: "Any dietary requirements for team lunches?", required: false },
-      { ref: "emergency_contact", type: "short_text", title: "Emergency contact — name and number", required: true },
+      { ref: "emergency_contact", type: "short_text", title: "Emergency contact: name and number", required: true },
       {
         ref: "accessibility",
         type: "long_text",
@@ -313,7 +313,7 @@ export const HR: TemplateSeed[] = [
       { when: "work_location", is: "A bit of both", then: "shipping_address" },
       { when: "home_setup", always: true, then: "equipment" },
     ],
-    ending: { title: "All set 🎊", body: "See you on day one — we'll email the schedule shortly." },
+    ending: { title: "All set 🎊", body: "See you on day one. We'll email the schedule shortly." },
   }),
 
   defineTemplate({
@@ -323,9 +323,9 @@ export const HR: TemplateSeed[] = [
     icon: "LogOut",
     description: "Ask why someone is leaving in a way they can answer honestly.",
     blurb:
-      "Leaving is when people say what they meant. Structured enough to count across a year of departures, open enough to catch what no option covers — and the follow-up follows the reason, so someone leaving over their manager is not asked about the salary bands.",
+      "Leaving is when people say what they meant. Structured enough to count across a year of departures, open enough to catch what no option covers, and the follow-up follows the reason, so someone leaving over their manager is not asked about the salary bands.",
     tags: ["retention", "people ops", "offboarding", "branching"],
-    greeting: "Before you go — your honest answers help the people staying. This is confidential.",
+    greeting: "Before you go: your honest answers help the people staying. This is confidential.",
     questions: [
       {
         ref: "ratings",
@@ -367,7 +367,7 @@ export const HR: TemplateSeed[] = [
           { label: "Under 10%" },
           { label: "10–25%" },
           { label: "More than 25%" },
-          { label: "It wasn't the number — it was how it was decided" },
+          { label: "Not the number itself, the way it was decided" },
         ],
       },
 
@@ -435,7 +435,7 @@ export const HR: TemplateSeed[] = [
       { when: "growth_missing", always: true, then: "what_worked" },
       { when: "raised_it", always: true, then: "what_worked" },
     ],
-    ending: { title: "Thank you — genuinely 🙏", body: "All the best for what's next." },
+    ending: { title: "Thank you, genuinely 🙏", body: "All the best for what's next." },
   }),
 
   defineTemplate({
@@ -445,9 +445,9 @@ export const HR: TemplateSeed[] = [
     icon: "HeartPulse",
     description: "A short, repeatable check that follows up on the low scores.",
     blurb:
-      "Short enough to send monthly and consistent enough to trend: six scaled statements that stay identical every round. Anyone who scores low on workload or support gets one extra question about it — which is where the anonymised comments worth reading come from.",
+      "Short enough to send monthly and consistent enough to trend: six scaled statements that stay identical every round. Anyone who scores low on workload or support gets one extra question about it, which is where the anonymised comments worth reading come from.",
     tags: ["culture", "pulse", "people ops", "branching"],
-    greeting: "Quick pulse check — anonymous, and under two minutes.",
+    greeting: "Quick pulse check. Anonymous, and under two minutes.",
     questions: [
       { ref: "workload", type: "opinion_scale", title: "My workload is manageable.", required: true, steps: 5, startAt: 1, labelLow: "Strongly disagree", labelHigh: "Strongly agree" },
       { ref: "clarity", type: "opinion_scale", title: "I'm clear on what's expected of me.", required: true, steps: 5, startAt: 1, labelLow: "Strongly disagree", labelHigh: "Strongly agree" },
@@ -498,7 +498,7 @@ export const HR: TemplateSeed[] = [
     icon: "Users",
     description: "Make referring someone take a minute, not an afternoon.",
     blurb:
-      "Referral schemes die on friction. Name, contact, role and one honest line is enough for a recruiter to act on — and when the referrer hasn't asked the candidate yet, the form says so and takes their word rather than an email address they shouldn't be sharing.",
+      "Referral schemes die on friction. Name, contact, role and one honest line is enough for a recruiter to act on, and when the referrer hasn't asked the candidate yet, the form says so and takes their word rather than an email address they shouldn't be sharing.",
     tags: ["referral", "hiring", "internal", "branching"],
     greeting: "Know someone great? Put them forward.",
     questions: [
@@ -537,7 +537,7 @@ export const HR: TemplateSeed[] = [
         description: "We won't contact anyone who hasn't agreed to it.",
         required: true,
         yesLabel: "Yes, I'll check with them",
-        noLabel: "No — just log it for now",
+        noLabel: "No, just log it for now",
       },
 
       // ── everyone ──

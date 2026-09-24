@@ -88,7 +88,7 @@ function messageFor(err: unknown): string {
   if (SETUP_ERRORS.has(code)) {
     console.error(
       `[chatform] Phone verification is misconfigured: ${code}. ` +
-        "Check the Firebase console — billing plan, Authentication > Settings > SMS region policy, " +
+        "Check the Firebase console: billing plan, Authentication > Settings > SMS region policy, " +
         "and that this domain is on the authorized list.",
     );
     // Never "try again": retrying cannot work until someone changes a setting,

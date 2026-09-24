@@ -134,7 +134,7 @@ describe("csvHeadersFor / csvCellsFor", () => {
   });
 
   it("marks a removed payment question on all five headers", () => {
-    expect(csvHeadersFor({ ...pay, retired: true }).every((h) => h.startsWith("Ticket (removed)"))).toBe(true);
+    expect(csvHeadersFor({ ...pay, retired: true }).every((h) => h.startsWith("Ticket (archived)"))).toBe(true);
   });
 
   it("writes five empty cells for an unanswered payment", () => {

@@ -145,7 +145,7 @@ const SETTING_LABELS: Record<string, string> = {
   "password.enabled": "Password protection",
   "password.value": "Form password",
   "captcha.enabled": "CAPTCHA",
-  allowResubmissions: "One response per person",
+  allowResubmissions: "Multiple responses",
   "onComplete.redirectUrl": "Completion redirect",
   "onComplete.delaySec": "Redirect delay",
   "onComplete.requireSubmit": "Explicit submit",
@@ -455,7 +455,7 @@ export function summarizeChanges(changes: readonly DocChange[]): string {
       case "title.changed":
         return c.from ? `Renamed the form to “${c.to}”` : `Created “${c.to}”`;
       default:
-        return `${c.label} — ${verb}`;
+        return `${c.label}: ${verb}`;
     }
   }
 

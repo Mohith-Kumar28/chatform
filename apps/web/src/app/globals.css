@@ -801,6 +801,26 @@
   }
 }
 
+/* The poll result's fills grow from the left, and the leader's crown pops in
+   as its bar lands. Delay and duration come inline, per row. */
+.poll-fill {
+  animation: cf-a-grow 850ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.poll-crown {
+  animation: cf-poll-crown 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@keyframes cf-poll-crown {
+  from {
+    opacity: 0;
+    transform: scale(0.3) rotate(-25deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes cf-caret {
   0%,
   49% {
@@ -1017,7 +1037,7 @@
   animation: cf-a-rise 560ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 [data-inview] .cf-a-pop {
-  animation: cf-a-pop 460ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  animation: cf-a-pop 460ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 [data-inview] .cf-a-slide-l {
   animation: cf-a-slide-l 520ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
@@ -1196,6 +1216,28 @@
   animation: cf-field-circle 17s ease-in-out infinite reverse;
 }
 
+/* A deferred field holds its opening frame until the page says go.
+ *
+ * `animation-play-state: paused` renders the 0% keyframe — the same
+ * arrangement the reduced-motion path ships, and one that already looks
+ * finished. So the hero is pixel-identical at first paint, and the browser is
+ * not re-rasterising a viewport-wide `blur(44px)` layer at 60fps through the
+ * window LCP is measured over. `GradientField` flips `data-field` to "lit"
+ * after an idle callback and the drift starts from where it was parked.
+ *
+ * Only a field that opted in with `defer` is ever held: without the attribute
+ * these rules do not match, so every other instance is untouched.
+ */
+[data-field="held"] :is(
+    .field-drift-1,
+    .field-drift-2,
+    .field-drift-3,
+    .field-drift-4,
+    .field-drift-5
+  ) {
+  animation-play-state: paused;
+}
+
 /* The inspector field a preview click points at (`inspector-reveal.ts`).
    Deliberately loud: it has to pull the eye across the screen from the
    preview, so it is a hard shake that dies away, with an accent ring that
@@ -1255,6 +1297,18 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* iPhone Safari zooms the page in on any field whose text is under 16px, and
+   the chat's are 15px: focusing the message box cropped the form and shifted
+   the layout. Touch screens get 16px in every field on the chat surface.
+   Unlayered, so it wins over the `text-*` utilities on the fields. */
+@media (pointer: coarse) {
+  .chat-surface input,
+  .chat-surface textarea,
+  .chat-surface select {
+    font-size: 16px;
   }
 }
 

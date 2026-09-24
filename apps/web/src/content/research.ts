@@ -93,13 +93,17 @@ export const STUDIES: readonly Study[] = [
   {
     id: "baymard",
     finding:
-      "22% of people who abandon a checkout say they left because it was too long or too complicated — not because of the price, and not because they changed their mind.",
-    method: "Baymard Institute's ongoing large-scale checkout usability research.",
+      "17% of US online shoppers have abandoned an order because the checkout was too long or too complicated — a complaint about the form itself, not the price.",
+    /* Was 22%, from Baymard's earlier survey round. The list page was
+       re-surveyed and now says 17% (last updated 22 September 2025); the old
+       figure was still circulating here a year after it changed. */
+    method:
+      "Baymard Institute's survey of US online shoppers on reasons for abandoning an order, excluding those who were only browsing.",
     authors: "Baymard Institute",
-    title: "Checkout Optimization: Minimize Form Fields",
+    title: "Cart Abandonment Rate Statistics",
     venue: "Baymard Institute",
-    year: 2024,
-    url: "https://baymard.com/blog/checkout-flow-average-form-fields",
+    year: 2025,
+    url: "https://baymard.com/lists/cart-abandonment-rate",
   },
   /*
    * The two below are about the *second* thing this product does — going back

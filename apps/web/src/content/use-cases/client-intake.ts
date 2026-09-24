@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "client-intake-form",
   name: "Client intake",
+  keyword: "Client intake form",
   group: "Win more work",
   audience: "Coaches, consultants, designers and anyone with a first session",
   navBlurb: "Walk into session one already knowing what they actually want to fix.",

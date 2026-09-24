@@ -1,3 +1,4 @@
+import { cleanLine } from "@repo/guard";
 import {
   readFormDoc,
   displayAnswer,
@@ -466,7 +467,20 @@ async function runFollowUpJob(
   if (progress) {
     vars.set("remaining", String(Math.max(progress.totalEstimate - progress.answered, 0)));
   }
+  /**
+   * Two interpolations of the same template, for the two parts of the message.
+   *
+   * `interpolate` escapes only the values it substitutes, never the author's
+   * own markdown — so the HTML part gets respondent answers with their
+   * markdown metacharacters escaped, and the author's `**bold**` still bolds.
+   * Without that, an answer of `[see here](https://elsewhere.example)` became a
+   * real link in a message the form's owner is signing.
+   *
+   * The plain-text part takes the unescaped pass: a backslash in front of
+   * every asterisk is not an improvement in a message nobody renders.
+   */
   const bodyMd = interpolate(step.bodyMd ?? "", vars);
+  const bodyMdHtml = interpolate(step.bodyMd ?? "", vars, { escapeMarkdown: true });
 
   const org = await env.DB.prepare(`SELECT postal_address FROM organizations WHERE id = ?`)
     .bind(row.organization_id)
@@ -475,7 +489,7 @@ async function runFollowUpJob(
 
   const msg = followUpEmail({
     subject: interpolate(step.subject, vars),
-    bodyHtml: bodyMd ? markdownToHtml(bodyMd) : "",
+    bodyHtml: bodyMdHtml ? markdownToHtml(bodyMdHtml) : "",
     bodyText: bodyMd,
     formTitle: row.form_title,
     /**
@@ -500,7 +514,17 @@ async function runFollowUpJob(
     */
     answered: byRef.size,
     ...(resolved?.firstName ? { firstName: resolved.firstName } : {}),
-    ...(org?.postal_address ? { postalAddress: org.postal_address } : {}),
+    /**
+     * Bounded on the way out, because it cannot be bounded on the way in.
+     *
+     * `postalAddress` is a Better Auth `additionalFields` entry with
+     * `input: true` and no length rule — writable straight through
+     * `authClient.organization.update()`, with no repo schema in the path — and
+     * it goes into the footer of every commercial message. Escaped already;
+     * this is about a footer that is a paragraph long. Bounding the read also
+     * covers whatever is in the column today.
+     */
+    ...(org?.postal_address ? { postalAddress: cleanLine(org.postal_address).slice(0, 300) } : {}),
     showPoweredBy: !doc.settings.branding?.hidePoweredBy,
   });
 
@@ -572,6 +596,13 @@ async function meterEmail(env: Bindings, orgId: string, n = 1): Promise<void> {
     // The message is already gone. Failing the job here would re-send it.
     console.error("email_meter_failed", orgId, err);
   }
+}
+
+/** The form's link for another response, or null where it would not take one (or has no slug). */
+async function submitAgainUrl(env: Bindings, doc: FormDoc, origin: string, formId: string): Promise<string | null> {
+  if (doc.settings.allowResubmissions === false) return null;
+  const slug = await slugOf(env, formId);
+  return slug ? `${origin}/f/${encodeURIComponent(slug)}` : null;
 }
 
 /** The form's public slug, for the resume link. */
@@ -726,10 +757,15 @@ async function runSubmissionJob(
     const to = resolveRespondentAddress(doc, { respondentEmail: sub.respondent_email, byRef })?.address;
     if (to) {
       const vars = interpolationVars(doc, byRef, form.form_title, sub);
+      // Escaped for the markdown pass, raw for the text part — see the note
+      // on the follow-up body above.
       const bodyMd = interpolate(autoReply.bodyMd || DEFAULT_CONFIRMATION_BODY, vars);
+      const bodyMdHtml = interpolate(autoReply.bodyMd || DEFAULT_CONFIRMATION_BODY, vars, {
+        escapeMarkdown: true,
+      });
       const msg = autoReplyEmail({
         subject: interpolate(autoReply.subject || DEFAULT_CONFIRMATION_SUBJECT, vars),
-        bodyHtml: markdownToHtml(bodyMd),
+        bodyHtml: markdownToHtml(bodyMdHtml),
         bodyText: bodyMd,
         formTitle: form.form_title,
         /**
@@ -739,6 +775,13 @@ async function runSubmissionJob(
          */
         ...(autoReply.includeAnswers ? { answers: lines } : {}),
         showPoweredBy: !doc.settings.branding?.hidePoweredBy,
+        /*
+         * Only where the form takes another response from the same person, so
+         * the email never offers what the form would then refuse. The slug is
+         * read here rather than joined above: it is the one field this needs
+         * and the query is shared with the owner's notification.
+         */
+        submitAgainUrl: await submitAgainUrl(env, doc, origin, job.formId),
       });
       try {
         // Replies reach the form's owner, where they gave us an address to use.

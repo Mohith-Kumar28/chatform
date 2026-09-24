@@ -1,8 +1,22 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
-import type { BlockDefinition, FormSummary, Page } from "../types/index.js";
+import type { BlockDefinition, FollowUpStats, FormDocument, FormSummary, Page } from "../types/index.js";
+import { Versions } from "./versions.js";
+import { Knowledge } from "./knowledge.js";
+import { Integrations } from "./integrations.js";
 
 export class Forms {
-  constructor(private readonly http: HttpClient) {}
+  /** Published versions of a form, and the way back to one. */
+  readonly versions: Versions;
+  /** What the agent may know beyond the questions. */
+  readonly knowledge: Knowledge;
+  /** Where the answers go besides a webhook. */
+  readonly integrations: Integrations;
+
+  constructor(private readonly http: HttpClient) {
+    this.versions = new Versions(http);
+    this.knowledge = new Knowledge(http);
+    this.integrations = new Integrations(http);
+  }
 
   list(
     options: { status?: "draft" | "published" | "archived" | "all"; limit?: number; cursor?: string } = {},
@@ -11,7 +25,12 @@ export class Forms {
     return this.http.get<Page<FormSummary>>("/v1/forms", options, request);
   }
 
-  /** The public configuration a respondent would see, including every question. */
+  /**
+   * The public configuration a respondent would see, including every question.
+   *
+   * This is the *published* form, so a draft answers 404 here however plainly
+   * it exists. Use `getDocument()` for a form you have not published yet.
+   */
   get(formId: string, request?: RequestOptions) {
     return this.http.get<{ slug: string; blocks: unknown[]; [key: string]: unknown }>(
       `/v1/forms/${formId}`,
@@ -20,9 +39,14 @@ export class Forms {
     );
   }
 
-  /** The editable document behind the form, rather than its public projection. */
+  /**
+   * The editable document behind the form, rather than its public projection.
+   *
+   * The one that works on a draft. `list()` also hides drafts unless you ask
+   * for them: its `status` defaults to `published`.
+   */
   getDocument(formId: string, request?: RequestOptions) {
-    return this.http.get<{ id: string; slug: string; status: string; doc: unknown }>(
+    return this.http.get<{ id: string; slug: string; status: string; doc: FormDocument }>(
       `/v1/forms/${formId}`,
       { view: "document" },
       request,
@@ -49,6 +73,16 @@ export class Forms {
       undefined,
       request,
     );
+  }
+
+  /**
+   * Take a published form off the air.
+   *
+   * The document survives; respondents are turned away. `publish()` puts it
+   * back, and the version history is untouched either way.
+   */
+  unpublish(formId: string, request?: RequestOptions) {
+    return this.http.post<{ ok: boolean }>(`/v1/forms/${formId}/unpublish`, undefined, request);
   }
 
   /** Soft — the responses collected against it stay readable. */
@@ -83,6 +117,15 @@ export class Forms {
       { source: options.source, includeTest: options.includeTest ? "1" : undefined },
       request,
     );
+  }
+
+  /**
+   * How the abandonment follow-ups for this form are doing.
+   *
+   * Takes no window: the endpoint reports over its own default period.
+   */
+  followupAnalytics(formId: string, request?: RequestOptions) {
+    return this.http.get<FollowUpStats>(`/v1/forms/${formId}/followup-analytics`, undefined, request);
   }
 }
 

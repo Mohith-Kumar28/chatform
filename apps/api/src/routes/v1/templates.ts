@@ -11,7 +11,10 @@
  * next change lands on both.
  */
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { FormSummaryView, Paged } from "../../lib/v1-schemas.js";
+import { page } from "../../lib/api-page.js";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../../lib/validator.js";
 import { z } from "zod";
 import type { Bindings } from "../../env.js";
 import { ErrorEnvelope } from "../../lib/openapi.js";
@@ -49,11 +52,11 @@ templatesV1Router.get(
     responses: {
       200: {
         description: "Templates",
-        content: { "application/json": { schema: resolver(z.array(TemplateSummary)) } },
+        content: { "application/json": { schema: resolver(Paged(TemplateSummary)) } },
       },
     },
   }),
-  async (c) => c.json(await listTemplates(c.env)),
+  async (c) => c.json(page(await listTemplates(c.env))),
 );
 
 templatesV1Router.get(
@@ -99,9 +102,9 @@ templatesV1Router.post(
     tags: ["v1"],
     summary: "Create a draft form from a template",
     description:
-      "Creates a draft, exactly as `POST /v1/forms` does — publish it when you are ready. Omit `workspace` to use the organization's first.",
+      "Creates a draft, exactly as `POST /v1/forms` does. Publish it when you are ready. The form lands in the organization's first workspace, which is not something an API key can choose: `/v1` exposes no workspace endpoint.",
     responses: {
-      200: { description: "The created form" },
+      200: { description: "The created form", content: { "application/json": { schema: resolver(FormSummaryView) } } },
       402: { description: "A plan limit refuses another form" },
       404: { description: "Template or workspace not found" },
     },

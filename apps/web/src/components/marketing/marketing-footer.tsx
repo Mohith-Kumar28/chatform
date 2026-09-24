@@ -17,6 +17,8 @@ const COLUMNS = [
     title: "Product",
     links: [
       { href: "/use-cases", label: "What people use it for" },
+      { href: "/form-templates", label: "Form templates" },
+      { href: "/ai-form-builder", label: "AI form builder" },
       { href: "/#how-it-works", label: "How it works" },
       { href: "/#the-moment", label: "How it answers back" },
       /* `/#product` was the describe/shape/share band, which is gone — the
@@ -44,14 +46,19 @@ const COLUMNS = [
       { href: "/google-forms-alternative", label: "chatform vs Google Forms" },
       { href: "/jotform-alternative", label: "chatform vs Jotform" },
       { href: "/tally-alternative", label: "chatform vs Tally" },
+      { href: "/surveymonkey-alternative", label: "chatform vs SurveyMonkey" },
+      { href: "/fillout-alternative", label: "chatform vs Fillout" },
+      { href: "/youform-alternative", label: "chatform vs Youform" },
       { href: "/compare", label: "See them side by side" },
     ],
   },
   {
     title: "Learn",
     links: [
+      { href: "/conversational-forms", label: "What are conversational forms?" },
       { href: "/use-cases", label: "Guides by use case" },
       { href: "/why-conversation-works", label: "Why conversation works" },
+      { href: "/form-statistics", label: "Form statistics, traced" },
       { href: "/blog", label: "Writing" },
       { href: "/ai-info", label: "For AI assistants" },
     ],

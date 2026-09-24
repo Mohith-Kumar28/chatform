@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240" role="img" aria-label="A conversation of chat bubbles">
+  <rect width="320" height="240" fill="#faf7f2"/>
+  <rect x="24" y="28" width="186" height="46" rx="16" fill="#ffffff"/>
+  <rect x="42" y="42" width="120" height="8" rx="4" fill="#1c1917"/>
+  <rect x="42" y="56" width="88" height="8" rx="4" fill="#a8a29e"/>
+  <rect x="150" y="88" width="146" height="34" rx="16" fill="#FFCBAA"/>
+  <rect x="168" y="100" width="104" height="8" rx="4" fill="#8a4b23"/>
+  <rect x="24" y="136" width="160" height="34" rx="16" fill="#ffffff"/>
+  <rect x="42" y="148" width="118" height="8" rx="4" fill="#1c1917"/>
+  <g>
+    <rect x="24" y="186" width="82" height="30" rx="15" fill="#ffffff" stroke="#e0dbd3" stroke-width="2"/>
+    <rect x="44" y="197" width="42" height="8" rx="4" fill="#a8a29e"/>
+    <rect x="116" y="186" width="82" height="30" rx="15" fill="#ffffff" stroke="#FD6F29" stroke-width="2"/>
+    <rect x="136" y="197" width="42" height="8" rx="4" fill="#FD6F29"/>
+  </g>
+</svg>

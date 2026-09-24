@@ -286,7 +286,7 @@ export const requireApiKey: MiddlewareHandler<{ Bindings: Bindings; Variables: P
         error: {
           code: "secret_key_in_browser",
           message:
-            "Secret keys must never be used from a browser — this one is now exposed to every visitor of that page. Rotate it and use a publishable pk_ key instead.",
+            "Secret keys must never be used from a browser. This one is now exposed to every visitor of that page, so rotate it and use a publishable pk_ key instead.",
         },
       },
       403,

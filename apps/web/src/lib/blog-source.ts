@@ -17,6 +17,8 @@ export interface BlogPost {
   description: string;
   date: string;
   author: string;
+  authorTitle?: string;
+  faq: readonly { question: string; answer: string }[];
   tags: readonly string[];
   /** The compiled MDX body, and the raw source for the markdown mirror. */
   entry: (typeof blog)[number];
@@ -32,6 +34,8 @@ function toPost(entry: (typeof blog)[number]): BlogPost {
     description: entry.description ?? "",
     date: entry.date,
     author: entry.author,
+    authorTitle: entry.authorTitle,
+    faq: entry.faq,
     tags: entry.tags,
     entry,
   };

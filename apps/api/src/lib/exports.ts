@@ -6,6 +6,7 @@ import {
   type Block,
   type FormDoc,
 } from "@repo/form-schema";
+import { csvField } from "@repo/guard";
 import type { Bindings } from "../env.js";
 import { resolveRetiredBlocks } from "./retired-columns.js";
 import { BIND_CHUNK, bindChunks, holesFor } from "./d1-bindings.js";
@@ -148,7 +149,17 @@ function whereFor(formId: string, orgId: string, filters: ExportFilters): { sql:
  */
 const NEWEST_FIRST = `ORDER BY COALESCE(completed_at, started_at) DESC, id DESC`;
 
-const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
+/**
+ * Quote for RFC 4180, and neutralise a cell a spreadsheet would execute.
+ *
+ * This used to be the quoting half only. `deFang` — now `csvCell` in
+ * `@repo/guard` — existed in `response-table.ts` and was applied to the
+ * dashboard's download, so the same answer typed by the same respondent came
+ * out safe through one export path and live through this one. A cell beginning
+ * `=IMPORTXML(...)` in an async export was a formula in the recipient's
+ * spreadsheet.
+ */
+const esc = (v: string) => csvField(v);
 
 type AnswerRow = { submission_id: string; block_ref: string; value_json: string };
 
@@ -253,9 +264,10 @@ export async function buildCsv(
     "started_at",
     "completed_at",
     ...columns.flatMap((b) => {
-      // Marked: a column the form no longer has must explain itself to whoever
-      // opens the file a year from now.
-      const title = `${b.title} (${b.ref})${retiredRefs.has(b.ref) ? " [removed]" : ""}`;
+      // "archived", not "removed": the question is gone from the form, but these
+      // answers are still here, and `[removed]` over a column full of data reads
+      // as though the data was what went.
+      const title = `${b.title} (${b.ref})${retiredRefs.has(b.ref) ? " [archived]" : ""}`;
       // A payment's reconciliation columns follow it, as in `response-table.ts`.
       return b.type === "payment" ? [title, ...paymentColumnTitles(title)] : [title];
     }),

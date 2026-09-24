@@ -24,9 +24,9 @@ import { BRICOLAGE_700, BRICOLAGE_800, INTER_500, INTER_600 } from "./share-card
 
 /* Alt text is read by someone who cannot see the card, in a feed of other
    cards — a scan position, so it names the category and the claim. */
-export const shareCardAlt = "chatform — AI forms that get 2.3× more submissions";
+export const shareCardAlt = "chatform — Conversational forms people actually finish";
 
-const DEFAULT_KICKER = "chatform turns your form into a conversation that people actually finish.";
+const DEFAULT_KICKER = "chatform reads each answer and asks the follow-up when one is too thin to use.";
 
 export interface ShareCardInput {
   /** Two to six words. Absent, the card wears the landing page's ringed headline. */
@@ -126,45 +126,68 @@ function Wordmark({ size }: { size: number }) {
 
 /**
  * The hero's headline, line by line. Satori has no inline formatting context to
- * wrap a ringed word in, so the three lines are set by hand — which is also
- * what keeps the ring mid-line, the way the hero holds it.
+ * wrap a ringed word in, so the lines are set by hand — which is also what keeps
+ * the ring mid-line, the way the hero holds it.
+ *
+ * Four lines now rather than three, because "Conversational" is fourteen
+ * characters and holds a line of its own at this size. Every
+ * measurement below derives from `SIZE` rather than being typed twice: the
+ * previous version had the ring's geometry written as six literals tuned to
+ * 82px, so dropping the type a step to fit the fourth line would have left a
+ * correctly-sized headline inside a pen mark still drawn for the old one.
+ *
+ * 66px is the largest step where the longest line — "Conversational", at 14
+ * characters — still clears the 592px this column has after its 68px inset, and
+ * where four lines plus the kicker and the footer row still fit the 522px of
+ * usable card height.
  */
+const SIZE = 66;
+
 function RingedHeadline() {
   const line = { display: "flex", alignItems: "center" } as const;
+  /* The ring was authored against 82px type. Everything it needs scales off that
+     one ratio, so the next headline change is a single edit to `SIZE`. */
+  const k = SIZE / 82;
   return (
     <div
       style={{
         display: "flex",
         flexDirection: "column",
         fontFamily: DISPLAY,
-        fontSize: 82,
+        fontSize: SIZE,
         fontWeight: 800,
-        letterSpacing: -3.6,
+        letterSpacing: -SIZE * 0.044,
         lineHeight: 1.02,
         color: INK,
       }}
     >
-      <div style={line}>AI forms that</div>
+      <div style={line}>Conversational</div>
+      <div style={line}>forms people</div>
       <div style={line}>
-        get
-        {/* The figure leans; the ring stays level — a number somebody leaned
-            in to write, inside a pen mark that did not move. */}
-        <div style={{ display: "flex", position: "relative", margin: "0 44px 0 40px" }}>
-          <div style={{ display: "flex", transform: "rotate(-4deg)" }}>2.3×</div>
+        actually
+        {/* The ring goes on the outcome word, level with the line. It used to
+            ring an unsourced "2.3×"; see the note on the hero's h1. */}
+        <div
+          style={{
+            display: "flex",
+            position: "relative",
+            margin: `0 ${Math.round(20 * k)}px 0 ${Math.round(32 * k)}px`,
+          }}
+        >
+          <div style={{ display: "flex" }}>finish</div>
           <svg
-            width="206"
-            height="104"
+            width={Math.round(232 * k)}
+            height={Math.round(104 * k)}
             viewBox="0 0 240 96"
             preserveAspectRatio="none"
             fill="none"
-            style={{ position: "absolute", left: -24, top: -8 }}
+            style={{ position: "absolute", left: Math.round(-24 * k), top: Math.round(-8 * k) }}
           >
             <path d={RING} stroke={INK} strokeWidth={4.5} strokeLinecap="round" opacity={0.85} />
           </svg>
         </div>
-        more
+        .
       </div>
-      <div style={line}>submissions.</div>
     </div>
   );
 }

@@ -11,6 +11,8 @@ import { UseCaseFigure } from "@/components/marketing/use-case-figure";
 import { HandNote } from "@/components/marketing/annotate";
 import { JsonLd } from "@/components/seo/json-ld";
 import { USE_CASES, getUseCase } from "@/content/use-cases";
+import { getTemplate } from "@/content/templates";
+import { TemplatePanes } from "@/components/templates/template-detail";
 import { breadcrumbLd, canonical, faqPageLd, howToLd, openGraphBase } from "@/lib/seo";
 
 export const dynamicParams = false;
@@ -57,6 +59,8 @@ export default async function UseCasePage({ params }: { params: Promise<{ slug: 
   const entry = getUseCase((await params).slug);
   if (!entry) notFound();
 
+  const template = entry.template ? getTemplate(entry.template.slug) : undefined;
+
   const related = entry.related
     .map((slug) => getUseCase(slug))
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
@@ -95,8 +99,23 @@ export default async function UseCasePage({ params }: { params: Promise<{ slug: 
             that in the half second before they decide to scroll, and no
             headline can do that job without becoming a worse headline.
           */}
-          <p className="text-caption text-muted-foreground">{entry.audience}</p>
-          <BandTitle as="h1" className="mt-3">
+          {/*
+            The search phrase opens the h1, and the audience finishes the
+            sentence: "Appointment booking form for salons, clinics, tutors…".
+            That line is the eyebrow described above, and it is also the one
+            place on the page where the words somebody typed into Google sit in
+            the heading Google reads first. The headline after it stays written
+            for the person, not the query.
+          */}
+          <BandTitle as="h1">
+            <span className="text-caption mb-3 block font-sans font-normal tracking-normal">
+              <span className="text-foreground font-semibold">{entry.keyword}</span>
+              <span className="text-muted-foreground">
+                {" "}
+                for {entry.audience.charAt(0).toLowerCase()}
+                {entry.audience.slice(1)}
+              </span>
+            </span>
             {entry.h1}
           </BandTitle>
           <BandLede className="max-w-2xl">{entry.lede}</BandLede>
@@ -215,11 +234,13 @@ export default async function UseCasePage({ params }: { params: Promise<{ slug: 
                   </div>
                 )}
 
-                {step.figure === "share" && entry.template && (
+                {step.figure === "share" && template && (
                   <p className="text-caption text-muted-foreground mt-5">
-                    In a hurry? Start from the{" "}
-                    <span className="text-foreground font-medium">{entry.template.name}</span>{" "}
-                    template instead and skip straight to publishing.
+                    In a hurry?{" "}
+                    <a href="#template" className="text-primary font-medium underline underline-offset-4">
+                      Start from the {template.searchName.toLowerCase()} template
+                    </a>{" "}
+                    instead and skip straight to publishing.
                   </p>
                 )}
               </div>
@@ -233,6 +254,43 @@ export default async function UseCasePage({ params }: { params: Promise<{ slug: 
           ))}
         </ol>
       </Band>
+
+      {/*
+        The template, as the app shows it.
+
+        The steps above are the prompt route — describe it and let the builder
+        draft it. This is the other route, and for most people the faster one:
+        the finished form, every question and branch visible before they sign
+        up, with one button to make it theirs. The same panes the app's own
+        template page draws, so what they read here is what they get.
+      */}
+      {template && (
+        <Band id="template" className="scroll-mt-20">
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <div className="max-w-2xl">
+              <BandTitle>Or start from the template.</BandTitle>
+              <BandLede>
+                The {template.searchName.toLowerCase()} template, already written:{" "}
+                {template.blockCount} questions, about {template.estMinutes} minute
+                {template.estMinutes === 1 ? "" : "s"} to answer. Every question and route is
+                yours to change.
+              </BandLede>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button asChild size="lg" shape="pill" className="h-12 px-7">
+                <Link href={`/templates/${template.slug}`}>
+                  Use this template
+                  <ArrowRight />
+                </Link>
+              </Button>
+              <Button asChild size="lg" shape="pill" variant="outline" className="h-12 px-7">
+                <Link href={template.path}>See the template</Link>
+              </Button>
+            </div>
+          </div>
+          <TemplatePanes doc={template.doc} title={template.searchName} className="mt-12" />
+        </Band>
+      )}
 
       {/* What lands afterwards. */}
       <Band tone="number">

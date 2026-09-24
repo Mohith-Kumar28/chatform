@@ -1,17 +1,14 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import {
   CheckCircle2,
   Download,
   Eye,
-  FileText,
   Gauge,
   Inbox,
-  Lock,
   MessageSquare,
   RefreshCw,
-  Sheet,
   TrendingDown,
   Users,
 } from "lucide-react";
@@ -29,14 +26,6 @@ import {
   useGetApiFormsByIdSubmissions,
 } from "@/lib/api/dashboard/dashboard";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { StatCard } from "@/components/ui/stat-card";
@@ -441,7 +430,7 @@ export function ResultsClient({ formId }: ResultsClientProps) {
           onChange={setTab}
           ariaLabel="Results view"
         />
-        <DownloadMenu
+        <DownloadButton
           formId={formId}
           completed={completedCount}
           partials={partialCount}
@@ -530,20 +519,27 @@ export function ResultsClient({ formId }: ResultsClientProps) {
               filters={statusSwitcher}
               onSelection={setSelection}
               /*
-                Partial only: on a finished response the follow-up story is
-                always "they finished", which the status pill already says.
+                On every tab, not just Partial.
 
-                And only when there is a story. With reminders switched off,
+                It used to be Partial-only, on the reasoning that a finished
+                response's follow-up story is always "they finished". That was
+                true while the column could only say so — and it is why the
+                column appeared and vanished as the author switched tabs, which
+                reads as a glitch rather than as a rule. It is also backwards
+                now: "a reminder brought this one back, and here is which one"
+                is a fact about a *finished* response, and the Completed tab was
+                the one place it could never be shown. The states either side of
+                that — recovered, or finished too late to credit — are the whole
+                question an author opens this screen to answer.
+
+                Still only when there is a story. With reminders switched off,
                 every cell in the column reads "not sent" — a whole column,
                 pinned next to the timestamp where the width is most expensive,
                 to report that a feature the author never enabled did nothing.
                 A sequence still in flight from before it was switched off does
                 count, because that one is a thing the product is about to do.
               */
-              showFollowUp={
-                statusFilter === "abandoned" &&
-                (Boolean(doc?.settings.followUp?.enabled) || rows.some((r) => r.followUp))
-              }
+              showFollowUp={Boolean(doc?.settings.followUp?.enabled) || rows.some((r) => r.followUp)}
               page={page}
             />
           )}
@@ -563,20 +559,25 @@ export function ResultsClient({ formId }: ResultsClientProps) {
 }
 
 /**
- * Taking the data out, as one control.
+ * Taking the data out, in one click.
  *
- * This was three: a button reading "Export 1 responses", a bare "+ 5 partial"
- * next to it, and — depending on the plan — either a second link or a lock
- * chip. Nobody could tell from looking whether "+ 5 partial" was a count, a
- * button, or something that would be added to the download, and the button
- * itself could not count ("1 responses").
+ * This was a menu, and before that a menu with two sections: CSV or workbook,
+ * each in a completed and an including-unfinished flavour, which is four
+ * answers to a question nobody was asking. Whoever presses Download wants
+ * their responses. The format is a decision we are better placed to make than
+ * they are, and the scope is the gate's business, not theirs.
  *
- * One button now, with the choice inside it where a choice belongs: what to
- * download, and in which format. The partial rows stay gated — same gate, same
- * count in the label — but as a menu item that says what it is instead of an
- * orphaned number beside an unrelated button.
+ * So: no menu. One press, one file, and the file is the workbook — typed
+ * cells, a frozen header, and finished and unfinished responses on their own
+ * tabs, which is the thing a CSV could not do and the reason the choice was
+ * worth removing rather than reordering.
+ *
+ * Nothing is lost by dropping the CSV: every spreadsheet reads `.xlsx`, and
+ * the unfinished rows have their own gate on this screen already — the
+ * Abandoned filter's `LockedOverlay`, which sells them far better than a
+ * locked row at the bottom of a menu did.
  */
-function DownloadMenu({
+function DownloadButton({
   formId,
   completed,
   partials,
@@ -590,23 +591,28 @@ function DownloadMenu({
   /** Set while rows are ticked in the table below — see `SubmissionsTable`. */
   selection?: { count: number; download: () => void } | null;
 }) {
-  const upgrade = useUpgrade();
-  // Straight browser navigation, so the session cookie rides along.
-  const href = (opts: { partials?: boolean; xlsx?: boolean }) =>
-    `${API_ORIGIN}/api/forms/${formId}/submissions/export${opts.xlsx ? ".xlsx" : ""}${
-      opts.partials ? "?includePartials=true" : ""
-    }`;
-
-  const total = completed + partials;
+  /**
+   * This browser's clock, for the timestamp the server puts in the filename.
+   *
+   * A client-only value, so it is read through `useSyncExternalStore` rather
+   * than inline: the server has no timezone to agree with, and rendering the
+   * browser's during hydration is exactly the mismatch the server snapshot
+   * (`null`) exists to avoid. The offset never changes while the page is open,
+   * so the subscribe callback has nothing to listen for.
+   *
+   * Before the early returns below, because hooks cannot run conditionally.
+   */
+  const tzOffset = useSyncExternalStore(
+    () => () => {},
+    () => new Date().getTimezoneOffset(),
+    () => null,
+  );
 
   /*
-    Ticked rows retarget this button rather than growing a second one.
-
-    There is no menu in this state, because there is no choice left to make:
-    the rows are already on screen and already fetched, so the scope is settled
-    and the format is the one the browser can write from here — CSV. Untick
-    everything and the button goes back to being the whole form's download,
-    every page of it, in either format.
+    Ticked rows retarget this button rather than growing a second one. The rows
+    are already on screen and already fetched, so this download is written here
+    in the browser — untick everything and the button goes back to being the
+    whole form's, every page of it.
   */
   if (selection) {
     return (
@@ -617,65 +623,36 @@ function DownloadMenu({
     );
   }
 
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" shape="pill" disabled={total === 0}>
-          <Download className="size-3.5" />
-          Download
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel className="text-muted-foreground text-micro font-medium tracking-wide uppercase">
-          {completed === 1 ? "1 completed response" : `${completed} completed responses`}
-        </DropdownMenuLabel>
-        <DropdownMenuItem asChild>
-          <a href={href({})} download>
-            <FileText />
-            CSV
-          </a>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <a href={href({ xlsx: true })} download>
-            <Sheet />
-            Excel workbook
-          </a>
-        </DropdownMenuItem>
+  // Nothing to take out yet. An anchor cannot be disabled, so this state is a
+  // real button rather than a link that quietly does nothing.
+  if (completed + partials === 0) {
+    return (
+      <Button variant="outline" size="sm" shape="pill" disabled>
+        <Download className="size-3.5" />
+        Download
+      </Button>
+    );
+  }
 
-        {partials > 0 && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-muted-foreground text-micro font-medium tracking-wide uppercase">
-              Including {partials} unfinished
-            </DropdownMenuLabel>
-            {canPartials ? (
-              <>
-                <DropdownMenuItem asChild>
-                  <a href={href({ partials: true })} download>
-                    <FileText />
-                    CSV
-                  </a>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <a href={href({ partials: true, xlsx: true })} download>
-                    <Sheet />
-                    Excel workbook
-                  </a>
-                </DropdownMenuItem>
-              </>
-            ) : (
-              <DropdownMenuItem
-                onSelect={() => upgrade({ feature: "export_partials" }, { count: partials, noun: "partial responses" })}
-              >
-                <Lock />
-                <span className="flex-1">Unfinished responses</span>
-                <LockChip reason={{ feature: "export_partials" }} context={{ count: partials }} />
-              </DropdownMenuItem>
-            )}
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+  /**
+   * Unfinished responses ride along whenever the plan allows them, count or no
+   * count: a form with none today gives the same file shape as the same form
+   * next week, rather than changing structure underneath whoever filed it.
+   *
+   * Straight browser navigation, so the session cookie rides along.
+   */
+  const href =
+    `${API_ORIGIN}/api/forms/${formId}/submissions/export.xlsx` +
+    `?includePartials=${canPartials}` +
+    (tzOffset === null ? "" : `&tz=${tzOffset}`);
+
+  return (
+    <Button asChild variant="outline" size="sm" shape="pill">
+      <a href={href} download>
+        <Download className="size-3.5" />
+        Download
+      </a>
+    </Button>
   );
 }
 

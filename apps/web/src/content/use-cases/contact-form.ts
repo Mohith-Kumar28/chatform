@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "contact-form-alternative",
   name: "Contact form that qualifies",
+  keyword: "Contact form",
   group: "Win more work",
   audience: "Agencies, studios, freelancers and anyone with an enquiry form",
   navBlurb: "Turn “Hi, I need a website” into a brief you can quote from, before you reply.",
@@ -111,7 +112,7 @@ Answer their questions as they come up — what we charge, whether we do hosting
   steps: [
     {
       title: "Open chatform and make an account",
-      body: "Go to chatform.in and sign up. Thirty seconds, no card. The free plan is unlimited forms and unlimited enquiries, so there is nothing to decide yet.",
+      body: "Go to chatform.in and sign up. Thirty seconds, no card. The free plan has unlimited enquiries, so there is nothing to decide yet.",
     },
     {
       title: "Paste your website address, then the prompt",

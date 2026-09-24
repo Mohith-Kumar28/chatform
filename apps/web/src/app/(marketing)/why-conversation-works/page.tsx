@@ -8,7 +8,12 @@ import { STUDIES, study } from "@/content/research";
 import { articleLd, breadcrumbLd, canonical, faqPageLd, openGraphBase } from "@/lib/seo";
 
 const PATH = "/why-conversation-works";
-const TITLE = "Why people finish a conversation and abandon a form";
+/**
+ * The question as it is searched. The h1 below keeps the page's own voice;
+ * the title is what a results page shows, and "conversational vs traditional
+ * forms" is the comparison people type when they are deciding.
+ */
+const TITLE = "Conversational vs traditional forms: what the research says";
 const DESCRIPTION =
   "The research on conversational data collection, with sources: what actually changes when the same questions are asked in a conversation by something that reads the answers — and what does not.";
 
@@ -26,7 +31,7 @@ const FAQ = [
   {
     question: "Do conversational forms have a higher completion rate?",
     answer:
-      "Nobody can honestly give you one number, and the ones circulating in this category mostly trace back to vendor marketing rather than to a study. What the peer-reviewed work does show is narrower and more useful: asking through a chat interface produces more differentiated answers and less satisficing (Kim, Lee and Gweon, CHI 2019), and an AI that probes thin answers produces significantly more informative and specific ones (Xiao et al., TOCHI 2020). Separately, Baymard Institute finds 22% of checkout abandonment is attributed to length and complexity. chatform reports completion rate and per-question drop-off for your own form; it does not claim an industry average.",
+      "Nobody can honestly give you one number, and the ones circulating in this category mostly trace back to vendor marketing rather than to a study. What the peer-reviewed work does show is narrower and more useful: asking through a chat interface produces more differentiated answers and less satisficing (Kim, Lee and Gweon, CHI 2019), and an AI that probes thin answers produces significantly more informative and specific ones (Xiao et al., TOCHI 2020). Separately, Baymard Institute finds 17% of US online shoppers have abandoned an order because the checkout was too long or complicated. chatform reports completion rate and per-question drop-off for your own form; it does not claim an industry average.",
   },
   {
     question: "Why do people give short or fake answers to open-ended questions?",
@@ -127,10 +132,10 @@ export default function WhyConversationWorksPage() {
               arrival, and the decision a visitor makes is not about any single question — it is
               about the whole visible stack. Baymard Institute&rsquo;s checkout research finds{" "}
               <a href={baymard.url} className="text-primary underline underline-offset-4" rel="noopener">
-                22% of people who abandon a checkout say they left because it was too long or too
-                complicated
+                17% of US online shoppers have abandoned an order because the checkout was too long or
+                too complicated
               </a>{" "}
-              — ahead of the several other reasons people usually assume come first.
+              — a reason that is entirely about the form, not about what was being bought.
             </p>
           </div>
           <div className="flex justify-center">
@@ -197,7 +202,7 @@ export default function WhyConversationWorksPage() {
             },
             {
               term: "It can explain what a question means",
-              def: "Schober and Conrad found that letting an interviewer clarify sharply reduces error. Give it up to twenty knowledge entries and it answers from them, quoting you, then carries on exactly where it was.",
+              def: "Schober and Conrad found that letting an interviewer clarify sharply reduces error. On Pro, give it your documents, pages and notes as a knowledge base and it answers from them, quoting you, then carries on exactly where it was.",
             },
             {
               term: "It is a machine, and says so",
@@ -286,7 +291,11 @@ export default function WhyConversationWorksPage() {
           ))}
         </ol>
         <p className="text-caption text-muted-foreground mt-8">
-          Comparing tools rather than formats?{" "}
+          New to the idea?{" "}
+          <Link href="/conversational-forms" className="text-primary underline underline-offset-4">
+            What conversational forms are, and when they work
+          </Link>
+          . Comparing tools rather than formats?{" "}
           <Link href="/compare" className="text-primary underline underline-offset-4">
             The comparisons, including where we lose
           </Link>

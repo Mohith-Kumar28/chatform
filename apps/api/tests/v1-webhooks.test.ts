@@ -57,11 +57,42 @@ describe("managing endpoints", () => {
     const created = (await res.json()) as { id: string; secret: string; secretPreview: string };
     expect(created.secret.startsWith("whsec_")).toBe(true);
 
-    const list = (await (await api("/v1/webhooks")).json()) as { id: string; secret?: string }[];
-    const listed = list.find((w) => w.id === created.id);
+    const list = (await (await api("/v1/webhooks")).json()) as { data: { id: string; secret?: string }[] };
+    const listed = list.data.find((w) => w.id === created.id);
     expect(listed).toBeTruthy();
     // Only a preview afterwards — the same treatment an API key gets.
     expect(listed).not.toHaveProperty("secret");
+  });
+
+  /**
+   * This route used to take any URL `new URL()` accepted — no scheme check, no
+   * address check — while its dashboard twin required https. Both land in the
+   * same column and are dialled by the same delivery worker, so a URL the
+   * dashboard refused could be created here and then fetched from inside the
+   * worker.
+   */
+  it.each([
+    ["a private address", "http://10.0.0.1/hook"],
+    ["the cloud metadata endpoint", "http://169.254.169.254/latest/meta-data/"],
+    ["credentials in the URL", "https://user:pw@acme.example/hook"],
+    ["a scheme that is not http", "ftp://acme.example/hook"],
+  ])("refuses %s", async (_label, url) => {
+    const res = await api("/v1/webhooks", {
+      method: "POST",
+      body: JSON.stringify({ url, events: ["response.completed"] }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "bad_url" } });
+  });
+
+  it("still allows loopback outside production, which is how integrations get built", async () => {
+    // `ENVIRONMENT` is "test" here. In production the same URL is refused —
+    // see tests/webhook-url.test.ts, which pins both halves of that rule.
+    const res = await api("/v1/webhooks", {
+      method: "POST",
+      body: JSON.stringify({ url: "http://localhost:8787/hook", events: ["response.completed"] }),
+    });
+    expect(res.status).toBe(201);
   });
 
   it("refuses an event name we do not send", async () => {
@@ -116,8 +147,8 @@ describe("scopes and tenancy", () => {
     const otherKey = (await seedKey(other, "v1whbkey", { scopes: { webhook: ["read"] } })).raw;
     const list = (await (
       await fetchApi("/v1/webhooks", { headers: { "x-api-key": otherKey } })
-    ).json()) as unknown[];
-    expect(list).toHaveLength(0);
+    ).json()) as { data: unknown[] };
+    expect(list.data).toHaveLength(0);
   });
 });
 

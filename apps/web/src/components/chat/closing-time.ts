@@ -82,7 +82,7 @@ export function describeClosing(
 
   if (remaining <= 0) {
     const text = started
-      ? "Closing time passed — you can still finish this response."
+      ? "Closing time passed. You can still finish this response."
       : "This form has closed.";
     return { tier: "passed", text, tickMs: null, srText: text };
   }

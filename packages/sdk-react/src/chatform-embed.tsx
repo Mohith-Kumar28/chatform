@@ -97,6 +97,33 @@ export function ChatformEmbed({
   for (const [key, value] of Object.entries(hidden ?? {})) url.searchParams.set(key, value);
 
   return (
+  /**
+   * The embedder's URL is not ours to collect.
+   *
+   * Without this the iframe sends the full page URL of whatever site the form
+   * is embedded on as a `Referer` on every request — including paths and query
+   * strings from a customer's private admin page. `strict-origin-when-cross-origin`
+   * sends the origin only.
+   *
+   * A `sandbox` attribute is deliberately NOT set here, and this is what the
+   * browser pass established rather than a guess.
+   *
+   * With `allow-scripts allow-same-origin allow-forms allow-popups
+   * allow-popups-to-escape-sandbox allow-downloads` applied to a real embed of
+   * a real form, the runtime **worked**: it rendered, the SSE stream
+   * connected, an answer was accepted and recorded, the postMessage resize
+   * bridge sized the frame, and the console was clean. Two paths could not be
+   * reached from that harness, because the accessibility tree does not
+   * traverse into a cross-document frame: picking a file through the uploader,
+   * and the Google sign-in popup on a gated form. Their tokens are granted in
+   * that list, which is reasoning, not evidence.
+   *
+   * What a sandbox buys here is `allow-top-navigation` staying off, so a
+   * compromised frame cannot navigate the embedder's page away. That is worth
+   * having and it is not worth betting an embedded live form's file upload or
+   * sign-in on two untested paths. Ship it after driving those two by hand on
+   * a real embed; everything else about it is already known to work.
+   */
     <iframe
       ref={frame}
       src={url.toString()}
@@ -104,6 +131,7 @@ export function ChatformEmbed({
       className={className}
       style={{ width: "100%", border: 0, height: measured, ...style }}
       allow="clipboard-write; camera; microphone"
+      referrerPolicy="strict-origin-when-cross-origin"
     />
   );
 }

@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { boundedString, safeUrl, storedUrl, storedUrlOptional } from "@repo/guard";
 import { ConditionGroup } from "./conditions";
 import { NanoId, RefString, VariableName } from "./ids";
+import { DEFAULT_REDIRECT_DELAY_SEC } from "./defaults";
 
 const RuleBase = { id: NanoId };
 
@@ -61,7 +63,8 @@ export type Variable = z.infer<typeof Variable>;
 
 export const HiddenField = z.object({
   name: z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_.-]{0,60}$/),
-  defaultValue: z.string().optional(),
+  // Unbounded until now, and it ends up in the prompt and in exports.
+  defaultValue: boundedString(500).optional(),
 });
 export type HiddenField = z.infer<typeof HiddenField>;
 
@@ -83,7 +86,7 @@ export type HiddenField = z.infer<typeof HiddenField>;
 export const EndingRequirement = z.object({
   id: NanoId,
   /** Stated as the requirement, not as the failure: "Be 18 or over". */
-  label: z.string().min(1).max(300),
+  label: boundedString(300).min(1),
   /** True when this requirement is NOT met. Null shows the line unconditionally. */
   when: ConditionGroup.nullable().default(null),
 });
@@ -92,13 +95,28 @@ export type EndingRequirement = z.output<typeof EndingRequirement>;
 export const Ending = z.object({
   id: NanoId,
   ref: RefString,
-  title: z.string().max(2000).default("Thank you!"),
-  bodyMd: z.string().max(10000).default(""),
-  imageUrl: z.string().url().nullable().default(null),
-  ctaLabel: z.string().max(60).optional(),
-  ctaUrl: z.string().url().optional(),
-  redirectUrl: z.string().url().optional(),
-  redirectDelaySec: z.number().int().min(0).max(120).default(5),
+  title: boundedString(2000).default("Thank you!"),
+  bodyMd: boundedString(10000).default(""),
+  imageUrl: storedUrl(1000).default(null),
+  ctaLabel: boundedString(60).optional(),
+  /**
+   * The two links an ending can send a respondent to, cleaned on read rather
+   * than rejected.
+   *
+   * `z.string().url()` accepted `javascript:` — it is `new URL()` with no
+   * scheme constraint — so these were a stored XSS: the runtime puts
+   * `redirectUrl` through `window.open` and `location.assign`, and `ctaUrl`
+   * into an anchor. The render side refuses a dangerous scheme now, and this
+   * stops new ones being written.
+   *
+   * `.catch(null)` rather than a rejection because `readFormDoc` re-parses a
+   * stored document on every read, on the respondent's path. A published form
+   * holding one bad URL has to keep working with a dead button; it must not
+   * become a 500 for everybody halfway through answering.
+   */
+  ctaUrl: storedUrlOptional(1000),
+  redirectUrl: storedUrlOptional(1000),
+  redirectDelaySec: z.number().int().min(0).max(120).default(DEFAULT_REDIRECT_DELAY_SEC),
   showSummary: z.boolean().default(false),
   /**
    * How this outcome ended.

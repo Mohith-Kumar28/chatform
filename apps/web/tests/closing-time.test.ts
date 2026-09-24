@@ -117,7 +117,7 @@ describe("describeClosing", () => {
 
     it("tells someone mid-conversation they can still finish", () => {
       expect(describe_(-MINUTE, true).text).toBe(
-        "Closing time passed — you can still finish this response.",
+        "Closing time passed. You can still finish this response.",
       );
     });
 

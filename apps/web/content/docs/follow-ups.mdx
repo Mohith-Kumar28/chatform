@@ -115,16 +115,56 @@ demo, a trial, a booking. Not for surveys, job applications, feedback forms or
 event RSVPs: those are not sales negotiations, and a reminder about one is
 marketing to somebody who never entered into anything.
 
+## When a reminder gets the credit
+
+A reminder is credited with a response if that response is **finished within 24
+hours of the reminder going out**. That is the whole rule, and it is the same one
+affiliate links and ad platforms use, for the same reason: almost nobody finishes
+a form in the tab they opened from their inbox. They read the mail on a phone at
+lunch, and answer on a laptop that evening.
+
+Three consequences worth knowing:
+
+- **They do not have to click anything.** Opening the link is recorded, and
+  reported separately as the mail's click-through rate, but it is not what earns
+  the credit. Counting only clicks missed most of the responses reminders
+  actually brought back.
+- **Only one reminder is credited per response.** Three messages to one person
+  recovered one response, not three. The credit goes to the last one that could
+  plausibly have done it — the most recent send, or the most recent open where
+  there was one.
+- **A completion outside the window is not a recovery.** Somebody who wanders
+  back a week later shows as **Finished later** in the results table: they
+  finished, and no reminder claims them.
+
+## The reminder column, state by state
+
+The Follow-up column carries one word per response. Hover it for the full
+sequence, with real times and — where there was one — which message brought them
+back.
+
+| | | |
+|---|---|---|
+| **Recovered** | green | A reminder was credited with this response. Hover to see which one, and how long after it they finished. |
+| **Opened** | blue | They opened a reminder's link and have not finished yet. |
+| **Finished later** | grey | They finished, but more than 24 hours after the last reminder, so it is not credited. |
+| **Sent**, **Sent ×2** | grey | Reminders went out, unopened, and the sequence has nothing left to send. |
+| **Held back** | grey | Deliberately sent nothing, as part of a holdout. |
+| **in 4h**, **Due**, **Queued**, **Sending** | outlined | Still to come. Nothing is owed here — the sweep runs every five minutes. |
+| **Still open** | outlined | They may still be answering. Whether to send is decided 30 minutes after their last message. |
+| **Not sent**, **Failed** | amber | Nothing went out, or delivery failed. The hover card names the cause — usually a missing postal address, an unpublished change, an opt-out, or a spent quota. |
+
 ## Measuring whether it worked
 
 Under *Options* you can hold back a share of abandoners and send them nothing.
-The results table marks those **Held back**, and the ones who were nudged and
-then finished **Recovered**.
+The results table marks those **Held back**.
 
 This is worth switching on. Published recovery rates for this kind of email are
 almost always the share of recipients who converted, with no control group — so
 they count everybody who was coming back anyway. A holdout is the only way to
-know what the reminders actually added.
+know what the reminders actually added. The held-back people are judged through
+the same 24-hour window, measured from the moment the reminder they were denied
+would have gone out, so the two sides are answering the same question.
 
 ## Webhooks
 

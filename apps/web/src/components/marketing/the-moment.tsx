@@ -2,7 +2,19 @@ import { BookOpen, CornerDownLeft, Zap } from "lucide-react";
 import { Band, BandTitle, BandLede } from "./band";
 import { InView } from "./in-view";
 import { ArrowMark, HandNote } from "./annotate";
-import { ChatDemo } from "./chat-demo";
+import dynamic from "next/dynamic";
+import { LazySection } from "./lazy-section";
+
+/**
+ * The page's second typewriter, several viewports below the fold.
+ *
+ * `dynamic` takes its chunk out of the route's static client references, so it
+ * stops being one of the `<script async>` tags in `<head>`; `LazySection`
+ * below means it is not even fetched until someone scrolls near it. Together
+ * that is a 33 KB component, an IntersectionObserver and a 32 ms render loop
+ * that a visitor who never reaches this band never pays for.
+ */
+const ChatDemo = dynamic(() => import("./chat-demo").then((m) => m.ChatDemo));
 import { MOMENT_SCRIPT } from "./chat-demo-scripts";
 
 /**
@@ -25,7 +37,7 @@ const CALLOUTS = [
   {
     icon: BookOpen,
     title: "Quotes your knowledge base",
-    body: "Twenty entries you write. It quotes you, not the internet.",
+    body: "Your documents, pages and notes, on Pro. It quotes you, not the internet.",
   },
   {
     icon: CornerDownLeft,
@@ -50,7 +62,11 @@ export function TheMoment() {
       </div>
 
       <div className="mt-12 grid gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:gap-14">
-        <ChatDemo script={MOMENT_SCRIPT} variant="feature" label="Recording" />
+        {/* The fallback reserves the feature variant's exact height
+            (`h-[22rem]` in `chat-demo.tsx`) so the swap shifts nothing. */}
+        <LazySection fallback={<div className="h-[22rem]" aria-hidden />} rootMargin="400px">
+          <ChatDemo script={MOMENT_SCRIPT} variant="feature" label="Recording" />
+        </LazySection>
 
         <ul className="flex flex-col gap-7">
           {CALLOUTS.map((c) => (

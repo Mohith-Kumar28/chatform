@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "volunteer-signup-form",
   name: "Volunteer signups",
+  keyword: "Volunteer sign up form",
   group: "Run a community",
   audience: "Charities, trusts, temples, PTAs, sports clubs, alumni groups",
   navBlurb: "Get volunteers who actually turn up, matched to shifts they can make.",
@@ -162,7 +163,7 @@ The tone should be warm, grateful and completely unbureaucratic. This is someone
     {
       question: "Is it really free for a charity?",
       answer:
-        "Yes, genuinely — unlimited forms and unlimited signups on the free plan, no card, no expiry. The paid plans buy things like putting your own logo on the form and removing our small badge, which some organisations want and many are perfectly happy without.",
+        "Yes, genuinely — unlimited signups on the free plan, no card, no expiry. The paid plans buy things like putting your own logo on the form and removing our small badge, which some organisations want and many are perfectly happy without.",
     },
     {
       question: "Can we collect a DBS or background check?",

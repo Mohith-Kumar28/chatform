@@ -1,4 +1,5 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
+import { rows } from "../internal/rows.js";
 
 export interface ExportFilters {
   /** Defaults to completed only, matching the read API. `["all"]` for everything. */
@@ -93,12 +94,12 @@ export class Exports {
   }
 
   async list(options: { formId?: string; limit?: number } = {}, request?: RequestOptions): Promise<Export[]> {
-    const res = await this.http.get<{ data: ExportWire[] }>(
+    const res = await this.http.get<ExportWire[] | { data: ExportWire[] }>(
       "/v1/exports",
       { form_id: options.formId, limit: options.limit },
       request,
     );
-    return res.data.map(toExport);
+    return rows(res).map(toExport);
   }
 
   /**

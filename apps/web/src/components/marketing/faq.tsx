@@ -24,6 +24,16 @@ import {
  */
 export const FAQ_ITEMS = [
   {
+    // First, and here for a reason the rest of this array is not. The headline
+    // sells the category — conversational forms — and this is where the other
+    // half of the search traffic is answered, in the words people actually type.
+    // It is also the one place that separates the two senses of an AI form
+    // builder, because chatform is both and most of the category is only the
+    // first.
+    question: "Is chatform an AI-powered form builder?",
+    answer: "Yes, in both senses of the phrase — and the second one is the part nobody else does. It builds the form: describe what you need in a sentence, or paste your website, and the questions, the wording, the order and the branching are written for you. Then it runs the form as a conversation: an AI-powered interviewer asks your questions one at a time, reads what people write, asks again when an answer is too thin to use, and emails the people who left halfway. Most AI form builders do only the first half — the AI writes the form, and then hands you the same static page of boxes.",
+  },
+  {
     question: "Is this just a chatbot bolted onto a form?",
     answer: "No, and the difference matters. Your form is still in charge. The AI is allowed to do six things — write down an answer, answer a question from your notes, ask again, rephrase, skip, or finish — and your form checks each one before it happens. It can make a question sound friendlier. It cannot decide what counts as an answer, reorder your questions, or invent one you never wrote.",
   },

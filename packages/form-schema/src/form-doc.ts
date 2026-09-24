@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { boundedString } from "@repo/guard";
 import type { RespondentAuthMethod } from "./respondent";
 import { AnswerMap } from "./answers";
 import { Block, type BlockMedia, type GroupFieldKind } from "./blocks";
@@ -12,8 +13,8 @@ export const SCHEMA_VERSION = 9;
 
 export const FormDoc = z.object({
   schemaVersion: z.number().int().positive().default(SCHEMA_VERSION),
-  title: z.string().min(1).max(200),
-  description: z.string().max(2000).optional(),
+  title: boundedString(200).min(1),
+  description: boundedString(2000).optional(),
   blocks: z.array(Block).min(1).max(200),
   endings: z.array(Ending).min(1).max(20),
   /** Rules evaluated after the last completed block; first matching goto(ending) wins. */
@@ -52,6 +53,9 @@ export interface PublicBlock {
   labels?: { low?: string; high?: string };
   yesLabel?: string;
   noLabel?: string;
+  /** `poll` only: whether the tally is ever shown back, and the floor it is held until. */
+  showResults?: boolean;
+  minResponsesToReveal?: number;
   accept?: string[];
   maxFiles?: number;
   maxSizeMB?: number;
@@ -185,6 +189,7 @@ export function toPublicBlock(b: Block): PublicBlock {
       pub.buttonLabel = b.buttonLabel;
       break;
     case "single_select":
+    case "poll":
     case "multi_select":
     case "dropdown":
     case "picture_choice":
@@ -200,6 +205,10 @@ export function toPublicBlock(b: Block): PublicBlock {
       }
       if (b.type === "single_select" || b.type === "multi_select") {
         pub.allowOther = b.allowOther;
+      }
+      if (b.type === "poll") {
+        pub.showResults = b.showResults;
+        pub.minResponsesToReveal = b.minResponsesToReveal;
       }
       break;
     case "ranking":
@@ -443,6 +452,22 @@ export interface PublicFormConfig {
   closed?: boolean;
   closedMessage?: string;
   /**
+   * Why it is closed, where saying so helps the respondent.
+   *
+   * Only the two reasons that are the respondent's business. A deadline that
+   * passed is a date they can be told — "you are two days late" is a different
+   * fact from "this is over", and the first one is the one somebody opening a
+   * forwarded link actually needs. A full intake is the other: "every place has
+   * been taken" answers the question the bare word "closed" leaves open, which
+   * is whether it is worth asking the organiser to let them in.
+   *
+   * Absent for everything else, and that absence is load-bearing: the monthly
+   * response ceiling also closes a form, and a respondent must never be shown
+   * that somebody's plan ran out. It presents as a plain close with no reason —
+   * see `openSession`, which takes the same care.
+   */
+  closedReason?: "schedule" | "capacity";
+  /**
    * When the form stops accepting responses, ISO, when the author scheduled a
    * close and asked for it to be shown. Projected so the hosted page can say
    * so before someone starts — the share card puts it on the unfurl, and the
@@ -501,6 +526,7 @@ export function toPublicConfig(
     brandingHidden: boolean;
     closed?: boolean;
     closedMessage?: string;
+    closedReason?: "schedule" | "capacity";
     /** Resolves `settings.meta.ogImageKey` to a public URL. */
     assetUrl?: (key: string) => string;
     /**
@@ -549,6 +575,7 @@ export function toPublicConfig(
     embed: { allowedOrigins: doc.settings.embed?.allowedOrigins ?? [] },
     closed: opts.closed,
     closedMessage: opts.closedMessage,
+    closedReason: opts.closedReason,
     closeAt: doc.settings.closeRules.showCountdown ? doc.settings.closeRules.closeAt : undefined,
     capacity:
       doc.settings.closeRules.showRemaining && doc.settings.closeRules.maxSubmissions

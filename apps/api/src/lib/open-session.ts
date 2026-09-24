@@ -221,8 +221,21 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
   const doc = readFormDoc(JSON.parse(form.schema_json));
   const settings = doc.settings;
 
+  /**
+   * The author's own words on every refusal, not just the billing one.
+   *
+   * Two of these three used to answer with the hardcoded string "This form is
+   * closed" while the ceiling branch below answered with
+   * `closeRules.closedMessageMd` — so the one message the author wrote, under
+   * a setting whose description reads "Shown when the form is closed", was
+   * shown on the one path they cannot cause and withheld on the two they can.
+   * A form that closed on schedule said nothing about where registration moved
+   * to, because the sentence that said so was sitting unread in the document.
+   */
+  const closedMessage = settings.closeRules.closedMessageMd;
+
   if (isClosed(doc, form.close_at)) {
-    return { ok: false, status: 403, body: { error: { code: "form_closed", message: "This form is closed" } } };
+    return { ok: false, status: 403, body: { error: { code: "form_closed", message: closedMessage } } };
   }
 
   /**
@@ -261,14 +274,14 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
     return {
       ok: false,
       status: 403,
-      body: { error: { code: "form_closed", message: settings.closeRules.closedMessageMd } },
+      body: { error: { code: "form_closed", message: closedMessage } },
     };
   }
 
   const cap = settings.closeRules.maxSubmissions;
   if (cap && !input.resumeSubmissionId) {
     if ((await completedSubmissions(env, form.id)) >= cap) {
-      return { ok: false, status: 403, body: { error: { code: "form_closed", message: "This form is closed" } } };
+      return { ok: false, status: 403, body: { error: { code: "form_closed", message: closedMessage } } };
     }
   }
 

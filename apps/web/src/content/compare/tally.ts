@@ -30,7 +30,7 @@ export default defineComparison({
     {
       title: "It answers the respondent's questions",
       body:
-        "Write up to twenty knowledge entries and it quotes you, mid-form, then carries on exactly where it was. The state machine still owns the flow, so nothing gets skipped or reordered while it is answering.",
+        "On Pro, give it up to 50 knowledge sources — documents, pages or notes — and it quotes you, mid-form, then carries on exactly where it was. The state machine still owns the flow, so nothing gets skipped or reordered while it is answering.",
     },
     {
       title: "Deeper logic, checked before you publish",
@@ -73,7 +73,7 @@ export default defineComparison({
     {
       question: "Is chatform free like Tally?",
       answer:
-        "Close, with one honest difference. Both give you unlimited forms and unlimited responses at $0 — chatform's is subject to a fair-use ceiling of 10,000 responses a month. The difference is the AI: running an interview costs money, so the free plan includes 200 AI conversations a month. Past that the form keeps working and keeps collecting; it falls back to asking the questions as written instead of rephrasing them.",
+        "Close, with one honest difference. Both give you unlimited responses at $0 — chatform's is subject to a fair-use ceiling of 10,000 responses a month, across up to 100 forms. The difference is the AI: running an interview costs money, so the free plan includes 200 AI conversations a month. Past that the form keeps working and keeps collecting; it falls back to asking the questions as written instead of rephrasing them.",
     },
     {
       question: "What happens when I run out of AI conversations?",

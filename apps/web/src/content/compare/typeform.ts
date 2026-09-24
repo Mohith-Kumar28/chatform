@@ -4,9 +4,11 @@ export default defineComparison({
   slug: "typeform-alternative",
   competitor: "Typeform",
   vendor: "Typeform",
-  title: "Typeform alternative — chatform, the one that answers back",
+  /* The exact query first, "free" for the price-motivated searcher, the
+     category second — see docs/KEYWORD-RESEARCH.md. */
+  title: "Free Typeform Alternative: Conversational Forms · chatform",
   description:
-    "An affordable Typeform alternative built as a conversation, not a slideshow of one field per screen. Unlimited responses free, AI that answers the respondent's questions, and a headless API. Compared honestly, with prices read in September 2026.",
+    "A Typeform alternative with conversational forms: unlimited free responses, AI follow-ups on vague answers, from $16/mo. And where Typeform still wins.",
   h1: "A Typeform alternative that talks back.",
   lede:
     "Typeform made forms beautiful. This one makes them finish — by reading what people write and letting them ask you something back.",
@@ -30,12 +32,12 @@ export default defineComparison({
     {
       title: "It answers questions back",
       body:
-        "Give it up to twenty knowledge entries and it quotes you, mid-form, without losing its place in the flow. Typeform's own conversational product, Formless, does this — but Formless is sold separately, and starts at $59 a month for 250 AI conversations. chatform's free plan includes 200.",
+        "On Pro, give it your documents, pages or notes — up to 50 knowledge sources — and it quotes you, mid-form, without losing its place in the flow. Typeform's own conversational product, Formless, does this — but Formless is sold separately, and starts at $59 a month for 250 AI conversations. chatform Pro is $16 a month billed yearly and includes 2,000.",
     },
     {
       title: "Unlimited responses on the free plan",
       body:
-        "Typeform's free tier stops at 10 responses a month. chatform's free plan has no per-plan response quota at all, subject to a fair-use ceiling of 10,000 a month — and unlimited forms alongside it.",
+        "Typeform's free tier stops at 10 responses a month. chatform's free plan has no per-plan response quota at all, subject to a fair-use ceiling of 10,000 a month, across up to 100 forms.",
     },
     {
       title: "A documented headless API",
@@ -64,6 +66,63 @@ export default defineComparison({
     },
   ],
 
+  byline: { author: "Mohith Kumar", checkedOn: "September 2026" },
+
+  atAGlance: [
+    { label: "Free plan", us: "Unlimited responses (fair use 10,000/mo), 200 AI conversations", them: "10 responses a month" },
+    { label: "Entry plan, billed yearly", us: "$16/mo", them: "$25/mo (Basic)" },
+    { label: "Answered as a conversation", us: "Every plan, free included", them: "Formless, sold separately from $59/mo" },
+    { label: "Someone leaves halfway", us: "Up to 3 reminders, worded differently (Pro)", them: "One automation on a partial submit, paid add-on" },
+  ],
+
+  whyLeave: [
+    {
+      title: "Ten responses a month",
+      body: "Typeform's free plan stops at 10 responses a month, which is a demo rather than a plan. Anything real means paying from the first week.",
+    },
+    {
+      title: "$25 a month to start",
+      body: "The entry paid plan, Basic, is $25 a month billed yearly — before you have decided whether the form is worth it.",
+    },
+    {
+      title: "The conversation costs extra",
+      body: "The AI that holds a conversation and answers questions is Formless, a separate product from $59 a month for 250 AI conversations. typeform.com itself shows one field per screen, with AI follow-ups on open-text answers.",
+    },
+    {
+      title: "Nothing chases the half-finished ones",
+      body: "Following up with people who left partway is one automation on a partial-submit trigger, on a paid add-on. There is no timed sequence of reminders.",
+    },
+  ],
+
+  switching: [
+    {
+      title: "Rebuild it from a sentence or a link",
+      body: "There is no Typeform importer. Describe the form in a sentence, or paste the URL of the page it lives on, and chatform drafts the questions, wording and branching (10 drafts a month free, 200 on Pro). Under about thirty questions, that is faster than an import.",
+    },
+    {
+      title: "Check the branches before it goes live",
+      body: "Every path is linted when you publish, so a branch that dead-ends or a question nobody can reach is caught before a respondent finds it.",
+    },
+    {
+      title: "Point your data where it went before",
+      body: "Responses go out through a spreadsheet feed you pull into Google Sheets or Excel, signed webhooks, or the REST API. There is no one-click connector catalogue — if you relied on Typeform's, that is the part you will rebuild.",
+    },
+    {
+      title: "Swap the embed",
+      body: "One script tag, inline, as a popup, a side tab or full page — or share the link and a QR code. Existing Typeform links will need replacing wherever they are posted.",
+    },
+  ],
+
+  otherAlternatives: [
+    { name: "Tally", href: "/tally-alternative", body: "The best free form builder: unlimited responses, the fastest editor, no AI follow-ups." },
+    { name: "Youform", href: "/youform-alternative", body: "The closest copy of Typeform's format, for less: unlimited free responses, Pro from $20/mo yearly." },
+    { name: "Fillout", href: "/fillout-alternative", body: "The cheapest paid tier ($15/mo yearly) and the deepest Airtable and Notion integrations." },
+    { name: "Jotform", href: "/jotform-alternative", body: "Its AI Agents also hold a conversation, inside a far broader product with payments and PDFs." },
+    { name: "Formbricks", body: "The open-source pick: AGPLv3, free to self-host, with a free cloud plan of 250 responses a month." },
+  ],
+
+  roundup: { href: "/blog/typeform-alternatives", label: "Typeform alternatives compared, all seven in one table →" },
+
   pricing: [
     { label: "Free plan", us: "Unlimited responses, 200 AI conversations", them: "10 responses a month" },
     { label: "Most affordable plan, billed yearly", us: "$16/mo", them: "$25/mo (Basic)" },
@@ -77,9 +136,19 @@ export default defineComparison({
 
   faq: [
     {
+      question: "Is there a free Typeform alternative?",
+      answer:
+        "Several. chatform's free plan has unlimited responses (fair-use ceiling of 10,000 a month) across up to 100 forms, with 200 AI conversations a month. Tally and Youform are free and unlimited as well, without AI follow-ups, and Google Forms is free with any Google account. Typeform's own free plan stops at 10 responses a month.",
+    },
+    {
+      question: "Is there an open-source Typeform alternative?",
+      answer:
+        "Yes: Formbricks. Its core is licensed AGPLv3 and free to self-host with Docker, and its cloud has a free plan of 250 responses a month. chatform is not open source, so if self-hosting is a requirement, Formbricks is the one to look at.",
+    },
+    {
       question: "Is chatform really free?",
       answer:
-        "Yes. Unlimited forms and unlimited responses on the free plan, subject to a fair-use ceiling of 10,000 responses a month, plus 200 AI-run conversations a month. No card, no trial clock. Paid plans start at $16 a month billed yearly, and they buy brand control, partial-response export, the API and a bigger AI allowance — not the right to collect answers.",
+        "Yes. Unlimited responses on the free plan, subject to a fair-use ceiling of 10,000 a month, across up to 100 forms, plus 200 AI-run conversations a month. No card, no trial clock. Paid plans start at $16 a month billed yearly, and they buy brand control, partial-response export, the API and a bigger AI allowance — not the right to collect answers.",
     },
     {
       question: "How does chatform compare to Typeform on pricing?",
@@ -106,6 +175,8 @@ export default defineComparison({
   sources: [
     { label: "Typeform pricing", url: "https://www.typeform.com/pricing/", checkedOn: "September 2026" },
     { label: "Formless pricing", url: "https://formless.ai/pricing", checkedOn: "September 2026" },
+    { label: "Formbricks pricing", url: "https://formbricks.com/pricing", checkedOn: "September 2026" },
+    { label: "Formbricks licence (GitHub)", url: "https://github.com/formbricks/formbricks", checkedOn: "September 2026" },
   ],
 
   updates: [

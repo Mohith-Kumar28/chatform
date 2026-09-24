@@ -169,3 +169,168 @@ export interface BlockDefinition {
     error_codes: string[];
   };
 }
+
+// ─────────────────────── 0.2.0: the rest of /v1 ───────────────────────
+
+/**
+ * A form document.
+ *
+ * `unknown` where the blocks are, and that is not laziness. The API publishes a
+ * complete JSON Schema per block type at `GET /v1/blocks/{type}`, which is the
+ * authority and which gains a type without this package being republished. What
+ * the API does *not* publish is a schema for the document around them, so these
+ * field names were read off `GET /v1/templates/{slug}`.
+ *
+ * Compose one and hand it to `forms.updateDocument()`. The linter it returns is
+ * the only validator that counts.
+ */
+export interface FormDocument {
+  schemaVersion: number;
+  title: string;
+  description?: string;
+  blocks: unknown[];
+  endings: unknown[];
+  /** Checked once, after the last question. A rule pinned to one can never fire. */
+  endingRules: unknown[];
+  logic: unknown[];
+  layout?: Record<string, unknown>;
+  variables?: unknown[];
+  hiddenFields?: unknown[];
+  settings?: Record<string, unknown>;
+  theme?: Record<string, unknown>;
+}
+
+export interface TemplateSummary {
+  slug: string;
+  title: string;
+  category: string;
+  description: string;
+  blurb: string;
+  tags: string[];
+  icon: string;
+  accent: string;
+  blockCount: number;
+  estMinutes: number;
+  usageCount: number;
+}
+
+export interface TemplateDetail extends TemplateSummary {
+  doc: FormDocument;
+}
+
+export interface FormVersionSummary {
+  version: number;
+  versionId: string;
+  note: string | null;
+  publishedAt: number;
+  authorLabel: string;
+  changeCount: number;
+  isActive: boolean;
+  /** Completed responses recorded against this version. */
+  responses: number;
+}
+
+export interface FormVersion {
+  version: number;
+  versionId: string;
+  note: string | null;
+  publishedAt: number;
+  doc: FormDocument;
+  /** The version this one was diffed against, when `compare` was given. */
+  comparedTo?: number;
+  changes: unknown[];
+  summary: string;
+}
+
+export interface RestoredVersion {
+  ok: boolean;
+  version: number;
+  summary: string;
+  changes: unknown[];
+  doc: FormDocument;
+}
+
+export interface KnowledgeSource {
+  id: string;
+  kind?: string;
+  title?: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
+export interface KnowledgeIndex {
+  sources: KnowledgeSource[];
+  usage: { bytes: number; maxBytes: number; count: number; maxCount: number };
+  /** False when the plan has no knowledge base, whatever is stored. */
+  enabled: boolean;
+}
+
+export interface Integration {
+  id: string;
+  provider: string;
+  status: string;
+  createdAt: number;
+  [key: string]: unknown;
+}
+
+export interface SpreadsheetIntegration extends Integration {
+  /**
+   * A live CSV. The URL is the credential, so treat it as a secret and rotate
+   * it rather than deleting and recreating if it leaks.
+   */
+  feedUrl: string;
+  includePartials: boolean;
+}
+
+export interface LintIssue {
+  level: "error" | "warning" | string;
+  code: string;
+  message: string;
+  path?: string;
+  refs?: string[];
+}
+
+export interface AiGenerateResult {
+  doc: FormDocument;
+  issues?: LintIssue[];
+  [key: string]: unknown;
+}
+
+export interface AiEditResult {
+  doc: FormDocument;
+  issues?: LintIssue[];
+  summary?: string;
+  [key: string]: unknown;
+}
+
+export interface ClarifyQuestion {
+  question: string;
+  why: string;
+  kind: string;
+  options: string[];
+}
+
+export interface RespondentAuthResult {
+  ok?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * How the follow-up emails for one form are doing.
+ *
+ * `holdout` and `liftPoints` are null until a holdout group has had time to not
+ * come back, which is the only honest way to attribute a recovery.
+ */
+export interface FollowUpStats {
+  everScheduled: boolean;
+  sent: number;
+  pending: number;
+  clicked: number;
+  recovered: number;
+  clickRate: number;
+  recoveryRate: number;
+  byStep: unknown[];
+  daily: { date: string; sent: number; recovered: number }[];
+  holdout: number | null;
+  liftPoints: number | null;
+}

@@ -59,6 +59,12 @@ beforeAll(async () => {
 describe("expired responses", () => {
   it("abandons one past its deadline, and only once", async () => {
     await seedResponse("sbm_swexp", { expires_at: Date.now() - 1000 });
+    await env.DB.prepare(
+      `INSERT INTO submission_answers (id, submission_id, form_id, block_ref, block_type, value_json, updated_at)
+       VALUES ('ans_swexp', 'sbm_swexp', ?1, 'q_name', 'short_text', '"Ada"', ?2)`,
+    )
+      .bind(t.formId, Date.now())
+      .run();
 
     expect(await sweepExpiredResponses(env as never)).toBeGreaterThan(0);
     const row = await env.DB.prepare(`SELECT status, meta FROM submissions WHERE id = 'sbm_swexp'`).first<{
@@ -71,6 +77,19 @@ describe("expired responses", () => {
     // A second pass must not enqueue a second webhook for the same response.
     const again = await sweepExpiredResponses(env as never);
     expect(again).toBe(0);
+  });
+
+  it("deletes one that expires with nothing answered, instead of abandoning it", async () => {
+    await seedResponse("sbm_swempty", { expires_at: Date.now() - 1000 });
+    await env.DB.prepare(`UPDATE submissions SET respondent_id = 'rsp_swempty' WHERE id = 'sbm_swempty'`).run();
+    await env.DB.prepare(
+      `INSERT INTO respondents (id, first_seen_at, last_seen_at, created_at) VALUES ('rsp_swempty', 1, 1, 1)`,
+    ).run();
+
+    expect(await sweepExpiredResponses(env as never)).toBeGreaterThan(0);
+    expect(await env.DB.prepare(`SELECT 1 FROM submissions WHERE id = 'sbm_swempty'`).first()).toBeNull();
+    // The person minted for it names nothing now, so it goes with it.
+    expect(await env.DB.prepare(`SELECT 1 FROM respondents WHERE id = 'rsp_swempty'`).first()).toBeNull();
   });
 
   it("leaves a conversation alone — its own object owns that decision", async () => {

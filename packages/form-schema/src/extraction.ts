@@ -23,6 +23,7 @@ export const DETERMINISTIC_TYPES = new Set<Block["type"]>([
   "statement",
   "yes_no",
   "single_select",
+  "poll",
   "multi_select",
   "dropdown",
   "picture_choice",

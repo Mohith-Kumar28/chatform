@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "customer-feedback-form",
   name: "Customer feedback",
+  keyword: "Customer feedback form",
   group: "Hear from customers",
   audience: "Restaurants, cafés, salons, gyms, hotels and homestays",
   navBlurb: "Catch the unhappy customer before they reach Google. Send the happy ones there.",

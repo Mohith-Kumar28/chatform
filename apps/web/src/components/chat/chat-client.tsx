@@ -14,7 +14,8 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import { stripRichText } from "@repo/form-schema";
+import { DEFAULT_REDIRECT_DELAY_SEC, stripRichText } from "@repo/form-schema";
+import { safeHref, safeMediaSrc } from "@repo/guard";
 import { QuestionDescription, RichText, SAFE_ELEMENTS } from "./rich-text";
 import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
@@ -25,7 +26,7 @@ import { asEmail } from "./respondent-hint";
 import { VerifyCard } from "./verify-card";
 import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
 import { useChat, type ChatMessage } from "./use-chat";
-import { DictateButton, KeyHint, SendRow, TextInput, keepFocus, modKeyLabel } from "./composers/primitives";
+import { DictateButton, KeyHint, SendRow, TextInput, DICTATE_KEY, isDictateShortcut, keepFocus, modKeyLabel } from "./composers/primitives";
 import { useDictation } from "@/hooks/use-dictation";
 import { FREE_TEXT, inputSemanticsFor } from "./composers/input-semantics";
 import { PhoneInput } from "./composers/phone";
@@ -33,7 +34,9 @@ import { isSendablePhone } from "./composers/phone-value";
 import { forgetValue, suggestionsFor } from "./respondent-profile";
 import { QuestionAffordance } from "./question-affordance";
 import { QuestionMedia } from "./question-media";
+import { PollResultCard } from "./poll-result";
 import { ChatBoot } from "./chat-boot";
+import { FormClosed } from "./form-closed";
 import { FeedbackDialog } from "./feedback-dialog";
 import { captureSnapshot } from "./chat-snapshot";
 import { ClosingNotice } from "./closing-notice";
@@ -292,8 +295,20 @@ export function ChatSurface({
    * to and then sat there. A URL and a delay are values, so a replay of the same
    * ending is now a no-op.
    */
-  const redirectTarget = chat.ending?.redirectUrl;
-  const redirectDelaySec = chat.ending?.redirectDelaySec ?? 5;
+  /**
+   * The ending's redirect, refused unless it is a link a browser should follow.
+   *
+   * `z.string().url()` accepts `javascript:` — it is `new URL()` with no
+   * scheme constraint — so an author, or the AI generator handed a poisoned
+   * page to read, could store `javascript:…` here and it would run in a
+   * respondent's browser on our origin, through `window.open`, through
+   * `location.assign`, and through the two anchors below. Guarded here rather
+   * than in the schema because the documents already stored are the ones that
+   * matter, and they are re-parsed on every read: a rejecting schema would
+   * turn a live form into a 500 instead of a form with one dead button.
+   */
+  const redirectTarget = safeHref(chat.ending?.redirectUrl);
+  const redirectDelaySec = chat.ending?.redirectDelaySec ?? DEFAULT_REDIRECT_DELAY_SEC;
   useEffect(() => {
     const target = redirectTarget;
     if (!target || previewMode) return;
@@ -430,6 +445,22 @@ export function ChatSurface({
   const respondentToken = chat.getRespondentToken();
 
   /**
+   * The form shut while this tab was open.
+   *
+   * Before the resolving check, not after: `start()` clears `resolving` in the
+   * same commit that sets this, but the ordering here is the one that says
+   * which screen wins, and a refusal must never be able to show up behind a
+   * spinner.
+   *
+   * `!= null` rather than a truthiness test. The message is the author's and
+   * may be empty — a form whose closed message was deliberately cleared is
+   * still a closed form, and `""` is a real value here.
+   */
+  if (chat.closed != null) {
+    return <FormClosed config={config} message={chat.closed} contained={previewMode} />;
+  }
+
+  /**
    * Hold the frame until we know which screen this is.
    *
    * `resolving` covers the round trip that decides between a fresh
@@ -447,7 +478,7 @@ export function ChatSurface({
         style={themeVars}
         inert={replay}
       >
-        <ChatBoot title={config.agentName || config.title} logoUrl={config.theme.logoUrl} />
+        <ChatBoot title={config.agentName || config.title} logoUrl={safeMediaSrc(config.theme.logoUrl)} />
       </div>
     );
   }
@@ -482,7 +513,13 @@ export function ChatSurface({
       <ChatHeader
         title={agentName}
         brandName={config.theme.brandName}
-        logoUrl={config.theme.logoUrl}
+        /*
+          `theme.logoUrl` is an author-supplied string with no URL validation
+          in the schema at all — not even `.url()` — and it lands in an `src`.
+          `data:` and `javascript:` are both refused here; a remote host is
+          allowed, because an author hosting their own logo is ordinary.
+        */
+        logoUrl={safeMediaSrc(config.theme.logoUrl)}
         pct={pct}
         mode={config.progressBar}
         answered={chat.question?.progress.answered ?? 0}
@@ -588,6 +625,15 @@ export function ChatSurface({
               />
               {m.id === mediaMessageId && description && !chat.ending && !chat.auth && !chat.verify && (
                 <QuestionDescription markdown={description} className="mt-2 max-w-[90%] px-1 opacity-85" />
+              )}
+              {/*
+                The poll's bars, under the answer they belong to rather than as
+                a message of their own: they are not something the form said,
+                and a respondent scrolling back should find them attached to
+                what they picked.
+              */}
+              {m.answeredRef && chat.pollResults[m.answeredRef] && (
+                <PollResultCard result={chat.pollResults[m.answeredRef]!} />
               )}
             </div>
           ))}
@@ -866,25 +912,9 @@ export function ChatSurface({
           */}
           {!replay && (!config.brandingHidden || !previewMode) && (
             /*
-              Centred under the message box, not under the row.
-
-              The line used to be centred on the footer, which is centred on the
-              screen — arithmetically right and visibly wrong, because the object
-              the eye measures against is the box, and the box sits half a Send
-              button left of centre. One item there and nobody noticed; two made
-              the caption wide enough to read as pushed to the right.
-
-              The offset is an invisible twin of the Send button rather than a
-              number, so it is exactly right by construction: same classes, same
-              label, same key chip — which means it also narrows itself on a
-              phone, where `kbd-hint` draws no ↵ and the real button is smaller.
-              A hardcoded 48px would have been 11px wrong on every phone and
-              wrong again the day the button's label changes.
-
-              Skip is deliberately not counted. It comes and goes question to
-              question, and following it would slide this line sideways
-              mid-conversation — a caption that moves while you read is worse
-              than one that is a few pixels off on optional questions.
+              Centred on the screen. It used to be centred under the message
+              box, which sits half a Send button left of centre, and on a phone
+              that read as a caption with more room on its right than its left.
             */
             <div className="mx-auto flex w-full max-w-2xl items-center px-4 pb-2">
               <p className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-x-2 text-center text-[0.6875rem]">
@@ -913,19 +943,6 @@ export function ChatSurface({
                   </button>
                 )}
               </p>
-              {/*
-                The twin. `h-0 overflow-hidden` keeps its width and gives back
-                its height, so it reserves the horizontal space and adds no
-                vertical space; `aria-hidden` and no text node of its own that
-                a screen reader could read as a second Send.
-              */}
-              <span
-                aria-hidden
-                className="ml-2 inline-flex h-0 shrink-0 items-center gap-1.5 overflow-hidden px-4 text-sm font-medium"
-              >
-                Send
-                <KeyHint tone="inverse">↵</KeyHint>
-              </span>
             </div>
           )}
         </footer>
@@ -1535,8 +1552,8 @@ function ReviewCard({
       */}
       <p className="text-sm font-medium">
         {counting
-          ? "That’s everything — tap any answer to change it, or hold it with Cancel below."
-          : "That’s everything — tap any answer to change it before you send."}
+          ? "That’s everything. Tap any answer to change it, or hold it with Cancel below."
+          : "That’s everything. Tap any answer to change it before you send."}
       </p>
 
       <ul className="space-y-0.5">
@@ -1697,7 +1714,7 @@ function StartOverButton({ onConfirm }: { onConfirm: () => void }) {
         }
       }}
       onBlur={() => setArmed(false)}
-      aria-label={armed ? "Confirm starting over — this clears your answers" : "Start over"}
+      aria-label={armed ? "Confirm starting over. This clears your answers" : "Start over"}
       className={cn(
         "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-opacity",
         armed
@@ -1795,7 +1812,7 @@ function EndingCard({
    * rendering: the first paint shows the delay the author configured, which is
    * what the countdown says at that instant anyway.
    */
-  const delaySec = ending.redirectDelaySec ?? 5;
+  const delaySec = ending.redirectDelaySec ?? DEFAULT_REDIRECT_DELAY_SEC;
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const counting = redirectArmed && !replay && !redirectBlocked;
   useEffect(() => {
@@ -1811,6 +1828,12 @@ function EndingCard({
     return () => clearInterval(id);
   }, [counting, delaySec]);
   const secondsToRedirect = secondsLeft ?? delaySec;
+  /**
+   * The same guard the effect that fires the redirect applies, applied to the
+   * anchors that stand in for it. A `javascript:` URL stored on an ending runs
+   * on our origin whether a timer navigates to it or a respondent clicks it.
+   */
+  const endingRedirect = safeHref(ending.redirectUrl);
 
   return (
     <>
@@ -1830,9 +1853,9 @@ function EndingCard({
           that stands in for it changes, because a party popper over "you can't
           submit this" is the tonal failure this whole ending kind exists to fix.
         */}
-        {theme.logoUrl ? (
+        {safeMediaSrc(theme.logoUrl) ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={theme.logoUrl} alt={theme.brandName ?? ""} className="mb-5 h-12 object-contain" />
+          <img src={safeMediaSrc(theme.logoUrl)!} alt={theme.brandName ?? ""} className="mb-5 h-12 object-contain" />
         ) : screenedOut ? (
           <div className="mb-5 grid size-16 place-items-center rounded-full border border-current/15 bg-current/8 opacity-70">
             <ShieldAlert className="size-8" strokeWidth={1.75} />
@@ -1917,9 +1940,17 @@ function EndingCard({
           </>
         )}
 
-        {ending.ctaLabel && ending.ctaUrl && (
+        {ending.ctaLabel && safeHref(ending.ctaUrl) && (
           <a
-            href={ending.ctaUrl}
+            href={safeHref(ending.ctaUrl)!}
+            /*
+              `rel` was missing here and present on the twin below. A
+              call-to-action leaving in a new tab hands the opened page a live
+              `window.opener` unless it is said, and this one goes to whatever
+              the author typed.
+            */
+            target="_blank"
+            rel="noopener noreferrer"
             className="mt-6 inline-flex h-11 items-center rounded-full px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
             style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
           >
@@ -1927,7 +1958,7 @@ function EndingCard({
           </a>
         )}
 
-        {ending.redirectUrl &&
+        {endingRedirect &&
           !replay &&
           (redirectBlocked ? (
             /*
@@ -1936,7 +1967,7 @@ function EndingCard({
               step, offered as the button it should have been.
             */
             <a
-              href={ending.redirectUrl}
+              href={endingRedirect}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-6 inline-flex h-11 items-center gap-2 rounded-full px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
@@ -2161,6 +2192,22 @@ const Composer = memo(function Composer({
   useEffect(() => {
     stopDictation();
   }, [block?.ref, stopDictation]);
+
+  // M starts and stops the mic when the respondent is not typing. See `isDictateShortcut`.
+  const toggleDictation = dictation.toggle;
+  // `status` rather than `disabled`, which is declared below the early returns.
+  const canDictate = dictation.supported && status !== "error" && !isPhone;
+  useEffect(() => {
+    if (!canDictate) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!isDictateShortcut(e)) return;
+      e.preventDefault();
+      setMicError(null);
+      toggleDictation();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canDictate, toggleDictation]);
 
   /** Everything remembered for this question except whatever is already typed. */
   const alternatives = suggestions.filter((s) => s !== text);
@@ -2401,9 +2448,11 @@ const Composer = memo(function Composer({
             /* Nothing where the browser has no recogniser — a mic that cannot
                listen is worse than no mic. Not on the phone field, which
                takes digits a recogniser would spell out as words. */
+            trailingHasHint
             trailing={
               dictation.supported && !disabled ? (
                 <DictateButton
+                  shortcut={DICTATE_KEY}
                   listening={dictation.listening}
                   onToggle={() => {
                     setMicError(null);

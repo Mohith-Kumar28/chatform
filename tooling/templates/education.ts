@@ -24,7 +24,7 @@ export const EDUCATION: TemplateSeed[] = [
           { label: "Foundations" },
           { label: "Intermediate" },
           { label: "Advanced" },
-          { label: "Not sure — help me choose" },
+          { label: "Not sure, help me choose" },
         ],
       },
 
@@ -139,7 +139,7 @@ export const EDUCATION: TemplateSeed[] = [
       },
     ],
     branches: [
-      { when: "course", is: "Not sure — help me choose", then: "experience" },
+      { when: "course", is: "Not sure, help me choose", then: "experience" },
       { when: "course", is: "Foundations", then: "why_this_level" },
       { when: "course", is: "Intermediate", then: "why_this_level" },
       { when: "course", is: "Advanced", then: "why_this_level" },
@@ -173,7 +173,7 @@ export const EDUCATION: TemplateSeed[] = [
     icon: "BookOpen",
     description: "End-of-course feedback that separates teaching from material.",
     blurb:
-      "A course can have excellent material and a rushed delivery, or the reverse — so they are rated apart. Anyone who says the pace was wrong is asked where it went wrong; anyone who would not recommend it is asked what would have to change, which is the only answer that improves the next cohort.",
+      "A course can have excellent material and a rushed delivery, or the reverse, so they are rated apart. Anyone who says the pace was wrong is asked where it went wrong; anyone who would not recommend it is asked what would have to change, which is the only answer that improves the next cohort.",
     tags: ["teaching", "feedback", "course", "branching"],
     greeting: "You made it to the end! How was it?",
     questions: [
@@ -271,9 +271,9 @@ export const EDUCATION: TemplateSeed[] = [
     icon: "ListChecks",
     description: "A scored quiz that adapts to how the first answers go.",
     blurb:
-      "Worked example questions with scores already attached to the options, so the wiring is done and you only replace the wording. The warm-up question decides whether the taker gets the easier set or the harder one — which is how a quiz stays interesting for both ends of a class.",
+      "Worked example questions with scores already attached to the options, so the wiring is done and you only replace the wording. The warm-up question decides whether the taker gets the easier set or the harder one, which is how a quiz stays interesting for both ends of a class.",
     tags: ["quiz", "scoring", "assessment", "branching"],
-    greeting: "A short quiz. No pressure — you'll get your score at the end.",
+    greeting: "A short quiz. No pressure: you'll get your score at the end.",
     questions: [
       { ref: "name", type: "short_text", title: "What should we call you?", required: true },
       {
@@ -372,6 +372,6 @@ export const EDUCATION: TemplateSeed[] = [
       { when: "self_level", is: "I know this well", then: "hard_1" },
       { when: "easy_3", always: true, then: "confidence" },
     ],
-    ending: { title: "Nicely done ✅", body: "Swap in your own questions — the scores are already wired up." },
+    ending: { title: "Nicely done ✅", body: "Swap in your own questions. The scores are already wired up." },
   }),
 ];

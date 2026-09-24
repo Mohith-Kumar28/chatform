@@ -1,5 +1,10 @@
 ---
-title: Read a form — its public config, or the document behind it
+title: 'Read a form: its public config, or the document behind it'
+description: Without `view`, this answers the published form exactly as a
+  respondent receives it. A form with no published version has only a draft, so
+  that is what comes back instead -- the same body as `view=document`, with
+  `status` saying which you are looking at. Pass `view=document` to read the
+  draft of a form that is already live.
 full: true
 _openapi:
   preload:
@@ -9,7 +14,12 @@ _openapi:
   toc: []
   structuredData:
     headings: []
-    contents: []
+    contents:
+      - content: Without `view`, this answers the published form exactly as a respondent
+          receives it. A form with no published version has only a draft, so
+          that is what comes back instead -- the same body as `view=document`,
+          with `status` saying which you are looking at. Pass `view=document` to
+          read the draft of a form that is already live.
 llmsExclude: true
 ---
 

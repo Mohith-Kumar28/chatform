@@ -1,5 +1,5 @@
 import type { Bindings } from "../env.js";
-import { resolveRespondent } from "./respondents.js";
+import { mintRespondent, resolveRespondent } from "./respondents.js";
 import { findOpenResponseId } from "./respondent-history.js";
 import type { AnswerMap, RespondentIdentity } from "@repo/form-schema";
 import { enqueueMail } from "./mail.js";
@@ -71,8 +71,9 @@ export interface OpenResponseArgs {
    * Who this response belongs to, platform-wide. See `lib/respondents.ts`.
    *
    * Resolved when the session opened, because that is where the raw browser
-   * fingerprint is. Null for a headless caller who offered nothing to recognise
-   * anybody by, and re-stamped by `attachRespondent` if they sign in later.
+   * fingerprint is. Omitted when there was nothing to recognise anybody by, and
+   * `openResponse` then mints a person for the row; `attachRespondent` folds
+   * that one into whoever they turn out to be if they sign in later.
    */
   respondentId?: string | null;
   /**
@@ -105,6 +106,15 @@ export interface OpenResponseArgs {
 export async function openResponse(o: ResponseOwner, a: OpenResponseArgs): Promise<string> {
   const id = a.responseId ?? newResponseId();
   if (isPreview(o)) return id;
+  /*
+    Every response names a person. The session resolves one from the browser
+    fingerprint, and when there was none to resolve from — a browser that
+    refused the probe, an API caller with no browser — this is the only place
+    left that can supply one, because this is where the row is born. Minted
+    here rather than at session open, so a visitor who leaves without answering
+    does not become a person either.
+  */
+  const respondentId = a.respondentId ?? (await mintRespondent(o.env));
   const res = await o.env.DB.prepare(
     `INSERT INTO submissions
        (id, form_id, form_version_id, organization_id, session_id, source, is_test, status,
@@ -131,7 +141,7 @@ export async function openResponse(o: ResponseOwner, a: OpenResponseArgs): Promi
       a.expiresAt ?? null,
       a.apiKeyId ?? null,
       a.fingerprint || null,
-      a.respondentId ?? null,
+      respondentId,
       a.identity?.provider ?? null,
       a.identity?.subject ?? null,
       a.identity?.email ?? null,
@@ -152,7 +162,14 @@ export async function openResponse(o: ResponseOwner, a: OpenResponseArgs): Promi
     "does somebody else already have one", and this one already knows the answer
     is yes. Its own session is a legitimate owner of the row that won.
   */
-  if (res.meta.changes === 0) return (await adoptExisting(o, id, a)) ?? id;
+  if (res.meta.changes === 0) {
+    // A retry landed on a row that already names somebody; the person minted
+    // for it would otherwise be a respondent with no response.
+    if (!a.respondentId && respondentId) {
+      await o.env.DB.prepare(`DELETE FROM respondents WHERE id = ?1`).bind(respondentId).run().catch(() => {});
+    }
+    return (await adoptExisting(o, id, a)) ?? id;
+  }
   return id;
 }
 
@@ -225,6 +242,18 @@ export async function attachRespondent(
   deviceKey?: string | null,
 ): Promise<string | null> {
   try {
+    /*
+      The person this row already names, so the sign-in folds into them rather
+      than past them. Usually that is the device's respondent, which the keys
+      below would find anyway; when it is one `openResponse` minted, nothing
+      else leads to it.
+    */
+    const current = responseId
+      ? ((await env.DB.prepare(`SELECT respondent_id FROM submissions WHERE id = ?1`)
+          .bind(responseId)
+          .first<{ respondent_id: string | null }>())?.respondent_id ?? null)
+      : null;
+
     if (responseId) {
       await env.DB.prepare(
         `UPDATE submissions
@@ -261,6 +290,7 @@ export async function attachRespondent(
       name: identity.name,
       phone: identity.phone,
       deviceKey: deviceKey ?? null,
+      knownAs: current,
     });
     if (respondentId && responseId) {
       await env.DB.prepare(`UPDATE submissions SET respondent_id = ?2 WHERE id = ?1`)
@@ -580,6 +610,51 @@ export interface FinalizeResult {
 }
 
 /**
+ * Delete a response that is ending with nothing in it.
+ *
+ * The API twin of the session object's `closeEmptySession`. A conversation that
+ * collected nothing never gets a row; an API response gets one the moment it is
+ * opened, because its id is the handle the caller answers into. So when one is
+ * abandoned or expires empty, the row goes, rather than sitting in the Partial
+ * tab as a timestamp with not one filled cell.
+ *
+ * Same test for "empty" as the conversation's: no answers and no verified
+ * identity. Guarded in the statement itself, so an answer that lands between
+ * the caller's read and this write keeps the row. Follow-ups cascade with it,
+ * and the person minted for it goes too when nothing else names them.
+ *
+ * Returns whether the row was deleted. Never throws: failing here leaves an
+ * empty row, which is where we started.
+ */
+export async function discardEmptyResponse(env: Bindings, responseId: string): Promise<boolean> {
+  try {
+    const gone = await env.DB.prepare(
+      `DELETE FROM submissions
+        WHERE id = ?1 AND status = 'in_progress' AND respondent_subject IS NULL
+          AND NOT EXISTS (SELECT 1 FROM submission_answers WHERE submission_id = ?1)
+        RETURNING respondent_id`,
+    )
+      .bind(responseId)
+      .first<{ respondent_id: string | null }>();
+    if (!gone) return false;
+    if (gone.respondent_id) {
+      await env.DB.prepare(
+        `DELETE FROM respondents
+          WHERE id = ?1
+            AND NOT EXISTS (SELECT 1 FROM respondent_keys WHERE respondent_id = ?1)
+            AND NOT EXISTS (SELECT 1 FROM submissions WHERE respondent_id = ?1)`,
+      )
+        .bind(gone.respondent_id)
+        .run();
+    }
+    return true;
+  } catch (err) {
+    console.error("discard_empty_response_failed", responseId, err instanceof Error ? err.message : String(err));
+    return false;
+  }
+}
+
+/**
  * Flip a response terminal, once.
  *
  * `WHERE status = 'in_progress'` and the `changed` flag are the guard that makes
@@ -817,10 +892,17 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
      *
      * Only on `completed`: a screen-out is not a recovery, and neither is a
      * response that came back through the link and was abandoned a second time.
-     * `creditFollowUpRecovery` credits nothing unless a link was actually
-     * clicked, so this is a no-op for the overwhelming majority of completions.
+     * `creditFollowUpRecovery` credits nothing unless a reminder went out inside
+     * its grace window, so this is a no-op for most completions — every form
+     * with follow-ups off, and everyone who finished in one sitting.
+     *
+     * `now` rather than the function's own clock, so `recovered_at` is the same
+     * instant as the `completed_at` written above. The results table subtracts
+     * the two to say how long after the reminder they came back, and a few
+     * milliseconds of drift between the row and its own completion would show
+     * up there as the only number on the card that cannot be checked.
      */
-    if (a.status === "completed") await creditFollowUpRecovery(o.env, a.responseId);
+    if (a.status === "completed") await creditFollowUpRecovery(o.env, a.responseId, now);
   }
 
   o.env.ANALYTICS.writeDataPoint({

@@ -1,6 +1,7 @@
 "use client";
 
 import { Flag, Plus, ShieldAlert, X } from "lucide-react";
+import { DEFAULT_REDIRECT_DELAY_SEC } from "@repo/form-schema";
 import type { Block, ConditionGroup, FormDoc, LogicRule } from "@repo/form-schema";
 import { ConditionsEditor, type WhenGroup } from "../condition-editor";
 import { Button } from "@/components/ui/button";
@@ -202,7 +203,7 @@ export function EndingInspector({
               // Clamped to the schema's own range rather than trusted: the box
               // is free text, and a NaN here would fail the whole save.
               const n = Number.parseInt(v, 10);
-              patch({ redirectDelaySec: Number.isFinite(n) ? Math.min(Math.max(n, 0), 120) : 5 });
+              patch({ redirectDelaySec: Number.isFinite(n) ? Math.min(Math.max(n, 0), 120) : DEFAULT_REDIRECT_DELAY_SEC });
             }}
             className={fieldInputClass}
           />

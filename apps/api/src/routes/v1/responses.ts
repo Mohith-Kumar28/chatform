@@ -1,5 +1,8 @@
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { NextQuestionView, Paged, ResponseView } from "../../lib/v1-schemas.js";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../../lib/validator.js";
+import { HiddenFieldsInput } from "../../lib/inputs.js";
 import { z } from "zod";
 import {
   readFormDoc,
@@ -27,6 +30,7 @@ import {
   deleteAnswerRow,
   findDuplicateAnswer,
   finalizeResponse,
+  discardEmptyResponse,
   newResponseId,
   type ResponseOwner,
 } from "../../lib/submissions.js";
@@ -215,7 +219,7 @@ const AnswerInput = z.record(z.string(), z.unknown());
 const CreateResponseBody = z
   .object({
     answers: AnswerInput.optional(),
-    hiddenFields: z.record(z.string(), z.string()).optional(),
+    hiddenFields: HiddenFieldsInput.optional(),
     /** Finish in the same call. Still writes one row per answer. */
     complete: z.boolean().default(false),
     /**
@@ -334,7 +338,7 @@ responsesRouter.post(
     tags: ["v1"],
     summary: "Open a response (optionally with answers, optionally completing it)",
     responses: {
-      201: { description: "Response" },
+      201: { description: "Response", content: { "application/json": { schema: resolver(ResponseView) } } },
       404: { description: "Form not found" },
       422: { description: "An answer was rejected, or required questions are unanswered" },
     },
@@ -448,7 +452,7 @@ responsesRouter.post(
     tags: ["v1"],
     summary: "Record one or more answers on an open response",
     responses: {
-      200: { description: "Updated response" },
+      200: { description: "Updated response", content: { "application/json": { schema: resolver(ResponseView) } } },
       404: { description: "Response not found" },
       409: { description: "The response is no longer open" },
       422: { description: "An answer was rejected" },
@@ -520,7 +524,10 @@ responsesRouter.delete(
   describeRoute({
     tags: ["v1"],
     summary: "Retract one answer, moving the flow back to it",
-    responses: { 200: { description: "Updated response" }, 404: { description: "Not found" } },
+    responses: {
+      200: { description: "Updated response", content: { "application/json": { schema: resolver(ResponseView) } } },
+      404: { description: "Not found" },
+    },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
@@ -552,7 +559,7 @@ responsesRouter.post(
     tags: ["v1"],
     summary: "Complete a response",
     responses: {
-      200: { description: "Completed response with its ending" },
+      200: { description: "Completed response with its ending", content: { "application/json": { schema: resolver(ResponseView) } } },
       404: { description: "Not found" },
       409: { description: "Already finished" },
       422: { description: "Required questions are unanswered" },
@@ -590,7 +597,7 @@ responsesRouter.post(
       );
     }
 
-    const body = (await c.req.json().catch(() => ({}))) as { endingRef?: string };
+    const body = c.req.valid("json");
     const { state, cursor } = replayState(form.doc, answers, hidden);
     let ending = cursor.kind === "ending" ? cursor.ending : resolveEnding(form.doc, state);
     if (body?.endingRef) {
@@ -640,7 +647,10 @@ responsesRouter.post(
   describeRoute({
     tags: ["v1"],
     summary: "Abandon an unfinished response",
-    responses: { 200: { description: "Abandoned response" }, 404: { description: "Not found" } },
+    responses: {
+      200: { description: "Abandoned response", content: { "application/json": { schema: resolver(ResponseView) } } },
+      404: { description: "Not found" },
+    },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
@@ -654,8 +664,19 @@ responsesRouter.post(
 
     const hidden = jsonOr<Record<string, string>>(row.hidden_fields, {});
     const answers = await loadAnswers(c.env, row.id);
+
+    /*
+      Nothing was answered, so there is nothing to keep: the row is deleted
+      rather than left in the Partial tab as an empty line, the same as a
+      conversation that ends before its first answer. The reply still
+      describes what the caller abandoned; a later read of this id is a 404.
+    */
+    if (Object.keys(answers).length === 0 && (await discardEmptyResponse(c.env, row.id))) {
+      return c.json(projectResponse({ ...row, status: "abandoned" }, form.doc, answers, new Set(["answers"])));
+    }
+
     const { state } = replayState(form.doc, answers, hidden);
-    const body = (await c.req.json().catch(() => ({}))) as { reason?: string };
+    const body = c.req.valid("json");
 
     await finalizeResponse(ownerOf(c.env, form, row), {
       responseId: row.id,
@@ -679,7 +700,10 @@ responsesRouter.get(
   describeRoute({
     tags: ["v1"],
     summary: "Read one response",
-    responses: { 200: { description: "Response" }, 404: { description: "Not found" } },
+    responses: {
+      200: { description: "Response", content: { "application/json": { schema: resolver(ResponseView) } } },
+      404: { description: "Not found" },
+    },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
@@ -701,7 +725,10 @@ responsesRouter.get(
   describeRoute({
     tags: ["v1"],
     summary: "Where the flow is waiting on this response",
-    responses: { 200: { description: "The next question, or the ending" }, 404: { description: "Not found" } },
+    responses: {
+      200: { description: "The next question, or the ending", content: { "application/json": { schema: resolver(NextQuestionView) } } },
+      404: { description: "Not found" },
+    },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
@@ -750,7 +777,7 @@ responsesRouter.get(
     tags: ["v1"],
     summary: "List a form's responses, newest first",
     responses: {
-      200: { description: "A page of responses" },
+      200: { description: "A page of responses", content: { "application/json": { schema: resolver(Paged(ResponseView)) } } },
       400: { description: "Malformed cursor" },
       402: { description: "Reading partial responses needs a plan that includes them" },
       404: { description: "Form not found" },

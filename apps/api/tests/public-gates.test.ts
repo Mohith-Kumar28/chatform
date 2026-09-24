@@ -127,14 +127,33 @@ describe("close rules", () => {
     const slug = await publish("closed", {
       closeRules: { closeAt: new Date(Date.now() - 60_000).toISOString(), closedMessageMd: "All done, thanks!" },
     });
-    expect((await createSession(slug)).status).toBe(403);
+    const refused = await createSession(slug);
+    expect(refused.status).toBe(403);
+
+    /*
+     * The author's words on the refusal too, not only in the config.
+     *
+     * This branch used to answer with the hardcoded "This form is closed"
+     * while the billing-ceiling branch answered with `closedMessageMd` — so
+     * the sentence an author wrote under a setting labelled "Shown when the
+     * form is closed" was withheld from the one path they control. It is the
+     * only thing a respondent who arrives late can be told that they could not
+     * work out for themselves.
+     */
+    const body = (await refused.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("form_closed");
+    expect(body.error.message).toBe("All done, thanks!");
 
     const config = (await (await fetchApi(`/p/forms/${slug}/config`)).json()) as {
       closed?: boolean;
       closedMessage?: string;
+      closedReason?: string;
     };
     expect(config.closed).toBe(true);
     expect(config.closedMessage).toBe("All done, thanks!");
+    // Names the deadline, so the screen can print the date rather than the
+    // bare word "closed".
+    expect(config.closedReason).toBe("schedule");
   });
 
   it("stays open before the scheduled time", async () => {
@@ -259,7 +278,9 @@ describe("close rules", () => {
   });
 
   it("closes once the response cap is reached, counting only completed responses", async () => {
-    const slug = await publish("cap", { closeRules: { maxSubmissions: 2 } });
+    const slug = await publish("cap", {
+      closeRules: { maxSubmissions: 2, closedMessageMd: "Full — try next term." },
+    });
     const formId = "frm_gate_cap";
 
     const insert = (n: number, status: string) =>
@@ -272,7 +293,44 @@ describe("close rules", () => {
     expect((await createSession(slug)).status).toBe(200);
 
     await insert(4, "completed").run();
-    expect((await createSession(slug)).status).toBe(403);
+    const refused = await createSession(slug);
+    expect(refused.status).toBe(403);
+    expect(((await refused.json()) as { error: { message: string } }).error.message).toBe("Full — try next term.");
+
+    /*
+     * And the config says so, which is what keeps a full form off the chat.
+     *
+     * The cap used to be enforced only when a session was opened, so the page
+     * rendered the whole runtime, posted a session and drew the refusal in an
+     * error rail under an empty thread. The count is read here as well now —
+     * the same helper, so the two cannot disagree — and the page turns into
+     * the closed screen before anything boots.
+     */
+    const config = (await (await fetchApi(`/p/forms/${slug}/config`)).json()) as {
+      closed?: boolean;
+      closedReason?: string;
+    };
+    expect(config.closed).toBe(true);
+    expect(config.closedReason).toBe("capacity");
+  });
+
+  /**
+   * A cap alone must not start publishing the count.
+   *
+   * The config route now reads `completedSubmissions` whenever a cap exists,
+   * to decide whether the form is full. That read is not consent to show the
+   * number: `showRemaining` is off by default precisely because a remaining
+   * count tells anyone holding the link how many people have answered. The two
+   * must stay separate, and this is the test that keeps them so.
+   */
+  it("counts against a cap without publishing how many places are left", async () => {
+    const slug = await publish("capquiet", { closeRules: { maxSubmissions: 9 } });
+    const config = (await (await fetchApi(`/p/forms/${slug}/config`)).json()) as {
+      closed?: boolean;
+      capacity?: unknown;
+    };
+    expect(config.closed).toBe(false);
+    expect(config.capacity).toBeUndefined();
   });
 });
 

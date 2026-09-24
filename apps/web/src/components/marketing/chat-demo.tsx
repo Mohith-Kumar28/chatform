@@ -168,6 +168,60 @@ export function ChatDemo({
     return () => io.disconnect();
   }, []);
 
+  /**
+   * The hero demo does not type until the headline has finished being the
+   * headline.
+   *
+   * Starting on the first IntersectionObserver callback was wrong in three
+   * ways at once. The playback loop calls `setTurns` every 32 ms for the
+   * length of the script — two characters a tick, several seconds of it — and
+   * every one re-renders the whole thread. That is seconds of continuous paint
+   * in a 32rem panel, which is most of the Speed Index; seconds of 32 ms React
+   * work, which is most of the long-task count; and the follow effect below
+   * reads `scrollHeight` on each one, which is the forced reflow.
+   *
+   * `fonts.ready` rather than a flat timer, because the thing being protected
+   * is the `<h1>`. It is set in Bricolage with `display: "swap"`, so its real
+   * paint — at the size and metrics the page was designed around — is when
+   * Bricolage lands, not when the fallback does. Starting a multi-second paint
+   * storm beside the headline before then puts the demo in front of it for the
+   * whole window the headline is measured in.
+   *
+   * Then one idle callback with a ceiling, so the demo begins a beat after the
+   * page settles rather than on the same frame. A visitor cannot tell; a trace
+   * can.
+   *
+   * Starts `true` for the feature variant: the demo in `TheMoment` is below
+   * the fold, and its IntersectionObserver is already the right gate.
+   */
+  const [lcpSettled, setLcpSettled] = useState(variant !== "hero");
+
+  useEffect(() => {
+    if (variant !== "hero") return;
+    let cancelled = false;
+    let handle = 0;
+    let idle = false;
+
+    const begin = () => {
+      if (cancelled) return;
+      idle = typeof window.requestIdleCallback === "function";
+      handle = idle
+        ? window.requestIdleCallback(() => !cancelled && setLcpSettled(true), { timeout: 1500 })
+        : window.setTimeout(() => !cancelled && setLcpSettled(true), 400);
+    };
+
+    const fonts = document.fonts;
+    if (!fonts || fonts.status === "loaded") begin();
+    else void fonts.ready.then(begin).catch(begin);
+
+    return () => {
+      cancelled = true;
+      if (!handle) return;
+      if (idle) window.cancelIdleCallback(handle);
+      else clearTimeout(handle);
+    };
+  }, [variant]);
+
   useEffect(() => {
     // Under reduced motion the whole script is shown at once — see `rendered`
     // below, which derives it during render. Nothing to animate, and nothing to
@@ -176,6 +230,7 @@ export function ChatDemo({
     // all along.
     if (reduced) return;
     if (!active) return;
+    if (!lcpSettled) return;
 
     let cancelled = false;
     const cancelled_ = () => cancelled;
@@ -235,14 +290,27 @@ export function ChatDemo({
     return () => {
       cancelled = true;
     };
-  }, [script, active, runId, reduced]);
+  }, [script, active, runId, reduced, lcpSettled]);
 
   // Follow the bottom as bubbles land — but only while the visitor is there.
   // The container scrolls, never the page.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !pinned) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: reduced ? "auto" : "smooth" });
+    /*
+      Inside a frame, not straight out of the effect.
+
+      This runs right after a React commit, once per typed tick, and
+      `scrollHeight` is a synchronous layout read — so reading it here forced
+      the browser to lay the panel out again before it had got round to it on
+      its own. Lighthouse called that out as a forced reflow. A rAF puts the
+      read after the browser's own layout pass instead of ahead of it; the
+      scroll still lands on the same frame the bubble does.
+    */
+    const frame = requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: reduced ? "auto" : "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
   }, [turns, typing, reduced, pinned]);
 
   /**

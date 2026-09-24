@@ -31,6 +31,17 @@ export default defineConfig({
           // failing test's ciphertext can be reproduced. Never a real key. The partner and
           // Stripe credentials stay unset for the same reason DODO_API_KEY does.
           PAYMENTS_ENCRYPTION_KEY: "Y2hhdGZvcm0tdGVzdC1wYXltZW50cy1rZXktMzJieXQ=",
+          /*
+           * No model key, whatever `.dev.vars` says.
+           *
+           * The pool reads `.dev.vars`, so on a machine with a real key every
+           * conversation test was quietly calling OpenRouter: slower, billed, and
+           * decided by a model rather than by the test. CI never had the key, so
+           * the suite only ever passed as written there. Empty counts as absent
+           * everywhere the key is checked. Tests that want a model stub `fetch`
+           * and set the key themselves (see `answer-gate-runtime.test.ts`).
+           */
+          OPENROUTER_API_KEY: "",
         },
       },
     }),

@@ -30,7 +30,7 @@
     "gen:plans": "pnpm --filter @repo/tooling gen:plans",
     "gen:templates": "pnpm --filter @repo/tooling gen:templates",
     "plans:verify": "pnpm gen:plans && git diff --exit-code -- tooling/seed-plans.sql",
-    "templates:verify": "pnpm gen:templates && git diff --exit-code -- tooling/seed-templates.sql",
+    "templates:verify": "pnpm gen:templates && git diff --exit-code -- tooling/seed-templates.sql apps/web/src/content/templates/catalogue.generated.json",
     "deploy:api": "pnpm --filter @repo/api run deploy",
     "clean": "turbo run clean && rm -rf node_modules",
     "deploy:web": "pnpm --filter @repo/web run cf:build && pnpm --filter @repo/web run cf:deploy",
@@ -49,6 +49,7 @@
     "gen:docs": "pnpm gen:blocks && pnpm gen:api-docs",
     "api-docs:verify": "pnpm gen:api-docs && git diff --exit-code -- apps/web/content/docs/api apps/web/src/lib/openapi/spec.json",
     "spec:coverage": "pnpm --filter @repo/tooling spec:coverage",
+    "api:verify": "pnpm --filter @repo/tooling api:verify",
     "gen:demo": "pnpm --filter @repo/tooling gen:demo",
     "demo:verify": "pnpm gen:demo && git diff --exit-code -- tooling/seed-demo-form.sql",
     "seed:demo": "pnpm --filter @repo/api exec wrangler d1 execute chatform --local --file ../../tooling/seed-demo-form.sql",
@@ -65,7 +66,8 @@
   },
   "pnpm": {
     "overrides": {
-      "@better-auth/utils": "0.4.2"
+      "@better-auth/utils": "0.4.2",
+      "zod": "4.4.3"
     },
     "patchedDependencies": {
       "@opennextjs/cloudflare@1.20.4": "patches/@opennextjs__cloudflare@1.20.4.patch"

@@ -17,6 +17,7 @@
     "yes_no",
     "single_select",
     "multi_select",
+    "poll",
     "dropdown",
     "picture_choice",
     "ranking",

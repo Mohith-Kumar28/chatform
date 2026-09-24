@@ -1,4 +1,5 @@
 import { displayAnswer, paymentCells, paymentColumnTitles, readFormDoc, type Block } from "@repo/form-schema";
+import { csvCell, csvRow } from "@repo/guard";
 import type { Bindings } from "../env.js";
 import { resolveRetiredBlocks } from "./retired-columns.js";
 
@@ -32,26 +33,13 @@ export interface TableOptions {
 }
 
 /**
- * Cells that a spreadsheet would execute rather than display.
- *
- * These rows are typed by strangers, and this data now goes somewhere that
- * treats a leading `=` as a program. Prefixing with an apostrophe is the
- * conventional neutralisation: Excel and Sheets both render the rest verbatim
- * and drop the quote.
- *
- * A leading `-` is left alone when the cell is an ordinary negative number,
- * because mangling `-40` to protect against `-1+cmd|…` would corrupt far more
- * data than it saves.
+ * `csvCell` from `@repo/guard` is the de-fanger that used to live here as
+ * `deFang`. Moved rather than copied: two of the three export paths did not
+ * have it, so the same answer came out safe through this one and live through
+ * the others. The `-40` carve-out went with it — mangling an ordinary negative
+ * number to defend against `-1+cmd|…` costs more data than it saves.
  */
-function deFang(value: string): string {
-  if (!value) return value;
-  const head = value[0]!;
-  if (head === "=" || head === "+" || head === "@" || head === "\t" || head === "\r") {
-    return `'${value}`;
-  }
-  if (head === "-" && !Number.isFinite(Number(value))) return `'${value}`;
-  return value;
-}
+const deFang = csvCell;
 
 export async function buildResponseTable(
   env: Bindings,
@@ -152,10 +140,12 @@ export async function buildResponseTable(
     "started_at",
     "completed_at",
     ...columns.flatMap((b) => {
-      // Marked, because a column the form no longer has needs to explain itself
-      // to whoever opens the file — and because the same question re-added later
-      // gets a new ref, so both columns can be present and neither is a mistake.
-      const title = `${b.title} (${b.ref})${retiredRefs.has(b.ref) ? " [removed]" : ""}`;
+      // "archived", not "removed": the question is gone from the form, but these
+      // answers are very much still here, and `[removed]` next to a column full
+      // of data reads as though the data was what went. It also matters that the
+      // same question re-added later gets a new ref, so both columns can be
+      // present at once and neither is a mistake.
+      const title = `${b.title} (${b.ref})${retiredRefs.has(b.ref) ? " [archived]" : ""}`;
       return b.type === "payment" ? [title, ...paymentColumnTitles(title)] : [title];
     }),
   ];
@@ -204,8 +194,90 @@ export async function buildResponseTable(
   return { header, rows, count: rows.length, truncated };
 }
 
-/** RFC 4180: every field quoted, embedded quotes doubled. */
+/** RFC 4180: every field quoted, embedded quotes doubled, formulas de-fanged. */
 export function toCsv({ header, rows }: ResponseTable): string {
-  const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
-  return [header, ...rows].map((row) => row.map(esc).join(",")).join("\n");
+  return [header, ...rows].map((row) => csvRow(row)).join("\n");
+}
+
+/**
+ * The same table, cut in two by whether the response was finished.
+ *
+ * Both halves keep the whole table's header — including any retired column
+ * only an unfinished response ever answered — so the two sheets line up column
+ * for column and a formula written against one works on the other.
+ *
+ * The cut is made on the `status` column already in the table rather than by
+ * asking D1 twice: the rows are in memory, the window and its column list were
+ * settled by one query, and a second pass would be free to disagree with the
+ * first about which responses are the newest.
+ */
+export function splitByCompletion(table: ResponseTable): {
+  completed: ResponseTable;
+  partial: ResponseTable;
+} {
+  const at = table.header.indexOf("status");
+  const completed: string[][] = [];
+  const partial: string[][] = [];
+  for (const row of table.rows) (row[at] === "completed" ? completed : partial).push(row);
+
+  const half = (rows: string[][]): ResponseTable => ({
+    header: table.header,
+    rows,
+    count: rows.length,
+    // Truncation is a property of the window, not of either half: the cap cut
+    // rows off the end of both.
+    truncated: table.truncated,
+  });
+  return { completed: half(completed), partial: half(partial) };
+}
+
+/**
+ * What the file is called once it lands in someone's Downloads folder.
+ *
+ * `responses-frm_9f3a2b1c8d.xlsx` told whoever downloaded it nothing: not which
+ * form, not when, and not which of the three exports they took that afternoon
+ * it was. The form's own title and a timestamp answer all three, and they sort
+ * sensibly in a folder because the date leads the stamp.
+ *
+ * `offsetMinutes` is the caller's `getTimezoneOffset()` — minutes to add to
+ * local time to reach UTC, so IST arrives as -330. Without it the stamp is UTC,
+ * which near midnight names the wrong day for most of the world.
+ */
+export function exportFilename(title: string, ext: string, offsetMinutes = 0): string {
+  /**
+   * Windows refuses `\/:*?"<>|` in a name and every platform refuses control
+   * characters, so a form titled `Q3: sales / marketing` has to be rewritten
+   * rather than escaped. Length is capped because some filesystems stop at 255
+   * bytes, and a 200-character form title is not a better name than its first
+   * eighty characters.
+   */
+  const clean =
+    title
+      // eslint-disable-next-line no-control-regex
+      .replace(/[ -]/g, "")
+      .replace(/[\\/:*?"<>|]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80)
+      .trim() || "Responses";
+
+  // Shifted into the caller's day before it is read, then formatted off the ISO
+  // string so the result is identical in every runtime and locale.
+  const iso = new Date(Date.now() - offsetMinutes * 60_000).toISOString();
+  const stamp = `${iso.slice(0, 10)} ${iso.slice(11, 13)}${iso.slice(14, 16)}`;
+
+  return `${clean} ${stamp}.${ext}`;
+}
+
+/**
+ * The header that carries it, in both spellings.
+ *
+ * A form named in Hindi, or with an emoji in it, cannot go in `filename=` —
+ * that one is ASCII, and the bytes either get mangled or the header gets
+ * rejected outright. RFC 5987's `filename*` carries the real name; the plain
+ * `filename` stays as the fallback for anything that does not read it.
+ */
+export function contentDisposition(filename: string): string {
+  const ascii = filename.replace(/[^\x20-\x7E]/g, "_").replaceAll('"', "'");
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }

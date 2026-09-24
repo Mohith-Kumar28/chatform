@@ -1,6 +1,6 @@
 {
   "name": "@chatformhq/js",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "The official JavaScript client for the Chatform API.",
   "license": "MIT",
   "type": "module",

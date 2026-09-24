@@ -131,7 +131,7 @@ describe("questions removed from a form", () => {
     const csv = await res.text();
     const [header, ...rows] = csv.split("\n");
 
-    expect(header).toContain("Team member 1 role (q_team1) [removed]");
+    expect(header).toContain("Team member 1 role (q_team1) [archived]");
     // After the live ones: the current form is what the author reads the sheet
     // against, and its history belongs at the far end.
     expect(header!.indexOf("q_email")).toBeLessThan(header!.indexOf("q_team1"));

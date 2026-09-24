@@ -1,8 +1,8 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Check, Lock, Minus } from "lucide-react";
-import { useGetApiBillingPlans, getGetApiBillingPlansQueryKey } from "@/lib/api/billing/billing";
+import { customFetch } from "@/lib/api/mutator";
 import type { Catalogue } from "@/lib/pricing-catalogue";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Band, BandTitle, BandLede } from "@/components/marketing/band";
@@ -99,7 +99,11 @@ const GROUPS: {
       { feature: "agent_knowledge" },
       { feature: "agent_guardrails" },
       { feature: "agent_model_picker" },
-      { limit: "knowledge_entries" },
+      /* Was `knowledge_entries`, a limit that no longer exists — the row
+         rendered nothing, so the table never said how much knowledge each
+         plan allows. */
+      { limit: "knowledge_sources_count" },
+      { limit: "knowledge_bytes" },
     ],
   },
   {
@@ -122,6 +126,10 @@ function formatLimit(value: number | null, unit: string): string {
   if (unit === "tokens" && value >= 1_000_000) return `${value / 1_000_000}M`;
   if (unit === "tokens" && value >= 1_000) return `${value / 1_000}k`;
   if (unit === "chars") return `${value.toLocaleString()} chars`;
+  if (unit === "bytes") {
+    const mb = value / (1024 * 1024);
+    return mb >= 1024 ? `${Math.round(mb / 1024)} GB` : `${Math.round(mb)} MB`;
+  }
   return value.toLocaleString();
 }
 
@@ -130,9 +138,32 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
   // number for us, and it is what every comparable product does.
   const [cycle, setCycle] = useState<"yearly" | "monthly">("yearly");
   const annual = cycle === "yearly";
-  const { data: raw } = useGetApiBillingPlans({
-    query: { queryKey: getGetApiBillingPlansQueryKey(), staleTime: 5 * 60_000 },
-  });
+  /**
+   * A plain fetch rather than the generated react-query hook.
+   *
+   * That hook was the only thing on any marketing route that needed a
+   * `QueryClientProvider`, and keeping it meant mounting TanStack Query — and,
+   * through it, the whole signed-in app shell — on public pages to overlay one
+   * boolean onto a catalogue the server had already rendered.
+   *
+   * Nothing here wanted a cache: the query had no invalidation, no mutation
+   * and no second reader, and a `staleTime` on a page people open once is not
+   * doing work. One request on mount, and `live ?? initial` below is unchanged.
+   */
+  const [live, setLive] = useState<Catalogue | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    customFetch<Catalogue>("/api/billing/plans", { method: "GET" })
+      .then((next) => {
+        if (alive) setLive(next);
+      })
+      // The authoring catalogue is already on screen and already right about
+      // everything but `checkoutReady`; a failed refresh should leave it there.
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
   /**
    * The seeded catalogue when it arrives, the authoring catalogue until then.
    *
@@ -147,7 +178,6 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
    * "contact us to set this up" note against a guess would put a false claim in
    * the prerendered HTML — which is the thing this whole change exists to stop.
    */
-  const live = raw as Catalogue | undefined;
   const data = live ?? initial;
   const plans = data.plans;
   const saving = plans.find((p) => p.id === "pro")?.yearlySavingPercent;
@@ -163,7 +193,7 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
         <div className="max-w-2xl">
           <BandTitle as="h1">Collect for free. Pay to look closer.</BandTitle>
           <BandLede>
-            Unlimited forms and unlimited responses on every plan, including the free one.
+            Unlimited responses on every plan, including the free one.
           </BandLede>
         </div>
 

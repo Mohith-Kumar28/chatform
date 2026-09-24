@@ -1,3 +1,5 @@
+import { cleanText } from "@repo/guard";
+
 /**
  * Splitting extracted markdown into passages worth embedding.
  *
@@ -49,7 +51,17 @@ export interface Chunk {
  * useless vectors where one passage would answer the question.
  */
 export function chunkMarkdown(markdown: string, chunkChars: number = CHUNK_CHARS): Chunk[] {
-  const normalized = markdown.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  /**
+   * Cleaned before it is split, so nothing invisible reaches the index.
+   *
+   * An uploaded document is the one input nobody reads before the model does.
+   * Zero-width and bidi characters inside it survive extraction, get embedded,
+   * come back through retrieval and land in the prompt — where they are the
+   * standard carrier for an instruction a human reviewing the same document
+   * would never see. `cleanText` is where every other untrusted string in the
+   * product goes; the blank-line collapse below is this module's own and stays.
+   */
+  const normalized = cleanText(markdown).replace(/\n{3,}/g, "\n\n").trim();
   if (!normalized) return [];
 
   const sections = splitOnHeadings(normalized);

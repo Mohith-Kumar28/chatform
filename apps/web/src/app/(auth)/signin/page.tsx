@@ -202,7 +202,7 @@ function SignInForm() {
             {mode === "signin" ? "Welcome back" : "Create your account"}
           </CardTitle>
           <CardDescription>
-            {mode === "signin" ? "Sign in to your chatform dashboard" : "Free forever — unlimited forms"}
+            {mode === "signin" ? "Sign in to your chatform dashboard" : "Free forever — unlimited responses"}
           </CardDescription>
         </CardHeader>
         <CardContent>

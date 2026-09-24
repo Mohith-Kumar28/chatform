@@ -1,5 +1,6 @@
 "use client";
 
+import { safeHref } from "@repo/guard";
 import { useMemo, useState } from "react";
 import { Loader2, Lock } from "lucide-react";
 import {
@@ -350,7 +351,13 @@ export function ManualPaymentAffordance({
     );
   }
 
-  const target = block.paymentMethod === "upi" ? upiUri : block.url;
+  /**
+   * `upi://` is ours, built from the block's own fields; `block.url` is a
+   * `z.string().url()`, which accepts `javascript:`. Only the second needs
+   * vetting, and `safeHref` would refuse the first for having a scheme no
+   * browser navigates.
+   */
+  const target = block.paymentMethod === "upi" ? upiUri : safeHref(block.url);
 
   // A block published without a destination is caught by lint, but a draft
   // being previewed can still reach here.

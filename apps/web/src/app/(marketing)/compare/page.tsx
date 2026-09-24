@@ -8,9 +8,14 @@ import { JsonLd } from "@/components/seo/json-ld";
 import { COMPARISONS } from "@/content/compare";
 import { breadcrumbLd, canonical, itemListLd, openGraphBase } from "@/lib/seo";
 
-const TITLE = "Compare chatform — the honest version";
+/**
+ * The query people actually type, rather than our name for the page. Nobody
+ * searches "compare chatform"; they search for an alternative to the tool
+ * they already pay for, and this is the page that names all four.
+ */
+const TITLE = "Typeform, SurveyMonkey, Google Forms & Jotform alternatives compared";
 const DESCRIPTION =
-  "chatform against Typeform, Google Forms, Jotform and Tally, including where each of them is still the better answer. Prices and capabilities read from each vendor's own pages, with the dates.";
+  "chatform against Typeform, Google Forms, SurveyMonkey, Jotform, Tally, Fillout and Youform, including where each of them is still the better answer. Prices and capabilities read from each vendor's own pages, with the dates.";
 
 export const metadata: Metadata = {
   title: { absolute: TITLE },

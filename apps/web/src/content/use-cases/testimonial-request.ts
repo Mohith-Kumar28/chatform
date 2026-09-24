@@ -3,6 +3,7 @@ import { defineUseCase } from "./define";
 export default defineUseCase({
   slug: "testimonial-request-form",
   name: "Testimonials",
+  keyword: "Testimonial request form",
   group: "Hear from customers",
   audience: "Freelancers, agencies, course creators, wedding and local businesses",
   navBlurb: "Turn “they were great!” into a quote you can actually put on your website.",

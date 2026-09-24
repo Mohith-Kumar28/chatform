@@ -11,7 +11,9 @@ import { TheDropOff } from "@/components/marketing/the-drop-off";
 import { Band, BandTitle, BandLede } from "@/components/marketing/band";
 import { InView } from "@/components/marketing/in-view";
 import { ArrowMark, HandNote } from "@/components/marketing/annotate";
-import { canonical, openGraphBase } from "@/lib/seo";
+import { JsonLd } from "@/components/seo/json-ld";
+import { buildCatalogue, dollars } from "@/lib/pricing-catalogue";
+import { canonical, openGraphBase, softwareApplicationLd } from "@/lib/seo";
 
 /**
  * Plain words in every position, page and metadata alike — and the outcome
@@ -38,19 +40,21 @@ export const metadata: Metadata = {
    * sees. Every other route wants the template and keeps it; only the
    * home page names the brand itself.
    */
-  title: { absolute: "chatform — AI forms that get 2.3× more submissions" },
+  title: { absolute: "chatform — Conversational forms people actually finish" },
   description:
-    "Free AI forms with unlimited submissions. chatform turns your form into a conversation that reads what people write, asks again when an answer is thin, and follows up with the ones who leave.",
+    "AI-powered conversational forms, free with unlimited submissions. chatform turns your form into a conversation that reads what people write, asks again when an answer is thin, and follows up with the ones who leave.",
   ...canonical("/"),
   openGraph: {
     ...openGraphBase("/"),
     // The h1 verbatim. A social card that promises something the page then
-    // words differently is a card the reader has to reconcile — and "agentic"
-    // was doing that work here while the page had already moved to "AI",
-    // which is the phrase people search with.
-    title: "chatform — AI forms that get 2.3× more submissions",
+    // words differently is a card the reader has to reconcile — first "agentic"
+    // was doing that, then "AI forms", which said prompt-to-form generator to
+    // anyone who has shopped this category. The noun is the category's own now.
+    // "AI-powered" is not missing from this object; it opens both descriptions,
+    // which is where a keyword belongs once the headline has a job of its own.
+    title: "chatform — Conversational forms people actually finish",
     description:
-      "It reads what people write, asks again when an answer is thin, and follows up with the ones who leave. Free, with unlimited submissions.",
+      "An AI-powered form that reads what people write, asks again when an answer is thin, and follows up with the ones who leave. Free, with unlimited submissions.",
     // A baked file, not an `opengraph-image.tsx`: nothing on this card changes,
     // and a route is served through the worker at ~2s where `public/` is
     // ~0.3s. Regenerate with `pnpm --filter @repo/web og:image`.
@@ -60,7 +64,7 @@ export const metadata: Metadata = {
         width: 1200,
         height: 630,
         type: "image/jpeg",
-        alt: "chatform — AI forms that get 2.3× more submissions",
+        alt: "chatform — Conversational forms people actually finish",
       },
     ],
   },
@@ -125,8 +129,28 @@ export const metadata: Metadata = {
  * does not reverse.
  */
 export default function LandingPage() {
+  const catalogue = buildCatalogue();
+
   return (
     <>
+      {/*
+        The product, as a product, on the page most searches for it land on.
+        It was only on `/pricing`, so the home page told a crawler that an
+        organisation and a website existed and nothing about what they sell.
+        Same offers as the pricing page, built from the same catalogue.
+      */}
+      <JsonLd
+        nodes={[
+          softwareApplicationLd(
+            catalogue.plans.map((plan) => ({
+              name: plan.name,
+              price: dollars(plan.priceMonthlyCents),
+              billingDuration: "P1M",
+              url: "/pricing",
+            })),
+          ),
+        ]}
+      />
       <Hero />
       <HowItConverts />
       <SpectrumStrip />

@@ -8,7 +8,7 @@ import { Prose } from "@/components/marketing/prose";
 import { mdxComponents } from "@/components/docs/mdx-components";
 import { JsonLd } from "@/components/seo/json-ld";
 import { getPost, posts } from "@/lib/blog-source";
-import { articleLd, breadcrumbLd, canonical, openGraphBase } from "@/lib/seo";
+import { articleLd, breadcrumbLd, canonical, faqPageLd, openGraphBase } from "@/lib/seo";
 
 export const dynamicParams = false;
 
@@ -60,6 +60,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             { name: "Writing", path: "/blog" },
             { name: post.title, path: post.url },
           ]),
+          ...(post.faq.length > 0 ? [faqPageLd(post.faq)] : []),
         ]}
       />
 
@@ -91,10 +92,29 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             <p className="text-body-lg text-muted-foreground mt-4 max-w-2xl leading-relaxed">
               {post.description}
             </p>
+            {/* A person, when there is one. Somebody deciding whether to trust
+                a comparison wants to know who wrote it, and so does Google. */}
+            {post.author !== "chatform" && (
+              <p className="text-caption text-muted-foreground mt-5">
+                By <span className="text-foreground font-medium">{post.author}</span>
+                {post.authorTitle ? `, ${post.authorTitle}` : ""}
+              </p>
+            )}
           </header>
 
           <Prose className="mt-12">
             <MDX components={mdxComponents} />
+            {post.faq.length > 0 && (
+              <>
+                <h2>Questions people ask</h2>
+                {post.faq.map((item) => (
+                  <div key={item.question}>
+                    <h3>{item.question}</h3>
+                    <p>{item.answer}</p>
+                  </div>
+                ))}
+              </>
+            )}
           </Prose>
         </article>
       </Band>

@@ -29,7 +29,11 @@ const chatform = createClient({ apiKey: process.env.CHATFORM_SECRET_KEY! });
 ```
 
 `chatform.forms`, `.responses`, `.sessions`, `.webhooks`, `.blocks`, `.exports`,
-`.files`, and `chatform.me()`.
+`.files`, `.templates`, `.ai`, and `chatform.me()`.
+
+Three more hang off `forms`, because a version, a knowledge source and an
+integration have no meaning apart from the form they belong to:
+`chatform.forms.versions`, `.knowledge` and `.integrations`.
 
 ```ts
 // a whole response in one call
@@ -46,6 +50,67 @@ await chatform.responses.complete(draft.id);
 
 Zero runtime dependencies — Web Crypto for signatures, `fetch` for transport —
 so it runs unchanged on Node, Workers, Deno and Bun.
+
+### Building a form
+
+```ts
+// start from a template
+const { id } = await chatform.templates.use("client-intake");
+
+// or compose the document yourself, then publish it
+const form = await chatform.forms.create({ title: "Speaker submissions" });
+const { issues } = await chatform.forms.updateDocument(form.id, doc);
+if (!issues.some((i) => i.level === "error")) await chatform.forms.publish(form.id);
+```
+
+`GET /v1/blocks` publishes a JSON Schema for every block type, and
+`chatform.blocks.list()` is how you read it. Build the document against that
+rather than a hardcoded list, and a new question type will not surprise you.
+
+<Callout type="warn">
+`forms.get()` reads the **published** form, so a form you have just created
+answers 404. Use `forms.getDocument()` for a draft. `forms.list()` is the same
+story: it returns published forms unless you ask for `status: "draft"` or
+`"all"`.
+</Callout>
+
+### Versions
+
+```ts
+const versions = await chatform.forms.versions.list(formId);
+const diff = await chatform.forms.versions.get(formId, 3, { compare: 2 });
+await chatform.forms.versions.restore(formId, 2);
+```
+
+`restore` writes the draft, not the live form, so respondents see nothing change
+until you publish again. Each version carries the number of completed responses
+recorded against it: a version nobody answered can be replaced freely, while one
+with responses behind it is the schema those answers were recorded against.
+
+### Knowledge
+
+```ts
+await chatform.forms.knowledge.addText(formId, { title: "Refund policy", body });
+await chatform.forms.knowledge.addLink(formId, { url: "https://example.com/faq" });
+await chatform.forms.knowledge.upload(formId, { body: bytes, filename: "handbook.pdf" });
+```
+
+Indexing happens after the call returns. `knowledge.list()` is where you watch a
+source become usable, and where you see what the plan has left.
+
+### Generating with a model
+
+```ts
+const { questions } = await chatform.ai.clarifyForm({ prompt });
+const { doc } = await chatform.ai.generateForm({ prompt, questionCount: 6 });
+const form = await chatform.forms.create({ title: doc.title, doc });
+```
+
+Nothing here saves anything — you get a document and decide what to do with it.
+`ai:generate` is the only scope that costs money to use, so it is not in the
+agent preset and has to be asked for; a 402 means the month's generations are
+spent rather than that a payment failed. `clarifyForm` runs on the cheapest tier
+and is not charged as a generation, so asking first is free.
 
 ### Paging
 

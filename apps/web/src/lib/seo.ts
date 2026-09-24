@@ -55,6 +55,16 @@ export function openGraphBase(path: string) {
     siteName: "chatform",
     locale: "en_US",
     type: "website" as const,
+    /**
+     * The site card, as the fallback for every page without its own.
+     *
+     * The use-case guides, the template pages, the hubs and every blog post
+     * declared `summary_large_image` and then gave the card no image, so a
+     * shared link unfurled as a large, empty box. A route with its own
+     * `opengraph-image` file still wins: file-based metadata overrides this
+     * object.
+     */
+    images: [{ url: "/og.jpg", width: 1200, height: 630, type: "image/jpeg", alt: "chatform — conversational forms" }],
   };
 }
 
@@ -79,6 +89,20 @@ export const LD_ID = {
   website: `${SITE_ORIGIN}/#website`,
 } as const;
 
+/**
+ * chatform's profiles elsewhere — LinkedIn, GitHub, Crunchbase, Product Hunt,
+ * G2 and so on, as they are created (see `docs/LINK-BUILDING.md`).
+ *
+ * `sameAs` is how Google ties those profiles to this site as one entity, which
+ * is the strongest lever there is against the four other products called
+ * Chatform. Only real, live URLs: a `sameAs` pointing at a 404 or at somebody
+ * else's account is worse than none.
+ */
+const SAME_AS: readonly string[] = [];
+
+const ORGANIZATION_DESCRIPTION =
+  "chatform turns forms into conversations that read what people write, ask again when an answer is too thin to use, and answer questions back — so more people finish.";
+
 export function organizationLd(): LdNode {
   return {
     "@type": "Organization",
@@ -86,8 +110,16 @@ export function organizationLd(): LdNode {
     name: "chatform",
     url: absoluteUrl("/"),
     logo: absoluteUrl("/icon.svg"),
-    description:
-      "chatform turns forms into conversations that read what people write, ask again when an answer is too thin to use, and answer questions back — so more people finish.",
+    description: ORGANIZATION_DESCRIPTION,
+    /**
+     * At least four unrelated products call themselves Chatform — an SMS app,
+     * an iGaming support agent, a WhatsApp form tool, an iOS keyboard — and
+     * every one of them outranks this site for the bare name. The domain is
+     * the part nobody else has, so it is declared as a name too; it is how
+     * people disambiguate us when they search.
+     */
+    alternateName: ["chatform.in", "chatform conversational forms"],
+    ...(SAME_AS.length > 0 ? { sameAs: [...SAME_AS] } : {}),
   };
 }
 
@@ -113,7 +145,9 @@ export interface LdOffer {
 export function softwareApplicationLd(offers: readonly LdOffer[]): LdNode {
   return {
     "@type": "SoftwareApplication",
+    "@id": `${SITE_ORIGIN}/#software`,
     name: "chatform",
+    description: ORGANIZATION_DESCRIPTION,
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     url: absoluteUrl("/"),
@@ -192,7 +226,13 @@ export function articleLd(article: LdArticle): LdNode {
     mainEntityOfPage: absoluteUrl(article.path),
     datePublished: article.datePublished,
     dateModified: article.dateModified ?? article.datePublished,
-    author: { "@type": "Organization", "@id": LD_ID.organization, name: article.author ?? "chatform" },
+    /* A named author is a person. It used to be emitted as the Organization
+       node under that person's name — one `@id` claiming two different names,
+       which is the contradiction structured data exists to avoid. */
+    author:
+      article.author && article.author !== "chatform"
+        ? { "@type": "Person", name: article.author }
+        : { "@type": "Organization", "@id": LD_ID.organization, name: "chatform" },
     publisher: { "@id": LD_ID.organization },
     ...(article.image ? { image: article.image } : {}),
   };

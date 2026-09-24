@@ -1,5 +1,6 @@
 "use client";
 
+import { safeMediaSrc } from "@repo/guard";
 import { fileDownloadUrl, type BlockMedia } from "@repo/form-schema";
 import { assetUrl } from "@/lib/assets";
 import { FileCard } from "./file-card";
@@ -36,7 +37,13 @@ export function QuestionMedia({
   }
   if (!media) return null;
 
-  const url = media.url ?? assetUrl(media.key);
+  /**
+   * `BlockMedia.url` is `z.string().max(1000)` in the schema — no `.url()`, no
+   * scheme check — and it goes straight into an `src` or a download `href`.
+   * An R2 key resolves to our own origin and needs no guard; an author's own
+   * URL does.
+   */
+  const url = media.url ? safeMediaSrc(media.url) : assetUrl(media.key);
   if (!url) return null;
 
   if (media.kind === "image") {

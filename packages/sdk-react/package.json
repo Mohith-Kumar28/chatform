@@ -1,7 +1,7 @@
 {
   "name": "@chatformhq/react",
-  "version": "0.1.1",
-  "description": "React bindings for Chatform \u2014 hooks and an embed component.",
+  "version": "0.2.0",
+  "description": "React bindings for Chatform: hooks and an embed component.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -15,7 +15,7 @@
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "prepublishOnly": "node ../../tooling/guard-publish.mjs && pnpm build"
   },
   "peerDependencies": {
@@ -27,7 +27,9 @@
   "devDependencies": {
     "@repo/config": "workspace:*",
     "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.2.5",
     "react": "^19.0.0",
+    "react-dom": "^19.2.8",
     "tsdown": "^0.15.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
