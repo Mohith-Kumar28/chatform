@@ -99,7 +99,7 @@ export function IntegrationsWorkspace({
 
   return (
     // Room below, so "Collect payments" (the last section) can scroll to the top when linked to.
-    <div className="space-y-10 pb-[40vh]">
+    <div className="space-y-10 pb-[75vh]">
       <section className="space-y-3">
         <div>
           <h2 className="text-h2">Put it on your site</h2>
@@ -318,7 +318,7 @@ function PaymentsGroup({
     <section
       id="payments"
       className={cn(
-        "-mx-3 scroll-mt-6 space-y-3 rounded-2xl px-3 py-3 transition-shadow duration-500",
+        "-mx-3 scroll-mt-20 space-y-3 rounded-2xl px-3 py-3 transition-shadow duration-500",
         flagged && "animate-attention ring-primary/70 ring-2",
       )}
     >
