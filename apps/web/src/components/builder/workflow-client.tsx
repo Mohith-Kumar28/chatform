@@ -292,9 +292,12 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
   const flowBanner = useMemo(() => {
     const entries = [...flowProblems.entries()];
     const errors = entries.filter(([, p]) => p.level === "error");
-    const pick = errors.length > 0 ? errors : entries;
+    // A question missing a setting blocks publishing too; it is not a route that merely does less.
+    const attention = entries.filter(([, p]) => p.attention);
+    const pick = errors.length > 0 ? errors : attention.length > 0 ? attention : entries;
     if (pick.length === 0) return null;
-    return { level: errors.length > 0 ? ("error" as const) : ("warning" as const), count: pick.length, ref: pick[0]![0] };
+    const level = errors.length > 0 ? ("error" as const) : attention.length > 0 ? ("attention" as const) : ("warning" as const);
+    return { level, count: pick.length, ref: pick[0]![0] };
   }, [flowProblems]);
   const [edges, setEdges] = useState<Edge[]>(derived.edges);
   if (syncedGraph !== derived) {
@@ -941,7 +944,9 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
                 */}
                 {flowBanner.level === "error"
                   ? `${flowBanner.count === 1 ? "1 step" : `${flowBanner.count} steps`} in this flow cannot be completed. Publishing is blocked until it is fixed.`
-                  : `${flowBanner.count === 1 ? "1 step" : `${flowBanner.count} steps`} in this flow may not do what it says. Publishing still works.`}
+                  : flowBanner.level === "attention"
+                    ? `${flowBanner.count === 1 ? "1 question needs" : `${flowBanner.count} questions need`} attention before you can publish.`
+                    : `${flowBanner.count === 1 ? "1 step" : `${flowBanner.count} steps`} in this flow may not do what it says. Publishing still works.`}
               </span>
               <span className="shrink-0 underline">Show me</span>
             </button>
