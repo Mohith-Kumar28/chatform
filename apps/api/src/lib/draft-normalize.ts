@@ -684,10 +684,10 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
        * 499 rupees, UPI mohith808@axl" into a short-text box titled "Payment
        * Confirmation".
        *
-       * Only ever `link` or `upi`. A model that writes `method=gateway` gets a
-       * link block: verified checkout needs an account the author connected
-       * and sign-in they switched on, and a draft can do neither — so it is
-       * chosen in the builder by the author, never here.
+       * Only ever `link` or `upi` here. A model cannot see the author's payment
+       * accounts, so it never names one: a link-less payment is upgraded to
+       * verified checkout on the default account afterwards, by
+       * `withDefaultPaymentAccount`, where the organization is known.
        */
       case "payment": {
         const upi = config.get("upi") ?? config.get("upiid") ?? config.get("vpa");

@@ -30,6 +30,7 @@ import {
 import { logAiGeneration } from "../lib/ai-usage.js";
 import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL, CLARIFY_SYSTEM, withClarifications, type BuilderTurn } from "../lib/agent-prompts.js";
 import { draftToDoc } from "../lib/draft-normalize.js";
+import { withDefaultPaymentAccount } from "../lib/payments/default-account.js";
 import { applyEditDraft, introducedFlowProblems, describeEditChanges } from "../lib/edit-apply.js";
 import { buildEditContext, buildEditTools, type EditOutcome } from "../lib/edit-tools.js";
 import { extractUrls, readSites } from "../lib/research.js";
@@ -141,7 +142,7 @@ function callSource(c: { req: { path: string; header(name: string): string | und
  */
 async function generateWithRetry(opts: {
   env: Bindings;
-  /** Carried only so the call reaches OpenRouter tagged with who is paying. */
+  /** Who is paying, for OpenRouter's tags, and whose default payment account a new payment question uses. */
   organizationId?: string | null;
   formId?: string | null;
   trace?: AiTrace;
@@ -224,7 +225,8 @@ async function generateWithRetry(opts: {
     }
 
     if (!hasErrors(normalized.issues)) {
-      return { doc: normalized.doc, issues: normalized.issues, tokens, usage, model };
+      const doc = await withDefaultPaymentAccount(opts.env, opts.organizationId, normalized.doc);
+      return { doc, issues: normalized.issues, tokens, usage, model };
     }
 
     lastError = normalized.issues
@@ -235,7 +237,8 @@ async function generateWithRetry(opts: {
       // Second attempt still has lint errors. The document is structurally
       // valid — it parsed — so the author is better served by a form with a
       // flagged issue in the builder than by nothing at all.
-      return { doc: normalized.doc, issues: normalized.issues, tokens, usage, model };
+      const doc = await withDefaultPaymentAccount(opts.env, opts.organizationId, normalized.doc);
+      return { doc, issues: normalized.issues, tokens, usage, model };
     }
     opts.onRetry?.("Fixing a problem with the flow");
   }
@@ -1106,7 +1109,9 @@ Answer the same request again, addressing that.`,
     // applies it, and applying is what saves — so declining leaves the form
     // exactly as it was. Writing here meant a rejected suggestion was already
     // in the database, and the client's own copy then had to fight it.
-    const issues = lintFormDoc(doc);
+    // A payment the model added without a link lands on the default account, as a generated one does.
+    const finalDoc = await withDefaultPaymentAccount(c.env, c.get("orgId"), doc, base);
+    const issues = lintFormDoc(finalDoc);
     /**
      * One line per edit, both paths, so the two can be compared on real
      * traffic rather than only on the bench. `rejections` is the interesting
@@ -1138,7 +1143,7 @@ Answer the same request again, addressing that.`,
     // is logged on its own tier rather than as whichever vendor drafted.
     await flushBilled(Date.now() - editStarted);
     return { status: 200, body: {
-      doc,
+      doc: finalDoc,
       added: added.length,
       addedRefs: added.map((b) => b.ref),
       updated: updated.length,

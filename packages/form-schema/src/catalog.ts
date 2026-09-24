@@ -150,7 +150,7 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
      * ever builds `link` or `upi` from a draft's `method=`.
      */
     summary:
-      "Takes money. Use this whenever the request mentions a price, a fee, a ticket, a deposit or a UPI id, and never a text question asking them to confirm they paid. Verified checkout on the author's own gateway is set up by the author in the builder, never in a draft.",
+      "Takes money. Use this whenever the request mentions a price, a fee, a ticket, a deposit or a UPI id, and never a text question asking them to confirm they paid. When the author has a payment account connected, a payment with no link or UPI id is taken through verified checkout on it, so give the amount and leave the link out unless one was named.",
     config:
       "method=upi with upi=<vpa like name@bank>, OR method=link with url=<checkout page>; amount=<number>, currency=<3-letter code, INR for rupees>",
     configKeys: ["method", "upi", "upiid", "vpa", "url", "link", "payee", "amount", "currency"],
