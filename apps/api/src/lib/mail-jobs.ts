@@ -30,6 +30,8 @@ import {
   invitationEmail,
   otpEmail,
   passwordResetEmail,
+  platformEventEmail,
+  stamp,
   submissionNotificationEmail,
   type AnswerLine,
 } from "./mail-templates.js";
@@ -100,7 +102,128 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOu
 
     case "respondent_feedback":
       return runFeedbackJob(env, job);
+
+    case "admin_new_user":
+      return runNewUserJob(env, job);
+
+    case "admin_new_form":
+      return runNewFormJob(env, job);
   }
+}
+
+/** One message to every platform admin. Throws only when nobody got it, so the queue retries. */
+async function mailPlatformAdmins(env: Bindings, msg: Omit<MailMessage, "to">): Promise<MailJobOutcome> {
+  const recipients = platformAdminEmails(env);
+  if (recipients.length === 0) return NO_MAIL;
+  const tally = mailTally();
+  const errors: unknown[] = [];
+  for (const to of recipients) {
+    try {
+      tally.record(to, await sendMail(env, { to, ...msg }));
+    } catch (err) {
+      console.error("admin_mail_failed", { subject: msg.subject, err: String(err) });
+      errors.push(err);
+    }
+  }
+  if (errors.length > 0 && tally.outcome().messages === 0) throw errors[0];
+  return tally.outcome();
+}
+
+const PROVIDER_LABEL: Record<string, string> = { credential: "email and password", google: "Google" };
+
+async function runNewUserJob(
+  env: Bindings,
+  job: Extract<MailJob, { kind: "admin_new_user" }>,
+): Promise<MailJobOutcome> {
+  const row = await env.DB.prepare(
+    `SELECT u.name, u.email, u.created_at,
+            (SELECT a.provider_id FROM accounts a WHERE a.user_id = u.id ORDER BY a.created_at ASC LIMIT 1) AS provider,
+            m.organization_id AS org_id, o.name AS org_name
+       FROM users u
+       LEFT JOIN members m ON m.user_id = u.id
+       LEFT JOIN organizations o ON o.id = m.organization_id
+      WHERE u.id = ?1
+      ORDER BY m.created_at ASC
+      LIMIT 1`,
+  )
+    .bind(job.userId)
+    .first<{ name: string; email: string; created_at: number; provider: string | null; org_id: string | null; org_name: string | null }>();
+  // Deleted before the queue got to it: nothing to announce.
+  if (!row) return NO_MAIL;
+
+  const origin = webOrigins(env)[0]!;
+  const provider = row.provider ? (PROVIDER_LABEL[row.provider] ?? row.provider) : "email code";
+  return mailPlatformAdmins(
+    env,
+    platformEventEmail({
+      subject: `chatform new sign-up: ${row.email}`,
+      heading: "Someone signed up",
+      facts: [
+        ["Name", row.name?.trim() || "not given"],
+        ["Email", row.email],
+        ["Signed up with", provider],
+        ["Account", row.org_name ?? "none yet"],
+        ["When", stamp(Number(row.created_at))],
+      ],
+      buttonUrl: row.org_id ? `${origin}/admin/accounts/${row.org_id}` : `${origin}/admin/accounts`,
+      buttonLabel: "Open the account",
+    }),
+  );
+}
+
+const FORM_SOURCE_LABEL: Record<Extract<MailJob, { kind: "admin_new_form" }>["source"], string> = {
+  builder: "blank form",
+  template: "template",
+  ai: "AI generator",
+  api: "API",
+};
+
+async function runNewFormJob(
+  env: Bindings,
+  job: Extract<MailJob, { kind: "admin_new_form" }>,
+): Promise<MailJobOutcome> {
+  const row = await env.DB.prepare(
+    `SELECT f.title, f.organization_id AS org_id, f.created_at,
+            o.name AS org_name, u.name AS user_name, u.email AS user_email,
+            (SELECT COUNT(*) FROM forms x WHERE x.organization_id = f.organization_id AND x.created_at <= f.created_at) AS nth
+       FROM forms f
+       LEFT JOIN organizations o ON o.id = f.organization_id
+       LEFT JOIN users u ON u.id = f.created_by
+      WHERE f.id = ?1`,
+  )
+    .bind(job.formId)
+    .first<{
+      title: string;
+      org_id: string;
+      created_at: number;
+      org_name: string | null;
+      user_name: string | null;
+      user_email: string | null;
+      nth: number;
+    }>();
+  if (!row) return NO_MAIL;
+  // A founder testing their own product does not need an email about it.
+  if (row.user_email && platformAdminEmails(env).includes(row.user_email.toLowerCase())) return NO_MAIL;
+
+  const origin = webOrigins(env)[0]!;
+  const nth = Number(row.nth);
+  const by = [row.user_name?.trim(), row.user_email].filter(Boolean).join(" · ");
+  return mailPlatformAdmins(
+    env,
+    platformEventEmail({
+      subject: `chatform new form: ${row.title}`,
+      heading: nth === 1 ? "A new account made its first form" : "A new form was created",
+      facts: [
+        ["Form", row.title],
+        ["Made from", FORM_SOURCE_LABEL[job.source]],
+        ["By", by || (job.source === "api" ? "an API key" : "unknown")],
+        ["Account", `${row.org_name ?? "unknown"} (form no. ${nth})`],
+        ["When", stamp(Number(row.created_at))],
+      ],
+      buttonUrl: `${origin}/admin/accounts/${row.org_id}`,
+      buttonLabel: "Open the account",
+    }),
+  );
 }
 
 /**

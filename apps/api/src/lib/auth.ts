@@ -296,6 +296,8 @@ export function createAuth(env: Bindings) {
         create: {
           after: async (user) => {
             await createDefaultOrg(env, user as { id: string; name?: string | null; email: string });
+            // After the org exists, so the mail can link straight to it.
+            await enqueueMail(env, { kind: "admin_new_user", userId: user.id });
           },
         },
       },

@@ -11,6 +11,7 @@ import { requireScope, entitlementsFor, type AuthzVars } from "../../lib/authori
 import { idempotent } from "../../lib/idempotency.js";
 import { parseDoc, publishForm, saveWorkingDoc } from "../../lib/forms-service.js";
 import { afterResponse, recordFormEvent } from "../../lib/form-activity.js";
+import { enqueueMail } from "../../lib/mail.js";
 import { clampForRuntime, brandingHiddenFor } from "../../lib/doc-entitlements.js";
 import { decodeCursor, paginate } from "../../lib/cursor.js";
 import { getEntitlements } from "../../lib/entitlements.js";
@@ -274,6 +275,7 @@ formsV1Router.post(
         actor: { type: "api_key", id: userId, label: "API" },
         source: "api",
       }).catch((err) => console.error("form_activity_failed", err)),);
+    await afterResponse(c, enqueueMail(c.env, { kind: "admin_new_form", formId: id, source: "api" }));
 
     return c.json({ id, title: body.title, slug, status: "draft", published: false, created_at: now, updated_at: now }, 201);
   },

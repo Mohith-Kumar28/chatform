@@ -403,6 +403,23 @@ export type MailJob =
        */
       kind: "followup";
       followupId: string;
+    }
+  | {
+      /**
+       * Somebody made an account. Mailed to `PLATFORM_ADMIN_EMAILS`.
+       *
+       * The user id alone: the consumer reads the name, the address, how they
+       * signed up and the organization made for them, which only exists once
+       * `createDefaultOrg` has run.
+       */
+      kind: "admin_new_user";
+      userId: string;
+    }
+  | {
+      /** A form was created, by any route. Mailed to `PLATFORM_ADMIN_EMAILS`. */
+      kind: "admin_new_form";
+      formId: string;
+      source: "builder" | "template" | "ai" | "api";
     };
 
 /**

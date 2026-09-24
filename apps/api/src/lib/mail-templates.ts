@@ -840,6 +840,43 @@ export function feedbackNotificationEmail(a: {
   };
 }
 
+/**
+ * A heads-up to the founders: a new account, or a new form.
+ *
+ * One shape for both, because both are the same read: what happened, a few
+ * labelled facts, and one button to the account in the console.
+ */
+export function platformEventEmail(a: {
+  subject: string;
+  heading: string;
+  facts: [string, string][];
+  buttonUrl: string;
+  buttonLabel: string;
+}): Omit<MailMessage, "to"> {
+  const body = [
+    h1(a.heading),
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 4px 0;">${a.facts
+      .map(
+        ([label, value]) => `<tr>
+  <td style="padding:8px 12px 8px 0;font-size:12px;line-height:1.5;color:${MUTED};border-top:1px solid ${BORDER};white-space:nowrap;vertical-align:top;">${escapeHtml(label)}</td>
+  <td style="padding:8px 0;font-size:13px;line-height:1.5;color:${INK};border-top:1px solid ${BORDER};word-break:break-word;">${escapeHtml(value)}</td>
+</tr>`,
+      )
+      .join("\n")}</table>`,
+    button(a.buttonUrl, a.buttonLabel),
+  ].join("\n");
+  return {
+    subject: a.subject,
+    html: layout({
+      preheader: a.facts.map(([, v]) => v).slice(0, 2).join(" · "),
+      body,
+      brand: false,
+      footer: "",
+    }),
+    text: [a.heading, ``, ...a.facts.map(([label, value]) => `${label}: ${value}`), ``, `${a.buttonLabel}: ${a.buttonUrl}`].join("\n"),
+  };
+}
+
 type WhoArgs = {
   respondentName: string | null;
   respondentEmail: string | null;
@@ -883,7 +920,7 @@ function whoBlock(a: WhoArgs): string {
 }
 
 /** `15 Sep 2026, 14:19 UTC` — one zone, named, because the readers are in two. */
-function stamp(ms: number): string {
+export function stamp(ms: number): string {
   const d = new Date(ms);
   const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });

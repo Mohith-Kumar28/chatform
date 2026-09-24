@@ -17,6 +17,7 @@ import { apiError, describeSchemaError } from "../lib/api-error.js";
 import { saveLimit } from "../lib/ratelimit.js";
 import { limitReached } from "@repo/entitlements";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
+import { enqueueMail } from "../lib/mail.js";
 
 export const formsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
@@ -363,6 +364,7 @@ formsRouter.post(
         actor: { type: "user", id: userId },
         source: body.doc !== undefined ? "template" : "builder",
       }).catch((err) => console.error("form_activity_failed", err)),);
+    await afterResponse(c, enqueueMail(c.env, { kind: "admin_new_form", formId: id, source: body.doc !== undefined ? "template" : "builder" }));
     return c.json({ id, title: body.title, slug, status: "draft", responses: 0, updatedAt: Date.now(), workingSchema: JSON.parse(workingSchema), activeVersion: null, workingRevision: 0, publishedAt: null, hasUnpublishedChanges: false });
   },
 );

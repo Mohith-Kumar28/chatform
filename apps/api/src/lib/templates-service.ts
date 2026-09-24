@@ -9,6 +9,7 @@
  */
 import { FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
+import { enqueueMail } from "./mail.js";
 
 export interface TemplateRow {
   slug: string;
@@ -135,6 +136,7 @@ export async function createFormFromTemplate(
     ),
     env.DB.prepare(`UPDATE form_templates SET usage_count = usage_count + 1 WHERE slug = ?`).bind(opts.slug),
   ]);
+  await enqueueMail(env, { kind: "admin_new_form", formId: id, source: "template" });
 
   /**
    * The same body `POST /v1/forms` answers with.
