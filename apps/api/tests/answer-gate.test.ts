@@ -150,6 +150,17 @@ describe("gateAnswer: turning answers into values", () => {
     expect(r.outcome).toEqual({ kind: "answer", value: "Sam@Acme.io" });
   });
 
+  it("never trims two glued addresses into one that nobody owns", async () => {
+    const email = block({ type: "email", title: "Email?" });
+    const jev = fakeJev(() => yesDirect);
+    // A pre-filled address with a second typed onto its end.
+    const glued = await gateAnswer(ENV, email, "respondent@example.comasha@example.com", CTX, { fetch: jev.fetch });
+    expect(glued.outcome).toMatchObject({ kind: "off_script" });
+    // Still found at the end of a sentence, and with a country domain.
+    const dotted = await gateAnswer(ENV, email, "it's asha@example.co.in.", CTX, { fetch: jev.fetch });
+    expect(dotted.outcome).toEqual({ kind: "answer", value: "asha@example.co.in" });
+  });
+
   it("asks per option on a multi-select, and returns every one picked", async () => {
     const langs = block({ type: "multi_select", title: "Languages?", options: opts("JS", "Python", "Go"), maxSelections: 3 });
     const jev = fakeJev(() => ({ ...yesDirect, o1: noul(0.95), o2: noul(0.02), o3: noul(0.9), unlisted: noul(0.03) }));

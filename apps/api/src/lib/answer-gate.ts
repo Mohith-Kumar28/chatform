@@ -177,7 +177,17 @@ export function planFor(block: Block, reply: string): Plan | GateOutcome {
     case "short_text":
       return spanPlan(block, reply);
     case "email":
-      return candidatePlan(block, matches(reply, /[^\s@<>(),;:"']+@[^\s@<>(),;:"']+\.[a-z]{2,}/gi));
+      /*
+       * Only an address that stands on its own. Unbounded, this read
+       * "respondent@example.comasha@example.com" (a pre-filled address with a second one typed
+       * onto its end) as "respondent@example.comasha", which is a valid-looking address nobody
+       * owns, and saved it. Now a candidate glued to another @ or to more letters is no
+       * candidate at all, so the reply is asked about instead of trimmed into something wrong.
+       */
+      return candidatePlan(
+        block,
+        matches(reply, /(?<![^\s<>(),;:"'])[^\s@<>(),;:"']+@[^\s@<>(),;:"']+\.[a-z]{2,}(?![^\s<>(),;:"'.!?])/gi),
+      );
     case "url":
       return candidatePlan(block, matches(reply, /\b(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s,;]*)?/gi));
     case "phone":
