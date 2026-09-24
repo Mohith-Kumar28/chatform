@@ -24,6 +24,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import "./flow.css";
 import { cn } from "@/lib/utils";
+import { setupAttention } from "./attention";
 import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspector";
 import { EndingInspector } from "./inspector/ending-inspector";
 import { blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
@@ -175,7 +176,11 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
   }
 
   const gotoRules = useMemo(() => doc.logic.filter(isGoto), [doc.logic]);
-  const answerableBlocks = useMemo(() => doc.blocks.filter((b) => b.type !== "welcome"), [doc.blocks]);
+  // A payment is not something to branch on: it only moves on once it's paid (lint says so too).
+  const answerableBlocks = useMemo(
+    () => doc.blocks.filter((b) => b.type !== "welcome" && b.type !== "payment"),
+    [doc.blocks],
+  );
 
   const setRules = useCallback((rules: LogicRule[]) => onChange({ ...doc, logic: rules }), [doc, onChange]);
 
@@ -189,7 +194,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
    * thing the publish dialog already says.
    */
   const flowProblems = useMemo(() => {
-    const out = new Map<string, { level: "error" | "warning"; messages: string[] }>();
+    const out = new Map<string, NodeProblem>();
     for (const issue of lintFormDoc(doc)) {
       if (!issue.refs?.length) continue;
       if (
@@ -229,6 +234,11 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
           out.set(ref, { level: issue.level, messages: [issue.message] });
         }
       }
+    }
+    // A question missing a setting it needs, drawn yellow ("needs attention")
+    // unless its routes are already broken, which is the louder of the two.
+    for (const [ref, a] of setupAttention(doc)) {
+      if (!out.has(ref)) out.set(ref, { level: "warning", messages: a.messages, attention: true });
     }
     return out;
   }, [doc]);
@@ -1135,7 +1145,7 @@ function StartNode({ id, data, selected }: NodeProps) {
 }
 
 /** A node the flow cannot serve: unreachable, or with no way to finish. */
-type NodeProblem = { level: "error" | "warning"; messages: string[] };
+type NodeProblem = { level: "error" | "warning"; messages: string[]; attention?: boolean };
 
 function QuestionNode({ id, data, selected }: NodeProps) {
   const { block, index, problem } = data as { block: Block; index: number; problem?: NodeProblem };
@@ -1153,7 +1163,12 @@ function QuestionNode({ id, data, selected }: NodeProps) {
           // colour and carries meaning of its own. Red stops a publish; amber
           // is the flow doing less than the author thinks, which is worth
           // seeing and is not worth a colour that means "broken".
-          problem && (problem.level === "error" ? "ring-2 ring-[var(--destructive)]" : "ring-2 ring-amber-500/70"),
+          problem &&
+            (problem.attention
+              ? "ring-2 ring-amber-400"
+              : problem.level === "error"
+                ? "ring-2 ring-[var(--destructive)]"
+                : "ring-2 ring-amber-500/70"),
         )}
         style={{ boxShadow: selected ? `inset 3px 0 0 0 ${accent}, var(--shadow-md)` : undefined }}
       >
@@ -1196,7 +1211,11 @@ function ProblemNote({ problem }: { problem: NodeProblem }) {
     >
       <AlertTriangle className="mt-px size-3 shrink-0" strokeWidth={2.5} />
       <span className="min-w-0">
-        {problem.messages.length > 1 ? `${problem.messages.length} flow problems` : shortProblem(problem.messages[0]!)}
+        {problem.attention
+          ? "Needs attention"
+          : problem.messages.length > 1
+            ? `${problem.messages.length} flow problems`
+            : shortProblem(problem.messages[0]!)}
       </span>
     </p>
   );

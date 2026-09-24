@@ -159,6 +159,7 @@ export interface PaymentAmountSource {
   amountMode: "fixed" | "variable" | "answer";
   amount?: number;
   priceFrom?: { ref: string; prices: Record<string, number> };
+  quantityFrom?: { ref: string };
   amountVariable?: string;
   minAmount?: number;
   maxAmount?: number;
@@ -203,8 +204,16 @@ export function resolvePaymentAmount(
   if (raw === undefined || raw === null || (typeof raw === "string" && raw.trim() === "")) {
     return { ok: false, code: "payment_no_amount" };
   }
-  const n = typeof raw === "string" ? Number(raw.trim().replace(/,/g, "")) : raw;
-  if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) return { ok: false, code: "payment_bad_amount" };
+  const parsed = typeof raw === "string" ? Number(raw.trim().replace(/,/g, "")) : raw;
+  if (typeof parsed !== "number" || !Number.isFinite(parsed) || parsed <= 0) return { ok: false, code: "payment_bad_amount" };
+  let n = parsed;
+
+  // Per person / per item. A calculated amount already is the total, so only a price is multiplied.
+  if (block.quantityFrom && block.amountMode !== "variable") {
+    const q = paymentQuantity(block, answers);
+    if (q === null) return { ok: false, code: "payment_no_amount" };
+    n = n * q;
+  }
 
   if (block.minAmount !== undefined && n < block.minAmount) return { ok: false, code: "payment_amount_out_of_range" };
   if (block.maxAmount !== undefined && n > block.maxAmount) return { ok: false, code: "payment_amount_out_of_range" };
@@ -338,4 +347,24 @@ export function priceChoices(block: PriceSourceLike): { key: string; label: stri
 export function priceKeyOf(answer: unknown): string | null {
   if (typeof answer === "boolean") return answer ? "yes" : "no";
   return typeof answer === "string" ? answer : null;
+}
+
+/** The most a quantity can multiply a price by: a party, a class, a crate, not a stadium. */
+export const MAX_PAYMENT_QUANTITY = 1000;
+
+/**
+ * How many (people, tickets, items) a payment is for, from its `quantityFrom`
+ * question: a whole number from 1 up to `MAX_PAYMENT_QUANTITY`, or null when
+ * the answer is missing or is not one. Never rounded: 2.5 tickets is a typo,
+ * and charging for 2 or 3 would each be a guess.
+ */
+export function paymentQuantity(
+  block: { quantityFrom?: { ref: string } },
+  answers: Record<string, unknown>,
+): number | null {
+  if (!block.quantityFrom) return 1;
+  const raw = answers[block.quantityFrom.ref];
+  const q = typeof raw === "string" ? Number(raw.trim()) : raw;
+  if (typeof q !== "number" || !Number.isInteger(q) || q < 1 || q > MAX_PAYMENT_QUANTITY) return null;
+  return q;
 }

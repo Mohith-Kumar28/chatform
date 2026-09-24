@@ -93,3 +93,53 @@ describe("lint, priced by an answer", () => {
     expect(codes(docOf(member, b))).not.toContain("payment_no_price_source");
   });
 });
+
+describe("price per person or item", () => {
+  const party = BlockSchema.parse({ id: "blk_party001", ref: "q_party", type: "number", title: "How many?", min: 1, max: 20 });
+  const perHead = (over: Record<string, unknown> = {}) =>
+    pay({ amountMode: "fixed", amount: 1000, priceFrom: undefined, quantityFrom: { ref: "q_party" }, ...over });
+
+  it("multiplies the price by the count", () => {
+    expect(resolvePaymentAmount(perHead() as never, {}, { q_party: 3 })).toMatchObject({ ok: true, amount: 3000 });
+  });
+
+  it("multiplies a price chosen by an answer too", () => {
+    const b = pay({ quantityFrom: { ref: "q_party" } });
+    expect(resolvePaymentAmount(b as never, {}, { q_plan: "opt_pro", q_party: 2 })).toMatchObject({ ok: true, amount: 1998 });
+  });
+
+  it("charges nothing for a missing, fractional or absurd count", () => {
+    for (const q of [undefined, 0, 2.5, -1, 5000, "three"]) {
+      expect(resolvePaymentAmount(perHead() as never, {}, { q_party: q }).ok).toBe(false);
+    }
+  });
+
+  it("wants the counting question to be a number question asked first", () => {
+    const codes = (doc: FormDoc) => lintFormDoc(doc).map((i) => i.code);
+    expect(codes(docOf(party, perHead()))).not.toContain("payment_no_quantity_source");
+    expect(codes(docOf(perHead(), party))).toContain("payment_no_quantity_source");
+    expect(codes(docOf(plan, perHead({ quantityFrom: { ref: "q_plan" } })))).toContain("payment_no_quantity_source");
+  });
+});
+
+describe("branching on a payment", () => {
+  it("is refused, because a payment only moves on once it's paid", () => {
+    const doc = FormDoc.parse({
+      schemaVersion: 1,
+      title: "Plans",
+      blocks: [plan, pay(), BlockSchema.parse({ id: "blk_notes001", ref: "q_notes", type: "long_text", title: "Notes" })],
+      endings: [{ id: "end_thanks01", ref: "end", title: "Thanks", kind: "success" }],
+      logic: [
+        {
+          id: "rl_paybranch",
+          action_kind: "goto",
+          from: "pay",
+          target: "end",
+          targetKind: "ending",
+          when: { op: "and", conditions: [{ left: { kind: "ref", ref: "pay" }, op: "gte", value: "0" }], groups: [] },
+        },
+      ],
+    });
+    expect(lintFormDoc(doc).map((i) => i.code)).toContain("payment_branch_condition");
+  });
+});

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, TriangleAlert } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   isPriceSource,
@@ -28,6 +28,7 @@ import { DomainsHelp, GroupFieldsEditor, PatternHelp, patternIsValid } from "./g
 import {
   CheckboxGroup,
   Field,
+  currencySymbol,
   ListEditor,
   MoneyField,
   NumberField,
@@ -820,6 +821,7 @@ function PaymentFields({
       {gateway ? (
         <LockedControl feature="collect_payments">
           <div className="space-y-6">
+            <div data-attention="payment-account" className="rounded-lg">
             <AccountPicker
               accounts={accounts}
               account={account}
@@ -827,7 +829,15 @@ function PaymentFields({
               known={known}
               onChange={chooseAccount}
             />
-            <AmountFields block={block} patch={patch} gateway />
+            </div>
+            <div data-attention="payment-amount" className="space-y-6 rounded-lg">
+              <AmountFields block={block} patch={patch} gateway />
+            </div>
+            {block.amountMode !== "variable" && (
+              <div data-attention="payment-quantity" className="rounded-lg">
+                <QuantityField block={block} patch={patch} />
+              </div>
+            )}
           </div>
         </LockedControl>
       ) : (
@@ -902,19 +912,30 @@ function AccountPicker({
     return (
       <Field label="Payment account">
         {/*
-         * A link, drawn as one. Outline + full width + left-aligned is the shape
-         * of every select beside it in this panel, so the one control here that
-         * goes somewhere read as an input nobody had filled in.
+         * Not a quiet link. Verified checkout with no account is a form that
+         * cannot publish, so this says so, says what fixes it, and makes the
+         * fix the loudest thing in the panel.
          */}
-        <Button variant="secondary" size="sm" asChild className="w-fit gap-1.5">
-          <Link href={integrate}>
-            Connect a payment account
-            <ArrowUpRight className="size-3.5" aria-hidden />
-          </Link>
-        </Button>
-        {selectedId && (
-          <p className="text-destructive text-xs">The account this question used is no longer connected.</p>
-        )}
+        <div className="space-y-2.5 rounded-lg border border-[var(--warning)]/50 bg-[var(--warning-soft)] p-3 text-[var(--warning-soft-foreground)]">
+          <div className="flex gap-2">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">
+                {selectedId ? "The account this question used is no longer connected" : "Connect a payment account"}
+              </p>
+              <p className="text-xs opacity-90">
+                This question can&apos;t take money yet, so the form can&apos;t be published. Connecting Razorpay takes
+                about a minute, and the money goes straight to you.
+              </p>
+            </div>
+          </div>
+          <Button size="sm" asChild className="w-full gap-1.5">
+            <Link href={integrate}>
+              Connect a payment account
+              <ArrowUpRight className="size-3.5" aria-hidden />
+            </Link>
+          </Button>
+        </div>
       </Field>
     );
   }
@@ -987,6 +1008,47 @@ function AccountOption({ account }: { account: PaymentAccount }) {
         {secondary && <span className="text-muted-foreground block truncate text-xs leading-none">{secondary}</span>}
       </span>
     </span>
+  );
+}
+
+/**
+ * Per person, per ticket, per item: the price times an earlier number answer.
+ *
+ * A select rather than a switch plus a select, because "don't multiply" is
+ * just one more choice, and the list says which questions can count.
+ */
+function QuantityField({
+  block,
+  patch,
+}: {
+  block: PaymentBlock;
+  patch: (p: Partial<Block>, coalesceKey?: string) => void;
+}) {
+  const blocks = useBuilderStore((s) => s.doc?.blocks ?? []);
+  const numbers = blocks
+    .slice(0, Math.max(0, blocks.findIndex((b) => b.ref === block.ref)))
+    .filter((b) => b.type === "number");
+  const current = block.quantityFrom?.ref;
+  if (numbers.length === 0 && !current) return null;
+  return (
+    <div className="space-y-1.5">
+      <SelectField
+        label="Charge per person or item"
+        value={current ?? NO_ACCOUNT}
+        onChange={(ref) => patch({ quantityFrom: ref === NO_ACCOUNT ? undefined : { ref } } as Partial<Block>)}
+        options={[
+          { value: NO_ACCOUNT, label: "No, one payment" },
+          ...(current && !numbers.some((b) => b.ref === current) ? [{ value: current, label: `${current} (missing)` }] : []),
+          ...numbers.map((b) => ({ value: b.ref, label: `× ${b.title || b.ref}` })),
+        ]}
+      />
+      {current && (
+        <p className="text-muted-foreground text-xs">
+          The price is multiplied by their answer, so 3 people at {currencySymbol(block.currency)}1,000 pay{" "}
+          {currencySymbol(block.currency)}3,000.
+        </p>
+      )}
+    </div>
   );
 }
 

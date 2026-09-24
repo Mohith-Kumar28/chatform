@@ -134,7 +134,7 @@ export function GatewayPaymentAffordance({
 
   if (phase === "phone") {
     return (
-      <PaymentCard price={price}>
+      <PaymentCard price={price} breakdown={block.amountBreakdown}>
         <form
           className="space-y-3"
           onSubmit={(e) => {
@@ -167,7 +167,7 @@ export function GatewayPaymentAffordance({
 
   if (phase === "awaiting" && payment?.preview) {
     return (
-      <PaymentCard price={price} note="Preview · no real payment is taken">
+      <PaymentCard price={price} breakdown={block.amountBreakdown} note="Preview · no real payment is taken">
         <PayButton disabled={!canAct} onClick={() => actions?.simulate()}>
           Simulate payment
         </PayButton>
@@ -193,7 +193,7 @@ export function GatewayPaymentAffordance({
    */
   if (phase === "awaiting" && payment?.interrupted && !payment.blocked) {
     return (
-      <PaymentCard price={price}>
+      <PaymentCard price={price} breakdown={block.amountBreakdown}>
         <div className="flex gap-2 rounded-xl bg-[var(--cf-bg)] px-3 py-2.5 text-sm">
           <CircleAlert className="mt-0.5 size-4 shrink-0 opacity-60" aria-hidden />
           <div className="min-w-0 space-y-0.5">
@@ -233,7 +233,7 @@ export function GatewayPaymentAffordance({
   if (phase === "awaiting") {
     const blocked = payment?.blocked === true;
     return (
-      <PaymentCard price={price}>
+      <PaymentCard price={price} breakdown={block.amountBreakdown}>
         {blocked ? (
           <p className="text-sm">Your browser didn&apos;t open the checkout. Tap below to open it.</p>
         ) : (
@@ -302,7 +302,7 @@ export function GatewayPaymentAffordance({
   // nothing else moves.
   const starting = phase === "starting";
   return (
-    <PaymentCard price={price}>
+    <PaymentCard price={price} breakdown={block.amountBreakdown}>
       <PayButton disabled={!canAct || starting} onClick={() => actions?.start(block.ref)}>
         {starting ? (
           <>
@@ -325,10 +325,13 @@ export function GatewayPaymentAffordance({
  */
 function PaymentCard({
   price,
+  breakdown,
   note,
   children,
 }: {
   price: string | null;
+  /** "₹1,000 × 3", when the amount is per person or item. */
+  breakdown?: string;
   note?: string;
   children: React.ReactNode;
 }) {
@@ -339,6 +342,7 @@ function PaymentCard({
         <div>
           <p className="text-xs opacity-60">Amount to pay</p>
           <p className="text-2xl font-semibold tracking-tight tabular-nums">{price}</p>
+          {breakdown && <p className="text-xs tabular-nums opacity-60">{breakdown}</p>}
         </div>
       )}
       {children}

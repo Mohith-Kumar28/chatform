@@ -160,6 +160,8 @@ export function usePaymentAccounts({ enabled = true }: { enabled?: boolean } = {
     queryFn: readAccounts,
     enabled,
     staleTime: 30_000,
+    // Connecting happens in another tab; coming back to this one should show the new account.
+    refetchOnWindowFocus: true,
   });
 }
 

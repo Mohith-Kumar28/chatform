@@ -71,17 +71,34 @@ function returnToHere(formId: string): string {
 }
 
 function useStartOAuth(provider: PaymentProviderName, formId: string) {
-  return useMutation({
+  // The variable is the tab the gateway opens in; the request itself needs nothing.
+  const mutation = useMutation<{ url: string }, Error, Window | null>({
     mutationFn: () =>
       paymentAccountsFetch<{ url: string }>(`/api/payment-accounts/oauth/${provider}/start`, {
         method: "POST",
         body: JSON.stringify({ returnTo: returnToHere(formId) }),
       }),
-    // A full navigation, not a popup: the gateway's consent screen refuses to be
-    // framed, and a popup blocker would eat a window opened after an await.
-    onSuccess: ({ url }) => window.location.assign(url),
-    onError: (err: Error) => toast.error(err.message),
+    // In a new tab, so the builder stays where the author left it. The gateway
+    // sends that tab back here once they approve, and this tab picks the new
+    // account up when they return to it (see `usePaymentAccounts`).
+    onSuccess: ({ url }, tab) => {
+      if (tab && !tab.closed) tab.location.href = url;
+      else window.location.assign(url);
+    },
+    onError: (err: Error, tab) => {
+      tab?.close();
+      toast.error(err.message);
+    },
   });
+  return {
+    ...mutation,
+    /*
+     * The tab is opened here, inside the click, and pointed at the gateway once
+     * the URL comes back. Opened after the request instead, a popup blocker
+     * refuses it, because nothing a user did is behind it any more.
+     */
+    mutate: () => mutation.mutate(window.open("about:blank", "_blank")),
+  };
 }
 
 /** Where each gateway's own dashboard lives, so an author can check which account this is. */

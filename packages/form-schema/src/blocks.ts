@@ -600,6 +600,12 @@ export const Block = z.discriminatedUnion("type", [
       })
       .optional()
       .catch(undefined),
+    /**
+     * Charge per person, per ticket, per item: the price (fixed, or from an
+     * answer) times the whole number answered on this earlier number question.
+     * ₹1,000 a head for a party of 3 is ₹3,000.
+     */
+    quantityFrom: z.object({ ref: z.string().max(120) }).optional().catch(undefined),
     /** `variable`: the form variable holding the amount, in major units. Resolved by `resolvePaymentAmount`. */
     amountVariable: z.string().optional(),
     /**

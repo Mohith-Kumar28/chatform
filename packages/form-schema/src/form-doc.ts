@@ -81,6 +81,8 @@ export interface PublicBlock {
   buttonLabel?: string;
   currency?: string;
   amount?: number;
+  /** payment: how the amount above was reached when it is per person or item, e.g. "₹1,000 × 3". */
+  amountBreakdown?: string;
   dateFormat?: string;
   placeholder?: string;
   maxLength?: number;
@@ -306,7 +308,8 @@ export function toPublicBlock(b: Block): PublicBlock {
       // A variable amount has nothing to resolve at publish time, so it is left
       // undefined: the checkout page states the price, and a UPI URI without
       // `am` lets the payer enter it. Better than publishing a wrong number.
-      pub.amount = b.amountMode === "fixed" ? b.amount : undefined;
+      // Per person: the total depends on an answer, so only the server can say it (see the session).
+      pub.amount = b.amountMode === "fixed" && !b.quantityFrom ? b.amount : undefined;
       pub.paymentMethod = b.method;
       if (b.method === "gateway") {
         /*

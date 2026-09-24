@@ -32,6 +32,7 @@ import {
   contactFieldPhrase,
   resolvePaymentAmount,
   formatAmount,
+  paymentQuantity,
   toMinorUnits,
   fromMinorUnits,
   PAYMENT_PROVIDERS,
@@ -1947,7 +1948,8 @@ export class SessionDO extends DurableObject<Bindings> {
       const stale = now.ok
         ? now.amountMinor !== settled.amountMinor || now.currency !== settled.currency.toUpperCase()
         : (payable.amountMode === "variable" && Boolean(payable.amountVariable)) ||
-          (payable.amountMode === "answer" && Boolean(payable.priceFrom));
+          (payable.amountMode === "answer" && Boolean(payable.priceFrom)) ||
+          Boolean(payable.quantityFrom);
       if (stale) {
         console.warn("payment_settle_amount_changed", {
           sessionId: meta.sessionId,
@@ -2536,7 +2538,8 @@ export class SessionDO extends DurableObject<Bindings> {
       const now = this.priceNow(block);
       const priced =
         (block.amountMode === "variable" && Boolean(block.amountVariable)) ||
-        (block.amountMode === "answer" && Boolean(block.priceFrom));
+        (block.amountMode === "answer" && Boolean(block.priceFrom)) ||
+        Boolean(block.quantityFrom);
       if (!now.ok && !priced) continue;
       if (
         now.ok &&
@@ -2659,9 +2662,15 @@ export class SessionDO extends DurableObject<Bindings> {
      * A price that depends on an answer is known here, where the answers are, so the card can
      * show it before Pay. Only a hint: checkout is still priced by `priceNow` when it is made.
      */
-    if (block.amountMode === "answer") {
+    if (block.amountMode === "answer" || block.quantityFrom) {
       const now = this.priceNow(block);
-      if (now.ok) pub.amount = now.amount;
+      if (now.ok) {
+        pub.amount = now.amount;
+        const qty = paymentQuantity(block, this.state.answers);
+        if (block.quantityFrom && qty !== null && qty > 1) {
+          pub.amountBreakdown = `${formatAmount(fromMinorUnits(Math.round(now.amountMinor / qty), now.currency), now.currency)} × ${qty}`;
+        }
+      }
     }
     return pub;
   }

@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Bot, ChevronDown, GitBranch, Sparkles, Trash2 } from "lucide-react";
+import { AlertTriangle, Bot, ChevronDown, GitBranch, Sparkles, Trash2 } from "lucide-react";
 import {
   IDENTITY_FIELDS,
   IDENTITY_FIELD_LABELS,
   canMapIdentityField,
   type Block,
+  type FormDoc,
   type IdentityFieldSetting,
 } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import { useBuilderStore, useSelectedBlock } from "@/stores/builder-store";
 import { EndingInspector } from "./ending-inspector";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_CLASSES } from "../block-library";
 import { defaultBlock } from "../default-block";
+import { ATTENTION_FIELD, setupAttention } from "../attention";
 import { Field, SelectField, SwitchField, TextField } from "./fields";
 import { RichDescription } from "./rich-description";
 import { MediaField } from "./media-field";
@@ -200,6 +202,7 @@ export function BlockInspector() {
       </div>
 
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pt-2 pb-6">
+        {doc && <AttentionCallout key={block.ref} blockRef={block.ref} doc={doc} />}
         <TextField
           label="Question"
           inspect="title"
@@ -380,6 +383,57 @@ function Section({
       {open && (
         <div className="space-y-5 pt-3 pb-1">{children}</div>
       )}
+    </div>
+  );
+}
+
+/**
+ * What this question is missing before the form can publish, said at the top
+ * of its settings, with the field to fill given a shake as the panel opens.
+ * Keyed by ref, so opening another question that needs attention shakes again.
+ */
+function AttentionCallout({ blockRef, doc }: { blockRef: string; doc: FormDoc }) {
+  const attention = useMemo(() => setupAttention(doc).get(blockRef), [doc, blockRef]);
+  const anchor = useRef<HTMLDivElement>(null);
+  const fields = attention ? [...new Set(attention.codes.map((c) => ATTENTION_FIELD[c]).filter(Boolean))] : [];
+  const fieldKey = fields.join(",");
+
+  useEffect(() => {
+    if (!fieldKey) return;
+    const panel = anchor.current?.closest(".overflow-y-auto");
+    const targets = fieldKey
+      .split(",")
+      .flatMap((f) => [...(panel?.querySelectorAll<HTMLElement>(`[data-attention="${f}"]`) ?? [])]);
+    if (targets.length === 0) return;
+    const start = setTimeout(() => {
+      targets[0]!.scrollIntoView({ behavior: "smooth", block: "center" });
+      for (const t of targets) t.classList.add("animate-attention");
+    }, 250);
+    const stop = setTimeout(() => {
+      for (const t of targets) t.classList.remove("animate-attention");
+    }, 1700);
+    return () => {
+      clearTimeout(start);
+      clearTimeout(stop);
+      for (const t of targets) t.classList.remove("animate-attention");
+    };
+  }, [fieldKey]);
+
+  if (!attention) return null;
+  return (
+    <div
+      ref={anchor}
+      className="flex gap-2 rounded-lg border border-amber-400/60 bg-amber-400/10 px-3 py-2.5 text-amber-800 dark:text-amber-200"
+    >
+      <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+      <div className="min-w-0 space-y-1">
+        <p className="text-sm font-medium">Needs attention before you can publish</p>
+        <ul className="space-y-0.5 text-xs opacity-90">
+          {attention.messages.map((m) => (
+            <li key={m}>{m}</li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

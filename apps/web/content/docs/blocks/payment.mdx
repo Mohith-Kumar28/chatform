@@ -76,6 +76,18 @@ Fields specific to `payment`. The [fields every block has](/docs/blocks/common-f
         "prices"
       ]
     },
+    "quantityFrom": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string",
+          "maxLength": 120
+        }
+      },
+      "required": [
+        "ref"
+      ]
+    },
     "amountVariable": {
       "type": "string"
     },
@@ -267,7 +279,7 @@ Fields specific to `payment`. The [fields every block has](/docs/blocks/common-f
 }
 ```
 
-In a generated draft these arrive as `config` pairs: `amount=<number>, currency=<3-letter code, INR for rupees>. When the price depends on what they chose (a plan, a ticket tier, a size), put that single-choice, dropdown or yes_no question BEFORE the payment (a yes_no prices Yes and No) and write price_from=<its ref>; prices=<option label>:<amount>|<option label>:<amount>, one price for every option, and no amount=. Only when the author named one: method=upi with upi=<vpa like name@bank>, or method=link with url=<checkout page>`.
+In a generated draft these arrive as `config` pairs: `amount=<number>, currency=<3-letter code, INR for rupees>. When the price depends on what they chose (a plan, a ticket tier, a size), put that single-choice, dropdown or yes_no question BEFORE the payment (a yes_no prices Yes and No) and write price_from=<its ref>; prices=<option label>:<amount>|<option label>:<amount>, one price for every option, and no amount=. When the price is per person, per ticket or per item ('₹1000 per guest'), put a number question counting them BEFORE the payment, set amount=<price for one>, and write quantity_from=<its ref>. Only when the author named one: method=upi with upi=<vpa like name@bank>, or method=link with url=<checkout page>`.
 
 ## What you receive
 

@@ -3,6 +3,7 @@ import type { EditDraft } from "./ai.js";
 import {
   applyBlockConfig,
   applyPriceFrom,
+  applyQuantityFrom,
   normalizeDraftEndings,
   normalizeEditBlocks,
   parseBlockConfig,
@@ -137,7 +138,8 @@ export function applyEditDraft(base: FormDoc, draft: EditDraft): EditApplication
     const at = doc.blocks.findIndex((b) => b.ref === ref);
     if (at < 0 || doc.blocks[at]!.type !== "payment") continue;
     const before = doc.blocks[at]!;
-    const next = applyPriceFrom(before, parseBlockConfig(raw), doc.blocks, renamed);
+    const config = parseBlockConfig(raw);
+    const next = applyQuantityFrom(applyPriceFrom(before, config, doc.blocks, renamed), config, doc.blocks, renamed);
     if (next === before) continue;
     doc.blocks[at] = next;
     const addedAt = added.indexOf(before);

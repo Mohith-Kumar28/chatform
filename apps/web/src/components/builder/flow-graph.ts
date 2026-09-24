@@ -37,7 +37,7 @@ export const condOf = (r: GotoRule) => r.when?.conditions[0];
 const ARROW_CLOSED = "arrowclosed" as MarkerType;
 
 /** A node the flow cannot serve: unreachable, or with no way to finish. */
-export type NodeProblem = { level: "error" | "warning"; messages: string[] };
+export type NodeProblem = { level: "error" | "warning"; messages: string[]; attention?: boolean };
 
 /**
  * Every wire on the canvas, drawn the same way.

@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { setupAttention, type Attention } from "./attention";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
   Asterisk,
+  AlertTriangle,
   GitBranch,
   CornerDownRight,
   Copy,
@@ -92,6 +94,8 @@ export function BlockList() {
     () => (doc ? computeQuestionFlow(doc) : new Map<string, QuestionFlow>()),
     [doc],
   );
+  // Questions missing something they need to publish, marked on their rows.
+  const attention = useMemo(() => (doc ? setupAttention(doc) : new Map<string, Attention>()), [doc]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -147,6 +151,7 @@ export function BlockList() {
                       index={i}
                       selected={selectedRef === block.ref}
                       flow={flow.get(block.ref)}
+                      attention={attention.get(block.ref)}
                       total={doc.blocks.length}
                       onSelect={() => select(block.ref)}
                       onDuplicate={() => duplicateBlock(block.ref)}
@@ -254,11 +259,14 @@ function SortableRow({
   total,
   selected,
   flow,
+  attention,
   onSelect,
   onDuplicate,
   onDelete,
 }: {
   block: Block;
+  /** What this question is missing before the form can publish. */
+  attention?: Attention;
   index: number;
   /** How many questions there are, so the row knows when it cannot move down. */
   total: number;
@@ -306,6 +314,7 @@ function SortableRow({
         "transition-[background-color,box-shadow] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
         TONE_CLASSES[meta.tone],
         selected ? "ring-0" : "opacity-[0.82] hover:opacity-100",
+        attention && "opacity-100 ring-2 ring-amber-400 ring-inset",
         isDragging && "shadow-md z-10 opacity-100",
       )}
     >
@@ -348,6 +357,15 @@ function SortableRow({
           <span className={cn("line-clamp-2 text-xs leading-snug", selected && "font-semibold")}>
             {block.title || meta.label}
           </span>
+          {attention && (
+            <span
+              title={attention.messages.join("\n\n")}
+              className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-1.5 py-px text-[10px] font-medium text-amber-700 dark:text-amber-300"
+            >
+              <AlertTriangle className="size-2.5" strokeWidth={2.5} aria-hidden />
+              Needs attention
+            </span>
+          )}
           {/*
             Said on the row it is true of, rather than by indenting the row
             under a parent. A question can be reached from more than one branch,

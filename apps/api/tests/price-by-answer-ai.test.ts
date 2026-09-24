@@ -102,3 +102,22 @@ describe("price_from on an edit", () => {
     expect(Object.values(pay.priceFrom?.prices ?? {}).sort()).toEqual([499, 999]);
   });
 });
+
+describe("per person, and branches off a payment", () => {
+  it("counts people from the named number question, and makes a payment branch a plain route", () => {
+    const { doc } = draftToDoc({
+      ...draft([
+        block({ ref: "welcome", type: "welcome", title: "Hi" }),
+        block({ ref: "q_party", type: "number", title: "How many people?" }),
+        block({ ref: "q_pay", type: "payment", title: "Tickets", config: "amount=1000; currency=INR; quantity_from=q_party" }),
+        block({ ref: "q_notes", type: "long_text", title: "Notes" }),
+      ]),
+      branches: [{ whenRef: "q_pay", op: "gte", value: "0", then: "end_thanks" } as never],
+    });
+    const pay = payOf(doc);
+    expect(pay.quantityFrom?.ref).toBe("q_party");
+    const fromPay = doc.logic.filter((r) => r.action_kind === "goto" && r.from === "q_pay");
+    expect(fromPay.length).toBeGreaterThan(0);
+    for (const r of fromPay) expect((r as { when?: { conditions: unknown[] } }).when?.conditions ?? []).toEqual([]);
+  });
+});

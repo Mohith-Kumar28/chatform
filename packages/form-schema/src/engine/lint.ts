@@ -521,6 +521,29 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
   // respondent reaches it, finds a dead end, and abandons the whole form. The
   // schema keeps these fields optional so a half-built block still saves, so
   // the requirement is enforced here, at publish.
+  /*
+   * A branch that tests a payment's answer. A verified payment has one outcome
+   * the flow ever sees (paid), and a manual one records only "they said they
+   * paid", so "if the payment is at least 0" or "if it failed" routes nobody
+   * the way it reads. Worse, it silently sends every payer down "otherwise".
+   * What was meant is "after paying, go to X": a route with no condition.
+   */
+  for (const r of doc.logic) {
+    if (r.action_kind !== "goto") continue;
+    const tested = (r.when?.conditions ?? []).find((c) => {
+      const left = c.left as { kind?: string; ref?: string };
+      return left.kind === "ref" && doc.blocks.find((b) => b.ref === left.ref)?.type === "payment";
+    });
+    if (!tested) continue;
+    const pay = doc.blocks.find((b) => b.ref === (tested.left as { ref: string }).ref)!;
+    issues.push({
+      level: "error",
+      code: "payment_branch_condition",
+      message: `A branch tests the answer to "${pay.title || pay.ref}". A payment only moves on once it's paid, so there's nothing to test. Remove the condition and route it unconditionally.`,
+      refs: [pay.ref],
+    });
+  }
+
   const gatewayRefs: string[] = [];
   for (const b of doc.blocks) {
     if (b.type !== "payment") continue;
@@ -541,6 +564,24 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
           message: `"${named}" takes verified payments but has no payment account connected. Connect one in Integrate, then pick it here.`,
           refs: [b.ref],
         });
+      }
+      if (b.quantityFrom) {
+        const qs = doc.blocks.find((x) => x.ref === b.quantityFrom!.ref);
+        if (!qs || qs.type !== "number") {
+          issues.push({
+            level: "error",
+            code: "payment_no_quantity_source",
+            message: `"${named}" charges per person or item but doesn't say which number question counts them.`,
+            refs: [b.ref],
+          });
+        } else if (doc.blocks.indexOf(qs) > doc.blocks.indexOf(b)) {
+          issues.push({
+            level: "error",
+            code: "payment_no_quantity_source",
+            message: `"${named}" counts people or items from "${qs.title || qs.ref}", which comes after it. Move that question before the payment.`,
+            refs: [b.ref, qs.ref],
+          });
+        }
       }
       if (b.amountMode === "answer") {
         const source = b.priceFrom ? doc.blocks.find((x) => x.ref === b.priceFrom!.ref) : undefined;

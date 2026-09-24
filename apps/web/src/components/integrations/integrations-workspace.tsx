@@ -98,7 +98,8 @@ export function IntegrationsWorkspace({
   ).length;
 
   return (
-    <div className="space-y-10">
+    // Room below, so "Collect payments" (the last section) can scroll to the top when linked to.
+    <div className="space-y-10 pb-[40vh]">
       <section className="space-y-3">
         <div>
           <h2 className="text-h2">Put it on your site</h2>
@@ -296,20 +297,33 @@ function PaymentsGroup({
   data: PaymentAccountsPayload;
   onOpen: (provider: PaymentProviderName) => void;
 }) {
+  const [flagged, setFlagged] = useState(false);
   useEffect(() => {
     // The inspector's "Connect a payment account" links to `#payments`; the
     // group only exists once the accounts have loaded, which is after the
-    // browser tried to scroll to it.
-    if (new URL(window.location.href).hash === "#payments") {
-      document.getElementById("payments")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    // browser tried to scroll to it. Arriving that way, the section also asks
+    // for attention once, so it is obvious this is where to go next.
+    if (new URL(window.location.href).hash !== "#payments") return;
+    document.getElementById("payments")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const on = setTimeout(() => setFlagged(true), 450);
+    const off = setTimeout(() => setFlagged(false), 2600);
+    return () => {
+      clearTimeout(on);
+      clearTimeout(off);
+    };
     // Once, on arrival.
   }, []);
 
   return (
-    <section id="payments" className="scroll-mt-6 space-y-3">
+    <section
+      id="payments"
+      className={cn(
+        "-mx-3 scroll-mt-6 space-y-3 rounded-2xl px-3 py-3 transition-shadow duration-500",
+        flagged && "animate-attention ring-primary/70 ring-2",
+      )}
+    >
       <div>
-        <h2 className="text-h2">Take payments</h2>
+        <h2 className="text-h2">Collect payments</h2>
         <p className="text-muted-foreground text-body">
           Checkout opens on your own gateway account and the chat moves on once it confirms. The money
           goes straight to you. Chatform never holds it and takes no cut.

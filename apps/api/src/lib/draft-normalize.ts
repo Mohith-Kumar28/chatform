@@ -1128,9 +1128,28 @@ export function resolveBranches(
   const byRef = new Map(blocks.map((b) => [b.ref, b]));
   const out: DraftBranch[] = [];
 
+  const paymentRouted = new Set<string>();
   for (const br of branches) {
     const block = byRef.get(br.whenRef);
     if (!block) continue;
+    /*
+     * A payment has one outcome the flow can see: paid. The chat does not move
+     * past a verified payment until the gateway confirms it, so "if the payment
+     * is at least 0" or "if it failed" describes nothing. What a model means by
+     * a branch here is "after paying, go to X", so that is what it becomes: one
+     * unconditional jump (the empty/not-empty pair `buildFlowRules` stores as
+     * one), the first target named, and nothing when X is next anyway.
+     */
+    if (block.type === "payment") {
+      if (paymentRouted.has(br.whenRef)) continue;
+      paymentRouted.add(br.whenRef);
+      const from = blocks.findIndex((b) => b.ref === br.whenRef);
+      const to = blocks.findIndex((b) => b.ref === br.then);
+      if (to >= 0 && to === from + 1) continue;
+      out.push({ when: { ref: br.whenRef, op: "is_not_empty", value: null }, then: br.then });
+      out.push({ when: { ref: br.whenRef, op: "is_empty", value: null }, then: br.then });
+      continue;
+    }
     // The emptiness operators are not available to a model.
     //
     // Not because they are wrong — an author can pick either of them in the
@@ -1223,6 +1242,29 @@ export interface NormalizedDraft {
  * can decide whether to retry.
  */
 /**
+ * `quantity_from=<ref>` on a payment: charge the price once per person or item,
+ * counted by that number question. Matched by ref or title like `price_from`;
+ * anything that is not a number question is dropped for lint to name.
+ */
+export function applyQuantityFrom(
+  block: Block,
+  config: Map<string, string>,
+  blocks: Block[],
+  refAlias: Map<string, string> = new Map(),
+): Block {
+  if (block.type !== "payment") return block;
+  const named = (config.get("quantity_from") ?? config.get("quantityfrom"))?.trim();
+  if (!named) return block;
+  const wanted = named.toLowerCase();
+  const source = blocks.find(
+    (b) =>
+      b.type === "number" &&
+      (b.ref.toLowerCase() === wanted || refAlias.get(named) === b.ref || b.title.trim().toLowerCase() === wanted),
+  );
+  return source ? { ...block, quantityFrom: { ref: source.ref } } : block;
+}
+
+/**
  * `price_from=<ref>; prices=Basic:499|Pro:999` on a payment, made real.
  *
  * Resolved after every block exists, because the question it names is another
@@ -1285,7 +1327,9 @@ export function draftToDoc(draft: GenerationDraft): NormalizedDraft {
   // A price that depends on an earlier answer, now that the question it names exists.
   for (const [i, b] of blocks.entries()) {
     const config = configs.get(b.ref);
-    if (b.type === "payment" && config) blocks[i] = applyPriceFrom(b, config, blocks, refAlias);
+    if (b.type === "payment" && config) {
+      blocks[i] = applyQuantityFrom(applyPriceFrom(b, config, blocks, refAlias), config, blocks, refAlias);
+    }
   }
 
   if (blocks.length < 2) throw new Error("draft had fewer than two usable blocks");

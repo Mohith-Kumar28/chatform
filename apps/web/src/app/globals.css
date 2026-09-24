@@ -777,6 +777,27 @@
    Durations and easings live as tokens above; these are the shared keyframes.
    Every looping or transform animation collapses under reduced-motion.        */
 
+/* "Look here": a short shake for a section the author was sent to. Collapsed by reduced-motion. */
+@keyframes attention {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15%,
+  45%,
+  75% {
+    transform: translateX(-6px);
+  }
+  30%,
+  60%,
+  90% {
+    transform: translateX(6px);
+  }
+}
+.animate-attention {
+  animation: attention 600ms ease-in-out 2;
+}
+
 @keyframes cf-message-in {
   from {
     opacity: 0;
