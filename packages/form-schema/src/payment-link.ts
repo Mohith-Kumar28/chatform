@@ -151,8 +151,9 @@ export function providerMinMinor(currency: string): number {
 
 /** The fields of a payment block that decide what it charges. */
 export interface PaymentAmountSource {
-  amountMode: "fixed" | "variable";
+  amountMode: "fixed" | "variable" | "answer";
   amount?: number;
+  priceFrom?: { ref: string; prices: Record<string, number> };
   amountVariable?: string;
   minAmount?: number;
   maxAmount?: number;
@@ -180,9 +181,15 @@ export type ResolvedPaymentAmount =
 export function resolvePaymentAmount(
   block: PaymentAmountSource,
   variables: Record<string, unknown>,
+  answers: Record<string, unknown> = {},
 ): ResolvedPaymentAmount {
   let raw: unknown;
-  if (block.amountMode === "variable") {
+  if (block.amountMode === "answer") {
+    // The option they picked, looked up in the author's price list. An "Other"
+    // answer, or an option given no price, has nothing to charge.
+    const key = block.priceFrom ? priceKeyOf(answers[block.priceFrom.ref]) : null;
+    raw = key !== null ? block.priceFrom?.prices[key] : undefined;
+  } else if (block.amountMode === "variable") {
     if (!block.amountVariable) return { ok: false, code: "payment_no_amount" };
     raw = variables[block.amountVariable];
   } else {
@@ -283,4 +290,47 @@ export function schedulingLabel(url: string, custom?: string): string {
 export function isMeetingRoom(url: string): boolean {
   const provider = detectSchedulingProvider(url);
   return provider === "meet" || provider === "zoom" || provider === "teams";
+}
+
+/** Anything a price-setting question might be, as far as pricing needs to know. */
+export interface PriceSourceLike {
+  type: string;
+  multiSelect?: boolean;
+  options?: { id: string; label: string }[];
+  yesLabel?: string;
+  noLabel?: string;
+}
+
+/**
+ * Whether a question can set a payment's price (`amountMode: "answer"`): one
+ * whose answer is exactly one of a fixed set, so there is one price to charge.
+ * A typed answer never is: "vip", "VIP " and "the VIP one" are three answers.
+ */
+export function isPriceSource(block: PriceSourceLike): boolean {
+  return (
+    block.type === "single_select" ||
+    block.type === "dropdown" ||
+    block.type === "yes_no" ||
+    (block.type === "picture_choice" && block.multiSelect !== true)
+  );
+}
+
+/**
+ * The answers a price-setting question can give, as the keys `priceFrom.prices`
+ * is written in: option ids for a list, `yes` and `no` for a yes/no question.
+ */
+export function priceChoices(block: PriceSourceLike): { key: string; label: string }[] {
+  if (block.type === "yes_no") {
+    return [
+      { key: "yes", label: block.yesLabel || "Yes" },
+      { key: "no", label: block.noLabel || "No" },
+    ];
+  }
+  return (block.options ?? []).map((o) => ({ key: o.id, label: o.label }));
+}
+
+/** A stored answer as a `priceFrom.prices` key, or null when it cannot have a price. */
+export function priceKeyOf(answer: unknown): string | null {
+  if (typeof answer === "boolean") return answer ? "yes" : "no";
+  return typeof answer === "string" ? answer : null;
 }

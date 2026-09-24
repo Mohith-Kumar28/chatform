@@ -1,6 +1,8 @@
 import {
   AddressField,
   Block as BlockSchema,
+  isPriceSource,
+  priceChoices,
   BLOCK_TYPES,
   BLOCK_CATALOG,
   parseEmailDomains,
@@ -439,9 +441,12 @@ function optionId(label: string, taken: Set<string>): string {
       .replace(/[^a-z0-9]+/g, "_")
       .replace(/(^_|_$)/g, "")
       .slice(0, 24) || "opt";
-  let id = `opt_${base}`;
+  // Option ids are at least six characters (`NanoId`), and "S" alone makes `opt_s`: too short
+  // to parse, so a size question S/M/L used to come back as a text box.
+  const stem = `opt_${base}`.length < 6 ? `${base}_1` : base;
+  let id = `opt_${stem}`;
   let n = 2;
-  while (taken.has(id)) id = `opt_${base}_${n++}`;
+  while (taken.has(id)) id = `opt_${stem}_${n++}`;
   taken.add(id);
   return id;
 }
@@ -1217,17 +1222,70 @@ export interface NormalizedDraft {
  * else is repaired. Lint issues are returned rather than thrown so the caller
  * can decide whether to retry.
  */
+/**
+ * `price_from=<ref>; prices=Basic:499|Pro:999` on a payment, made real.
+ *
+ * Resolved after every block exists, because the question it names is another
+ * block and its option ids are only minted when that block is normalized. The
+ * model names the question by ref or by title, and each option by its label;
+ * both are matched loosely, and anything that does not match is dropped rather
+ * than guessed at, which leaves lint to say "no price for Team" in the builder.
+ * Nothing here without both keys: a fixed price stays a fixed price.
+ */
+export function applyPriceFrom(
+  block: Block,
+  config: Map<string, string>,
+  blocks: Block[],
+  refAlias: Map<string, string> = new Map(),
+): Block {
+  if (block.type !== "payment") return block;
+  const named = (config.get("price_from") ?? config.get("pricefrom"))?.trim();
+  const list = config.get("prices")?.trim();
+  if (!named || !list) return block;
+
+  const wanted = named.toLowerCase();
+  const source = blocks.find(
+    (b) =>
+      b.ref.toLowerCase() === wanted ||
+      refAlias.get(named) === b.ref ||
+      b.title.trim().toLowerCase() === wanted,
+  );
+  if (!source || !isPriceSource(source)) return block;
+  const choices = priceChoices(source);
+
+  const prices: Record<string, number> = {};
+  for (const item of list.split(list.includes("|") ? "|" : ",")) {
+    const at = Math.max(item.lastIndexOf(":"), item.lastIndexOf("="));
+    if (at < 1) continue;
+    const label = item.slice(0, at).trim().toLowerCase();
+    const amount = Number(item.slice(at + 1).replace(/[^\d.]/g, ""));
+    const choice = choices.find((o) => o.label.trim().toLowerCase() === label || o.key === label);
+    if (choice && Number.isFinite(amount) && amount > 0) prices[choice.key] = amount;
+  }
+  if (Object.keys(prices).length === 0) return block;
+  return { ...block, amountMode: "answer", amount: undefined, priceFrom: { ref: source.ref, prices } };
+}
+
 export function draftToDoc(draft: GenerationDraft): NormalizedDraft {
   const takenRefs = new Set<string>();
   const blocks: Block[] = [];
   const optionIdsByRef = new Map<string, Map<string, string>>();
 
+  const refAlias = new Map<string, string>();
+  const configs = new Map<string, Map<string, string>>();
   for (const [i, b] of draft.blocks.entries()) {
     const ref = normalizeRef(b.ref, i, takenRefs);
     const normalized = normalizeBlock({ ...b, options: b.options ?? [] }, ref, i === 0);
     if (!normalized) continue;
     blocks.push(normalized.block);
     optionIdsByRef.set(ref, normalized.optionIds);
+    refAlias.set(b.ref, ref);
+    configs.set(ref, parseBlockConfig(b.config));
+  }
+  // A price that depends on an earlier answer, now that the question it names exists.
+  for (const [i, b] of blocks.entries()) {
+    const config = configs.get(b.ref);
+    if (b.type === "payment" && config) blocks[i] = applyPriceFrom(b, config, blocks, refAlias);
   }
 
   if (blocks.length < 2) throw new Error("draft had fewer than two usable blocks");

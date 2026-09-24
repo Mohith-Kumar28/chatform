@@ -1946,7 +1946,8 @@ export class SessionDO extends DurableObject<Bindings> {
        */
       const stale = now.ok
         ? now.amountMinor !== settled.amountMinor || now.currency !== settled.currency.toUpperCase()
-        : payable.amountMode === "variable" && Boolean(payable.amountVariable);
+        : (payable.amountMode === "variable" && Boolean(payable.amountVariable)) ||
+          (payable.amountMode === "answer" && Boolean(payable.priceFrom));
       if (stale) {
         console.warn("payment_settle_amount_changed", {
           sessionId: meta.sessionId,
@@ -2533,7 +2534,10 @@ export class SessionDO extends DurableObject<Bindings> {
         continue;
       }
       const now = this.priceNow(block);
-      if (!now.ok && (block.amountMode !== "variable" || !block.amountVariable)) continue;
+      const priced =
+        (block.amountMode === "variable" && Boolean(block.amountVariable)) ||
+        (block.amountMode === "answer" && Boolean(block.priceFrom));
+      if (!now.ok && !priced) continue;
       if (
         now.ok &&
         toMinorUnits(held.amount, held.currency) === now.amountMinor &&
@@ -2612,7 +2616,7 @@ export class SessionDO extends DurableObject<Bindings> {
       block.amountMode === "variable" && this.doc
         ? (variablesReaching(this.doc, this.state.answers, this.state.hidden, block.ref) ?? this.state.variables)
         : this.state.variables;
-    return resolvePaymentAmount(block, variables);
+    return resolvePaymentAmount(block, variables, this.state.answers);
   }
 
   /**
@@ -2651,6 +2655,14 @@ export class SessionDO extends DurableObject<Bindings> {
       this.paymentProviders.set(block.paymentAccountId, provider);
     }
     if (provider) pub.paymentProvider = provider;
+    /*
+     * A price that depends on an answer is known here, where the answers are, so the card can
+     * show it before Pay. Only a hint: checkout is still priced by `priceNow` when it is made.
+     */
+    if (block.amountMode === "answer") {
+      const now = this.priceNow(block);
+      if (now.ok) pub.amount = now.amount;
+    }
     return pub;
   }
 

@@ -5,7 +5,9 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  isPriceSource,
   isValidUpiId,
+  priceChoices,
   parseEmailDomains,
   PAYMENT_PROVIDER_LABELS,
   UPI_CURRENCY,
@@ -989,6 +991,81 @@ function AccountOption({ account }: { account: PaymentAccount }) {
 }
 
 /**
+ * "Depends on an answer": pick the question, then price each of its options.
+ *
+ * The plain version of what variables do for the common case (plans, ticket
+ * tiers, sizes). Nothing to declare and no rules to write: the prices live on
+ * the payment itself, keyed by option id, and the server looks the answer up
+ * when checkout is made.
+ */
+function PriceByAnswer({
+  block,
+  sources,
+  patch,
+}: {
+  block: PaymentBlock;
+  sources: Block[];
+  patch: (p: Partial<Block>, coalesceKey?: string) => void;
+}) {
+  const source = sources.find((b) => b.ref === block.priceFrom?.ref);
+  const prices = block.priceFrom?.prices ?? {};
+
+  if (sources.length === 0) {
+    return (
+      <div className="bg-muted/40 space-y-1 rounded-lg border border-dashed p-3">
+        <p className="text-sm font-medium">Add a choice question first</p>
+        <p className="text-muted-foreground text-xs">
+          Put a single-choice or dropdown question before this payment, like &ldquo;Which plan?&rdquo; with Basic, Pro
+          and Team. Then pick it here and give each option a price.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <SelectField
+        label="Which question sets the price"
+        value={source?.ref ?? NO_ACCOUNT}
+        onChange={(ref) =>
+          patch({ priceFrom: ref === NO_ACCOUNT ? undefined : { ref, prices: {} } } as Partial<Block>)
+        }
+        options={[
+          ...(source ? [] : [{ value: NO_ACCOUNT, label: "Choose a question" }]),
+          ...sources.map((b) => ({ value: b.ref, label: b.title || b.ref })),
+        ]}
+      />
+      {source && (
+        <Field label="Price for each answer">
+          <div className="divide-y rounded-lg border">
+            {priceChoices(source).map((o) => (
+              <div key={o.key} className="flex items-center gap-3 px-3 py-2">
+                <span className="min-w-0 flex-1 truncate text-sm">{o.label}</span>
+                <div className="w-36 shrink-0">
+                  <MoneyField
+                    label=""
+                    value={prices[o.key]}
+                    currency={block.currency}
+                    placeholder="Price"
+                    onChange={(v) => {
+                      const next = { ...prices };
+                      if (v === undefined) delete next[o.key];
+                      else next[o.key] = v;
+                      patch({ priceFrom: { ref: source.ref, prices: next } } as Partial<Block>, `price:${block.ref}:${o.key}`);
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-muted-foreground text-xs">They&apos;re charged the price of the option they picked.</p>
+        </Field>
+      )}
+    </>
+  );
+}
+
+/**
  * Fixed, or read from a variable.
  *
  * For verified checkout the variable is picked from the form's own variables
@@ -1008,6 +1085,11 @@ function AmountFields({
   const key = (field: string) => `${field}:${block.ref}`;
   const variables = useBuilderStore((s) => s.doc?.variables ?? []);
   const formId = useBuilderStore((s) => s.formId);
+  const blocks = useBuilderStore((s) => s.doc?.blocks ?? []);
+  // Questions that can set the price: one pick from a list, asked before this payment.
+  const sources = blocks
+    .slice(0, Math.max(0, blocks.findIndex((b) => b.ref === block.ref)))
+    .filter((b) => isPriceSource(b));
 
   return (
     <>
@@ -1017,10 +1099,14 @@ function AmountFields({
         onChange={(v) => patch({ amountMode: v } as Partial<Block>)}
         options={[
           { value: "fixed", label: "Fixed amount" },
-          { value: "variable", label: "Worked out from answers" },
+          // Only checkout reads it on the server; a link or UPI QR has no way to charge per answer.
+          ...(gateway || block.amountMode === "answer" ? [{ value: "answer", label: "Depends on an answer" }] : []),
+          { value: "variable", label: "Calculated (advanced)" },
         ]}
       />
-      {block.amountMode === "fixed" ? (
+      {block.amountMode === "answer" ? (
+        <PriceByAnswer block={block} sources={sources} patch={patch} />
+      ) : block.amountMode === "fixed" ? (
         <MoneyField
           label="Price"
           value={block.amount}

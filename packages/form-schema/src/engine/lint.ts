@@ -11,7 +11,9 @@ import type { LogicRule } from "../logic";
 import {
   formatAmount,
   fromMinorUnits,
+  isPriceSource,
   isValidUpiId,
+  priceChoices,
   providerMinMinor,
   toMinorUnits,
   UPI_CURRENCY,
@@ -540,7 +542,47 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
           refs: [b.ref],
         });
       }
-      if (b.amountMode === "variable") {
+      if (b.amountMode === "answer") {
+        const source = b.priceFrom ? doc.blocks.find((x) => x.ref === b.priceFrom!.ref) : undefined;
+        const before = source ? doc.blocks.indexOf(source) < doc.blocks.indexOf(b) : false;
+        if (!source || !isPriceSource(source)) {
+          issues.push({
+            level: "error",
+            code: "payment_no_price_source",
+            message: `"${named}" takes its price from an answer but doesn't say which single-choice question sets it.`,
+            refs: [b.ref],
+          });
+        } else if (!before) {
+          issues.push({
+            level: "error",
+            code: "payment_no_price_source",
+            message: `"${named}" takes its price from "${source.title || source.ref}", which comes after it. Move that question before the payment.`,
+            refs: [b.ref, source.ref],
+          });
+        } else {
+          const choices = priceChoices(source);
+          const unpriced = choices.filter((o) => !(b.priceFrom!.prices[o.key]! > 0));
+          if (unpriced.length > 0) {
+            issues.push({
+              level: "error",
+              code: "payment_bad_amount",
+              message: `"${named}" has no price for ${unpriced.map((o) => `"${o.label}"`).join(", ")}. Give every option a price.`,
+              refs: [b.ref],
+            });
+          }
+          const tooSmall = choices.find(
+            (o) => (b.priceFrom!.prices[o.key] ?? 0) > 0 && toMinorUnits(b.priceFrom!.prices[o.key]!, b.currency) < providerMinMinor(b.currency),
+          );
+          if (tooSmall) {
+            issues.push({
+              level: "error",
+              code: "payment_bad_amount",
+              message: `"${tooSmall.label}" costs less than the smallest amount payment gateways accept in ${b.currency.toUpperCase()} (${formatAmount(fromMinorUnits(providerMinMinor(b.currency), b.currency), b.currency)}).`,
+              refs: [b.ref],
+            });
+          }
+        }
+      } else if (b.amountMode === "variable") {
         if (!b.amountVariable?.trim()) {
           issues.push({
             level: "error",

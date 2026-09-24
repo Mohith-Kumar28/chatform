@@ -577,8 +577,29 @@ export const Block = z.discriminatedUnion("type", [
      * documents that `["link","upi"]` refused outright.
      */
     method: z.enum(["link", "upi", "gateway"]).default("link").catch("link"),
-    amountMode: z.enum(["fixed", "variable"]).default("fixed"),
+    /**
+     * `fixed`: `amount`. `variable`: a form variable (see below). `answer`: the
+     * price of the option they picked on an earlier choice question (`priceFrom`).
+     *
+     * `.catch` for the same reason `method` has one: a mode this build has never
+     * heard of reads as a fixed price rather than a form that will not load.
+     */
+    amountMode: z.enum(["fixed", "variable", "answer"]).default("fixed").catch("fixed"),
     amount: z.number().min(0).optional(),
+    /**
+     * `answer`: which question sets the price, and what each of its options costs.
+     *
+     * Keyed by option id, not label, so renaming "Pro" to "Pro plan" keeps its
+     * price. The plain alternative to variables for the common case (plans,
+     * ticket tiers, sizes): no variable to declare and no rules to write.
+     */
+    priceFrom: z
+      .object({
+        ref: z.string().max(120),
+        prices: z.record(z.string().max(64), z.number().min(0).max(10_000_000)),
+      })
+      .optional()
+      .catch(undefined),
     /** `variable`: the form variable holding the amount, in major units. Resolved by `resolvePaymentAmount`. */
     amountVariable: z.string().optional(),
     /**

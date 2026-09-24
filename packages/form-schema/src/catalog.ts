@@ -152,8 +152,8 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
     summary:
       "Takes money. Use this whenever the request mentions a price, a fee, a ticket, a deposit or a UPI id, and never a text question asking them to confirm they paid. When the author has a payment account connected, a payment with no link or UPI id is taken through verified checkout on it, so give the amount and leave the link out unless one was named.",
     config:
-      "method=upi with upi=<vpa like name@bank>, OR method=link with url=<checkout page>; amount=<number>, currency=<3-letter code, INR for rupees>",
-    configKeys: ["method", "upi", "upiid", "vpa", "url", "link", "payee", "amount", "currency"],
+      "amount=<number>, currency=<3-letter code, INR for rupees>. When the price depends on what they chose (a plan, a ticket tier, a size), put that single-choice, dropdown or yes_no question BEFORE the payment (a yes_no prices Yes and No) and write price_from=<its ref>; prices=<option label>:<amount>|<option label>:<amount>, one price for every option, and no amount=. Only when the author named one: method=upi with upi=<vpa like name@bank>, or method=link with url=<checkout page>",
+    configKeys: ["method", "upi", "upiid", "vpa", "url", "link", "payee", "amount", "currency", "price_from", "pricefrom", "prices"],
   },
   scheduling: {
     summary:
