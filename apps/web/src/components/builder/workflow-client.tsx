@@ -24,7 +24,9 @@ import {
 import "@xyflow/react/dist/style.css";
 import "./flow.css";
 import { cn } from "@/lib/utils";
-import { setupAttention } from "./attention";
+import { publishProblems, type NodeProblem } from "./attention";
+import { ProblemsBanner } from "./problems-banner";
+import { useAttentionShake } from "./use-attention-shake";
 import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspector";
 import { EndingInspector } from "./inspector/ending-inspector";
 import { blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
@@ -49,7 +51,6 @@ import {
   DEFAULT_REDIRECT_DELAY_SEC,
   Block as BlockSchema,
   bridgeDeletedBlocks,
-  lintFormDoc,
   pruneEndingRules,
   rulesAreExhaustive,
 } from "@repo/form-schema";
@@ -184,64 +185,8 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
 
   const setRules = useCallback((rules: LogicRule[]) => onChange({ ...doc, logic: rules }), [doc, onChange]);
 
-  /**
-   * Where the flow is broken, per node.
-   *
-   * From `lintFormDoc`, which is the same pass that decides whether the form
-   * can be published — so the canvas cannot disagree with the publish button
-   * about whether the flow works. Only issues that name refs land on a node;
-   * the rest (a missing ending, a payment with no destination) are the kind of
-   * thing the publish dialog already says.
-   */
-  const flowProblems = useMemo(() => {
-    const out = new Map<string, NodeProblem>();
-    for (const issue of lintFormDoc(doc)) {
-      if (!issue.refs?.length) continue;
-      if (
-        issue.code !== "unreachable_blocks" &&
-        issue.code !== "no_route_to_ending" &&
-        issue.code !== "dangling_target" &&
-        // A route that can never run is a problem about this question's own
-        // list of routes, so it belongs on this question's node and nowhere
-        // else — it is the one warning the canvas can point at precisely.
-        issue.code !== "unreachable_route" &&
-        /*
-         * And the four that are the same kind of thing: a route drawn on this
-         * node whose condition cannot do what it says. A condition that is
-         * always true, one that can never be true, one comparing a choice
-         * question against something that is not one of its options, and an
-         * exact match on a box the respondent types into freely. None of them
-         * breaks the form, so none is an error — but each is an arm the author
-         * believes in and the flow never takes, and the node is the only place
-         * that can say so.
-         */
-        issue.code !== "always_true_route" &&
-        issue.code !== "never_true_route" &&
-        issue.code !== "value_not_an_option" &&
-        issue.code !== "exact_match_on_free_text" &&
-        // An ending nobody is sent to. The one thing worth saying about an
-        // ending, and it belongs on the ending.
-        issue.code !== "ending_unreachable"
-      ) {
-        continue;
-      }
-      for (const ref of issue.refs) {
-        const existing = out.get(ref);
-        if (existing) {
-          existing.messages.push(issue.message);
-          if (issue.level === "error") existing.level = "error";
-        } else {
-          out.set(ref, { level: issue.level, messages: [issue.message] });
-        }
-      }
-    }
-    // A question missing a setting it needs, drawn yellow ("needs attention")
-    // unless its routes are already broken, which is the louder of the two.
-    for (const [ref, a] of setupAttention(doc)) {
-      if (!out.has(ref)) out.set(ref, { level: "warning", messages: a.messages, attention: true });
-    }
-    return out;
-  }, [doc]);
+  // Where the flow is broken, per node. Shared with the Questions view's banner.
+  const flowProblems = useMemo(() => publishProblems(doc), [doc]);
 
   // ── derive graph from doc ──────────────────────────────────────────────
   const derived = useMemo(() => deriveGraph(doc, gotoRules, flowProblems), [doc, gotoRules, flowProblems]);
@@ -253,7 +198,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
   const [nodes, setNodes] = useState<Node[]>(derived.nodes);
 
   /**
-   * Put a node on screen and select it.
+   * Put a node on screen when something sends the author to it.
    *
    * Selecting it was the whole of "Show me", and the comment above the banner
    * claimed that panned the canvas. Nothing panned the canvas: `setViewport`
@@ -267,38 +212,22 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
    * who had set it where they wanted it. Centred on the node's middle, so a
    * wide branch card does not land half off the edge.
    */
-  const revealNode = useCallback(
-    (id: string) => {
-      setSelectedNodeId(id);
-      const node = nodes.find((n) => n.id === id);
-      if (!node) return;
-      setCenter(
-        node.position.x + (node.measured?.width ?? node.width ?? 180) / 2,
-        node.position.y + (node.measured?.height ?? node.height ?? 60) / 2,
-        { zoom: getZoom(), duration: 320 },
-      );
-    },
-    [nodes, setSelectedNodeId, setCenter, getZoom],
-  );
 
-  /**
-   * What the banner says, and which node it goes to.
-   *
-   * Errors first: a form that cannot be published is a different message from
-   * one that merely does less than it looks like it does, and showing the
-   * milder one while an error is outstanding buries it. Within a level the
-   * first in document order wins, which is the order the canvas draws.
-   */
-  const flowBanner = useMemo(() => {
-    const entries = [...flowProblems.entries()];
-    const errors = entries.filter(([, p]) => p.level === "error");
-    // A question missing a setting blocks publishing too; it is not a route that merely does less.
-    const attention = entries.filter(([, p]) => p.attention);
-    const pick = errors.length > 0 ? errors : attention.length > 0 ? attention : entries;
-    if (pick.length === 0) return null;
-    const level = errors.length > 0 ? ("error" as const) : attention.length > 0 ? ("attention" as const) : ("warning" as const);
-    return { level, count: pick.length, ref: pick[0]![0] };
-  }, [flowProblems]);
+  // Sent here by the banner or a refused publish (see the note above): pan to it as well. Keyed on
+  // the pulse alone, so moving nodes afterwards never drags the view back.
+  const pulse = useBuilderStore((st) => st.attentionPulse);
+  // The pulse has already selected it in the store; this only moves the view.
+  useEffect(() => {
+    const node = pulse && nodes.find((n) => n.id === pulse.ref);
+    if (!node) return;
+    setCenter(
+      node.position.x + (node.measured?.width ?? node.width ?? 180) / 2,
+      node.position.y + (node.measured?.height ?? node.height ?? 60) / 2,
+      { zoom: getZoom(), duration: 320 },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pulse]);
+
   const [edges, setEdges] = useState<Edge[]>(derived.edges);
   if (syncedGraph !== derived) {
     setSyncedGraph(derived);
@@ -920,38 +849,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
           canvas is bigger than the viewport as soon as a form has a branch or
           two, so the count lives here and pressing it goes to the first one.
         */}
-        {flowBanner && (
-          <div className="px-4 pt-2">
-            <button
-              type="button"
-              onClick={() => revealNode(flowBanner.ref)}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs",
-                flowBanner.level === "error"
-                  ? "text-destructive bg-[color-mix(in_oklch,var(--destructive)_12%,transparent)]"
-                  : "bg-[color-mix(in_oklch,var(--warning,oklch(0.75_0.15_75))_14%,transparent)] text-amber-700 dark:text-amber-400",
-              )}
-            >
-              <AlertTriangle className="size-3.5 shrink-0" strokeWidth={2.5} />
-              <span className="min-w-0 flex-1">
-                {/*
-                  Errors and warnings are not the same sentence, and saying so
-                  used to be nobody's job: every marked node got "cannot be
-                  completed. Publishing is blocked until it is fixed" in red,
-                  including the warnings — a route that can never run, an exact
-                  match on a free-text box — none of which block anything. A
-                  form that publishes fine, told in red that it cannot.
-                */}
-                {flowBanner.level === "error"
-                  ? `${flowBanner.count === 1 ? "1 step" : `${flowBanner.count} steps`} in this flow cannot be completed. Publishing is blocked until it is fixed.`
-                  : flowBanner.level === "attention"
-                    ? `${flowBanner.count === 1 ? "1 question needs" : `${flowBanner.count} questions need`} attention before you can publish.`
-                    : `${flowBanner.count === 1 ? "1 step" : `${flowBanner.count} steps`} in this flow may not do what it says. Publishing still works.`}
-              </span>
-              <span className="shrink-0 underline">Show me</span>
-            </button>
-          </div>
-        )}
+        <ProblemsBanner />
         <CanvasMenuProvider actions={menuActions}>
           <PaneMenu>
             {/*
@@ -1149,20 +1047,21 @@ function StartNode({ id, data, selected }: NodeProps) {
   );
 }
 
-/** A node the flow cannot serve: unreachable, or with no way to finish. */
-type NodeProblem = { level: "error" | "warning"; messages: string[]; attention?: boolean };
 
 function QuestionNode({ id, data, selected }: NodeProps) {
   const { block, index, problem } = data as { block: Block; index: number; problem?: NodeProblem };
   const meta = blockMeta(block.type);
+  const card = useRef<HTMLDivElement>(null);
+  useAttentionShake(id, card);
   const accent = TONE_ACCENT[meta.tone];
   // Selection is a spine in the block's family colour, matching the Questions
   // list, rather than a generic orange ring.
   return (
     <NodeMenu id={id} kind="question" required={block.required}>
       <div
+        ref={card}
         className={cn(
-          "w-56 rounded-xl bg-[var(--card)] px-3 py-2.5 transition-shadow",
+          "relative w-56 rounded-xl bg-[var(--card)] px-3 py-2.5 transition-shadow",
           selected ? "shadow-md" : "shadow-xs",
           // A broken node is outlined, not tinted: the fill is the block's family
           // colour and carries meaning of its own. Red stops a publish; amber
@@ -1186,7 +1085,18 @@ function QuestionNode({ id, data, selected }: NodeProps) {
           <span className="min-w-0 flex-1 truncate text-xs font-medium">{block.title}</span>
           {block.required && <span className="text-destructive text-xs">*</span>}
         </div>
-        {problem ? (
+        {/* Sits on the top edge, half in and half out, in the ring's own
+            amber so it reads as part of that mark and nothing else. */}
+        {problem?.attention && (
+          <span
+            title={problem.messages.join("\n\n")}
+            className="absolute -top-2.5 right-3 inline-flex items-center gap-1 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] leading-none font-semibold text-amber-950 shadow-xs"
+          >
+            <AlertTriangle className="size-2.5" strokeWidth={2.5} aria-hidden />
+            Needs attention
+          </span>
+        )}
+        {problem && !problem.attention ? (
           <ProblemNote problem={problem} />
         ) : (
           <p className="text-muted-foreground mt-1 text-[10px] tracking-wide uppercase">{meta.label}</p>
@@ -1216,9 +1126,7 @@ function ProblemNote({ problem }: { problem: NodeProblem }) {
     >
       <AlertTriangle className="mt-px size-3 shrink-0" strokeWidth={2.5} />
       <span className="min-w-0">
-        {problem.attention
-          ? "Needs attention"
-          : problem.messages.length > 1
+        {problem.messages.length > 1
             ? `${problem.messages.length} flow problems`
             : shortProblem(problem.messages[0]!)}
       </span>

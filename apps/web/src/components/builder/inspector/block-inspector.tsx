@@ -397,6 +397,8 @@ function AttentionCallout({ blockRef, doc }: { blockRef: string; doc: FormDoc })
   const anchor = useRef<HTMLDivElement>(null);
   const fields = attention ? [...new Set(attention.codes.map((c) => ATTENTION_FIELD[c]).filter(Boolean))] : [];
   const fieldKey = fields.join(",");
+  // Sent here again (the banner, a refused publish): shake again.
+  const pulse = useBuilderStore((s) => (s.attentionPulse?.ref === blockRef ? s.attentionPulse.n : 0));
 
   useEffect(() => {
     if (!fieldKey) return;
@@ -417,7 +419,7 @@ function AttentionCallout({ blockRef, doc }: { blockRef: string; doc: FormDoc })
       clearTimeout(stop);
       for (const t of targets) t.classList.remove("animate-attention");
     };
-  }, [fieldKey]);
+  }, [fieldKey, pulse]);
 
   if (!attention) return null;
   return (

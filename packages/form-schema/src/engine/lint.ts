@@ -672,12 +672,14 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
           level: "error",
           code: "payment_no_upi_id",
           message: `"${b.title || b.ref}" collects payment over UPI but has no UPI ID.`,
+          refs: [b.ref],
         });
       } else if (!isValidUpiId(b.upiId)) {
         issues.push({
           level: "error",
           code: "payment_bad_upi_id",
           message: `"${b.upiId}" is not a valid UPI ID. It should look like name@bank.`,
+          refs: [b.ref],
         });
       }
       if (b.currency.toUpperCase() !== UPI_CURRENCY) {
@@ -692,6 +694,7 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
         level: "error",
         code: "payment_no_link",
         message: `"${b.title || b.ref}" collects payment but has no payment link.`,
+        refs: [b.ref],
       });
     }
   }

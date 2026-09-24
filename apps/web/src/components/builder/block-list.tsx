@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { setupAttention, type Attention } from "./attention";
+import { useAttentionShake } from "./use-attention-shake";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowDown,
@@ -281,6 +282,16 @@ function SortableRow({
     id: block.ref,
   });
   const meta = blockMeta(block.type);
+  // The row is dnd-kit's node too, so the shake shares its ref.
+  const row = useRef<HTMLDivElement | null>(null);
+  const setRowRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      row.current = el;
+      setNodeRef(el);
+    },
+    [setNodeRef],
+  );
+  useAttentionShake(block.ref, row, true);
   const moveBlock = useBuilderStore((s) => s.moveBlock);
   const updateBlock = useBuilderStore((s) => s.updateBlock);
   const openPicker = useBuilderStore((s) => s.openPicker);
@@ -300,7 +311,7 @@ function SortableRow({
       onToggleRequired={() => updateBlock(block.ref, { required: !block.required } as Partial<Block>)}
     >
     <div
-      ref={setNodeRef}
+      ref={setRowRef}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
@@ -310,7 +321,9 @@ function SortableRow({
         boxShadow: selected ? `inset 3px 0 0 0 ${TONE_ACCENT[meta.tone]}` : undefined,
       }}
       className={cn(
-        "group relative flex items-start gap-1.5 overflow-hidden rounded-xl py-2 pr-1.5 pl-2",
+        "group relative flex items-start gap-1.5 rounded-xl py-2 pr-1.5 pl-2",
+        // Clipped, except when the attention pill has to sit across the edge.
+        !attention && "overflow-hidden",
         "transition-[background-color,box-shadow] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
         TONE_CLASSES[meta.tone],
         selected ? "ring-0" : "opacity-[0.82] hover:opacity-100",
@@ -318,6 +331,17 @@ function SortableRow({
         isDragging && "shadow-md z-10 opacity-100",
       )}
     >
+      {/* On the top edge, half in and half out, in the ring's own amber: the
+          same mark as the Flow canvas, so the two views read alike. */}
+      {attention && (
+        <span
+          title={attention.messages.join("\n\n")}
+          className="pointer-events-none absolute -top-2 right-5 z-10 inline-flex items-center gap-1 rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] leading-none font-semibold text-amber-950 shadow-xs"
+        >
+          <AlertTriangle className="size-2.5" strokeWidth={2.5} aria-hidden />
+          Needs attention
+        </span>
+      )}
       {/*
         The type icon *is* the grab handle: it swaps to a grip under the cursor
         and takes the drag listeners itself.
@@ -357,15 +381,6 @@ function SortableRow({
           <span className={cn("line-clamp-2 text-xs leading-snug", selected && "font-semibold")}>
             {block.title || meta.label}
           </span>
-          {attention && (
-            <span
-              title={attention.messages.join("\n\n")}
-              className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-1.5 py-px text-[10px] font-medium text-amber-700 dark:text-amber-300"
-            >
-              <AlertTriangle className="size-2.5" strokeWidth={2.5} aria-hidden />
-              Needs attention
-            </span>
-          )}
           {/*
             Said on the row it is true of, rather than by indenting the row
             under a parent. A question can be reached from more than one branch,

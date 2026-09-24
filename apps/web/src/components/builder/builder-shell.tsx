@@ -26,6 +26,7 @@ import { PreviewDialog } from "./preview-dialog";
 import { PublishStrippedDialog, type StrippedSetting } from "./publish-stripped-dialog";
 import { UnpublishedChangesDialog } from "./unpublished-changes-dialog";
 import { useUnpublishedGuard } from "./use-unpublished-guard";
+import { firstBlockingIssue } from "./attention";
 import { ShortcutsDialog } from "@/components/ui/shortcuts-dialog";
 import { useBuilderShortcuts } from "./use-builder-shortcuts";
 
@@ -230,6 +231,22 @@ export function BuilderShell({
 
   async function onPublish() {
     const wasPublished = row?.status === "published";
+    /**
+     * Refused here, before the request, when the form would fail lint.
+     *
+     * The server's refusal was every lint error joined into one paragraph, in a
+     * toast, naming no place to go. This says the first problem in reading
+     * order in a line, and takes the author to it: the question is selected and
+     * shaken, and so is the field to fill. Fix it, press Publish again, and it
+     * goes to the next one.
+     */
+    const { doc: current, pulseAttention } = useBuilderStore.getState();
+    const blocking = current ? firstBlockingIssue(current) : null;
+    if (blocking) {
+      if (blocking.ref) pulseAttention(blocking.ref);
+      toast.error("Can't publish yet", { description: `${blocking.title}: ${blocking.fix}.` });
+      throw new Error(blocking.fix);
+    }
     setPublishing(true);
     try {
       // Flush first: Publish used to be disabled while the doc was dirty, so a

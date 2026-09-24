@@ -148,6 +148,13 @@ export interface BuilderState {
   // ── selection ──
   select: (ref: string | null) => void;
   selectEnding: (ref: string | null) => void;
+  /**
+   * "Look here": selects a question or ending and bumps `n`, which the list
+   * row, the canvas node and the inspector all watch to shake. A counter, so
+   * sending someone to the same place twice shakes it twice.
+   */
+  attentionPulse: { ref: string; n: number } | null;
+  pulseAttention: (ref: string) => void;
 
   // ── panels the keyboard can reach ──
   /** Open the picker at `index`; omit for the end of the list. */
@@ -213,6 +220,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   docIssues: [],
   selectedRef: null,
   selectedEndingRef: null,
+  attentionPulse: null,
   pickerIndex: null,
   designOpen: false,
   shortcuts: [],
@@ -383,6 +391,15 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
 
   select: (ref) => set({ selectedRef: ref, selectedEndingRef: null }),
   selectEnding: (ref) => set({ selectedEndingRef: ref, selectedRef: null }),
+  pulseAttention: (ref) => {
+    const { doc, attentionPulse } = get();
+    const ending = doc?.endings.some((e) => e.ref === ref);
+    set({
+      selectedRef: ending ? null : ref,
+      selectedEndingRef: ending ? ref : null,
+      attentionPulse: { ref, n: (attentionPulse?.n ?? 0) + 1 },
+    });
+  },
 
   openPicker: (index) =>
     set((s) => ({ pickerIndex: index ?? s.doc?.blocks.length ?? 0, designOpen: false })),

@@ -9,6 +9,7 @@ import { AiBar } from "../ai-bar";
 import { QuestionPreview } from "../question-preview";
 import { EmptyState } from "@/components/ui/empty-state";
 import { BuildToolbar } from "../build-toolbar";
+import { ProblemsBanner } from "../problems-banner";
 import { useBuilderStore, useSelectedBlock } from "@/stores/builder-store";
 import { useGetApiFormsById } from "@/lib/api/dashboard/dashboard";
 
@@ -55,6 +56,7 @@ export function BuildTab() {
 
       <main className="relative flex min-w-0 flex-1 flex-col">
         <BuildToolbar />
+        <ProblemsBanner />
 
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 pt-3 pb-28">
           <div className="flex max-h-full w-full max-w-lg flex-col">
