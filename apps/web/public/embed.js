@@ -120,6 +120,17 @@
   var fallbackTimer = 0;
   var READY_GRACE_MS = 3500;
 
+  /**
+   * Whether the launcher is the panel's close right now: a popup on a screen
+   * wide enough that the panel does not cover the launcher. Must match the
+   * 520px in `injectPlacement` and the `.cf-x` rules. The frame is told, so it
+   * does not draw a second X in its header.
+   */
+  var narrow = window.matchMedia ? window.matchMedia("(max-width:520px)") : null;
+  function hostCloses() {
+    return mode === "popup" && !(narrow && narrow.matches);
+  }
+
   function emit(name, payload) {
     var handlers = listeners[name] || [];
     for (var i = 0; i < handlers.length; i++) {
@@ -137,6 +148,9 @@
     // The frame posts only to this origin, and only if the form allows it.
     url.searchParams.set("parentOrigin", window.location.origin);
     if (theme !== "auto") url.searchParams.set("theme", theme);
+    // The first answer rides in the URL so the header X never flashes; later
+    // changes (a window resized across 520px) arrive as a "host" message.
+    if (hostCloses()) url.searchParams.set("hostClose", "1");
     for (var key in hidden) {
       if (Object.prototype.hasOwnProperty.call(hidden, key)) url.searchParams.set(key, hidden[key]);
     }
@@ -169,17 +183,23 @@
         ".cf-panel.cf-open{display:block}",
         ".cf-fullpage{inset:0;width:100vw;height:100vh;border-radius:0}",
         /*
-         * The launcher stands down while the panel is up.
+         * The launcher stands down while the panel is up, except on a desktop popup.
          *
-         * It was drawn at a fixed corner and the panel was drawn over it, which
-         * is fine for a popup on a desktop and wrong everywhere else: a side tab
-         * runs the full height of that same edge, and under 520px the panel goes
-         * edge-to-edge — so "Join Waitlist" sat on top of the sheet it had just
-         * opened, over the composer, still saying "open me". The panel carries
-         * its own close now, so there is nothing left for it to do until it is
-         * closed again.
+         * A side tab runs the full height of the launcher's edge, and under 520px
+         * the panel goes edge-to-edge, so a launcher left there sits on top of
+         * the sheet it just opened. Those two use the panel's own close.
+         *
+         * A desktop popup opens beside the launcher instead, so the launcher
+         * becomes the close: a circle with an X, the way every messenger widget
+         * does it, and the frame drops the X from its header (see `hostCloses`).
          */
         ".cf-launcher.cf-away{display:none}",
+        ".cf-launcher .cf-x-icon{display:none}",
+        ".cf-launcher.cf-x{width:48px;height:48px;padding:0;justify-content:center;border-radius:50%}",
+        ".cf-launcher.cf-bare.cf-x{width:56px;height:56px}",
+        ".cf-launcher.cf-x>*{display:none}",
+        ".cf-launcher.cf-x>.cf-x-icon{display:block;width:20px;height:20px}",
+        "@media (max-width:520px){.cf-launcher.cf-x{display:none}}",
         ".cf-close{position:absolute;top:10px;right:10px;z-index:1;width:32px;height:32px;padding:0;",
         "border:0;border-radius:50%;background:rgba(15,15,15,.55);color:#fff;cursor:pointer;",
         "display:grid;place-items:center}",
@@ -219,7 +239,12 @@
       "@media (max-width:520px){.cf-p-" + uid +
       "{inset:0;width:100vw;height:100dvh;max-height:none;border-radius:0}}";
 
-    addStyle(null, launcherRule + panelRule + mobileRule);
+    // A desktop popup closes from the launcher, so the fallback X is only for
+    // the layouts where the launcher is hidden.
+    var fallbackRule =
+      mode === "popup" ? "@media (min-width:521px){.cf-p-" + uid + ">.cf-close{display:none}}" : "";
+
+    addStyle(null, launcherRule + panelRule + mobileRule + fallbackRule);
   }
 
   function buildFrame() {
@@ -239,19 +264,27 @@
   }
 
   /** Inlined rather than fetched: one more network request for 300 bytes. */
-  function chatIcon() {
+  function icon(d, strokeWidth) {
     var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", "0 0 24 24");
     svg.setAttribute("fill", "none");
     svg.setAttribute("stroke", "currentColor");
-    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-width", strokeWidth);
     svg.setAttribute("stroke-linecap", "round");
     svg.setAttribute("stroke-linejoin", "round");
     svg.setAttribute("aria-hidden", "true");
     var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", "M21 11.5a8.4 8.4 0 0 1-9 8.4 8.9 8.9 0 0 1-3.9-.9L3 21l1.9-4.9A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z");
+    path.setAttribute("d", d);
     svg.appendChild(path);
     return svg;
+  }
+
+  function chatIcon() {
+    return icon("M21 11.5a8.4 8.4 0 0 1-9 8.4 8.9 8.9 0 0 1-3.9-.9L3 21l1.9-4.9A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z", "2");
+  }
+
+  function closeIcon() {
+    return icon("M18 6 6 18M6 6l12 12", "2.5");
   }
 
   function mountInline() {
@@ -281,7 +314,15 @@
       launcher.className = "cf-launcher cf-l-" + uid + (label ? "" : " cf-bare");
       launcher.style.background = color;
       if (showIcon) launcher.appendChild(chatIcon());
-      if (label) launcher.appendChild(document.createTextNode(label));
+      if (label) {
+        // In a span so `.cf-x` can hide it while the launcher is the close.
+        var text = document.createElement("span");
+        text.textContent = label;
+        launcher.appendChild(text);
+      }
+      var x = closeIcon();
+      x.setAttribute("class", "cf-x-icon");
+      launcher.appendChild(x);
       launcher.setAttribute("aria-haspopup", "dialog");
       launcher.setAttribute("aria-expanded", "false");
       // A circle with no text needs a name for anyone not looking at it.
@@ -315,17 +356,7 @@
     fallbackClose.type = "button";
     fallbackClose.className = "cf-close";
     fallbackClose.setAttribute("aria-label", "Close the form");
-    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("fill", "none");
-    svg.setAttribute("stroke", "currentColor");
-    svg.setAttribute("stroke-width", "2.5");
-    svg.setAttribute("stroke-linecap", "round");
-    svg.setAttribute("aria-hidden", "true");
-    var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", "M18 6 6 18M6 6l12 12");
-    svg.appendChild(path);
-    fallbackClose.appendChild(svg);
+    fallbackClose.appendChild(closeIcon());
     fallbackClose.addEventListener("click", close);
     panel.appendChild(fallbackClose);
   }
@@ -347,7 +378,9 @@
     if (panel) panel.classList.add("cf-open");
     if (launcher) {
       launcher.setAttribute("aria-expanded", "true");
-      launcher.classList.add("cf-away");
+      launcher.setAttribute("aria-label", "Close the form");
+      // A popup's launcher turns into the close (and CSS hides it on a phone).
+      launcher.classList.add(mode === "popup" ? "cf-x" : "cf-away");
     }
     // Nothing to escape through until the frame says hello, so give it a moment
     // and then draw an exit anyway.
@@ -361,7 +394,9 @@
     if (panel) panel.classList.remove("cf-open");
     if (launcher) {
       launcher.setAttribute("aria-expanded", "false");
+      launcher.setAttribute("aria-label", label || "Open the form");
       launcher.classList.remove("cf-away");
+      launcher.classList.remove("cf-x");
     }
     hideFallbackClose();
     isOpen = false;
@@ -398,6 +433,7 @@
         // The frame draws its own close from here on, so retire ours.
         frameReady = true;
         hideFallbackClose();
+        post({ type: "host", closes: hostCloses() });
         emit("ready", message);
         break;
       case "resize":
@@ -419,6 +455,15 @@
         break;
     }
   });
+
+  // Crossing 520px swaps which X is the close, so the frame has to hear about it.
+  function onNarrowChange() {
+    if (frameReady) post({ type: "host", closes: hostCloses() });
+  }
+  if (narrow && mode === "popup") {
+    if (narrow.addEventListener) narrow.addEventListener("change", onNarrowChange);
+    else if (narrow.addListener) narrow.addListener(onNarrowChange);
+  }
 
   function setupTriggers() {
     if (openOn === "load") {

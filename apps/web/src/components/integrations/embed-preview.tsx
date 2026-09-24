@@ -89,6 +89,8 @@ export function EmbedPreview({
   const horizontal = config.position.endsWith("left") ? "left" : "right";
   const clearance = config.offset + LAUNCHER_CLEARANCE;
   const takeover = stage.width <= MOBILE_TAKEOVER;
+  // `embed.js`'s `hostCloses()`: a desktop popup closes from the launcher.
+  const launcherCloses = config.mode === "popup" && !takeover;
 
   const panelBox: React.CSSProperties = takeover
     ? { inset: 0, borderRadius: 0 }
@@ -166,7 +168,7 @@ export function EmbedPreview({
                     blocks={blocks}
                     compact={takeover || config.width < 380}
                     phone={device === "mobile"}
-                    onClose={onToggle}
+                    onClose={launcherCloses ? undefined : onToggle}
                   />
                 </div>
               )}
@@ -176,15 +178,30 @@ export function EmbedPreview({
                 than by reading the snippet and imagining the result. Its metrics
                 are `embed.js`'s `.cf-launcher` rule, to the pixel.
 
-                Gone while the panel is up, because that is what `.cf-away` does
-                on a real page. A side tab runs the full height of the same edge
-                and a phone panel covers the corner outright, so a launcher left
-                where it started is a pill sitting on top of the sheet it just
-                opened, over the composer, still saying "open me". The way out
-                is the one the respondent is actually given: the panel's own
-                close, in its header.
+                While the panel is up it does what `embed.js` does: a desktop
+                popup's launcher becomes a round X (`.cf-x`), and a side tab or
+                a phone hides it (`.cf-away`), because there the panel covers
+                that corner and closes from its own header instead.
               */}
-              {!open && (
+              {launcherCloses && open ? (
+                <button
+                  type="button"
+                  onClick={onToggle}
+                  aria-label="Close the panel"
+                  className={cn(
+                    "absolute grid cursor-pointer place-items-center rounded-full border-0 text-white",
+                    config.label ? "size-12" : "size-14",
+                  )}
+                  style={{
+                    [vertical]: config.offset,
+                    [horizontal]: config.offset,
+                    background: config.color,
+                    boxShadow: "0 6px 24px rgba(0,0,0,.18)",
+                  }}
+                >
+                  <X className="size-5" strokeWidth={2.5} />
+                </button>
+              ) : !open && (
                 <button
                   type="button"
                   onClick={onToggle}
@@ -394,9 +411,8 @@ function MockConversation({
   /**
    * Overlay modes only: the close the panel carries itself.
    *
-   * `chat-client` draws this the moment the embed handshake lands, and
-   * `embed.js` hides the launcher while the panel is open precisely because it
-   * is there. Leaving it out of the picture showed a way in and no way out.
+   * `chat-client` draws this the moment the embed handshake lands, except on a
+   * desktop popup, where the launcher turns into the close instead.
    */
   onClose?: () => void;
 }) {

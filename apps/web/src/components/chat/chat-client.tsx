@@ -24,7 +24,7 @@ import { AuthCard } from "./auth-card";
 import { warmGoogleSignIn } from "./google-signin";
 import { asEmail } from "./respondent-hint";
 import { VerifyCard } from "./verify-card";
-import { embedBridgeReady, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
+import { embedShowsClose, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
 import { useChat, type ChatMessage } from "./use-chat";
 import { DictateButton, KeyHint, SendRow, TextInput, DICTATE_KEY, isDictateShortcut, keepFocus, modKeyLabel } from "./composers/primitives";
 import { useDictation } from "@/hooks/use-dictation";
@@ -375,8 +375,11 @@ export function ChatSurface({
    * Gated on the handshake rather than on `?embed=1`: a parent that failed the
    * origin allowlist gets no messages from us, and a close button that posts
    * into a void is worse than no close button.
+   *
+   * Not on a desktop popup, though: there the launcher beside the panel turns
+   * into a round X, and a second one up here would be two ways to do one thing.
    */
-  const canClose = useSyncExternalStore(subscribeEmbedBridge, embedBridgeReady, () => false);
+  const canClose = useSyncExternalStore(subscribeEmbedBridge, embedShowsClose, () => false);
 
   /*
     Stable handlers for the question controls.

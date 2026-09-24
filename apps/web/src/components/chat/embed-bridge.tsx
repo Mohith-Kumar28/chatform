@@ -62,8 +62,20 @@ export function requestEmbedClose(): boolean {
  */
 const bridgeListeners = new Set<() => void>();
 
-export function embedBridgeReady(): boolean {
-  return post !== null;
+/**
+ * Whether the host page closes the panel itself, from its launcher.
+ *
+ * On a desktop popup `embed.js` turns the launcher into a round X beside the
+ * panel, so an X in the header as well would be two closes. The loader decides,
+ * because only it knows the page's width: a 400px panel and a 400px phone look
+ * the same from in here. The first answer comes in `?hostClose=1`, so the
+ * header X never flashes, and a later change arrives as a `host` message.
+ */
+let hostCloses = false;
+
+/** Whether the frame should draw its own close. */
+export function embedShowsClose(): boolean {
+  return post !== null && !hostCloses;
 }
 
 export function subscribeEmbedBridge(onChange: () => void): () => void {
@@ -73,10 +85,20 @@ export function subscribeEmbedBridge(onChange: () => void): () => void {
   };
 }
 
+function notify(): void {
+  for (const listener of bridgeListeners) listener();
+}
+
 function setPost(next: typeof post): void {
   if (post === next) return;
   post = next;
-  for (const listener of bridgeListeners) listener();
+  notify();
+}
+
+function setHostCloses(next: boolean): void {
+  if (hostCloses === next) return;
+  hostCloses = next;
+  notify();
 }
 
 export function EmbedBridge({
@@ -119,6 +141,7 @@ export function EmbedBridge({
     const send = (message: Omit<ToParent, "source" | "v">) => {
       window.parent.postMessage({ source: "chatform", v: 1, ...message }, parentOrigin);
     };
+    setHostCloses(new URLSearchParams(window.location.search).get("hostClose") === "1");
     setPost(send);
     send({ type: "ready" });
 
@@ -144,9 +167,15 @@ export function EmbedBridge({
 
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== parentOrigin) return;
-      const message = event.data as { source?: string; type?: string; fields?: Record<string, string> };
+      const message = event.data as {
+        source?: string;
+        type?: string;
+        fields?: Record<string, string>;
+        closes?: boolean;
+      };
       if (message?.source !== "chatform") return;
       if (message.type === "close") send({ type: "close" });
+      if (message.type === "host") setHostCloses(message.closes === true);
     };
     window.addEventListener("message", onMessage);
 
