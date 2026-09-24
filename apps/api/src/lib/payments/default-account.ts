@@ -37,7 +37,7 @@ export async function withDefaultPaymentAccount(
       .map((b) => b.ref),
   );
   if (candidates.size === 0) return doc;
-  if (!gatewayEnabled(env, orgId)) return doc;
+  if (!gatewayEnabled(env)) return doc;
 
   try {
     const ent = await getEntitlements(env, orgId);

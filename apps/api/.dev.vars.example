@@ -158,9 +158,8 @@ FIREBASE_PROJECT_ID=
 # Rotating: move the old value to _PREV, put the new one here; both open, new rows use this.
 PAYMENTS_ENCRYPTION_KEY=
 PAYMENTS_ENCRYPTION_KEY_PREV=
-# "on" for every organization. Otherwise only the org ids listed below, comma-separated.
+# "on" to switch verified payments on. The plan decides who can use them.
 PAYMENTS_GATEWAY_ENABLED=
-PAYMENTS_GATEWAY_ORGS=
 
 # Cashfree partner program (partner.cashfree.com). "sandbox" or "production"; unset is sandbox.
 CASHFREE_PARTNER_CLIENT_ID=

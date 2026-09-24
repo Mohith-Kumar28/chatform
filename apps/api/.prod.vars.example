@@ -85,9 +85,8 @@ EMAIL_FROM_MARKETING=
 # `openssl rand -base64 32` and never reuse the local one.
 PAYMENTS_ENCRYPTION_KEY=
 PAYMENTS_ENCRYPTION_KEY_PREV=
-# Off in production until rollout: list internal org ids first, "on" at general availability.
+# "on" to switch verified payments on. The plan decides who can use them.
 PAYMENTS_GATEWAY_ENABLED=
-PAYMENTS_GATEWAY_ORGS=
 CASHFREE_PARTNER_CLIENT_ID=
 CASHFREE_PARTNER_CLIENT_SECRET=
 CASHFREE_PARTNER_API_KEY=

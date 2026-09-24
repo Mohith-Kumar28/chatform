@@ -112,7 +112,7 @@ beforeAll(async () => {
   await subscribePro(pro.orgId);
   await subscribePro(other.orgId);
   key = (await seedKey(pro, "paypubkey", { scopes: { form: ["read", "write", "publish"] } })).raw;
-  setEnv({ PAYMENTS_GATEWAY_ENABLED: "on", PAYMENTS_GATEWAY_ORGS: undefined });
+  setEnv({ PAYMENTS_GATEWAY_ENABLED: "on" });
 
   await seedAccount("pac_pp_rzp", pro.orgId);
   await seedAccount("pac_pp_stripe", pro.orgId, { provider: "stripe" });

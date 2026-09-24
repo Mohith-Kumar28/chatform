@@ -168,7 +168,7 @@ export function refuseImpersonation(c: Ctx): Response | null {
 /** Flag, then plan. The flag first, so an organization outside the rollout is not shown an upsell. */
 export async function connectGate(c: Ctx, surface: string): Promise<Response | null> {
   const orgId = c.get("orgId");
-  if (!gatewayEnabled(c.env, orgId)) {
+  if (!gatewayEnabled(c.env)) {
     return problem(c, 403, "gateway_payments_disabled", "Verified payments are not available for this organization yet.");
   }
   return assertFeature(c, "collect_payments", { surface });
@@ -180,7 +180,7 @@ export async function handleList(c: Ctx): Promise<Response> {
   const orgId = c.get("orgId")!;
   return c.json({
     accounts: await listAccounts(c.env, orgId),
-    enabled: gatewayEnabled(c.env, orgId),
+    enabled: gatewayEnabled(c.env),
     providers: {
       cashfree: { configured: providerConfigured(c.env, "cashfree") },
       razorpay: { configured: providerConfigured(c.env, "razorpay") },
@@ -502,7 +502,7 @@ paymentAccountsPublicRouter.get(
       .first<{ role: string }>();
     if (!member) return fail("not_a_member");
     // Re-checked, because ten minutes is long enough for a plan to lapse or the flag to change.
-    if (!gatewayEnabled(c.env, payload.orgId)) return fail("disabled");
+    if (!gatewayEnabled(c.env)) return fail("disabled");
     const ent = await getEntitlements(c.env, payload.orgId);
     if (!ent.features.collect_payments) return fail("plan_required");
 

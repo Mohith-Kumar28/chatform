@@ -326,7 +326,7 @@ export async function checkGatewayPayments(
   }
 
   const issues: GatewayPublishIssue[] = [];
-  if (!gatewayEnabled(env, orgId)) {
+  if (!gatewayEnabled(env)) {
     issues.push({
       level: "error",
       code: "payment_gateway_disabled",

@@ -1560,7 +1560,7 @@ export class SessionDO extends DurableObject<Bindings> {
       return refuse("already_paid", "You've already paid for this.");
     }
 
-    if (!gatewayEnabled(this.env, meta.organizationId)) {
+    if (!gatewayEnabled(this.env)) {
       // Same sentence as a missing account, and for the same reason: nothing the
       // respondent does reaches it, so don't invite them to wait and retry.
       return refuse("payment_unavailable", "This form can't take payments right now. Let its owner know.");

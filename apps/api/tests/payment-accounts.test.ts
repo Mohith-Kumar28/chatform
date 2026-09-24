@@ -379,7 +379,7 @@ describe("connect routes", () => {
     expect(((await locked.json()) as { error: { code: string } }).error.code).toBe("feature_locked");
     expect((await fetchApi("/api/payment-accounts", { headers: { cookie: free.cookie } })).status).toBe(200);
 
-    setEnv({ PAYMENTS_GATEWAY_ENABLED: "", PAYMENTS_GATEWAY_ORGS: "org_somebody_else" });
+    setEnv({ PAYMENTS_GATEWAY_ENABLED: "" });
     try {
       const off = await fetchApi("/api/payment-accounts/stripe", {
         method: "POST",
@@ -391,11 +391,8 @@ describe("connect routes", () => {
       const listed = (await (await fetchApi("/api/payment-accounts", { headers: { cookie: a.cookie } })).json()) as { enabled: boolean };
       expect(listed.enabled).toBe(false);
 
-      setEnv({ PAYMENTS_GATEWAY_ORGS: `org_x, ${a.orgId}` });
-      const listedIn = (await (await fetchApi("/api/payment-accounts", { headers: { cookie: a.cookie } })).json()) as { enabled: boolean };
-      expect(listedIn.enabled).toBe(true);
     } finally {
-      setEnv({ PAYMENTS_GATEWAY_ENABLED: "on", PAYMENTS_GATEWAY_ORGS: undefined });
+      setEnv({ PAYMENTS_GATEWAY_ENABLED: "on" });
     }
   });
 

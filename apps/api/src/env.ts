@@ -232,14 +232,8 @@ export interface Bindings {
    */
   PAYMENTS_ENCRYPTION_KEY?: string;
   PAYMENTS_ENCRYPTION_KEY_PREV?: string;
-  /**
-   * `"on"` turns gateway payments on for every organization. Anything else
-   * leaves them on only for the ids in `PAYMENTS_GATEWAY_ORGS`, comma-separated
-   * — the rollout is one internal org on sandbox accounts before anyone else.
-   * See `lib/payments/flag.ts`.
-   */
+  /** `"on"` turns gateway payments on; the plan decides who can use them. See `lib/payments/flag.ts`. */
   PAYMENTS_GATEWAY_ENABLED?: string;
-  PAYMENTS_GATEWAY_ORGS?: string;
   /**
    * Cashfree partner (OAuth) credentials. `CASHFREE_PARTNER_API_KEY` signs the
    * partner-level webhooks. `CASHFREE_ENVIRONMENT` is `"sandbox"` or
