@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Landmark } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   isValidUpiId,
   parseEmailDomains,
@@ -14,7 +15,7 @@ import { LockedControl } from "@/components/billing/gate";
 import { Button } from "@/components/ui/button";
 import { InfoHint } from "@/components/ui/info-hint";
 import {
-  accountName,
+  accountDisplay,
   INR_ONLY_PROVIDERS,
   usePaymentAccounts,
   type PaymentAccount,
@@ -917,28 +918,32 @@ function AccountPicker({
 
   // Opens the Integrate tab with this gateway's accounts sheet already open.
   const manage = `/forms/${formId}/integrate?payments=open&provider=${account?.provider ?? accounts[0]?.provider ?? "razorpay"}#payments`;
-  const options = [
-    ...(selectedId ? [] : [{ value: NO_ACCOUNT, label: "Choose an account" }]),
-    ...(selectedId && !account ? [{ value: selectedId, label: "No longer connected" }] : []),
-    ...accounts.map((a) => ({ value: a.id, label: accountName(a, PAYMENT_PROVIDER_LABELS[a.provider]) })),
-  ];
-
   return (
     <div className="space-y-2">
-      <SelectField
-        label="Payment account"
-        value={selectedId ?? NO_ACCOUNT}
-        onChange={(v) => onChange(accounts.find((a) => a.id === v))}
-        options={options}
-      />
-      {account && (
-        <p className="text-muted-foreground flex flex-wrap items-center gap-x-1.5 text-xs">
-          <span>{account.environment === "test" ? "Test mode" : "Live"}</span>
-          {(account.connectedBy?.email || account.connectedBy?.name) && (
-            <span>· Connected by {account.connectedBy.email || account.connectedBy.name}</span>
-          )}
-        </p>
-      )}
+      <Field label="Payment account">
+        <Select value={selectedId ?? NO_ACCOUNT} onValueChange={(v) => onChange(accounts.find((a) => a.id === v))}>
+          <SelectTrigger className="h-auto w-full py-2">
+            <SelectValue>
+              {account ? (
+                <AccountOption account={account} />
+              ) : (
+                <span className="text-muted-foreground">
+                  {selectedId ? "No longer connected" : "Choose an account"}
+                </span>
+              )}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {!selectedId && <SelectItem value={NO_ACCOUNT}>Choose an account</SelectItem>}
+            {selectedId && !account && <SelectItem value={selectedId}>No longer connected</SelectItem>}
+            {accounts.map((a) => (
+              <SelectItem key={a.id} value={a.id} className="py-2">
+                <AccountOption account={a} />
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
       {selectedId && !account && (
         <p className="text-destructive text-xs">That account was disconnected. Pick another one.</p>
       )}
@@ -958,6 +963,34 @@ function AccountPicker({
         <ArrowUpRight className="size-3" aria-hidden />
       </Link>
     </div>
+  );
+}
+
+/** One account as a row: its name and tags, then the line that tells it from the others. */
+function AccountOption({ account }: { account: PaymentAccount }) {
+  const { name, detail } = accountDisplay(account, PAYMENT_PROVIDER_LABELS[account.provider]);
+  return (
+    <span className="flex min-w-0 items-center gap-2.5 text-left">
+      <span className="bg-muted text-muted-foreground grid size-7 shrink-0 place-items-center rounded-md">
+        <Landmark className="size-3.5" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-sm font-medium">{name}</span>
+          {account.environment === "test" && <OptionTag>Test</OptionTag>}
+          {account.isDefault && <OptionTag>Default</OptionTag>}
+        </span>
+        {detail && <span className="text-muted-foreground block truncate font-mono text-[11px]">{detail}</span>}
+      </span>
+    </span>
+  );
+}
+
+function OptionTag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium">
+      {children}
+    </span>
   );
 }
 

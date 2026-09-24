@@ -163,18 +163,17 @@ export function usePaymentAccounts({ enabled = true }: { enabled?: boolean } = {
   });
 }
 
-/** "Razorpay · Acme Events (test)", how an account is named wherever one is picked. */
-export function accountName(account: PaymentAccount, providerLabel: string): string {
-  /*
-   * The "(test)" is only added when the author's own label doesn't already say
-   * so. They usually name the account for the mode it is in — "Acme (Stripe
-   * test)" — and appending ours made "Stripe · Acme (Stripe test) (test)".
-   */
-  const saysTest = /\btest\b/i.test(account.label);
-  const suffix = account.environment === "test" && !saysTest ? " (test)" : "";
-  // A label that already names the gateway ("Razorpay acc_…") is not prefixed with it again.
-  const named = account.label.toLowerCase().startsWith(providerLabel.toLowerCase())
-    ? account.label
-    : `${providerLabel} · ${account.label}`;
-  return `${named}${suffix}${account.isDefault ? " · Default" : ""}`;
+/**
+ * How an account is named wherever one is picked: a name to read, and a quieter
+ * line that tells two accounts apart.
+ *
+ * A freshly connected account is labelled "Razorpay acc_SXSV…" because the
+ * gateway hands back nothing friendlier. That label is shown as "Razorpay
+ * account", with the id moved to the second line, until the author names it.
+ */
+export function accountDisplay(account: PaymentAccount, providerLabel: string): { name: string; detail: string | null } {
+  const id = account.providerAccountId;
+  const auto = !!id && account.label === `${providerLabel} ${id}`;
+  if (auto) return { name: `${providerLabel} account`, detail: id };
+  return { name: account.label, detail: id ? `${providerLabel} · ${id}` : providerLabel };
 }

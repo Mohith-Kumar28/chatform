@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import {
   PAYMENT_ACCOUNTS_KEY,
   PaymentAccountError,
+  accountDisplay,
   paymentAccountsFetch,
   type PaymentAccount,
   type PaymentAccountsPayload,
@@ -235,7 +236,7 @@ function AccountCard({ account, formId }: { account: PaymentAccount; formId: str
             </form>
           ) : (
             <div className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-sm font-medium">{account.label}</span>
+              <span className="truncate text-sm font-medium">{accountDisplay(account, label).name}</span>
               <Button
                 variant="ghost"
                 size="icon-sm"
