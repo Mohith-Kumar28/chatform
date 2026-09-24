@@ -63,10 +63,11 @@ export function requestEmbedClose(): boolean {
 const bridgeListeners = new Set<() => void>();
 
 /**
- * Whether the host page closes the panel itself, from its launcher.
+ * Whether the host page handles closing, so the header draws no X.
  *
- * On a desktop popup `embed.js` turns the launcher into a round X beside the
- * panel, so an X in the header as well would be two closes. The loader decides,
+ * Inline, the form is part of the page and there is nothing to close. On a
+ * desktop popup `embed.js` turns the launcher into a round X beside the panel,
+ * so an X in the header as well would be two closes. The loader decides,
  * because only it knows the page's width: a 400px panel and a 400px phone look
  * the same from in here. The first answer comes in `?hostClose=1`, so the
  * header X never flashes, and a later change arrives as a `host` message.

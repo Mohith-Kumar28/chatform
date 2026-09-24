@@ -1031,29 +1031,42 @@ function ChatHeader({
             <LogoMark className="size-5" />
           </div>
         )}
+        {/*
+          The title gets the whole first line. "Start over" sat beside it and
+          took ~110px of a 390px phone, so the title truncated after three
+          words; it lives on the second line now, next to the progress.
+        */}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">
             {title}
             {brandName && <span className="ml-1.5 font-normal opacity-50">· {brandName}</span>}
           </p>
-          {status === "reconnecting" ? (
-            <p className="text-xs opacity-60">Reconnecting…</p>
-          ) : (
-            mode !== "none" && (
-              <p className="text-xs opacity-60">
-                {mode === "steps" && total > 0 ? `Question ${answered + 1} of ${total}` : `${pct}% complete`}
-              </p>
-            )
-          )}
+          <div className="flex min-w-0 items-center gap-1.5 text-xs">
+            {status === "reconnecting" ? (
+              <span className="truncate opacity-60">Reconnecting…</span>
+            ) : (
+              mode !== "none" && (
+                <span className="truncate opacity-60">
+                  {mode === "steps" && total > 0 ? `Question ${answered + 1} of ${total}` : `${pct}% complete`}
+                </span>
+              )
+            )}
+            {onStartOver && (
+              <>
+                {(status === "reconnecting" || mode !== "none") && (
+                  <span aria-hidden className="opacity-30">·</span>
+                )}
+                <StartOverButton onConfirm={onStartOver} />
+              </>
+            )}
+          </div>
         </div>
 
-        {onStartOver && <StartOverButton onConfirm={onStartOver} />}
-
         {/*
-          Unlabelled, unlike "Start over" beside it. An X in the corner of a
-          panel is the most over-learned control on the web and needs no word,
-          and the header is the one row here with no space to spare — the title
-          truncates already.
+          Unlabelled. An X in the corner of a panel is the most over-learned
+          control on the web and needs no word. Only drawn where there is
+          something to close: never inline, and not on a desktop popup, whose
+          launcher is the close.
         */}
         {onClose && (
           <button
@@ -1726,19 +1739,17 @@ function StartOverButton({ onConfirm }: { onConfirm: () => void }) {
       onBlur={() => setArmed(false)}
       aria-label={armed ? "Confirm starting over. This clears your answers" : "Start over"}
       className={cn(
-        "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-opacity",
+        "-my-1 flex shrink-0 items-center gap-1 rounded-full py-1 text-xs font-medium transition-opacity",
         armed
           ? "text-[var(--destructive)] opacity-100"
-          : "opacity-45 hover:opacity-90 focus-visible:opacity-90",
+          : "opacity-60 hover:opacity-100 focus-visible:opacity-100",
       )}
     >
-      <RotateCcw className="size-3.5 shrink-0" />
+      <RotateCcw className="size-3 shrink-0" />
       {/*
         The label is what makes this discoverable, and discoverability was the
-        entire problem with the menu — so it is never dropped, not even on a
-        phone. It costs about 66px against a title that truncates anyway, and a
-        bare rotate glyph on a phone is only marginally better than the "…" it
-        replaced.
+        entire problem with the menu, so it is never dropped, not even on a
+        phone. On the second line it costs the title nothing.
       */}
       <span>{armed ? "Tap again to clear" : "Start over"}</span>
     </button>

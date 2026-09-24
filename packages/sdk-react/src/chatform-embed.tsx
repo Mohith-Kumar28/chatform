@@ -94,6 +94,8 @@ export function ChatformEmbed({
   url.searchParams.set("embed", "1");
   url.searchParams.set("parentOrigin", typeof window === "undefined" ? "" : window.location.origin);
   if (theme !== "auto") url.searchParams.set("theme", theme);
+  // Without an onClose the form sits in the page, so its header draws no X.
+  if (!onClose) url.searchParams.set("hostClose", "1");
   for (const [key, value] of Object.entries(hidden ?? {})) url.searchParams.set(key, value);
 
   return (

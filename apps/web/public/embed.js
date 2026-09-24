@@ -121,13 +121,14 @@
   var READY_GRACE_MS = 3500;
 
   /**
-   * Whether the launcher is the panel's close right now: a popup on a screen
-   * wide enough that the panel does not cover the launcher. Must match the
-   * 520px in `injectPlacement` and the `.cf-x` rules. The frame is told, so it
-   * does not draw a second X in its header.
+   * Whether the frame should leave the X out of its header. True inline, where
+   * the form is part of the page and there is nothing to close, and on a popup
+   * wide enough that the launcher is the close. Must match the 520px in
+   * `injectPlacement` and the `.cf-x` rules.
    */
   var narrow = window.matchMedia ? window.matchMedia("(max-width:520px)") : null;
   function hostCloses() {
+    if (mode === "inline") return true;
     return mode === "popup" && !(narrow && narrow.matches);
   }
 

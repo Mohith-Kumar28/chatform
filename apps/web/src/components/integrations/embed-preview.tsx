@@ -444,14 +444,17 @@ function MockConversation({
                 <span className="ml-1.5 font-normal opacity-50">· {theme.brandName}</span>
               )}
             </p>
-            <p className="text-xs opacity-60">{pct}% complete</p>
+            {/* The runtime's second line: progress, then "Start over", so the
+                title keeps the whole first line. */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="opacity-60">{pct}% complete</span>
+              <span aria-hidden className="opacity-30">·</span>
+              <span className="flex items-center gap-1 font-medium opacity-60">
+                <RotateCcw className="size-3 shrink-0" />
+                Start over
+              </span>
+            </div>
           </div>
-          {/* Labelled, like the runtime's — a bare rotate glyph is exactly what
-              "Start over" stopped being, because nobody found it. */}
-          <span className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium opacity-45">
-            <RotateCcw className="size-3.5 shrink-0" />
-            Start over
-          </span>
           {onClose && (
             <button
               type="button"
