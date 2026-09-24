@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, Landmark, Pencil, Plus, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowUpRight, Pencil, Plus, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { PAYMENT_PROVIDER_LABELS, type PaymentProviderName } from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
@@ -22,6 +22,7 @@ import {
   type PaymentAccount,
   type PaymentAccountsPayload,
 } from "./payment-accounts";
+import { ProviderLogo } from "./provider-logo";
 
 /**
  * Connecting a gateway account, one provider at a time.
@@ -203,9 +204,7 @@ function AccountCard({ account, formId }: { account: PaymentAccount; formId: str
   return (
     <div className="bg-card overflow-hidden rounded-xl border">
       <div className="flex items-start gap-3 p-4">
-        <div className="bg-muted text-muted-foreground grid size-9 shrink-0 place-items-center rounded-lg">
-          <Landmark className="size-4" />
-        </div>
+        <ProviderLogo provider={account.provider} className="size-9" />
 
         <div className="min-w-0 flex-1 space-y-1">
           {editing ? (

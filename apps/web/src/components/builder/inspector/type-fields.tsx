@@ -16,11 +16,11 @@ import { Button } from "@/components/ui/button";
 import { InfoHint } from "@/components/ui/info-hint";
 import {
   accountDisplay,
-  PROVIDER_MARK,
   INR_ONLY_PROVIDERS,
   usePaymentAccounts,
   type PaymentAccount,
 } from "@/components/integrations/payment-accounts";
+import { ProviderLogo } from "@/components/integrations/provider-logo";
 import { useBuilderStore } from "@/stores/builder-store";
 import { DomainsHelp, GroupFieldsEditor, PatternHelp, patternIsValid } from "./group-fields";
 import {
@@ -970,16 +970,9 @@ function AccountPicker({
 /** One account as a row: its name and tags, then the line that tells it from the others. */
 function AccountOption({ account }: { account: PaymentAccount }) {
   const { name, detail } = accountDisplay(account, PAYMENT_PROVIDER_LABELS[account.provider]);
-  const mark = PROVIDER_MARK[account.provider];
   return (
     <span className="flex min-w-0 items-center gap-2.5 text-left">
-      <span
-        className="grid size-8 shrink-0 place-items-center rounded-lg text-sm font-semibold text-white"
-        style={{ backgroundColor: mark.bg }}
-        aria-hidden
-      >
-        {mark.letter}
-      </span>
+      <ProviderLogo provider={account.provider} />
       <span className="min-w-0 flex-1 space-y-0.5">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate text-sm leading-tight font-medium">{name}</span>

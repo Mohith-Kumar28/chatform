@@ -179,10 +179,3 @@ export function accountDisplay(account: PaymentAccount, providerLabel: string): 
   if (auto) return { name: `${providerLabel} account`, detail: tail };
   return { name: account.label, detail: tail ? `${providerLabel} · ${tail}` : providerLabel };
 }
-
-/** Each gateway's own brand colour, for the small mark beside an account's name. */
-export const PROVIDER_MARK: Record<PaymentProviderName, { bg: string; letter: string }> = {
-  razorpay: { bg: "#2563EB", letter: "R" },
-  cashfree: { bg: "#6933D3", letter: "C" },
-  stripe: { bg: "#635BFF", letter: "S" },
-};
