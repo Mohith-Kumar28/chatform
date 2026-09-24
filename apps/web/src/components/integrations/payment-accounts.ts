@@ -174,6 +174,15 @@ export function usePaymentAccounts({ enabled = true }: { enabled?: boolean } = {
 export function accountDisplay(account: PaymentAccount, providerLabel: string): { name: string; detail: string | null } {
   const id = account.providerAccountId;
   const auto = !!id && account.label === `${providerLabel} ${id}`;
-  if (auto) return { name: `${providerLabel} account`, detail: id };
-  return { name: account.label, detail: id ? `${providerLabel} · ${id}` : providerLabel };
+  // The tail of the id is enough to tell two apart; the whole thing is on the account card.
+  const tail = id ? `ending ${id.slice(-5)}` : null;
+  if (auto) return { name: `${providerLabel} account`, detail: tail };
+  return { name: account.label, detail: tail ? `${providerLabel} · ${tail}` : providerLabel };
 }
+
+/** Each gateway's own brand colour, for the small mark beside an account's name. */
+export const PROVIDER_MARK: Record<PaymentProviderName, { bg: string; letter: string }> = {
+  razorpay: { bg: "#2563EB", letter: "R" },
+  cashfree: { bg: "#6933D3", letter: "C" },
+  stripe: { bg: "#635BFF", letter: "S" },
+};

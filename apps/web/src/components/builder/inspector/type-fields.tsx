@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Landmark } from "lucide-react";
+import { ArrowUpRight, Check } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   isValidUpiId,
@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { InfoHint } from "@/components/ui/info-hint";
 import {
   accountDisplay,
+  PROVIDER_MARK,
   INR_ONLY_PROVIDERS,
   usePaymentAccounts,
   type PaymentAccount,
@@ -969,27 +970,35 @@ function AccountPicker({
 /** One account as a row: its name and tags, then the line that tells it from the others. */
 function AccountOption({ account }: { account: PaymentAccount }) {
   const { name, detail } = accountDisplay(account, PAYMENT_PROVIDER_LABELS[account.provider]);
+  const mark = PROVIDER_MARK[account.provider];
   return (
     <span className="flex min-w-0 items-center gap-2.5 text-left">
-      <span className="bg-muted text-muted-foreground grid size-7 shrink-0 place-items-center rounded-md">
-        <Landmark className="size-3.5" aria-hidden />
+      <span
+        className="grid size-8 shrink-0 place-items-center rounded-lg text-sm font-semibold text-white"
+        style={{ backgroundColor: mark.bg }}
+        aria-hidden
+      >
+        {mark.letter}
       </span>
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 space-y-0.5">
         <span className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-sm font-medium">{name}</span>
-          {account.environment === "test" && <OptionTag>Test</OptionTag>}
-          {account.isDefault && <OptionTag>Default</OptionTag>}
+          <span className="truncate text-sm leading-tight font-medium">{name}</span>
+          {account.isDefault && (
+            <span className="text-muted-foreground inline-flex shrink-0 items-center gap-0.5 text-[11px] leading-none">
+              <Check className="size-3" aria-hidden />
+              Default
+            </span>
+          )}
         </span>
-        {detail && <span className="text-muted-foreground block truncate font-mono text-[11px]">{detail}</span>}
+        <span className="flex min-w-0 items-center gap-1.5 text-xs leading-tight">
+          {account.environment === "test" && (
+            <span className="shrink-0 rounded-sm bg-[var(--warning-soft)] px-1 py-px text-[10px] font-medium text-[var(--warning-soft-foreground)]">
+              Test mode
+            </span>
+          )}
+          {detail && <span className="text-muted-foreground truncate">{detail}</span>}
+        </span>
       </span>
-    </span>
-  );
-}
-
-function OptionTag({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium">
-      {children}
     </span>
   );
 }
