@@ -304,10 +304,15 @@ function PaymentsGroup({
     // browser tried to scroll to it. Arriving that way, the section also asks
     // for attention once, so it is obvious this is where to go next.
     if (new URL(window.location.href).hash !== "#payments") return;
-    document.getElementById("payments")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    const on = setTimeout(() => setFlagged(true), 450);
-    const off = setTimeout(() => setFlagged(false), 2600);
+    // Twice: once now, and once the sections above have finished growing (the
+    // embed preview lays out late, and the router may restore the top first).
+    const go = () => document.getElementById("payments")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    go();
+    const again = setTimeout(go, 400);
+    const on = setTimeout(() => setFlagged(true), 800);
+    const off = setTimeout(() => setFlagged(false), 3000);
     return () => {
+      clearTimeout(again);
       clearTimeout(on);
       clearTimeout(off);
     };
