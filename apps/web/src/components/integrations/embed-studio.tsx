@@ -109,7 +109,7 @@ export function EmbedStudio({
   blocks: Block[];
 }) {
   const [config, setConfig] = useState<EmbedConfig>(STUDIO_DEFAULTS);
-  const [target, setTarget] = useState<Target>("html");
+  const [target, setTarget] = useState<Target>("ai");
   const [previewOpen, setPreviewOpen] = useState(true);
   const [device, setDevice] = useState<PreviewDevice>("desktop");
 
@@ -441,10 +441,10 @@ export function EmbedStudio({
           <SegmentedControl
             size="sm"
             options={[
+              { value: "ai", label: "AI prompt", icon: Sparkles },
               { value: "html", label: "HTML", icon: Code2 },
               { value: "react", label: "React", icon: Code2 },
               { value: "email", label: "Email", icon: Mail },
-              { value: "ai", label: "AI prompt", icon: Sparkles },
             ]}
             value={target}
             onChange={setTarget}
