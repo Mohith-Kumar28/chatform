@@ -33,6 +33,7 @@ import {
 import { customFetch } from "@/lib/api/mutator";
 import { EmbedStudio } from "./embed-studio";
 import { PAYMENT_SHEET_COPY, PaymentAccountPanel } from "./payment-account-sheet";
+import { ProviderLogo } from "./provider-logo";
 import { usePaymentAccounts, type PaymentAccountsPayload } from "./payment-accounts";
 import { SpreadsheetPanel } from "./spreadsheet-panel";
 import { WebhooksPanel } from "./webhooks-panel";
@@ -326,6 +327,7 @@ function PaymentsGroup({
             <DestinationCard
               key={provider}
               icon={provider === "stripe" ? CreditCard : IndianRupee}
+              logo={<ProviderLogo provider={provider} className={cn("size-9 rounded-xl", !configured && accounts.length === 0 && "opacity-60 grayscale")} />}
               accent={configured || accounts.length > 0 ? "var(--primary)" : "var(--muted-foreground)"}
               name={PAYMENT_PROVIDER_LABELS[provider]}
               blurb={PAYMENT_BLURBS[provider]}
@@ -403,8 +405,11 @@ function DestinationCard({
   detail,
   onClick,
   href,
+  logo,
 }: {
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  /** The service's own mark, drawn instead of `icon` where there is one. */
+  logo?: React.ReactNode;
   accent: string;
   name: string;
   blurb: string;
@@ -417,12 +422,14 @@ function DestinationCard({
 
   const body = (
     <div className="flex items-start gap-3">
-        <span
-          className="grid size-9 shrink-0 place-items-center rounded-xl"
-          style={{ background: `color-mix(in oklab, ${accent} 14%, transparent)`, color: accent }}
-        >
-          <Icon className="size-4" strokeWidth={1.75} />
-        </span>
+        {logo ?? (
+          <span
+            className="grid size-9 shrink-0 place-items-center rounded-xl"
+            style={{ background: `color-mix(in oklab, ${accent} 14%, transparent)`, color: accent }}
+          >
+            <Icon className="size-4" strokeWidth={1.75} />
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="text-h3 truncate">{name}</p>
