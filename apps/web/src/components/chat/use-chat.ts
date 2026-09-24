@@ -220,6 +220,14 @@ export interface PaymentState {
   message: string | null;
   /** The browser refused the checkout tab, so the card leads with opening it by hand. */
   blocked: boolean;
+  /**
+   * `awaiting`, with no checkout on screen: the modal was closed, the tab gave up
+   * being polled, or a reload brought the card back with nothing open. The card
+   * then offers Pay again instead of a spinner that would never stop, because
+   * nothing is going to happen until the respondent acts (or a webhook lands,
+   * which settles the payment on the stream either way).
+   */
+  interrupted: boolean;
 }
 
 /**
@@ -240,6 +248,48 @@ const PAYMENT_POLL_MAX_MS = 10 * 60 * 1000;
  */
 const PAYMENT_RESYNC_MS = 4000;
 
+/**
+ * A payment the gateway confirmed, drawn as a receipt in the transcript under
+ * the message that asked for it. `fresh` is only true on the device that was
+ * there when it landed, and only until the celebration has played once.
+ */
+export interface PaymentReceipt {
+  ref: string;
+  recordId: string;
+  display: string | null;
+  provider: PaymentProvider | null;
+  paymentId: string | null;
+  paidAt: number;
+  testMode: boolean;
+  simulated: boolean;
+  /** The message it sits under: the last one on screen when the payment settled. */
+  afterMessageId: string | null;
+  fresh: boolean;
+}
+
+/**
+ * Receipts are the one part of the transcript the server does not replay (the
+ * payment has no message of its own), so they are remembered per session in
+ * this browser. A convenience: losing them loses the card, never the payment.
+ */
+const receiptsKey = (sessionId: string) => `chatform:receipts:${sessionId}`;
+function loadReceipts(sessionId: string): PaymentReceipt[] {
+  try {
+    const raw = localStorage.getItem(receiptsKey(sessionId));
+    const list = raw ? (JSON.parse(raw) as PaymentReceipt[]) : [];
+    return Array.isArray(list) ? list.map((r) => ({ ...r, fresh: false })) : [];
+  } catch {
+    return [];
+  }
+}
+function saveReceipts(sessionId: string, receipts: PaymentReceipt[]): void {
+  try {
+    localStorage.setItem(receiptsKey(sessionId), JSON.stringify(receipts.map((r) => ({ ...r, fresh: false }))));
+  } catch {
+    // Private mode or a full quota: the receipt just won't survive a reload.
+  }
+}
+
 const blankPayment = (ref: string): PaymentState => ({
   ref,
   phase: "starting",
@@ -251,6 +301,7 @@ const blankPayment = (ref: string): PaymentState => ({
   preview: false,
   message: null,
   blocked: false,
+  interrupted: false,
 });
 
 /** Which gateway a launch belongs to. Stripe is the only one that redirects. */
@@ -512,6 +563,8 @@ export function useChat({
 }: UseChatOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pollResults, setPollResults] = useState<Record<string, PollResult>>({});
+  const [paymentReceipts, setPaymentReceipts] = useState<PaymentReceipt[]>([]);
+  const messagesRef = useRef<ChatMessage[]>([]);
   const [question, setQuestion] = useState<QuestionState | null>(null);
   /** The question on screen, for callbacks that must stay stable across renders. */
   const currentQuestionRef = useRef<string | null>(null);
@@ -1147,6 +1200,11 @@ export function useChat({
           preview: data.preview === true,
           message: null,
           blocked: prev?.recordId === data.recordId ? prev.blocked : false,
+          // A new record with no tap behind it is a replay after a reload: nothing is open.
+          interrupted:
+            prev?.recordId === data.recordId
+              ? prev.interrupted
+              : !(paymentStartingRef.current || checkoutOpeningRef.current),
         }));
         setValidationHint(null);
         settleTurn();
@@ -1166,6 +1224,28 @@ export function useChat({
        */
       on("payment_settled", (e) => {
         const data = JSON.parse((e as MessageEvent).data) as PaymentSettledEvent;
+        const sessionId = sessionRef.current?.sessionId;
+        const last = messagesRef.current[messagesRef.current.length - 1];
+        setPaymentReceipts((prev) => {
+          if (prev.some((r) => r.recordId === data.recordId)) return prev;
+          const next = [
+            ...prev,
+            {
+              ref: data.ref,
+              recordId: data.recordId,
+              display: data.display ?? null,
+              provider: data.provider ?? null,
+              paymentId: data.paymentId ?? null,
+              paidAt: data.paidAt ?? Date.now(),
+              testMode: data.testMode === true,
+              simulated: data.simulated === true,
+              afterMessageId: last ? (last.serverId ?? last.id) : null,
+              fresh: true,
+            },
+          ];
+          if (sessionId) saveReceipts(sessionId, next);
+          return next;
+        });
         setPendingPayment((prev) => (prev && (prev.recordId === data.recordId || prev.ref === data.ref) ? null : prev));
         /*
          * Only for the question on screen. A payment can settle for one the respondent has
@@ -1830,6 +1910,7 @@ export function useChat({
        */
       if (checkoutOpeningRef.current) return;
       checkoutOpeningRef.current = true;
+      setPendingPayment((p) => (p?.recordId === recordId && p.interrupted ? { ...p, interrupted: false } : p));
       const attempt = checkoutAttemptRef.current;
       let outcome: Awaited<ReturnType<typeof launchCheckout>>;
       try {
@@ -1851,9 +1932,16 @@ export function useChat({
           preopened?.close();
           return;
         case "completed":
-        case "dismissed":
-          void confirmPayment(recordId);
+        case "dismissed": {
+          // Closed without the gateway's word that it was paid: say so, and put Pay back.
+          const status = await confirmPayment(recordId);
+          if (status !== "paid") {
+            setPendingPayment((p) =>
+              p?.recordId === recordId && p.phase === "awaiting" ? { ...p, interrupted: true } : p,
+            );
+          }
           return;
+        }
         case "blocked":
           setPendingPayment((p) => (p?.recordId === recordId ? { ...p, blocked: true } : p));
           return;
@@ -1903,6 +1991,7 @@ export function useChat({
         phase: "starting",
         message: null,
         blocked: false,
+        interrupted: false,
       }));
       setValidationHint(null);
 
@@ -2580,6 +2669,7 @@ export function useChat({
     const timer = setInterval(() => {
       if (Date.now() - startedAt > PAYMENT_POLL_MAX_MS) {
         clearInterval(timer);
+        setPendingPayment((p) => (p?.recordId === pollRecordId ? { ...p, interrupted: true } : p));
         return;
       }
       if (document.visibilityState === "visible") void confirmPayment(pollRecordId);
@@ -2678,9 +2768,27 @@ export function useChat({
     };
   }, [start]);
 
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  /*
+   * The receipts belong to a session. Picked up when one connects (a reload
+   * resuming it), and dropped when it goes (Start over).
+   */
+  useEffect(() => {
+    const id = sessionRef.current?.sessionId ?? null;
+    setPaymentReceipts((prev) => {
+      if (!id) return prev.length ? [] : prev;
+      if (prev.some((r) => r.fresh)) return prev;
+      return loadReceipts(id);
+    });
+  }, [status]);
+
   return {
     messages,
     pollResults,
+    paymentReceipts,
     question,
     review,
     submitted,

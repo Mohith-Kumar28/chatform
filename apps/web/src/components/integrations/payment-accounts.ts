@@ -28,12 +28,18 @@ export interface PaymentAccount {
   credentialKind: "oauth" | "restricted_key" | "connect";
   environment: "test" | "live";
   label: string;
+  /** The gateway's own id for the account, as its dashboard shows it. */
+  providerAccountId: string | null;
   status: PaymentAccountStatus;
   lastError: string | null;
   currencies: string[];
   createdAt: number;
   /** How many of the organization's forms point a payment block at this account. */
   formsUsing?: number;
+  /** New verified-checkout questions start on this one. At most one per organization. */
+  isDefault?: boolean;
+  /** Who in the organization connected it. */
+  connectedBy?: { name: string | null; email: string | null } | null;
 }
 
 export interface PaymentAccountsPayload {
@@ -157,7 +163,7 @@ export function usePaymentAccounts({ enabled = true }: { enabled?: boolean } = {
   });
 }
 
-/** "Razorpay · Acme Events (test)" — how an account is named wherever one is picked. */
+/** "Razorpay · Acme Events (test)", how an account is named wherever one is picked. */
 export function accountName(account: PaymentAccount, providerLabel: string): string {
   /*
    * The "(test)" is only added when the author's own label doesn't already say
@@ -166,5 +172,9 @@ export function accountName(account: PaymentAccount, providerLabel: string): str
    */
   const saysTest = /\btest\b/i.test(account.label);
   const suffix = account.environment === "test" && !saysTest ? " (test)" : "";
-  return `${providerLabel} · ${account.label}${suffix}`;
+  // A label that already names the gateway ("Razorpay acc_…") is not prefixed with it again.
+  const named = account.label.toLowerCase().startsWith(providerLabel.toLowerCase())
+    ? account.label
+    : `${providerLabel} · ${account.label}`;
+  return `${named}${suffix}${account.isDefault ? " · Default" : ""}`;
 }

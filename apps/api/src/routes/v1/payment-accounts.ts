@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../../lib/validator.js";
 import { z } from "zod";
 import type { Bindings } from "../../env.js";
 import type { GuardVars } from "../../lib/guards.js";
@@ -10,12 +11,14 @@ import {
   CashfreeOnboardBody,
   OAuthStartBody,
   PublicAccountSchema,
+  RenameAccountBody,
   StripeKeyBody,
   connectGate,
   handleCashfreeOnboard,
   handleDisconnect,
   handleList,
   handleOAuthStart,
+  handleRename,
   handleStripeConnect,
 } from "../payment-accounts.js";
 
@@ -124,6 +127,23 @@ paymentAccountsV1Router.post(
     if (refused) return refused;
     return handleCashfreeOnboard(c, c.req.valid("json"));
   },
+);
+
+paymentAccountsV1Router.patch(
+  "/payment-accounts/:id",
+  requireScope("payment", "write"),
+  validator("json", RenameAccountBody),
+  describeRoute({
+    tags: ["v1"],
+    summary: "Rename a payment account, or make it the default",
+    description:
+      "`label` sets the name the account is shown under in the builder. `isDefault: true` makes it the account new verified-checkout questions start on. Nothing changes at the gateway.",
+    responses: {
+      200: { description: "Updated", content: json(z.object({ ok: z.literal(true) })) },
+      404: { description: "Not found", content: errorContent },
+    },
+  }),
+  (c) => handleRename(c, c.req.param("id"), c.req.valid("json")),
 );
 
 paymentAccountsV1Router.delete(

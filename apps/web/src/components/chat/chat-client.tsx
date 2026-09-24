@@ -48,6 +48,7 @@ import {
 } from "./countdown";
 import { useViewportLock } from "./use-viewport-lock";
 import { Confetti } from "./confetti";
+import { PaymentReceiptCard } from "./payment-receipt";
 import { cn } from "@/lib/utils";
 import { API_ORIGIN } from "@/lib/api/mutator";
 
@@ -635,6 +636,12 @@ export function ChatSurface({
               {m.answeredRef && chat.pollResults[m.answeredRef] && (
                 <PollResultCard result={chat.pollResults[m.answeredRef]!} />
               )}
+              {/* A verified payment's receipt, under the message it arrived after. */}
+              {chat.paymentReceipts
+                .filter((r) => r.afterMessageId === m.id || (m.serverId && r.afterMessageId === m.serverId))
+                .map((r) => (
+                  <PaymentReceiptCard key={r.recordId} receipt={r} />
+                ))}
             </div>
           ))}
 

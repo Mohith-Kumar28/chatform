@@ -53,6 +53,14 @@ export interface PaymentSettledEvent {
   ref: string;
   recordId: string;
   status: "paid";
+  /** The receipt. Optional: a server older than the receipt card sends none of it. */
+  display?: string;
+  provider?: PaymentProvider;
+  paymentId?: string | null;
+  /** Epoch ms. */
+  paidAt?: number;
+  testMode?: boolean;
+  simulated?: boolean;
 }
 
 /** `payment_failed` — this attempt did not go through; the card stays up for a retry. */

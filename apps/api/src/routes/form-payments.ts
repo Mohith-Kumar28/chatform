@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../lib/validator.js";
 import { z } from "zod";
 import { fromMinorUnits, paymentDashboardUrl, PAYMENT_PROVIDERS, type PaymentProviderName } from "@repo/form-schema";
 import type { Bindings } from "../env.js";

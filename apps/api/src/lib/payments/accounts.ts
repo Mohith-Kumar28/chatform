@@ -60,6 +60,7 @@ interface AccountDbRow {
   capabilities_json: string;
   platform_fee_bps: number;
   connected_by_user_id: string | null;
+  is_default?: number;
   created_at: number;
   updated_at: number;
 }
@@ -179,25 +180,37 @@ export interface PublicAccount {
   credentialKind: CredentialKind;
   environment: PaymentEnvironment;
   label: string;
+  /** The gateway's own id for the account (`acc_…`, `acct_…`): what its dashboard shows. Not a secret. */
+  providerAccountId: string | null;
   status: PaymentAccountStatus;
   lastError: string | null;
   currencies: string[];
   createdAt: number;
   formsUsing?: number;
+  /** New verified-checkout questions start on this one. Exactly one active account per organization reads true. */
+  isDefault?: boolean;
+  /** Who in the organization connected it, so two accounts can be told apart by more than an id. */
+  connectedBy?: { name: string | null; email: string | null } | null;
 }
 
-export function toPublicAccount(account: PaymentAccountRow, formsUsing?: number): PublicAccount {
+export function toPublicAccount(
+  account: PaymentAccountRow,
+  formsUsing?: number,
+  connectedBy?: PublicAccount["connectedBy"],
+): PublicAccount {
   return {
     id: account.id,
     provider: account.provider,
     credentialKind: account.credentialKind,
     environment: account.environment,
     label: account.displayLabel,
+    providerAccountId: account.providerAccountId,
     status: account.status,
     lastError: account.lastError,
     currencies: account.currencies,
     createdAt: account.createdAt,
     ...(formsUsing !== undefined ? { formsUsing } : {}),
+    ...(connectedBy !== undefined ? { connectedBy } : {}),
   };
 }
 
@@ -215,14 +228,56 @@ export async function listAccounts(env: Bindings, orgId: string): Promise<Public
             (SELECT COUNT(*) FROM forms f
               WHERE f.organization_id = a.organization_id
                 AND f.deleted_at IS NULL
-                AND instr(f.working_schema, '"' || a.id || '"') > 0) AS forms_using
+                AND instr(f.working_schema, '"' || a.id || '"') > 0) AS forms_using,
+            u.name AS connected_by_name,
+            u.email AS connected_by_email
        FROM payment_accounts a
+       LEFT JOIN users u ON u.id = a.connected_by_user_id
       WHERE a.organization_id = ? AND a.status != 'disconnected'
       ORDER BY a.created_at DESC`,
   )
     .bind(orgId)
-    .all<AccountDbRow & { forms_using: number }>();
-  return (results ?? []).map((r) => toPublicAccount(rowToAccount(r), r.forms_using));
+    .all<AccountDbRow & { forms_using: number; connected_by_name: string | null; connected_by_email: string | null }>();
+  const rows = results ?? [];
+  // The flagged one, or, with none flagged, the first connected that still works.
+  const active = rows.filter((r) => r.status === "active");
+  const defaultId = (active.find((r) => r.is_default === 1) ?? active[active.length - 1])?.id ?? null;
+  return rows.map((r) => ({
+    ...toPublicAccount(
+      rowToAccount(r),
+      r.forms_using,
+      r.connected_by_name || r.connected_by_email ? { name: r.connected_by_name, email: r.connected_by_email } : null,
+    ),
+    isDefault: r.id === defaultId,
+  }));
+}
+
+/** Make one account the organization's default, and every other one not. */
+export async function setDefaultAccount(env: Bindings, orgId: string, accountId: string): Promise<boolean> {
+  const target = await env.DB.prepare(
+    `SELECT id FROM payment_accounts WHERE id = ? AND organization_id = ? AND status = 'active'`,
+  )
+    .bind(accountId, orgId)
+    .first<{ id: string }>();
+  if (!target) return false;
+  await env.DB.prepare(`UPDATE payment_accounts SET is_default = (id = ?), updated_at = ? WHERE organization_id = ?`)
+    .bind(accountId, Date.now(), orgId)
+    .run();
+  return true;
+}
+
+/**
+ * The author's own name for an account. The gateway only hands back an id, and "Razorpay
+ * acc_SXSV…" does not say which of two accounts is the event one; this does.
+ */
+export async function renameAccount(env: Bindings, orgId: string, accountId: string, label: string): Promise<boolean> {
+  const res = await env.DB.prepare(
+    `UPDATE payment_accounts SET display_label = ?, updated_at = ?
+      WHERE id = ? AND organization_id = ? AND status != 'disconnected'`,
+  )
+    .bind(label.slice(0, 200), Date.now(), accountId, orgId)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
 }
 
 export async function openCredentials(env: Bindings, account: PaymentAccountRow): Promise<StoredCredentials> {
@@ -383,14 +438,14 @@ async function upsertAccount(env: Bindings, input: UpsertInput, attempt = 0): Pr
   if (existing) {
     await env.DB.prepare(
       `UPDATE payment_accounts
-          SET credential_kind = ?, display_label = ?, credentials_enc = ?, access_expires_at = ?, refresh_expires_at = ?,
+          SET credential_kind = ?, credentials_enc = ?, access_expires_at = ?, refresh_expires_at = ?,
               refresh_lock_until = NULL, webhook_secret_enc = ?, provider_webhook_id = ?, status = 'active', last_error = NULL,
               currencies_json = ?, capabilities_json = ?, connected_by_user_id = ?, updated_at = ?
         WHERE id = ? AND organization_id = ?`,
     )
+      // `display_label` is left alone: a reconnect must not wipe the name the author gave it.
       .bind(
         input.credentialKind,
-        label,
         credentialsEnc,
         input.accessExpiresAt,
         input.refreshExpiresAt,

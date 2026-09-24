@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import {
@@ -24,6 +25,7 @@ import {
   CheckboxGroup,
   Field,
   ListEditor,
+  MoneyField,
   NumberField,
   SelectField,
   SwitchField,
@@ -713,8 +715,14 @@ const NO_ACCOUNT = "__none";
  */
 function currencyFor(account: PaymentAccount | undefined, current: string): string | undefined {
   if (!account) return undefined;
-  if (INR_ONLY_PROVIDERS.has(account.provider)) return current === "INR" ? undefined : "INR";
-  return undefined;
+  const want = INR_ONLY_PROVIDERS.has(account.provider) ? "INR" : account.currencies[0]?.toUpperCase();
+  return want && want !== current.toUpperCase() ? want : undefined;
+}
+
+/** The account a new verified-checkout question starts on: the one marked default, else the first connected. */
+function defaultAccount(accounts: PaymentAccount[]): PaymentAccount | undefined {
+  const usable = accounts.filter((a) => a.status === "active");
+  return usable.find((a) => a.isDefault) ?? usable[usable.length - 1];
 }
 
 /**
@@ -758,6 +766,19 @@ function PaymentFields({
     { value: "upi" as const, label: "UPI QR (manual, unverified)" },
   ];
 
+  /*
+   * A verified-checkout question with no account, and a default to give it: it gets the
+   * default. Only once the list is known, so a slow read never assigns a guess.
+   */
+  const fallback = gateway && !block.paymentAccountId && known ? defaultAccount(accounts) : undefined;
+  useEffect(() => {
+    if (!fallback) return;
+    const currency = currencyFor(fallback, block.currency);
+    patch({ paymentAccountId: fallback.id, ...(currency ? { currency } : {}) } as Partial<Block>);
+    // `patch` is a fresh closure per render; the id is what decides whether this runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fallback?.id]);
+
   const chooseAccount = (next: PaymentAccount | undefined) => {
     const currency = currencyFor(next, block.currency);
     patch({ paymentAccountId: next?.id, ...(currency ? { currency } : {}) } as Partial<Block>);
@@ -770,9 +791,9 @@ function PaymentFields({
         value={block.method}
         onChange={(v) => {
           if (v === "gateway") {
-            // One account connected is the account; making the author pick it
-            // from a list of one is a step that can only be got wrong.
-            const only = !block.paymentAccountId && accounts.length === 1 ? accounts[0] : undefined;
+            // The default account is the account; making the author pick it
+            // from a list every time is a step that can only be got wrong.
+            const only = !block.paymentAccountId ? defaultAccount(accounts) : undefined;
             const chosen = only ?? account;
             const currency = currencyFor(chosen, block.currency);
             patch({
@@ -803,7 +824,6 @@ function PaymentFields({
               onChange={chooseAccount}
             />
             <AmountFields block={block} patch={patch} gateway />
-            <CurrencyField block={block} account={account} patch={patch} />
           </div>
         </LockedControl>
       ) : (
@@ -834,12 +854,15 @@ function PaymentFields({
             />
           )}
           <AmountFields block={block} patch={patch} />
-          <TextField
-            label="Currency"
-            value={block.currency}
-            onChange={(v) => patch({ currency: v.toUpperCase().slice(0, 3) } as Partial<Block>, key("cur"))}
-            maxLength={3}
-          />
+          {/* A payment link charges on a page we cannot see, so its currency is the author's to say. UPI is rupees. */}
+          {block.method === "link" && (
+            <TextField
+              label="Currency"
+              value={block.currency}
+              onChange={(v) => patch({ currency: v.toUpperCase().slice(0, 3) } as Partial<Block>, key("cur"))}
+              maxLength={3}
+            />
+          )}
         </>
       )}
     </>
@@ -892,6 +915,8 @@ function AccountPicker({
     );
   }
 
+  // Opens the Integrate tab with this gateway's accounts sheet already open.
+  const manage = `/forms/${formId}/integrate?payments=open&provider=${account?.provider ?? accounts[0]?.provider ?? "razorpay"}#payments`;
   const options = [
     ...(selectedId ? [] : [{ value: NO_ACCOUNT, label: "Choose an account" }]),
     ...(selectedId && !account ? [{ value: selectedId, label: "No longer connected" }] : []),
@@ -906,19 +931,31 @@ function AccountPicker({
         onChange={(v) => onChange(accounts.find((a) => a.id === v))}
         options={options}
       />
+      {account && (
+        <p className="text-muted-foreground flex flex-wrap items-center gap-x-1.5 text-xs">
+          <span>{account.environment === "test" ? "Test mode" : "Live"}</span>
+          {(account.connectedBy?.email || account.connectedBy?.name) && (
+            <span>· Connected by {account.connectedBy.email || account.connectedBy.name}</span>
+          )}
+        </p>
+      )}
       {selectedId && !account && (
         <p className="text-destructive text-xs">That account was disconnected. Pick another one.</p>
       )}
       {account && account.status !== "active" && (
         <p className="text-destructive text-xs">
           This account needs reconnecting before it can take payments.{" "}
-          <Link href={integrate} className="underline">
+          <Link href={manage} className="underline">
             Open Integrate
           </Link>
         </p>
       )}
-      <Link href={integrate} className="text-muted-foreground hover:text-foreground block text-xs">
+      <Link
+        href={manage}
+        className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-xs underline decoration-dotted underline-offset-4 hover:decoration-solid"
+      >
         Manage payment accounts
+        <ArrowUpRight className="size-3" aria-hidden />
       </Link>
     </div>
   );
@@ -957,10 +994,10 @@ function AmountFields({
         ]}
       />
       {block.amountMode === "fixed" ? (
-        <NumberField
+        <MoneyField
           label="Amount"
           value={block.amount}
-          min={0}
+          currency={block.currency}
           onChange={(v) => patch({ amount: v } as Partial<Block>, key("amount"))}
         />
       ) : (
@@ -987,17 +1024,17 @@ function AmountFields({
           )}
           {gateway && (
             <div className="grid grid-cols-2 gap-3">
-              <NumberField
+              <MoneyField
                 label="Minimum amount"
                 value={block.minAmount}
-                min={0}
+                currency={block.currency}
                 placeholder="None"
                 onChange={(v) => patch({ minAmount: v } as Partial<Block>, key("minAmount"))}
               />
-              <NumberField
+              <MoneyField
                 label="Maximum amount"
                 value={block.maxAmount}
-                min={0}
+                currency={block.currency}
                 placeholder="None"
                 onChange={(v) => patch({ maxAmount: v } as Partial<Block>, key("maxAmount"))}
               />
@@ -1006,50 +1043,6 @@ function AmountFields({
         </>
       )}
     </>
-  );
-}
-
-/** Pinned to INR on a rupee-only gateway; free text otherwise, Stripe included (see `currencyFor`). */
-function CurrencyField({
-  block,
-  account,
-  patch,
-}: {
-  block: PaymentBlock;
-  account: PaymentAccount | undefined;
-  patch: (p: Partial<Block>, coalesceKey?: string) => void;
-}) {
-  const current = block.currency.toUpperCase();
-  const supported = account && INR_ONLY_PROVIDERS.has(account.provider) ? ["INR"] : [];
-
-  if (supported.length === 0) {
-    return (
-      <TextField
-        label="Currency"
-        value={block.currency}
-        onChange={(v) => patch({ currency: v.toUpperCase().slice(0, 3) } as Partial<Block>, `cur:${block.ref}`)}
-        maxLength={3}
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <SelectField
-        label="Currency"
-        value={current}
-        onChange={(v) => patch({ currency: v } as Partial<Block>)}
-        options={[
-          ...(supported.includes(current) ? [] : [{ value: current, label: `${current} (not supported)` }]),
-          ...supported.map((c) => ({ value: c, label: c })),
-        ]}
-      />
-      {!supported.includes(current) && (
-        <p className="text-destructive text-xs">
-          {PAYMENT_PROVIDER_LABELS[account!.provider]} can&apos;t charge in {current} on this account.
-        </p>
-      )}
-    </div>
   );
 }
 

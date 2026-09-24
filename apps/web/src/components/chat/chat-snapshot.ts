@@ -25,6 +25,7 @@ export type ScreenState = Pick<
   ChatState,
   | "messages"
   | "pollResults"
+  | "paymentReceipts"
   | "question"
   | "review"
   | "submitted"
@@ -99,6 +100,8 @@ export function captureSnapshot(config: PublicFormConfig, chat: ChatState): Chat
     state: {
       messages: chat.messages.map((m) => ({ ...m, streaming: false, optimistic: false })),
       pollResults: chat.pollResults,
+      // `fresh` is a one-time flourish, not state: a replayed report shows the receipt, not the confetti.
+      paymentReceipts: chat.paymentReceipts.map((r) => ({ ...r, fresh: false })),
       question: chat.question,
       review: chat.review,
       submitted: chat.submitted,
@@ -153,10 +156,11 @@ export function toChatState(snapshot: ChatSnapshot): ChatState {
       ? // `closed` was added after v2 shipped, so a report filed before it has
         // no such field — and `undefined` there would make `chat-client` draw
         // the closed screen over somebody's replayed conversation.
-        { ...snapshot.state, closed: snapshot.state.closed ?? null }
+        { ...snapshot.state, closed: snapshot.state.closed ?? null, paymentReceipts: snapshot.state.paymentReceipts ?? [] }
       : {
           messages: snapshot.messages,
           pollResults: snapshot.pollResults ?? {},
+          paymentReceipts: [],
           question: snapshot.question,
           review: snapshot.review,
           ending: snapshot.ending,

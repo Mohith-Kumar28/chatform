@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -181,6 +181,125 @@ export function NumberField({
         onChange={(e) => buffered.onChange(e.target.value)}
         onBlur={buffered.onBlur}
       />
+    </Field>
+  );
+}
+
+/** The largest amount a payment question accepts: one crore, or ten million, in any currency. */
+export const MAX_PAYMENT_AMOUNT = 10_000_000;
+
+/** How many decimals a currency has (INR and USD 2, JPY 0), from the platform's own table. */
+export function currencyDecimals(currency: string): number {
+  try {
+    return new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions().maximumFractionDigits ?? 2;
+  } catch {
+    return 2;
+  }
+}
+
+/** "₹", "$", "€", or the code itself for a currency with no symbol. */
+export function currencySymbol(currency: string): string {
+  try {
+    const part = new Intl.NumberFormat("en-IN", { style: "currency", currency })
+      .formatToParts(0)
+      .find((p) => p.type === "currency");
+    return part?.value ?? currency;
+  } catch {
+    return currency;
+  }
+}
+
+/**
+ * Money, typed as money.
+ *
+ * Not `type="number"`: that accepts `e`, `-` and `+`, changes value when the
+ * page is scrolled over it, and hands back `""` for anything it cannot parse,
+ * so the field could not tell a half-typed `1.` from nothing at all. This keeps
+ * the text the author typed, lets through only digits and one point, stops at
+ * the currency's own decimals, and only commits a value that could be charged.
+ * Anything else stays on screen with the reason under it.
+ */
+export function MoneyField({
+  label,
+  value,
+  currency,
+  onChange,
+  placeholder,
+  help,
+}: {
+  label: string;
+  value: number | undefined;
+  currency: string;
+  onChange: (v: number | undefined) => void;
+  placeholder?: string;
+  help?: React.ReactNode;
+}) {
+  const id = useId();
+  const decimals = currencyDecimals(currency);
+  const [text, setText] = useState(value === undefined ? "" : String(value));
+  const [error, setError] = useState<string | undefined>();
+
+  // Follow the document when it changes underneath (undo, another tab), but not while it matches.
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    const matches = text === "" ? value === undefined : Number(text) === value;
+    if (!matches) setText(value === undefined ? "" : String(value));
+  }
+
+  function change(raw: string) {
+    // Digits and one point; commas and spaces are how people write money, so they are dropped, not refused.
+    let next = raw.replace(/[\s,]/g, "").replace(/[^\d.]/g, "");
+    const dot = next.indexOf(".");
+    if (dot !== -1) {
+      next = next.slice(0, dot + 1) + next.slice(dot + 1).replace(/\./g, "");
+      if (decimals === 0) next = next.slice(0, dot);
+      else next = next.slice(0, dot + 1 + decimals);
+    }
+    // "007" is 7; "0.5" keeps its zero.
+    next = next.replace(/^0+(?=\d)/, "");
+    setText(next);
+
+    if (next === "" || next === ".") {
+      setError(undefined);
+      onChange(undefined);
+      return;
+    }
+    const n = Number(next);
+    if (!Number.isFinite(n)) return;
+    if (n > MAX_PAYMENT_AMOUNT) {
+      setError(`Keep it at ${currencySymbol(currency)}${MAX_PAYMENT_AMOUNT.toLocaleString("en-IN")} or less.`);
+      return;
+    }
+    if (n === 0) {
+      setError("Enter an amount above zero.");
+      return;
+    }
+    setError(undefined);
+    onChange(n);
+  }
+
+  return (
+    <Field label={label} error={error} help={help}>
+      <div className="relative">
+        <span className="text-muted-foreground pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm">
+          {currencySymbol(currency)}
+        </span>
+        <Input
+          id={id}
+          type="text"
+          inputMode={decimals === 0 ? "numeric" : "decimal"}
+          autoComplete="off"
+          className={cn(fieldInputClass, "pl-8 tabular-nums")}
+          value={text}
+          placeholder={placeholder ?? (decimals === 0 ? "0" : "0.00")}
+          aria-invalid={error ? true : undefined}
+          onChange={(e) => change(e.target.value)}
+        />
+        <span className="text-muted-foreground pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs">
+          {currency.toUpperCase()}
+        </span>
+      </div>
     </Field>
   );
 }

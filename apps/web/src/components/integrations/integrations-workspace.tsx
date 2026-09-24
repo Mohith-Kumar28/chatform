@@ -241,12 +241,15 @@ function PaymentsOAuthResult({
     if (!ready || handled.current) return;
     const url = new URL(window.location.href);
     const outcome = url.searchParams.get("payments");
-    if (outcome !== "connected" && outcome !== "error") return;
+    if (outcome !== "connected" && outcome !== "error" && outcome !== "open") return;
     handled.current = true;
     const raw = url.searchParams.get("provider");
     const provider = PAYMENT_PROVIDERS.find((p) => p === raw);
     const name = provider ? PAYMENT_PROVIDER_LABELS[provider] : "The payment account";
-    if (outcome === "connected") {
+    // `open`: a link from a payment question's settings, straight to that gateway's accounts.
+    if (outcome === "open") {
+      // Nothing to announce.
+    } else if (outcome === "connected") {
       toast.success(`${name} connected. Pick it on a payment question to start taking verified payments.`);
     } else {
       toast.error(
@@ -308,7 +311,7 @@ function PaymentsGroup({
         <h2 className="text-h2">Take payments</h2>
         <p className="text-muted-foreground text-body">
           Checkout opens on your own gateway account and the chat moves on once it confirms. The money
-          goes straight to you — Chatform never holds it and takes no cut.
+          goes straight to you. Chatform never holds it and takes no cut.
         </p>
       </div>
 

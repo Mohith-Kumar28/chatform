@@ -17024,6 +17024,16 @@
                           "label": {
                             "type": "string"
                           },
+                          "providerAccountId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -17054,6 +17064,45 @@
                           },
                           "formsUsing": {
                             "type": "number"
+                          },
+                          "connectedBy": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "email": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "email"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "isDefault": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -17062,6 +17111,7 @@
                           "credentialKind",
                           "environment",
                           "label",
+                          "providerAccountId",
                           "status",
                           "lastError",
                           "currencies",
@@ -17518,6 +17568,16 @@
                         "label": {
                           "type": "string"
                         },
+                        "providerAccountId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "status": {
                           "type": "string",
                           "enum": [
@@ -17548,6 +17608,45 @@
                         },
                         "formsUsing": {
                           "type": "number"
+                        },
+                        "connectedBy": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "email": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "email"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "isDefault": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -17556,6 +17655,7 @@
                         "credentialKind",
                         "environment",
                         "label",
+                        "providerAccountId",
                         "status",
                         "lastError",
                         "currencies",
@@ -17935,6 +18035,136 @@
       }
     },
     "/v1/payment-accounts/{id}": {
+      "patch": {
+        "operationId": "patchV1PaymentAccountsById",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "isDefault": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Rename a payment account, or make it the default",
+        "description": "`label` sets the name the account is shown under in the builder. `isDefault: true` makes it the account new verified-checkout questions start on. Nothing changes at the gateway.",
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-required-scope": "payment:write",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      },
       "delete": {
         "operationId": "deleteV1PaymentAccountsById",
         "tags": [
@@ -24476,6 +24706,16 @@
                           "label": {
                             "type": "string"
                           },
+                          "providerAccountId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -24506,6 +24746,45 @@
                           },
                           "formsUsing": {
                             "type": "number"
+                          },
+                          "connectedBy": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "email": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "email"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "isDefault": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -24514,6 +24793,7 @@
                           "credentialKind",
                           "environment",
                           "label",
+                          "providerAccountId",
                           "status",
                           "lastError",
                           "currencies",
@@ -24903,6 +25183,16 @@
                         "label": {
                           "type": "string"
                         },
+                        "providerAccountId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "status": {
                           "type": "string",
                           "enum": [
@@ -24933,6 +25223,45 @@
                         },
                         "formsUsing": {
                           "type": "number"
+                        },
+                        "connectedBy": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "email": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "email"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "isDefault": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -24941,6 +25270,7 @@
                         "credentialKind",
                         "environment",
                         "label",
+                        "providerAccountId",
                         "status",
                         "lastError",
                         "currencies",
@@ -25314,6 +25644,133 @@
       }
     },
     "/api/payment-accounts/{id}": {
+      "patch": {
+        "operationId": "patchApiPaymentAccountsById",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "isDefault": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Rename a payment account, or make it the default",
+        "description": "`label` sets the name the account is shown under in the builder. `isDefault: true` makes it the account new verified-checkout questions start on. Nothing changes at the gateway.",
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      },
       "delete": {
         "operationId": "deleteApiPaymentAccountsById",
         "tags": [

@@ -2,7 +2,7 @@
 
 import { safeHref } from "@repo/guard";
 import { useMemo, useState } from "react";
-import { Loader2, Lock } from "lucide-react";
+import { CircleAlert, Loader2, Lock } from "lucide-react";
 import {
   buildUpiUri,
   formatAmount,
@@ -114,10 +114,12 @@ export function GatewayPaymentAffordance({
   const phase = payment?.phase ?? "idle";
   const canAct = Boolean(actions) && !disabled;
   const skip = block.required ? null : (
-    <button type="button" onClick={onSkip} disabled={disabled} className="text-xs underline opacity-60">
+    <button type="button" onClick={onSkip} disabled={disabled} className="text-xs underline opacity-60 hover:opacity-100">
       Skip
     </button>
   );
+  // The amount is the card's headline, so the button does not repeat it.
+  const payLabel = "Pay";
 
   async function check() {
     if (!actions) return;
@@ -132,112 +134,167 @@ export function GatewayPaymentAffordance({
 
   if (phase === "phone") {
     return (
-      <form
-        className="animate-message-in space-y-3 rounded-2xl bg-[var(--cf-chip-bg)] p-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (phone && canAct) actions?.start(block.ref, { phone });
-        }}
-      >
-        <p className="text-sm">{payment?.message ?? "What number should the payment receipt go to?"}</p>
-        <PhoneInput value={phone} onChange={setPhone} variant="field" autoFocus name="payment-phone" />
-        <div className="flex flex-wrap items-center gap-2">
+      <PaymentCard price={price}>
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (phone && canAct) actions?.start(block.ref, { phone });
+          }}
+        >
+          <p className="text-sm">{payment?.message ?? "What number should the payment receipt go to?"}</p>
+          <PhoneInput value={phone} onChange={setPhone} variant="field" autoFocus name="payment-phone" />
           <PayButton type="submit" disabled={!canAct || !phone}>
-            {price ? `Pay ${price}` : "Pay"}
+            {payLabel}
           </PayButton>
           {payment?.preview ? (
-            <button type="button" onClick={() => actions?.simulate()} disabled={!canAct} className="text-xs underline opacity-60">
-              Simulate instead
-            </button>
-          ) : (
-            skip
-          )}
-        </div>
-        <p className="flex items-center gap-1.5 text-xs opacity-60">
-          <Lock className="size-3" aria-hidden />
-          {secureLine}
-        </p>
-      </form>
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => actions?.simulate()}
+                disabled={!canAct}
+                className="text-xs underline opacity-60 hover:opacity-100"
+              >
+                Simulate instead
+              </button>
+            </div>
+          ) : null}
+        </form>
+        {payment?.preview ? null : <CardFooter secureLine={secureLine} skip={skip} />}
+      </PaymentCard>
     );
   }
 
   if (phase === "awaiting" && payment?.preview) {
     return (
-      <div className="animate-message-in space-y-3 rounded-2xl bg-[var(--cf-chip-bg)] p-4">
-        <p className="text-xs font-medium opacity-60">Preview · no real payment is taken</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <PayButton disabled={!canAct} onClick={() => actions?.simulate()}>
-            {price ? `Simulate paying ${price}` : "Simulate payment"}
-          </PayButton>
-          <button type="button" onClick={() => actions?.cancel()} disabled={!canAct} className="text-xs underline opacity-60">
+      <PaymentCard price={price} note="Preview · no real payment is taken">
+        <PayButton disabled={!canAct} onClick={() => actions?.simulate()}>
+          Simulate payment
+        </PayButton>
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={() => actions?.cancel()}
+            disabled={!canAct}
+            className="text-xs underline opacity-60 hover:opacity-100"
+          >
             Cancel
           </button>
         </div>
-      </div>
+      </PaymentCard>
+    );
+  }
+
+  /*
+   * The checkout was closed, gave up, or is not open after a reload. Nothing is
+   * pending on our side, so this is the Pay card again with one line saying
+   * what happened. A payment that did go through still settles on the stream
+   * and takes the card away, whatever it is showing.
+   */
+  if (phase === "awaiting" && payment?.interrupted && !payment.blocked) {
+    return (
+      <PaymentCard price={price}>
+        <div className="flex gap-2 rounded-xl bg-[var(--cf-bg)] px-3 py-2.5 text-sm">
+          <CircleAlert className="mt-0.5 size-4 shrink-0 opacity-60" aria-hidden />
+          <div className="min-w-0 space-y-0.5">
+            <p className="font-medium">Payment not completed</p>
+            <p className="text-xs opacity-70">
+              The checkout closed before the payment went through. If you did pay, this updates on its own.
+            </p>
+          </div>
+        </div>
+        <PayButton disabled={!canAct} onClick={() => actions?.reopen()}>
+          {payLabel}
+        </PayButton>
+        <div className="flex items-center justify-center gap-4 text-xs">
+          <button
+            type="button"
+            onClick={() => void check()}
+            disabled={!canAct || checking}
+            className="underline opacity-60 hover:opacity-100"
+          >
+            {checking ? "Checking…" : "I've paid, check again"}
+          </button>
+          <button
+            type="button"
+            onClick={() => actions?.cancel()}
+            disabled={!canAct}
+            className="underline opacity-60 hover:opacity-100"
+          >
+            Cancel
+          </button>
+        </div>
+        {checked && <p className="text-center text-xs opacity-70">{checked}</p>}
+        <CardFooter secureLine={secureLine} skip={skip} />
+      </PaymentCard>
     );
   }
 
   if (phase === "awaiting") {
     const blocked = payment?.blocked === true;
     return (
-      <div className="animate-message-in space-y-3 rounded-2xl bg-[var(--cf-chip-bg)] p-4">
-        <p className="flex items-center gap-2 text-sm">
-          {blocked ? null : <Loader2 className="size-4 shrink-0 animate-spin opacity-70" aria-hidden />}
-          {blocked ? "Your browser didn't open the checkout tab." : "Waiting for payment confirmation…"}
-        </p>
-        <p className="text-xs opacity-60">
-          {price ? `Amount ${price} · ` : ""}
-          {secureLine}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          {blocked ? (
-            <PayButton disabled={!canAct} onClick={() => actions?.reopen()}>
-              Open checkout
-            </PayButton>
-          ) : (
-            <Chip disabled={!canAct} onClick={() => actions?.reopen()}>
-              Open checkout again
-            </Chip>
-          )}
-          <Chip disabled={!canAct || checking} onClick={() => void check()}>
-            {checking ? "Checking…" : "Check payment"}
-          </Chip>
-          <button type="button" onClick={() => actions?.cancel()} disabled={!canAct} className="text-xs underline opacity-60">
+      <PaymentCard price={price}>
+        {blocked ? (
+          <p className="text-sm">Your browser didn&apos;t open the checkout. Tap below to open it.</p>
+        ) : (
+          <div className="flex items-center gap-2.5 rounded-xl bg-[var(--cf-bg)] px-3 py-2.5 text-sm">
+            <Loader2 className="size-4 shrink-0 animate-spin opacity-70" aria-hidden />
+            <span>Complete the payment in the checkout window. This updates on its own.</span>
+          </div>
+        )}
+        <PayButton disabled={!canAct} onClick={() => actions?.reopen()}>
+          {blocked ? "Open checkout" : "Open checkout again"}
+        </PayButton>
+        <div className="flex items-center justify-center gap-4 text-xs">
+          <button
+            type="button"
+            onClick={() => void check()}
+            disabled={!canAct || checking}
+            className="underline opacity-60 hover:opacity-100"
+          >
+            {checking ? "Checking…" : "I've paid, check now"}
+          </button>
+          <button
+            type="button"
+            onClick={() => actions?.cancel()}
+            disabled={!canAct}
+            className="underline opacity-60 hover:opacity-100"
+          >
             Cancel
           </button>
         </div>
-        {checked && <p className="text-xs opacity-70">{checked}</p>}
-      </div>
+        {checked && <p className="text-center text-xs opacity-70">{checked}</p>}
+      </PaymentCard>
     );
   }
 
   if (phase === "failed") {
     /*
      * In the preview the refusal is not a failure, it is the reason simulating
-     * is on offer — "payments aren't available on this form" in alarm red, with
+     * is on offer: "payments aren't available on this form" in alarm red, with
      * no word that this is a preview, reads to the author as something they
      * broke. Same copy, told as the note it is.
      */
     const previewRefusal = payment?.preview === true;
     return (
-      <div className="animate-message-in space-y-3 rounded-2xl bg-[var(--cf-chip-bg)] p-4">
-        {previewRefusal && <p className="text-xs font-medium opacity-60">Preview · no real payment is taken</p>}
+      <PaymentCard
+        price={price}
+        note={previewRefusal ? "Preview · no real payment is taken" : undefined}
+      >
         <p role="alert" className={previewRefusal ? "text-sm opacity-70" : "text-destructive text-sm"}>
           {payment?.message ?? "That payment didn't go through."}
         </p>
-        <div className="flex flex-wrap items-center gap-2">
-          {payment?.preview ? (
-            <PayButton disabled={!canAct} onClick={() => actions?.simulate()}>
-              {price ? `Simulate paying ${price}` : "Simulate payment"}
-            </PayButton>
-          ) : (
-            <PayButton disabled={!canAct} onClick={() => actions?.start(block.ref)}>
-              Try again
-            </PayButton>
-          )}
-          {skip}
-        </div>
-      </div>
+        {payment?.preview ? (
+          <PayButton disabled={!canAct} onClick={() => actions?.simulate()}>
+            Simulate payment
+          </PayButton>
+        ) : (
+          <PayButton disabled={!canAct} onClick={() => actions?.start(block.ref)}>
+            Try again
+          </PayButton>
+        )}
+        <CardFooter secureLine={secureLine} skip={skip} />
+      </PaymentCard>
     );
   }
 
@@ -245,26 +302,58 @@ export function GatewayPaymentAffordance({
   // nothing else moves.
   const starting = phase === "starting";
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <PayButton disabled={!canAct || starting} onClick={() => actions?.start(block.ref)}>
-          {starting ? (
-            <>
-              <Loader2 className="size-4 animate-spin" aria-hidden />
-              Opening checkout…
-            </>
-          ) : price ? (
-            `Pay ${price}`
-          ) : (
-            "Pay"
-          )}
-        </PayButton>
-        {starting ? null : skip}
-      </div>
+    <PaymentCard price={price}>
+      <PayButton disabled={!canAct || starting} onClick={() => actions?.start(block.ref)}>
+        {starting ? (
+          <>
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+            Opening checkout…
+          </>
+        ) : (
+          payLabel
+        )}
+      </PayButton>
+      <CardFooter secureLine={secureLine} skip={starting ? null : skip} />
+    </PaymentCard>
+  );
+}
+
+/**
+ * The frame every state of the gateway card shares: what is owed, large, above
+ * whatever the respondent can do about it. The amount leads because it is the
+ * one thing a person looks for before they tap anything that takes money.
+ */
+function PaymentCard({
+  price,
+  note,
+  children,
+}: {
+  price: string | null;
+  note?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="animate-message-in w-full max-w-md space-y-3 rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] p-4">
+      {note && <p className="text-xs font-medium opacity-60">{note}</p>}
+      {price && (
+        <div>
+          <p className="text-xs opacity-60">Amount to pay</p>
+          <p className="text-2xl font-semibold tracking-tight tabular-nums">{price}</p>
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+
+function CardFooter({ secureLine, skip }: { secureLine: string; skip: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
       <p className="flex items-center gap-1.5 text-xs opacity-60">
         <Lock className="size-3" aria-hidden />
         {secureLine}
       </p>
+      {skip}
     </div>
   );
 }
@@ -285,7 +374,7 @@ function PayButton({
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex h-10 items-center gap-2 rounded-full bg-[var(--cf-accent)] px-5 text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-60"
+      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--cf-accent)] px-6 text-base font-semibold text-[var(--cf-accent-text)] shadow-sm transition-[transform,filter] hover:brightness-105 active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-60"
     >
       {children}
     </button>

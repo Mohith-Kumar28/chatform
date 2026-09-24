@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
+import { validator } from "../lib/validator.js";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
 import { getAuth, requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
@@ -15,6 +16,8 @@ import {
   listAccounts,
   loadAccountForOrg,
   newPaymentAccountId,
+  renameAccount,
+  setDefaultAccount,
   saveOAuthAccount,
   saveStripeKeyAccount,
   toPublicAccount,
@@ -81,11 +84,14 @@ export const PublicAccountSchema = z.object({
   credentialKind: z.enum(["oauth", "restricted_key", "connect"]),
   environment: z.enum(["test", "live"]),
   label: z.string(),
+  providerAccountId: z.string().nullable(),
   status: z.enum(["active", "needs_reconnect", "revoked", "disconnected"]),
   lastError: z.string().nullable(),
   currencies: z.array(z.string()),
   createdAt: z.number(),
   formsUsing: z.number().optional(),
+  connectedBy: z.object({ name: z.string().nullable(), email: z.string().nullable() }).nullable().optional(),
+  isDefault: z.boolean().optional(),
 });
 
 export const AccountListSchema = z.object({
@@ -99,6 +105,13 @@ export const AccountListSchema = z.object({
   }),
 });
 
+export const RenameAccountBody = z
+  .object({
+    label: z.string().trim().min(1).max(80).optional(),
+    /** Only `true`: an account stops being the default by another one becoming it. */
+    isDefault: z.literal(true).optional(),
+  })
+  .refine((b) => b.label !== undefined || b.isDefault !== undefined, { message: "Nothing to change" });
 export const OAuthStartBody = z.object({ returnTo: z.string().min(1).max(1000) });
 export const StripeKeyBody = z.object({ restrictedKey: z.string().min(1).max(500) });
 export const CashfreeOnboardBody = z.object({
@@ -290,6 +303,22 @@ export async function handleDisconnect(c: Ctx, accountId: string | undefined): P
   return c.json({ ok: true as const });
 }
 
+export async function handleRename(
+  c: Ctx,
+  accountId: string | undefined,
+  body: z.infer<typeof RenameAccountBody>,
+): Promise<Response> {
+  const orgId = c.get("orgId")!;
+  if (!accountId) return problem(c, 404, "not_found", "Payment account not found");
+  if (body.label !== undefined && !(await renameAccount(c.env, orgId, accountId, body.label))) {
+    return problem(c, 404, "not_found", "Payment account not found");
+  }
+  if (body.isDefault && !(await setDefaultAccount(c.env, orgId, accountId))) {
+    return problem(c, 404, "not_found", "Payment account not found");
+  }
+  return c.json({ ok: true as const });
+}
+
 // ─────────────────────────────── dashboard routes ───────────────────────────────
 
 paymentAccountsRouter.get(
@@ -370,6 +399,26 @@ paymentAccountsRouter.post(
     const refused = refuseImpersonation(c) ?? (await assertPermission(c, "webhook", "create")) ?? (await connectGate(c, "payments.onboard"));
     if (refused) return refused;
     return handleCashfreeOnboard(c, c.req.valid("json"));
+  },
+);
+
+paymentAccountsRouter.patch(
+  "/payment-accounts/:id",
+  validator("json", RenameAccountBody),
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Rename a payment account, or make it the default",
+    description:
+      "`label` sets the name the account is shown under in the builder. `isDefault: true` makes it the account new verified-checkout questions start on. Nothing changes at the gateway.",
+    responses: {
+      200: { description: "Updated", content: json(z.object({ ok: z.literal(true) })) },
+      404: { description: "Not found", content: errorContent },
+    },
+  }),
+  async (c) => {
+    const refused = refuseImpersonation(c) ?? (await assertPermission(c, "webhook", "update"));
+    if (refused) return refused;
+    return handleRename(c, c.req.param("id"), c.req.valid("json"));
   },
 );
 

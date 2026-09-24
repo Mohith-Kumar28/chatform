@@ -795,6 +795,8 @@ export const paymentAccounts = sqliteTable(
     /** Reserved; chatform takes nothing per transaction. */
     platformFeeBps: integer("platform_fee_bps").notNull().default(0),
     connectedByUserId: text("connected_by_user_id"),
+    /** New verified-checkout questions start on this account. See `0038_payment_account_default.sql`. */
+    isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
     updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
   },

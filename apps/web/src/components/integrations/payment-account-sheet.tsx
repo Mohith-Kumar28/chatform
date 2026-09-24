@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowUpRight, Landmark, Pencil, Plus, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { PAYMENT_PROVIDER_LABELS, type PaymentProviderName } from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,6 +82,15 @@ function useStartOAuth(provider: PaymentProviderName, formId: string) {
   });
 }
 
+/** Where each gateway's own dashboard lives, so an author can check which account this is. */
+const DASHBOARD_URL: Record<PaymentProviderName, string> = {
+  razorpay: "https://dashboard.razorpay.com/",
+  cashfree: "https://merchant.cashfree.com/",
+  stripe: "https://dashboard.stripe.com/",
+};
+
+const dateFormat = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
+
 export function PaymentAccountPanel({
   provider,
   formId,
@@ -95,20 +105,20 @@ export function PaymentAccountPanel({
   const label = PAYMENT_PROVIDER_LABELS[provider];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {accounts.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="text-h3">Connected</h3>
+        <section className="space-y-3">
+          <h3 className="text-muted-foreground text-caption font-medium">
+            {accounts.length === 1 ? "Connected account" : `Connected accounts (${accounts.length})`}
+          </h3>
           {accounts.map((account) => (
-            <AccountRow key={account.id} account={account} formId={formId} />
+            <AccountCard key={account.id} account={account} formId={formId} />
           ))}
         </section>
       )}
 
-      {accounts.length > 0 && <hr className="border-border" />}
-
       {/*
-        Connecting more is the paid, rolled-out part. The rows above are not:
+        Connecting more is the paid, rolled-out part. The cards above are not:
         a lapsed plan must still be able to see and remove what it connected.
       */}
       {!configured || data?.enabled === false ? (
@@ -133,12 +143,16 @@ export function PaymentAccountPanel({
   );
 }
 
-function AccountRow({ account, formId }: { account: PaymentAccount; formId: string }) {
+function AccountCard({ account, formId }: { account: PaymentAccount; formId: string }) {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(account.label);
   const label = PAYMENT_PROVIDER_LABELS[account.provider];
   const reconnect = useStartOAuth(account.provider, formId);
   const broken = account.status === "needs_reconnect" || account.status === "revoked";
+  const who = account.connectedBy?.name || account.connectedBy?.email || null;
+  const whoDetail = account.connectedBy?.name && account.connectedBy.email ? account.connectedBy.email : null;
 
   const disconnect = useMutation({
     mutationFn: () => paymentAccountsFetch(`/api/payment-accounts/${account.id}`, { method: "DELETE" }),
@@ -149,29 +163,145 @@ function AccountRow({ account, formId }: { account: PaymentAccount; formId: stri
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const rename = useMutation({
+    mutationFn: (next: string) =>
+      paymentAccountsFetch(`/api/payment-accounts/${account.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ label: next }),
+      }),
+    onSuccess: () => {
+      setEditing(false);
+      void queryClient.invalidateQueries({ queryKey: PAYMENT_ACCOUNTS_KEY });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const makeDefault = useMutation({
+    mutationFn: () =>
+      paymentAccountsFetch(`/api/payment-accounts/${account.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isDefault: true }),
+      }),
+    onSuccess: () => {
+      toast.success(`${account.label} is now the default. New payment questions start on it.`);
+      void queryClient.invalidateQueries({ queryKey: PAYMENT_ACCOUNTS_KEY });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  function saveName() {
+    const next = name.trim();
+    if (!next || next === account.label) {
+      setName(account.label);
+      setEditing(false);
+      return;
+    }
+    rename.mutate(next);
+  }
+
   return (
-    <div className="bg-muted/30 space-y-2 rounded-xl p-3">
-      <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{account.label}</span>
-        <Badge variant={account.environment === "test" ? "secondary" : "soft"}>
-          {account.environment === "test" ? "Test" : "Live"}
-        </Badge>
+    <div className="bg-card overflow-hidden rounded-xl border">
+      <div className="flex items-start gap-3 p-4">
+        <div className="bg-muted text-muted-foreground grid size-9 shrink-0 place-items-center rounded-lg">
+          <Landmark className="size-4" />
+        </div>
+
+        <div className="min-w-0 flex-1 space-y-1">
+          {editing ? (
+            <form
+              className="flex items-center gap-1.5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveName();
+              }}
+            >
+              <Input
+                autoFocus
+                value={name}
+                maxLength={80}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setName(account.label);
+                    setEditing(false);
+                  }
+                }}
+                aria-label="Account name"
+                className="h-8"
+              />
+              <Button type="submit" size="sm" disabled={rename.isPending}>
+                {rename.isPending ? "Saving…" : "Save"}
+              </Button>
+            </form>
+          ) : (
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate text-sm font-medium">{account.label}</span>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Rename account"
+                className="text-muted-foreground size-6 shrink-0"
+                onClick={() => {
+                  setName(account.label);
+                  setEditing(true);
+                }}
+              >
+                <Pencil className="size-3" />
+              </Button>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              className={cn(
+                "text-caption inline-flex items-center gap-1.5 font-medium",
+                broken ? "text-destructive" : "text-[var(--success)]",
+              )}
+            >
+              <span className={cn("size-1.5 rounded-full", broken ? "bg-destructive" : "bg-[var(--success)]")} />
+              {STATUS_LABEL[account.status]}
+            </span>
+            <Badge variant={account.environment === "test" ? "secondary" : "soft"}>
+              {account.environment === "test" ? "Test mode" : "Live"}
+            </Badge>
+            {account.isDefault && <Badge variant="soft">Default</Badge>}
+          </div>
+        </div>
+
         <Button
           variant="ghost"
           size="icon-sm"
           aria-label={`Disconnect ${account.label}`}
+          className="text-muted-foreground hover:text-destructive shrink-0"
           onClick={() => setConfirming(true)}
         >
           <Trash2 className="size-3.5" />
         </Button>
       </div>
 
-      <dl className="text-caption grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-        <dt className="text-muted-foreground">Status</dt>
-        <dd className={cn(broken ? "text-destructive" : "text-[var(--success)]")}>{STATUS_LABEL[account.status]}</dd>
+      <dl className="text-caption bg-muted/30 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 border-t px-4 py-3">
+        {account.providerAccountId && (
+          <>
+            <dt className="text-muted-foreground">{label} ID</dt>
+            <dd className="flex min-w-0 items-center gap-1">
+              <span className="truncate font-mono">{account.providerAccountId}</span>
+              <CopyButton value={account.providerAccountId} toastMessage={`${label} ID copied`} className="text-muted-foreground size-6" />
+            </dd>
+          </>
+        )}
+        {who && (
+          <>
+            <dt className="text-muted-foreground">Connected by</dt>
+            <dd className="min-w-0 truncate">
+              {who}
+              {whoDetail && <span className="text-muted-foreground"> · {whoDetail}</span>}
+            </dd>
+          </>
+        )}
+        <dt className="text-muted-foreground">Connected on</dt>
+        <dd>{dateFormat.format(account.createdAt)}</dd>
         {account.currencies.length > 0 && (
           <>
-            <dt className="text-muted-foreground">Currencies</dt>
+            <dt className="text-muted-foreground">Currency</dt>
             <dd>{account.currencies.join(", ")}</dd>
           </>
         )}
@@ -187,8 +317,31 @@ function AccountRow({ account, formId }: { account: PaymentAccount; formId: stri
         )}
       </dl>
 
+      <div className="flex items-center justify-between gap-3 border-t px-4 py-2.5">
+        <a
+          href={DASHBOARD_URL[account.provider]}
+          target="_blank"
+          rel="noreferrer"
+          className="text-muted-foreground hover:text-foreground text-caption inline-flex items-center gap-1 font-medium"
+        >
+          Open {label} dashboard
+          <ArrowUpRight className="size-3.5" />
+        </a>
+        {!account.isDefault && account.status === "active" && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-caption h-7"
+            disabled={makeDefault.isPending}
+            onClick={() => makeDefault.mutate()}
+          >
+            {makeDefault.isPending ? "Saving…" : "Make default"}
+          </Button>
+        )}
+      </div>
+
       {broken && (
-        <div className="flex gap-2 rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-[var(--warning-soft-foreground)]">
+        <div className="flex gap-2 border-t bg-[var(--warning-soft)] px-4 py-3 text-[var(--warning-soft-foreground)]">
           <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
           <div className="text-caption min-w-0 flex-1 space-y-2">
             <p>
@@ -244,18 +397,43 @@ function OAuthConnect({
 
   return (
     <div className="space-y-5">
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-h3">{hasAccount ? "Connect another account" : `Connect ${label}`}</h3>
-          <p className="text-muted-foreground text-caption">
-            You&apos;ll approve Chatform on {label}, then come straight back here. No API keys to copy.
-          </p>
-        </div>
-        <Button size="sm" shape="pill" disabled={start.isPending} onClick={() => start.mutate()}>
-          {start.isPending ? "Opening…" : `Connect ${label}`}
-          <ArrowUpRight className="size-3.5" />
-        </Button>
-      </section>
+      {hasAccount ? (
+        <section className="flex items-center justify-between gap-3 rounded-xl border border-dashed p-4">
+          <div className="min-w-0">
+            <h3 className="text-sm font-medium">Add another {label} account</h3>
+            <p className="text-muted-foreground text-caption">
+              For a different business or event. Each payment question picks its own account.
+            </p>
+          </div>
+          <Button size="sm" variant="outline" shape="pill" disabled={start.isPending} onClick={() => start.mutate()}>
+            <Plus className="size-3.5" />
+            {start.isPending ? "Opening…" : "Add account"}
+          </Button>
+        </section>
+      ) : (
+        <section className="space-y-4 rounded-xl border p-5">
+          <div className="space-y-1">
+            <h3 className="text-h3">Connect your {label} account</h3>
+            <p className="text-muted-foreground text-caption">No API keys to copy. It takes about a minute.</p>
+          </div>
+          <ol className="space-y-2.5">
+            {[
+              `Sign in to ${label} and approve Chatform.`,
+              "You come straight back here, connected.",
+              "Pick the account in any payment question.",
+            ].map((step, i) => (
+              <li key={step} className="flex items-center gap-3 text-sm">
+                <StepNumber n={i + 1} />
+                {step}
+              </li>
+            ))}
+          </ol>
+          <Button className="w-full" shape="pill" disabled={start.isPending} onClick={() => start.mutate()}>
+            {start.isPending ? "Opening…" : `Connect ${label}`}
+            <ArrowUpRight className="size-3.5" />
+          </Button>
+        </section>
+      )}
 
       {provider === "cashfree" && <CashfreeOnboard formId={formId} onUseOAuth={() => start.mutate()} />}
     </div>
@@ -494,7 +672,7 @@ function StripeConnect({ hasAccount }: { hasAccount: boolean }) {
               {STRIPE_PERMISSIONS.map((p) => (
                 <li key={p.resource} className="flex flex-wrap gap-x-1.5">
                   <span className="font-medium">{p.resource}</span>
-                  <span className="text-muted-foreground">— {p.access}, {p.why}</span>
+                  <span className="text-muted-foreground">{p.access}, {p.why}</span>
                 </li>
               ))}
             </ul>

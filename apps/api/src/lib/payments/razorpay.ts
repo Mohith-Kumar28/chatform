@@ -246,8 +246,10 @@ export function createRazorpayAdapter(env: Bindings, creds: RazorpayCredentials)
           key: creds.publicToken,
           amountMinor: req.amountMinor,
           currency: req.currency.toUpperCase(),
-          name: req.title,
-          description: req.description,
+          // Razorpay's checkout header is the payee, and it draws the name's first letter as the
+          // logo. The form is who the respondent thinks they are paying; the question is what for.
+          name: req.description || req.title,
+          description: req.description ? req.title : undefined,
           prefill: prefill.name || prefill.email || prefill.contact ? prefill : undefined,
         },
       };

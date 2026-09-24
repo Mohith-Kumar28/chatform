@@ -2068,7 +2068,7 @@ export class SessionDO extends DurableObject<Bindings> {
         this.state.answers[ref] = value.value;
         await this.persistMeta();
         this.ctx.waitUntil(this.projectAnswer(payable, value.value));
-        await this.emit("payment_settled", { ref, recordId: settled.recordId, status: "paid" });
+        await this.emit("payment_settled", settledEvent(ref, settled, simulated));
         /*
          * `null`, not a message id: nothing the respondent typed is this answer. The client
          * treats that as "no bubble to put a pencil on" rather than guessing at the last one.
@@ -2081,7 +2081,7 @@ export class SessionDO extends DurableObject<Bindings> {
         return { accepted: true, reason: "recorded_off_cursor" };
       }
 
-      await this.emit("payment_settled", { ref, recordId: settled.recordId, status: "paid" });
+      await this.emit("payment_settled", settledEvent(ref, settled, simulated));
       await this.appendMessage(
         "system_event",
         `Payment ${simulated ? "simulated" : "verified"}: ${formatAmount(fromMinorUnits(settled.amountMinor, settled.currency), settled.currency)} via ${PAYMENT_PROVIDER_LABELS[settled.provider]}`,
@@ -6181,3 +6181,21 @@ function nextInSequence(doc: FormDoc, ref: string): string | null {
   return doc.blocks[idx + 1]!.ref;
 }
 
+/**
+ * `payment_settled`, with what the respondent's receipt shows: the amount as the gateway charged
+ * it, when, and the gateway's own payment id. All of it from the server's record, never from the
+ * browser that paid.
+ */
+function settledEvent(ref: string, settled: SettledPayment, simulated: boolean) {
+  return {
+    ref,
+    recordId: settled.recordId,
+    status: "paid" as const,
+    display: formatAmount(fromMinorUnits(settled.amountMinor, settled.currency), settled.currency),
+    provider: settled.provider,
+    paymentId: settled.providerPaymentId,
+    paidAt: settled.paidAt,
+    testMode: settled.testMode === true,
+    simulated,
+  };
+}
