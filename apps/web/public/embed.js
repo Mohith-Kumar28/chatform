@@ -187,9 +187,34 @@
         ".cf-launcher svg{width:18px;height:18px;flex:none;display:block}",
         // An empty data-label asks for the bare circle every messenger widget uses.
         ".cf-launcher.cf-bare{width:56px;height:56px;padding:0;justify-content:center;border-radius:50%}",
-        ".cf-panel{position:fixed;z-index:2147483001;border:0;border-radius:16px;background:#fff;",
-        "box-shadow:0 12px 48px rgba(0,0,0,.22);display:none;overflow:hidden}",
-        ".cf-panel.cf-open{display:block}",
+        /*
+         * Shown and hidden by opacity and transform rather than display, so it
+         * can animate both ways. visibility waits for the fade before hiding,
+         * so a closed panel still takes no clicks and no focus.
+         */
+        ".cf-panel{position:fixed;z-index:2147483001;border:0;border-radius:16px;background:var(--cf-skel-bg);",
+        "box-shadow:0 12px 48px rgba(0,0,0,.22);overflow:hidden;visibility:hidden;opacity:0;pointer-events:none;",
+        "transform:translateY(12px) scale(.97);",
+        "transition:opacity .16s ease,transform .22s cubic-bezier(.2,.8,.2,1),visibility 0s linear .22s}",
+        ".cf-panel.cf-open{visibility:visible;opacity:1;transform:none;pointer-events:auto;",
+        "transition:opacity .16s ease,transform .22s cubic-bezier(.2,.8,.2,1),visibility 0s}",
+        /*
+         * Until the form says it is ready: the panel's own colour and a typing
+         * indicator, so a click gets an answer at once instead of a white box
+         * for the second the form takes to arrive. The frame fades in over it.
+         */
+        ".cf-host{--cf-skel-bg:#faf8f5;--cf-skel-dot:rgba(0,0,0,.28)}",
+        ".cf-host.cf-dark{--cf-skel-bg:#1c1b19;--cf-skel-dot:rgba(255,255,255,.35)}",
+        "@media (prefers-color-scheme:dark){.cf-host.cf-auto{--cf-skel-bg:#1c1b19;--cf-skel-dot:rgba(255,255,255,.35)}}",
+        ".cf-inline{position:relative;overflow:hidden;border-radius:16px;background:var(--cf-skel-bg)}",
+        ".cf-skel{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:6px;",
+        "transition:opacity .2s ease}",
+        ".cf-skel i{width:7px;height:7px;border-radius:50%;background:var(--cf-skel-dot);animation:cf-dot 1s ease-in-out infinite}",
+        ".cf-skel i:nth-child(2){animation-delay:.15s}.cf-skel i:nth-child(3){animation-delay:.3s}",
+        "@keyframes cf-dot{0%,80%,100%{opacity:.35;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}",
+        ".cf-frame{position:relative;opacity:0;transition:opacity .22s ease}",
+        ".cf-ready .cf-frame{opacity:1}",
+        ".cf-ready .cf-skel{opacity:0}",
         ".cf-fullpage{inset:0;width:100vw;height:100vh;border-radius:0}",
         /*
          * The launcher stands down while the panel is up, except on a desktop popup.
@@ -207,14 +232,16 @@
         ".cf-launcher.cf-x{width:48px;height:48px;padding:0;justify-content:center;border-radius:50%}",
         ".cf-launcher.cf-bare.cf-x{width:56px;height:56px}",
         ".cf-launcher.cf-x>*{display:none}",
-        ".cf-launcher.cf-x>.cf-x-icon{display:block;width:20px;height:20px}",
+        ".cf-launcher.cf-x>.cf-x-icon{display:block;width:20px;height:20px;animation:cf-spin .2s ease-out}",
+        "@keyframes cf-spin{from{opacity:0;transform:rotate(-90deg)}to{opacity:1;transform:none}}",
         "@media (max-width:520px){.cf-launcher.cf-x{display:none}}",
         ".cf-close{position:absolute;top:10px;right:10px;z-index:1;width:32px;height:32px;padding:0;",
         "border:0;border-radius:50%;background:rgba(15,15,15,.55);color:#fff;cursor:pointer;",
         "display:grid;place-items:center}",
         ".cf-close:hover{background:rgba(15,15,15,.75)}",
         ".cf-close svg{width:16px;height:16px;display:block}",
-        "@media (prefers-reduced-motion:reduce){.cf-launcher{transition:none}}",
+        "@media (prefers-reduced-motion:reduce){.cf-launcher{transition:none}",
+        ".cf-panel,.cf-panel.cf-open{transform:none}.cf-skel i,.cf-x-icon{animation:none!important}}",
       ].join(""),
     );
   }
@@ -245,16 +272,23 @@
         "px;max-height:calc(100vh - " + (clearance + offset) + "px)}";
     }
 
+    // The panel grows out of its corner, and a side tab slides in from its edge.
+    var motionRule =
+      mode === "side-tab"
+        ? ".cf-p-" + uid + ":not(.cf-open){transform:translateX(" + (horizontal === "right" ? "" : "-") + "32px)}"
+        : ".cf-p-" + uid + "{transform-origin:" + vertical + " " + horizontal + "}";
+
     var mobileRule =
       "@media (max-width:520px){.cf-p-" + uid +
-      "{inset:0;width:100vw;height:100dvh;max-height:none;border-radius:0}}";
+      "{inset:0;width:100vw;height:100dvh;max-height:none;border-radius:0}" +
+      ".cf-p-" + uid + ":not(.cf-open){transform:translateY(24px)}}";
 
     // A desktop popup closes from the launcher, so the fallback X is only for
     // the layouts where the launcher is hidden.
     var fallbackRule =
       mode === "popup" && showLauncher ? "@media (min-width:521px){.cf-p-" + uid + ">.cf-close{display:none}}" : "";
 
-    addStyle(null, launcherRule + panelRule + mobileRule + fallbackRule);
+    addStyle(null, launcherRule + panelRule + motionRule + mobileRule + fallbackRule);
   }
 
   function buildFrame() {
@@ -267,10 +301,46 @@
     // never the embedder's full URL. A `sandbox` attribute is deliberately not
     // set — that needs a browser pass, not reasoning.
     frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+    frame.className = "cf-frame";
     frame.style.border = "0";
     frame.style.width = "100%";
     frame.style.height = "100%";
+    frame.style.display = "block";
+    // "ready" is the signal to show the form. A frame that loads but never
+    // says it (a blocked origin, an error page) is shown anyway, a moment later.
+    frame.addEventListener("load", function () {
+      setTimeout(reveal, 1200);
+    });
     return frame;
+  }
+
+  function reveal() {
+    if (panel) panel.classList.add("cf-ready");
+  }
+
+  /** The panel's colour and three typing dots, until the form arrives. */
+  function skeleton() {
+    var el = document.createElement("div");
+    el.className = "cf-skel";
+    el.setAttribute("aria-hidden", "true");
+    for (var d = 0; d < 3; d++) el.appendChild(document.createElement("i"));
+    return el;
+  }
+
+  function hostClass() {
+    return " cf-host " + (theme === "dark" ? "cf-dark" : theme === "light" ? "" : "cf-auto");
+  }
+
+  /**
+   * Warm the connection now, so the first open does not also pay for DNS and
+   * TLS. The frame itself is not loaded here: loading it opens a session, and
+   * a session per page view is a response per page view.
+   */
+  function preconnect(href) {
+    var link = document.createElement("link");
+    link.rel = "preconnect";
+    link.href = href;
+    document.head.appendChild(link);
   }
 
   /** Inlined rather than fetched: one more network request for 300 bytes. */
@@ -301,8 +371,10 @@
     injectStyles();
     var host = target ? document.querySelector(target) : null;
     var container = document.createElement("div");
+    container.className = "cf-inline" + hostClass();
     container.style.width = "100%";
     container.style.height = heightAttr === "auto" ? "620px" : panelHeight + "px";
+    container.appendChild(skeleton());
     container.appendChild(buildFrame());
     if (host) host.appendChild(container);
     else if (script.parentNode) script.parentNode.insertBefore(container, script);
@@ -314,7 +386,8 @@
     injectStyles();
     injectPlacement();
     panel = document.createElement("div");
-    panel.className = "cf-panel cf-p-" + uid + (mode === "fullpage" ? " cf-fullpage" : "");
+    panel.className = "cf-panel cf-p-" + uid + hostClass() + (mode === "fullpage" ? " cf-fullpage" : "");
+    panel.appendChild(skeleton());
     if (!lazy) panel.appendChild(buildFrame());
     document.body.appendChild(panel);
 
@@ -348,13 +421,14 @@
        * the launcher is enough warning to have it ready by the time it opens.
        */
       if (lazy) {
-        launcher.addEventListener(
-          "mouseenter",
-          function () {
-            if (!frame) panel.appendChild(buildFrame());
-          },
-          { once: true },
-        );
+        // Hover on a desktop, the first touch on a phone, focus from a keyboard:
+        // each is a head start of a few hundred ms before the click lands.
+        var warm = function () {
+          if (!frame) panel.appendChild(buildFrame());
+        };
+        launcher.addEventListener("mouseenter", warm, { once: true });
+        launcher.addEventListener("pointerdown", warm, { once: true });
+        launcher.addEventListener("focus", warm, { once: true });
       }
     }
   }
@@ -443,6 +517,7 @@
         // The frame draws its own close from here on, so retire ours.
         frameReady = true;
         hideFallbackClose();
+        reveal();
         post({ type: "host", closes: hostCloses() });
         emit("ready", message);
         break;
@@ -495,6 +570,18 @@
   }
   document.addEventListener("click", onPageClick);
 
+  // Hovering or touching your own button starts the frame early, as on the launcher.
+  function onPageWarm(event) {
+    if (frame || destroyed || mode === "inline" || !panel || !event.target || !event.target.closest) return;
+    var el = event.target.closest("[data-chatform-open]");
+    if (!el) return;
+    var which = el.getAttribute("data-chatform-open");
+    if (which ? which !== slug : window.Chatform !== api) return;
+    panel.appendChild(buildFrame());
+  }
+  document.addEventListener("pointerover", onPageWarm);
+  document.addEventListener("pointerdown", onPageWarm);
+
   function setupTriggers() {
     if (openOn === "load") {
       open();
@@ -511,14 +598,19 @@
     }
     if (openOn.indexOf("scroll:") === 0) {
       var pct = parseInt(openOn.slice(7), 10) || 50;
-      window.addEventListener("scroll", function onScroll() {
-        var scrolled =
-          (window.scrollY / (document.body.scrollHeight - window.innerHeight || 1)) * 100;
+      // How far down this page the visitor is, as a share of how far it can
+      // scroll. A page too short to scroll counts as read to the end.
+      var check = function () {
+        var room = document.documentElement.scrollHeight - window.innerHeight;
+        var scrolled = room > 0 ? (window.scrollY / room) * 100 : 100;
         if (scrolled >= pct) {
-          window.removeEventListener("scroll", onScroll);
+          window.removeEventListener("scroll", check);
           open();
+          return true;
         }
-      });
+        return false;
+      };
+      if (!check()) window.addEventListener("scroll", check, { passive: true });
     }
   }
 
@@ -526,6 +618,8 @@
     destroyed = true;
     hideFallbackClose();
     document.removeEventListener("click", onPageClick);
+    document.removeEventListener("pointerover", onPageWarm);
+    document.removeEventListener("pointerdown", onPageWarm);
     if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
     if (launcher && launcher.parentNode) launcher.parentNode.removeChild(launcher);
     frame = null;
@@ -534,6 +628,10 @@
   }
 
   function mount() {
+    preconnect(app);
+    // The frame's API calls run in this page's connection partition, so a
+    // preconnect from here is one the frame gets to use.
+    if (/^https:\/\/(www\.)?chatform\.in$/.test(app)) preconnect("https://api.chatform.in");
     if (mode === "inline") mountInline();
     else {
       mountOverlay();

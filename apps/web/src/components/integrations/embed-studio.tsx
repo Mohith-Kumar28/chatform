@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   Code2,
   Mail,
+  Sparkles,
   Monitor,
   PanelRightClose,
   PanelRightOpen,
@@ -27,6 +28,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { EmbedPreview, type PreviewDevice } from "./embed-preview";
 import {
+  aiPrompt,
   cspSnippet,
   emailSnippet,
   embedSnippet,
@@ -36,7 +38,6 @@ import {
   isOverlay,
   reactSnippet,
   type EmbedConfig,
-  type EmbedMode,
   type EmbedPosition,
 } from "@/lib/embed-snippet";
 import { cn } from "@/lib/utils";
@@ -59,18 +60,37 @@ import { cn } from "@/lib/utils";
  * and left the preview stranded in a tall empty column beside them.
  */
 
-type Target = "html" | "react" | "email";
+type Target = "html" | "react" | "email" | "ai";
 
 // The brand pair leads, in the mark's order, then four hues far enough apart
 // to be told apart at 20px. `#8b5cf6` is gone: it sat one swatch away from the
 // brand violet and close enough to it that the two read as a rendering bug.
 const SWATCHES = ["#FD6F29", "#9D6EE4", "#0ea5e9", "#10b981", "#ef4444", "#111827"];
 
-const TRIGGERS: { value: EmbedConfig["openOn"]; label: string }[] = [
-  { value: "click", label: "When a button is clicked" },
-  { value: "load", label: "As soon as the page loads" },
-  { value: "exit-intent", label: "When the cursor leaves the page" },
-  { value: "scroll:50", label: "After scrolling halfway" },
+/**
+ * What the studio starts from. The loader's own default is click-only, but a
+ * popup nobody notices collects nothing, so the studio suggests opening it
+ * halfway down the page. The snippet spells that out as data-open-on.
+ */
+const STUDIO_DEFAULTS: EmbedConfig = { ...EMBED_DEFAULTS, openOn: "scroll:50" };
+
+const TRIGGERS: { value: EmbedConfig["openOn"]; label: string; hint: string }[] = [
+  {
+    value: "scroll:50",
+    label: "After scrolling halfway down the page",
+    hint: "Opens once the visitor has scrolled past the middle of the page they are on, measured from the top to the bottom of that page. Once per visit to the page.",
+  },
+  { value: "load", label: "As soon as the page loads", hint: "Opens by itself when the page loads." },
+  {
+    value: "exit-intent",
+    label: "When the visitor is about to leave",
+    hint: "Opens when the mouse moves up out of the page, toward the tabs or the close button. Desktop only.",
+  },
+  {
+    value: "click",
+    label: "Off, only when a button is clicked",
+    hint: "Opens only when a visitor clicks the corner button or your own button.",
+  },
 ];
 
 export function EmbedStudio({
@@ -88,7 +108,7 @@ export function EmbedStudio({
   theme: ThemeDoc;
   blocks: Block[];
 }) {
-  const [config, setConfig] = useState<EmbedConfig>(EMBED_DEFAULTS);
+  const [config, setConfig] = useState<EmbedConfig>(STUDIO_DEFAULTS);
   const [target, setTarget] = useState<Target>("html");
   const [previewOpen, setPreviewOpen] = useState(true);
   const [device, setDevice] = useState<PreviewDevice>("desktop");
@@ -100,20 +120,22 @@ export function EmbedStudio({
     const options = { ...config, slug, origin: appOrigin };
     if (target === "react") return reactSnippet(options);
     if (target === "email") return emailSnippet(slug, appOrigin, "Answer a few questions", config.color);
+    if (target === "ai") return aiPrompt(options);
     return embedSnippet(options);
   }, [config, slug, appOrigin, target]);
 
   const overlay = isOverlay(config.mode);
+  const ownButtonHtml = `<button type="button" data-chatform-open>${config.label || EMBED_DEFAULTS.label}</button>`;
   const unpublished = status !== undefined && status !== "published";
   const modeBlurb = EMBED_MODES.find((m) => m.mode === config.mode)?.blurb;
-  const modified = JSON.stringify(config) !== JSON.stringify(EMBED_DEFAULTS);
+  const modified = JSON.stringify(config) !== JSON.stringify(STUDIO_DEFAULTS);
 
   return (
     <div className="space-y-4">
       {unpublished && (
         <p className="text-caption rounded-xl border border-[var(--warning)]/40 bg-[var(--warning-soft)] px-4 py-3 text-[var(--warning-soft-foreground)]">
-          This form isn&apos;t published yet. The snippet is final — respondents will just see a
-          closed message until you hit Publish.
+          This form isn&apos;t published yet. The snippet is final. Visitors will see a closed
+          message until you hit Publish.
         </p>
       )}
 
@@ -174,8 +196,27 @@ export function EmbedStudio({
         </div>
 
         <div className="bg-card flex max-h-[32rem] min-h-0 flex-col overflow-hidden rounded-2xl lg:max-h-none">
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
-            <Field label="How it appears">
+          {/*
+            Sections, each under a divider, so the rail reads as four or five
+            decisions instead of one long list of equally loud controls.
+          */}
+          <div className="divide-border/60 min-h-0 flex-1 divide-y overflow-y-auto">
+            <Section
+              title="How it appears"
+              hint={modeBlurb}
+              action={
+                modified && (
+                  <button
+                    type="button"
+                    onClick={() => setConfig(STUDIO_DEFAULTS)}
+                    className="text-muted-foreground hover:text-foreground text-micro flex shrink-0 items-center gap-1 transition-colors"
+                  >
+                    <RotateCcw className="size-3" />
+                    Reset to defaults
+                  </button>
+                )
+              }
+            >
               <div className="grid grid-cols-2 gap-1.5">
                 {EMBED_MODES.map((m) => (
                   <ModeButton
@@ -183,168 +224,29 @@ export function EmbedStudio({
                     active={config.mode === m.mode}
                     label={m.label}
                     blurb={m.blurb}
-                    onClick={() => set("mode", m.mode as EmbedMode)}
+                    onClick={() =>
+                      setConfig((prev) => ({
+                        ...prev,
+                        mode: m.mode,
+                        // A popup auto-opens halfway down by default.
+                        openOn: m.mode === "popup" && prev.mode !== "popup" ? "scroll:50" : prev.openOn,
+                      }))
+                    }
                   />
                 ))}
               </div>
-            </Field>
+            </Section>
 
             {overlay && (
               <>
-                <Field
-                  label="Corner"
-                  hint={config.launcher ? "Where the launcher sits on the page." : "Where the panel opens."}
-                >
-                  <CornerPicker value={config.position} onChange={(p) => set("position", p)} />
-                </Field>
-
-                {/*
-                  Your own button. Any element carrying `data-chatform-open`
-                  opens the form, with or without the corner button; switching
-                  the corner button off is for pages that only want theirs.
-                */}
-                <Field
-                  label="Your own button"
-                  hint="Add data-chatform-open to any button or link on your page and it opens the form."
-                >
-                  <div className="flex items-center gap-2">
-                    <code className="bg-muted text-micro min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 font-mono">
-                      data-chatform-open
-                    </code>
-                    <CopyButton value="data-chatform-open" />
-                  </div>
-                  <div className="flex items-center justify-between pt-1">
-                    <Label
-                      htmlFor="embed-launcher"
-                      className="text-muted-foreground text-caption font-normal"
-                    >
-                      Show the corner button too
-                    </Label>
-                    <Switch
-                      id="embed-launcher"
-                      checked={config.launcher}
-                      onCheckedChange={(v) => set("launcher", v)}
-                    />
-                  </div>
-                </Field>
-
-                {config.launcher && (
-                  <Field label="Launcher">
-                    <Input
-                      value={config.label}
-                      placeholder="Icon only"
-                      onChange={(e) => set("label", e.target.value)}
-                    />
-                    <div className="flex items-center justify-between pt-1">
-                      <Label
-                        htmlFor="embed-icon"
-                        className="text-muted-foreground text-caption font-normal"
-                      >
-                        Show the chat icon
-                      </Label>
-                      <Switch
-                        id="embed-icon"
-                        checked={config.icon}
-                        onCheckedChange={(v) => set("icon", v)}
-                      />
-                    </div>
-                  </Field>
-                )}
-
-                {config.launcher && (
-                  <Field
-                    label="Launcher colour"
-                    hint="The bubble only — the conversation uses the form's theme."
-                  >
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {SWATCHES.map((hex) => (
-                        <button
-                          key={hex}
-                          type="button"
-                          aria-label={hex}
-                          onClick={() => set("color", hex)}
-                          style={{ background: hex }}
-                          className={cn(
-                            "size-6 rounded-full transition-transform duration-[var(--duration-micro)]",
-                            config.color.toLowerCase() === hex.toLowerCase()
-                              ? "ring-foreground ring-2 ring-offset-2 ring-offset-[var(--card)]"
-                              : "hover:scale-110",
-                          )}
-                        />
-                      ))}
-                    </div>
-                    {/*
-                      A colour well next to the hex, because "#FD6F29" is not a
-                      colour anybody can pick — it is one you can only paste.
-                    */}
-                    <div className="relative flex items-center gap-2">
-                      <input
-                        type="color"
-                        aria-label="Pick a launcher colour"
-                        value={/^#[0-9a-f]{6}$/i.test(config.color) ? config.color : "#000000"}
-                        onChange={(e) => set("color", e.target.value.toUpperCase())}
-                        className="border-border size-8 shrink-0 cursor-pointer rounded-lg border bg-transparent p-0.5"
-                      />
-                      <Input
-                        value={config.color}
-                        onChange={(e) => set("color", e.target.value)}
-                        className="h-8 font-mono text-xs"
-                        aria-label="Launcher colour, as hex"
-                      />
-                    </div>
-                  </Field>
-                )}
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Width">
-                    <NumberInput
-                      value={config.width}
-                      min={280}
-                      max={720}
-                      onChange={(v) => set("width", v)}
-                    />
-                  </Field>
-                  {/* A side tab is full height by definition, so it has no height
-                      to set — and the gap it does have is the launcher's. */}
-                  {config.mode === "popup" ? (
-                    <Field label="Height">
-                      <NumberInput
-                        value={config.height}
-                        min={320}
-                        max={900}
-                        onChange={(v) => set("height", v)}
-                      />
-                    </Field>
-                  ) : (
-                    <Field label="Edge gap">
-                      <NumberInput
-                        value={config.offset}
-                        min={0}
-                        max={80}
-                        onChange={(v) => set("offset", v)}
-                      />
-                    </Field>
-                  )}
-                </div>
-
-                {config.mode === "popup" && (
-                  <Field label="Edge gap" hint="Distance from the corner, in pixels.">
-                    <NumberInput
-                      value={config.offset}
-                      min={0}
-                      max={80}
-                      onChange={(v) => set("offset", v)}
-                    />
-                  </Field>
-                )}
-
-                <Field label="Opens">
+                <Section title="Auto open" hint="Open the form by itself. Clicking a button always opens it too.">
                   <Select
                     value={config.openOn}
                     onValueChange={(v) => set("openOn", v as EmbedConfig["openOn"])}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue />
+                      {/* Spelled out: SelectValue renders empty until the list has opened once. */}
+                      <SelectValue>{TRIGGERS.find((t) => t.value === config.openOn)?.label}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {TRIGGERS.map((t) => (
@@ -354,17 +256,151 @@ export function EmbedStudio({
                       ))}
                     </SelectContent>
                   </Select>
-                </Field>
+                  <p className="text-muted-foreground text-micro">
+                    {TRIGGERS.find((t) => t.value === config.openOn)?.hint}
+                  </p>
+                </Section>
+
+                <Section title="Position">
+                  <Field label="Corner">
+                    <CornerPicker value={config.position} onChange={(p) => set("position", p)} />
+                  </Field>
+                  <Field label="Gap from the edge" hint="In pixels. 20 is the usual.">
+                    <NumberInput
+                      value={config.offset}
+                      min={0}
+                      max={80}
+                      onChange={(v) => set("offset", v)}
+                    />
+                  </Field>
+                </Section>
+
+                <Section
+                  title="Corner button"
+                  hint="The round button in the corner that opens the form."
+                  action={
+                    <Switch
+                      aria-label="Show the corner button"
+                      checked={config.launcher}
+                      onCheckedChange={(v) => set("launcher", v)}
+                    />
+                  }
+                >
+                  {config.launcher ? (
+                    <>
+                      <Field label="Button text" hint="Leave empty for an icon-only circle.">
+                        <Input
+                          value={config.label}
+                          placeholder="Icon only"
+                          onChange={(e) => set("label", e.target.value)}
+                        />
+                      </Field>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="embed-icon" className="text-caption font-normal">
+                          Show the chat icon
+                        </Label>
+                        <Switch
+                          id="embed-icon"
+                          checked={config.icon}
+                          onCheckedChange={(v) => set("icon", v)}
+                        />
+                      </div>
+                      <Field label="Button colour" hint="The form itself uses its own theme.">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {SWATCHES.map((hex) => (
+                            <button
+                              key={hex}
+                              type="button"
+                              aria-label={hex}
+                              onClick={() => set("color", hex)}
+                              style={{ background: hex }}
+                              className={cn(
+                                "size-6 rounded-full transition-transform duration-[var(--duration-micro)]",
+                                config.color.toLowerCase() === hex.toLowerCase()
+                                  ? "ring-foreground ring-2 ring-offset-2 ring-offset-[var(--card)]"
+                                  : "hover:scale-110",
+                              )}
+                            />
+                          ))}
+                        </div>
+                        {/*
+                          A colour well next to the hex, because "#FD6F29" is not a
+                          colour anybody can pick. It is one you can only paste.
+                        */}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            aria-label="Pick a button colour"
+                            value={/^#[0-9a-f]{6}$/i.test(config.color) ? config.color : "#000000"}
+                            onChange={(e) => set("color", e.target.value.toUpperCase())}
+                            className="border-border size-8 shrink-0 cursor-pointer rounded-lg border bg-transparent p-0.5"
+                          />
+                          <Input
+                            value={config.color}
+                            onChange={(e) => set("color", e.target.value)}
+                            className="h-8 font-mono text-xs"
+                            aria-label="Button colour, as hex"
+                          />
+                        </div>
+                      </Field>
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground text-caption">
+                      Hidden. The form opens only from a button on your own site (see below).
+                    </p>
+                  )}
+                </Section>
+
+                <Section title="Size" hint="In pixels. On phones it always fills the screen.">
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Width">
+                      <NumberInput
+                        value={config.width}
+                        min={280}
+                        max={720}
+                        onChange={(v) => set("width", v)}
+                      />
+                    </Field>
+                    {/* A side tab is full height by definition. */}
+                    {config.mode === "popup" && (
+                      <Field label="Height">
+                        <NumberInput
+                          value={config.height}
+                          min={320}
+                          max={900}
+                          onChange={(v) => set("height", v)}
+                        />
+                      </Field>
+                    )}
+                  </div>
+                </Section>
+
+
+                <Section
+                  title="Open from your own button"
+                  hint="Already have a button on your site, like “Join waitlist”? Add the orange word to it, like below. Clicking that button then opens this form."
+                >
+                  <div className="bg-muted relative rounded-xl p-3 pr-10 font-mono text-xs leading-relaxed">
+                    <span className="opacity-60">&lt;button </span>
+                    <span className="text-primary font-semibold">data-chatform-open</span>
+                    <span className="opacity-60">&gt;</span>
+                    {config.label || EMBED_DEFAULTS.label}
+                    <span className="opacity-60">&lt;/button&gt;</span>
+                    <div className="absolute top-1.5 right-1.5">
+                      <CopyButton value={ownButtonHtml} />
+                    </div>
+                  </div>
+                  <p className="text-muted-foreground text-micro">
+                    Works on links too. Keep the script above on the same page.
+                  </p>
+                </Section>
               </>
             )}
 
             {config.mode === "inline" && (
-              <Field label="Height">
+              <Section title="Height">
                 <div className="flex items-center justify-between">
-                  <Label
-                    htmlFor="embed-auto-height"
-                    className="text-muted-foreground text-caption font-normal"
-                  >
+                  <Label htmlFor="embed-auto-height" className="text-caption font-normal">
                     Grow to fit the conversation
                   </Label>
                   <Switch
@@ -383,31 +419,19 @@ export function EmbedStudio({
                 )}
                 <p className="text-muted-foreground text-micro">
                   {config.autoHeight
-                    ? "Starts at 620px and follows the conversation as it grows. Needs the loader."
-                    : "A plain iframe — no script, so it survives a strict CSP."}
+                    ? "Starts at 620px and follows the conversation as it grows."
+                    : "A plain iframe with no script, so it works on sites that block scripts."}
                 </p>
-              </Field>
+              </Section>
             )}
 
             {config.mode === "fullpage" && (
-              <p className="text-muted-foreground text-micro">
-                The form takes over the window, so there is nothing to place and nothing to size.
-                Everything it looks like comes from the form&apos;s own theme.
-              </p>
+              <Section title="Nothing to set">
+                <p className="text-muted-foreground text-caption">
+                  The form takes over the whole window. Its look comes from the form&apos;s theme.
+                </p>
+              </Section>
             )}
-          </div>
-
-          <div className="border-border/60 shrink-0 border-t p-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full"
-              onClick={() => setConfig(EMBED_DEFAULTS)}
-              disabled={!modified}
-            >
-              <RotateCcw className="size-3.5" />
-              Reset to defaults
-            </Button>
           </div>
         </div>
       </div>
@@ -420,12 +444,17 @@ export function EmbedStudio({
               { value: "html", label: "HTML", icon: Code2 },
               { value: "react", label: "React", icon: Code2 },
               { value: "email", label: "Email", icon: Mail },
+              { value: "ai", label: "AI prompt", icon: Sparkles },
             ]}
             value={target}
             onChange={setTarget}
             ariaLabel="Where you're pasting this"
           />
-          <CopyButton value={snippet} label="Copy snippet" variant="default" />
+          <CopyButton
+            value={snippet}
+            label={target === "ai" ? "Copy prompt" : "Copy snippet"}
+            variant="default"
+          />
         </div>
 
         <pre className="bg-muted text-caption max-h-64 overflow-auto rounded-xl p-4 font-mono">
@@ -443,7 +472,15 @@ export function EmbedStudio({
           </p>
         )}
 
-        {target !== "email" && (
+        {target === "ai" && (
+          <p className="text-muted-foreground text-micro flex items-start gap-1.5">
+            <Sparkles className="mt-0.5 size-3 shrink-0" />
+            Paste this into Cursor, Claude Code, Lovable or any AI coding tool. It asks you a few
+            questions first, then adds the form to your site.
+          </p>
+        )}
+
+        {(target === "html" || target === "react") && (
           <details className="group">
             {/* Underlined, because it opens something. Undecorated it read as a
                 caption sitting under the snippet rather than as a control. */}
@@ -460,6 +497,32 @@ export function EmbedStudio({
   );
 }
 
+/** One decision in the rail, under a divider. */
+function Section({
+  title,
+  hint,
+  action,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-4 px-5 py-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold">{title}</h3>
+          {hint && <p className="text-muted-foreground text-micro">{hint}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function Field({
   label,
   hint,
@@ -472,7 +535,7 @@ function Field({
   return (
     <div className="space-y-2">
       <div className="space-y-0.5">
-        <p className="text-h3">{label}</p>
+        <p className="text-caption font-medium">{label}</p>
         {hint && <p className="text-muted-foreground text-micro">{hint}</p>}
       </div>
       {children}

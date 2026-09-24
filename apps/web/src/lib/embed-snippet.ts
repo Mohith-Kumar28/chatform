@@ -19,7 +19,7 @@ export type EmbedMode = "inline" | "popup" | "side-tab" | "fullpage";
 export type EmbedPosition = "bottom-right" | "bottom-left" | "top-right" | "top-left";
 
 export const EMBED_MODES: { mode: EmbedMode; label: string; blurb: string }[] = [
-  { mode: "popup", label: "Popup", blurb: "A launcher in the corner that opens a panel." },
+  { mode: "popup", label: "Popup", blurb: "A button in the corner that opens the form." },
   { mode: "inline", label: "Inline", blurb: "In the flow of the page, growing to fit." },
   { mode: "side-tab", label: "Side tab", blurb: "Slides in from the edge, full height." },
   { mode: "fullpage", label: "Full page", blurb: "Takes over the whole window." },
@@ -166,8 +166,18 @@ export function embedSnippet(options: SnippetOptions): string {
   }
 
   const attrs = [`data-form="${slug}"`, ...attributes(config, hidden)];
+  /**
+   * Inline gets a placeholder that holds its space from the first paint. The
+   * loader runs after the page has parsed, so without one the form arrives
+   * 620px tall and shoves everything below it down.
+   */
+  const placeholder =
+    config.mode === "inline"
+      ? [`<div id="chatform-${slug}" style="min-height:620px"></div>`]
+      : [];
+  if (placeholder.length) attrs.push(`data-target="#chatform-${slug}"`);
   const tag = [`<script`, `  src="${origin}/embed.js"`, ...attrs.map((a) => `  ${a}`), `  defer`, `></script>`];
-  return [...tag, ...ownButton(config, "html")].join("\n");
+  return [...placeholder, ...tag, ...ownButton(config, "html")].join("\n");
 }
 
 /**
@@ -243,4 +253,123 @@ export function emailSnippet(
  */
 export function cspSnippet(origin: string): string {
   return `frame-src ${origin};\nscript-src ${origin};`;
+}
+
+const MODE_WORDS: Record<EmbedMode, string> = {
+  popup: "popup",
+  "side-tab": "side tab",
+  inline: "inline",
+  fullpage: "full page",
+};
+
+const OPEN_WORDS: Record<EmbedConfig["openOn"], string> = {
+  click: "when a button is clicked",
+  load: "as soon as the page loads",
+  "exit-intent": "when the visitor is about to leave",
+  "scroll:50": "after scrolling halfway down the page",
+};
+
+/**
+ * A prompt for an AI coding tool that adds the embed to someone's site.
+ *
+ * It carries every option the loader reads, so the agent never has to guess
+ * an attribute, and it tells the agent to ask before it builds, with the
+ * choices made in the studio as the suggested answers. Written without em
+ * dashes on purpose: the agent copies the prompt's voice into the site.
+ */
+export function aiPrompt(options: SnippetOptions): string {
+  const config = resolve(options);
+  const { slug, origin } = config;
+  const overlay = isOverlay(config.mode);
+  const suggested = (text: string) => `(suggested: ${text})`;
+
+  return `I want to add a Chatform form to my website. Chatform is a form that feels like a chat. It goes on a page with one script tag. There is no package to install and no API key.
+
+Form slug: ${slug}
+Script: ${origin}/embed.js
+
+## Step 1: ask me first
+
+Before you write any code, ask me these questions. Ask them one or two at a time, show the suggested answer for each (these are the settings I already picked in Chatform), and wait for my reply. Skip any question that does not apply to the answers I have already given.
+
+1. How should the form appear? ${suggested(MODE_WORDS[config.mode])}
+   - popup: a button in a corner of the page opens the form in a small panel
+   - side tab: the form slides in from the edge of the screen, full height
+   - inline: the form sits inside a section of the page, like any other content
+   - full page: the form takes over the whole window
+2. Which page or pages should it be on? For inline, which section of the page should it go in?
+3. (popup and side tab) Should it open from the round corner button, from a button that is already on my site, or both? If from my own button, which button is it? ${suggested(config.launcher ? "the corner button" : "my own button only")}
+4. (popup and side tab) Which corner? bottom-right, bottom-left, top-right or top-left. ${suggested(config.position)}
+5. (corner button) What should the button say, should it show a chat icon, and what colour should it be? ${suggested(`"${config.label || "icon only"}", ${config.icon ? "with the icon" : "no icon"}, ${config.color}`)}
+6. (popup and side tab) When should it open? ${suggested(OPEN_WORDS[config.openOn])}
+   - when a button is clicked
+   - as soon as the page loads
+   - when the visitor is about to leave (the mouse moves up out of the page, desktop only)
+   - after scrolling a percentage of the page, for example halfway
+7. Size. Popup: width and height in pixels. Side tab: width. Inline: grow to fit the conversation, or a fixed height. ${suggested(overlay ? `${config.width} wide${config.mode === "popup" ? `, ${config.height} tall` : ""}` : config.autoHeight ? "grow to fit" : `${config.height} tall`)}
+8. Light, dark, or follow the visitor's system setting? ${suggested(config.theme)}
+9. Should any hidden values be passed in, like the plan a visitor is on or where they came from? These are saved with each response.
+
+## Step 2: add it
+
+Use the approach that fits my project. Look at the code to work out the stack; ask if it is unclear.
+- Plain HTML: put the script tag just before </body>.
+- Next.js: use next/script with strategy="lazyOnload", in the layout for every page or in one page for just that page. Put each data attribute on the Script component as it is.
+- React without Next.js, Vue, Svelte and others: add the script tag to index.html, or create the script element once in code. Guard against adding it twice (React StrictMode runs effects twice in development).
+- Webflow, WordPress, Framer, Shopify and other site builders: tell me where to paste the script tag (usually a custom code or embed block).
+
+Do not install any npm package for this. The script is all it needs.
+
+## Every setting on the script tag
+
+All settings are data attributes on the script tag. Leave one out to get its default.
+
+| Attribute | What it does | Values | Default |
+| --- | --- | --- | --- |
+| data-form | Which form to show. Required. | the form slug | none |
+| data-mode | How it appears | popup, side-tab, inline, fullpage | popup |
+| data-position | Which corner (popup, side tab) | bottom-right, bottom-left, top-right, top-left | bottom-right |
+| data-offset | Gap from the edges of the window, in px | 0 to 80 | 20 |
+| data-width | Panel width in px (popup, side tab) | 280 to 720 | 400 popup, 440 side tab |
+| data-height | Panel height in px (popup), or inline height | 320 to 900, or auto for inline | 600 popup, auto inline |
+| data-button-color | Corner button colour | any CSS colour, like #FD6F29 | #FD6F29 |
+| data-label | Corner button text | any text; empty for an icon-only circle | Fill this form |
+| data-icon | Chat icon on the corner button | chat, none | chat |
+| data-launcher | Hide the corner button | none | shown |
+| data-open-on | When it opens | click, load, exit-intent, scroll:<percent> such as scroll:50 | click |
+| data-theme | Colour scheme | light, dark, auto | auto |
+| data-target | Inline only: CSS selector of the element to put the form in | a selector, like #signup | right where the script tag is |
+| data-hidden-<name> | A hidden value saved with each response | data-hidden-plan="pro" | none |
+
+On screens narrower than 520px the popup and side tab always fill the whole screen.
+
+## Opening it from my own button
+
+Add the attribute data-chatform-open to any button or link. Clicking it opens the form. It works for buttons added to the page later too.
+
+<button type="button" data-chatform-open>Join the waitlist</button>
+
+To hide the round corner button and use only my own button, add data-launcher="none" to the script tag. If one page has two forms, name the form: data-chatform-open="${slug}".
+
+## Controlling it from JavaScript
+
+window.Chatform.open()
+window.Chatform.close()
+window.Chatform.toggle()
+window.Chatform.prefill({ plan: "pro" })   // hidden values, set at runtime
+window.Chatform.on("complete", (event) => { /* the visitor finished the form */ })
+
+Other events: open, close, ready, question, answer. Calls made before the script has loaded are queued if you push them to window.ChatformQueue, for example window.ChatformQueue = [["open"]].
+
+## The snippet with my current settings
+
+Start from this and change it to match my answers:
+
+${embedSnippet(options)}
+
+## Before you finish
+
+- Only one script tag per form per page.
+- If the site sets a Content Security Policy, add: frame-src ${origin}; script-src ${origin};
+- Tell me how to check it works: which page to open and what I should see.`;
 }
