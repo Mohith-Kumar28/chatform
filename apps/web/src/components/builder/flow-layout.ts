@@ -10,18 +10,23 @@ import type { Edge, Node } from "@xyflow/react";
  * Both were re-implementing, badly, a solved problem — so this hands the graph
  * to dagre, which is what the layered-DAG layout in every flow editor is.
  *
- * Left to right, so the form reads the way it is answered.
+ * Top to bottom, so the form reads as the list of questions it is.
  */
 
-/** Roughly the rendered size of each node type; dagre needs real boxes. */
+/**
+ * Roughly the rendered size of each node type; dagre needs real boxes.
+ *
+ * A question is sized for a title on two lines, the most it wraps to before
+ * the ellipsis, so a long title cannot push its card into the next rank.
+ */
 const SIZES: Record<string, { width: number; height: number }> = {
-  start: { width: 180, height: 44 },
-  question: { width: 210, height: 56 },
-  ending: { width: 190, height: 44 },
-  branch: { width: 220, height: 64 },
+  start: { width: 240, height: 44 },
+  question: { width: 288, height: 72 },
+  ending: { width: 224, height: 44 },
+  branch: { width: 288, height: 64 },
 };
 
-const DEFAULT_SIZE = { width: 210, height: 56 };
+const DEFAULT_SIZE = { width: 288, height: 72 };
 
 /**
  * A branch node's own geometry, as the markup lays it out.

@@ -521,7 +521,7 @@ function FlowNode({ node }: { node: Node }) {
   const meta = blockMeta(block.type);
   return (
     <div
-      className="bg-card h-full overflow-hidden rounded-xl px-3 py-2.5 shadow-xs"
+      className="bg-card flex h-full flex-col justify-center overflow-hidden rounded-xl px-3 py-2 shadow-xs"
       style={{ boxShadow: `inset 3px 0 0 0 ${TONE_ACCENT[meta.tone]}, var(--shadow-xs)` }}
     >
       <div className="flex items-center gap-2">
@@ -529,7 +529,9 @@ function FlowNode({ node }: { node: Node }) {
           <meta.icon className="size-3.5" strokeWidth={2} />
         </span>
         <span className="tabular text-[0.625rem] opacity-60">{index}</span>
-        <span className="min-w-0 flex-1 truncate text-xs font-medium">{block.title}</span>
+        <span className="line-clamp-2 min-w-0 flex-1 text-xs font-medium break-words" title={block.title}>
+          {block.title}
+        </span>
         {block.required && <span className="text-destructive text-xs">*</span>}
       </div>
       <p className="text-muted-foreground mt-1 text-[10px] tracking-wide uppercase">{meta.label}</p>

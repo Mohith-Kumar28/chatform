@@ -1035,13 +1035,15 @@ function StartNode({ id, data, selected }: NodeProps) {
   return (
     <NodeMenu id={id} kind="start" deletable={false}>
       <div
-        className={`rounded-full border-2 px-4 py-2 shadow-sm ${selected ? "border-primary ring-2 ring-primary/30" : "border-green-600/50"}`}
+        // A fixed width, matching what the layout reserves for it: sized by
+        // its title, a long welcome pushed the pill off the column's centre.
+        className={`w-60 rounded-full border-2 px-4 py-2 shadow-sm ${selected ? "border-primary ring-2 ring-primary/30" : "border-green-600/50"}`}
         style={{ background: "var(--card)" }}
       >
         <div className="flex items-center gap-2">
           <Play className="size-3 fill-green-600 text-green-600" />
           <span className="tabular text-[0.625rem] opacity-60">{index}</span>
-          <span className="max-w-44 truncate text-xs font-semibold">{block.title}</span>
+          <span className="min-w-0 flex-1 truncate text-xs font-semibold" title={block.title}>{block.title}</span>
         </div>
         <Handle type="source" position={Position.Bottom} className="!bg-green-600" />
       </div>
@@ -1063,7 +1065,7 @@ function QuestionNode({ id, data, selected }: NodeProps) {
       <div
         ref={card}
         className={cn(
-          "relative w-56 rounded-xl bg-[var(--card)] px-3 py-2.5 transition-shadow",
+          "relative w-72 rounded-xl bg-[var(--card)] px-3 py-2.5 transition-shadow",
           selected ? "shadow-md" : "shadow-xs",
           // A broken node is outlined, not tinted: the fill is the block's family
           // colour and carries meaning of its own. Red stops a publish; amber
@@ -1084,7 +1086,10 @@ function QuestionNode({ id, data, selected }: NodeProps) {
             <meta.icon className="size-3.5" strokeWidth={2} />
           </span>
           <span className="tabular text-[0.625rem] opacity-60">{index}</span>
-          <span className="min-w-0 flex-1 truncate text-xs font-medium">{block.title}</span>
+          {/* Two lines, then the ellipsis; the full title is on hover. */}
+          <span className="line-clamp-2 min-w-0 flex-1 text-xs font-medium break-words" title={block.title}>
+            {block.title}
+          </span>
           {block.required && <span className="text-destructive text-xs">*</span>}
         </div>
         {/* Sits on the top edge, half in and half out, in the ring's own
@@ -1176,7 +1181,7 @@ function EndingNode({ id, data, selected, deletable }: NodeProps) {
   return (
     <NodeMenu id={id} kind="ending" deletable={deletable !== false}>
       <div
-        className="w-44 rounded-xl border-2 border-dashed px-3 py-2.5 shadow-sm"
+        className="w-56 rounded-xl border-2 border-dashed px-3 py-2.5 shadow-sm"
         style={{
           background: screenOut ? "var(--destructive-soft)" : "var(--success-soft)",
           borderColor: selected ? accent : `color-mix(in oklab, ${accent} 55%, transparent)`,
@@ -1245,7 +1250,7 @@ function BranchNode({ id, data, selected }: NodeProps) {
     <NodeMenu id={id} kind="branch" sourceRef={sourceRef}>
       <div
         className={cn(
-          "relative w-56 rounded-xl border-2 bg-[var(--card)] pb-1 shadow-sm",
+          "relative w-72 rounded-xl border-2 bg-[var(--card)] pb-1 shadow-sm",
           selected ? "border-primary ring-primary/30 shadow-md ring-2" : "border-amber-500/60",
           broken && "!border-[var(--destructive)] ring-2 ring-[var(--destructive)]",
         )}
