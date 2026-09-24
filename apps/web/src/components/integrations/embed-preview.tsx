@@ -87,10 +87,11 @@ export function EmbedPreview({
 
   const vertical = config.position.startsWith("top") ? "top" : "bottom";
   const horizontal = config.position.endsWith("left") ? "left" : "right";
-  const clearance = config.offset + LAUNCHER_CLEARANCE;
+  const hasLauncher = config.launcher;
+  const clearance = config.offset + (hasLauncher ? LAUNCHER_CLEARANCE : 0);
   const takeover = stage.width <= MOBILE_TAKEOVER;
   // `embed.js`'s `hostCloses()`: a desktop popup closes from the launcher.
-  const launcherCloses = config.mode === "popup" && !takeover;
+  const launcherCloses = config.mode === "popup" && hasLauncher && !takeover;
 
   const panelBox: React.CSSProperties = takeover
     ? { inset: 0, borderRadius: 0 }
@@ -201,7 +202,7 @@ export function EmbedPreview({
                 >
                   <X className="size-5" strokeWidth={2.5} />
                 </button>
-              ) : !open && (
+              ) : !open && hasLauncher && (
                 <button
                   type="button"
                   onClick={onToggle}

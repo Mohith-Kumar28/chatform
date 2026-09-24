@@ -67,7 +67,7 @@ type Target = "html" | "react" | "email";
 const SWATCHES = ["#FD6F29", "#9D6EE4", "#0ea5e9", "#10b981", "#ef4444", "#111827"];
 
 const TRIGGERS: { value: EmbedConfig["openOn"]; label: string }[] = [
-  { value: "click", label: "When the launcher is clicked" },
+  { value: "click", label: "When a button is clicked" },
   { value: "load", label: "As soon as the page loads" },
   { value: "exit-intent", label: "When the cursor leaves the page" },
   { value: "scroll:50", label: "After scrolling halfway" },
@@ -191,72 +191,109 @@ export function EmbedStudio({
 
             {overlay && (
               <>
-                <Field label="Corner" hint="Where the launcher sits on the page.">
+                <Field
+                  label="Corner"
+                  hint={config.launcher ? "Where the launcher sits on the page." : "Where the panel opens."}
+                >
                   <CornerPicker value={config.position} onChange={(p) => set("position", p)} />
                 </Field>
 
-                <Field label="Launcher">
-                  <Input
-                    value={config.label}
-                    placeholder="Icon only"
-                    onChange={(e) => set("label", e.target.value)}
-                  />
+                {/*
+                  Your own button. Any element carrying `data-chatform-open`
+                  opens the form, with or without the corner button; switching
+                  the corner button off is for pages that only want theirs.
+                */}
+                <Field
+                  label="Your own button"
+                  hint="Add data-chatform-open to any button or link on your page and it opens the form."
+                >
+                  <div className="flex items-center gap-2">
+                    <code className="bg-muted text-micro min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 font-mono">
+                      data-chatform-open
+                    </code>
+                    <CopyButton value="data-chatform-open" />
+                  </div>
                   <div className="flex items-center justify-between pt-1">
                     <Label
-                      htmlFor="embed-icon"
+                      htmlFor="embed-launcher"
                       className="text-muted-foreground text-caption font-normal"
                     >
-                      Show the chat icon
+                      Show the corner button too
                     </Label>
                     <Switch
-                      id="embed-icon"
-                      checked={config.icon}
-                      onCheckedChange={(v) => set("icon", v)}
+                      id="embed-launcher"
+                      checked={config.launcher}
+                      onCheckedChange={(v) => set("launcher", v)}
                     />
                   </div>
                 </Field>
 
-                <Field
-                  label="Launcher colour"
-                  hint="The bubble only — the conversation uses the form's theme."
-                >
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {SWATCHES.map((hex) => (
-                      <button
-                        key={hex}
-                        type="button"
-                        aria-label={hex}
-                        onClick={() => set("color", hex)}
-                        style={{ background: hex }}
-                        className={cn(
-                          "size-6 rounded-full transition-transform duration-[var(--duration-micro)]",
-                          config.color.toLowerCase() === hex.toLowerCase()
-                            ? "ring-foreground ring-2 ring-offset-2 ring-offset-[var(--card)]"
-                            : "hover:scale-110",
-                        )}
-                      />
-                    ))}
-                  </div>
-                  {/*
-                    A colour well next to the hex, because "#FD6F29" is not a
-                    colour anybody can pick — it is one you can only paste.
-                  */}
-                  <div className="relative flex items-center gap-2">
-                    <input
-                      type="color"
-                      aria-label="Pick a launcher colour"
-                      value={/^#[0-9a-f]{6}$/i.test(config.color) ? config.color : "#000000"}
-                      onChange={(e) => set("color", e.target.value.toUpperCase())}
-                      className="border-border size-8 shrink-0 cursor-pointer rounded-lg border bg-transparent p-0.5"
-                    />
+                {config.launcher && (
+                  <Field label="Launcher">
                     <Input
-                      value={config.color}
-                      onChange={(e) => set("color", e.target.value)}
-                      className="h-8 font-mono text-xs"
-                      aria-label="Launcher colour, as hex"
+                      value={config.label}
+                      placeholder="Icon only"
+                      onChange={(e) => set("label", e.target.value)}
                     />
-                  </div>
-                </Field>
+                    <div className="flex items-center justify-between pt-1">
+                      <Label
+                        htmlFor="embed-icon"
+                        className="text-muted-foreground text-caption font-normal"
+                      >
+                        Show the chat icon
+                      </Label>
+                      <Switch
+                        id="embed-icon"
+                        checked={config.icon}
+                        onCheckedChange={(v) => set("icon", v)}
+                      />
+                    </div>
+                  </Field>
+                )}
+
+                {config.launcher && (
+                  <Field
+                    label="Launcher colour"
+                    hint="The bubble only — the conversation uses the form's theme."
+                  >
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {SWATCHES.map((hex) => (
+                        <button
+                          key={hex}
+                          type="button"
+                          aria-label={hex}
+                          onClick={() => set("color", hex)}
+                          style={{ background: hex }}
+                          className={cn(
+                            "size-6 rounded-full transition-transform duration-[var(--duration-micro)]",
+                            config.color.toLowerCase() === hex.toLowerCase()
+                              ? "ring-foreground ring-2 ring-offset-2 ring-offset-[var(--card)]"
+                              : "hover:scale-110",
+                          )}
+                        />
+                      ))}
+                    </div>
+                    {/*
+                      A colour well next to the hex, because "#FD6F29" is not a
+                      colour anybody can pick — it is one you can only paste.
+                    */}
+                    <div className="relative flex items-center gap-2">
+                      <input
+                        type="color"
+                        aria-label="Pick a launcher colour"
+                        value={/^#[0-9a-f]{6}$/i.test(config.color) ? config.color : "#000000"}
+                        onChange={(e) => set("color", e.target.value.toUpperCase())}
+                        className="border-border size-8 shrink-0 cursor-pointer rounded-lg border bg-transparent p-0.5"
+                      />
+                      <Input
+                        value={config.color}
+                        onChange={(e) => set("color", e.target.value)}
+                        className="h-8 font-mono text-xs"
+                        aria-label="Launcher colour, as hex"
+                      />
+                    </div>
+                  </Field>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Width">

@@ -23,14 +23,21 @@
  *   data-height      panel height in px; inline takes "auto"     default 600 / auto
  *   data-target      CSS selector for inline mode                default appends
  *   data-app         the Chatform origin                         default this script's origin
- *   data-color       launcher colour                             default #FD6F29
+ *   data-button-color launcher colour (data-color still works)  default #FD6F29
  *   data-label       launcher text; "" for an icon-only bubble   default "Fill this form"
  *   data-icon        chat | none                                 default chat
+ *   data-launcher    "none" hides the corner button; open it from
+ *                    your own element instead (see below)
  *   data-theme       light | dark | auto                         default auto
  *   data-open-on     click | load | exit-intent | scroll:<pct>   default click
  *   data-lazy        "false" to build the frame immediately      default lazy
  *   data-nonce       CSP nonce, copied onto injected styles
  *   data-hidden-*    prefilled hidden fields (data-hidden-plan="pro")
+ *
+ * Your own button:
+ *   <button data-chatform-open>Join the waitlist</button>
+ *   Any element with data-chatform-open opens the form when clicked. Give it
+ *   the slug (data-chatform-open="my-form") when a page has two forms.
  *
  * Programmatic:
  *   window.Chatform.open() / .close() / .toggle() / .prefill({}) / .on(event, fn) / .destroy()
@@ -53,10 +60,11 @@
   var scriptOrigin = new URL(script.src, window.location.href).origin;
   var app = script.getAttribute("data-app") || scriptOrigin;
   var mode = script.getAttribute("data-mode") || "popup";
-  var color = script.getAttribute("data-color") || "#FD6F29";
+  var color = script.getAttribute("data-button-color") || script.getAttribute("data-color") || "#FD6F29";
   var labelAttr = script.getAttribute("data-label");
   var label = labelAttr === null ? "Fill this form" : labelAttr;
   var showIcon = script.getAttribute("data-icon") !== "none";
+  var showLauncher = script.getAttribute("data-launcher") !== "none";
   var theme = script.getAttribute("data-theme") || "auto";
   var openOn = script.getAttribute("data-open-on") || "click";
   var lazy = script.getAttribute("data-lazy") !== "false";
@@ -129,7 +137,7 @@
   var narrow = window.matchMedia ? window.matchMedia("(max-width:520px)") : null;
   function hostCloses() {
     if (mode === "inline") return true;
-    return mode === "popup" && !(narrow && narrow.matches);
+    return mode === "popup" && showLauncher && !(narrow && narrow.matches);
   }
 
   function emit(name, payload) {
@@ -228,8 +236,9 @@
         ".cf-p-" + uid + "{top:0;bottom:0;" + horizontal + ":0;width:" + panelWidth +
         "px;height:100vh;border-radius:0}";
     } else {
-      // Clear of the launcher, which is about 48px tall plus its own gap.
-      var clearance = offset + 68;
+      // Clear of the launcher, which is about 48px tall plus its own gap. With
+      // no launcher the panel takes the corner itself.
+      var clearance = showLauncher ? offset + 68 : offset;
       panelRule =
         ".cf-p-" + uid + "{" + vertical + ":" + clearance + "px;" + horizontal + ":" + offset +
         "px;width:" + panelWidth + "px;height:" + panelHeight +
@@ -243,7 +252,7 @@
     // A desktop popup closes from the launcher, so the fallback X is only for
     // the layouts where the launcher is hidden.
     var fallbackRule =
-      mode === "popup" ? "@media (min-width:521px){.cf-p-" + uid + ">.cf-close{display:none}}" : "";
+      mode === "popup" && showLauncher ? "@media (min-width:521px){.cf-p-" + uid + ">.cf-close{display:none}}" : "";
 
     addStyle(null, launcherRule + panelRule + mobileRule + fallbackRule);
   }
@@ -309,7 +318,7 @@
     if (!lazy) panel.appendChild(buildFrame());
     document.body.appendChild(panel);
 
-    if (mode !== "fullpage") {
+    if (mode !== "fullpage" && showLauncher) {
       launcher = document.createElement("button");
       launcher.type = "button";
       launcher.className = "cf-launcher cf-l-" + uid + (label ? "" : " cf-bare");
@@ -466,6 +475,26 @@
     else if (narrow.addListener) narrow.addListener(onNarrowChange);
   }
 
+  /**
+   * `data-chatform-open` on any element of the page opens this form.
+   *
+   * Delegated from the document, so it covers buttons rendered after this
+   * script ran (a React page, a menu opened later). A bare attribute belongs to
+   * the first form on the page; one with a slug belongs to that form.
+   */
+  function onPageClick(event) {
+    if (destroyed || !event.target || !event.target.closest) return;
+    var el = event.target.closest("[data-chatform-open]");
+    if (!el) return;
+    var which = el.getAttribute("data-chatform-open");
+    if (which ? which !== slug : window.Chatform !== api) return;
+    event.preventDefault();
+    // Inline is already open, so the most a button can do is bring it into view.
+    if (mode === "inline" && panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    else open();
+  }
+  document.addEventListener("click", onPageClick);
+
   function setupTriggers() {
     if (openOn === "load") {
       open();
@@ -496,6 +525,7 @@
   function destroy() {
     destroyed = true;
     hideFallbackClose();
+    document.removeEventListener("click", onPageClick);
     if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
     if (launcher && launcher.parentNode) launcher.parentNode.removeChild(launcher);
     frame = null;

@@ -47,6 +47,8 @@ export interface EmbedConfig {
   /** Launcher text. Empty means an icon-only bubble. */
   label: string;
   icon: boolean;
+  /** The corner button. Off means the form opens from the page's own element. */
+  launcher: boolean;
   theme: "auto" | "light" | "dark";
   openOn: "click" | "load" | "exit-intent" | "scroll:50";
   /** Panel width for overlays. */
@@ -71,15 +73,15 @@ export const EMBED_DEFAULTS: EmbedConfig = {
   position: "bottom-right",
   offset: 20,
   // The mark's orange. Must stay in step with the same default in
-  // `public/embed.js` — the snippet generators diff against this to decide
-  // which attributes to spell out, so a drift here writes `data-color` into
-  // every snippet for a value the loader would have used anyway.
+  // `public/embed.js`. Unlike the rest, `data-button-color` is always spelled
+  // out, so the snippet shows where to change it.
   color: "#FD6F29",
   // "Questions?" is a support-widget default, and this is a form: the bubble
   // read as a help desk nobody was staffing. Must stay in step with the same
   // default in `public/embed.js`, for the reason given on `color` above.
   label: "Fill this form",
   icon: true,
+  launcher: true,
   theme: "auto",
   openOn: "click",
   width: 400,
@@ -119,9 +121,15 @@ function attributes(config: EmbedConfig, hidden: Record<string, string> | undefi
     if (config.mode === "popup" && config.height !== EMBED_DEFAULTS.height) {
       add("data-height", config.height);
     }
-    if (config.color !== EMBED_DEFAULTS.color) add("data-color", config.color);
-    if (config.label !== EMBED_DEFAULTS.label) add("data-label", config.label);
-    if (!config.icon) add("data-icon", "none");
+    if (config.launcher) {
+      // Always written: the one value almost everybody changes, and a snippet
+      // without it gives no hint that it can be.
+      add("data-button-color", config.color);
+      if (config.label !== EMBED_DEFAULTS.label) add("data-label", config.label);
+      if (!config.icon) add("data-icon", "none");
+    } else {
+      add("data-launcher", "none");
+    }
     if (config.openOn !== EMBED_DEFAULTS.openOn) add("data-open-on", config.openOn);
   }
   if (config.mode === "inline" && !config.autoHeight) add("data-height", config.height);
@@ -158,9 +166,25 @@ export function embedSnippet(options: SnippetOptions): string {
   }
 
   const attrs = [`data-form="${slug}"`, ...attributes(config, hidden)];
-  return [`<script`, `  src="${origin}/embed.js"`, ...attrs.map((a) => `  ${a}`), `  defer`, `></script>`].join(
-    "\n",
-  );
+  const tag = [`<script`, `  src="${origin}/embed.js"`, ...attrs.map((a) => `  ${a}`), `  defer`, `></script>`];
+  return [...tag, ...ownButton(config, "html")].join("\n");
+}
+
+/**
+ * With the corner button off, the page has to supply its own, so the snippet
+ * shows one. Any element works; the attribute is what matters.
+ */
+function ownButton(config: EmbedConfig, target: "html" | "react"): string[] {
+  if (!isOverlay(config.mode) || config.launcher) return [];
+  const label = escapeAttr(config.label || EMBED_DEFAULTS.label);
+  if (target === "react") {
+    return [``, `// Any element with data-chatform-open opens the form.`, `<button type="button" data-chatform-open>${label}</button>`];
+  }
+  return [
+    ``,
+    `<!-- Any element with data-chatform-open opens the form. -->`,
+    `<button type="button" data-chatform-open>${label}</button>`,
+  ];
 }
 
 /**
@@ -191,6 +215,7 @@ export function reactSnippet(options: SnippetOptions): string {
     `    />`,
     `  );`,
     `}`,
+    ...ownButton(config, "react"),
   ].join("\n");
 }
 
