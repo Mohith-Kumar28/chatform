@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUp, Check, GitBranch, Loader2, Mic, Minus, Shuffle, SlidersHorizontal, Sparkles, Square, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
@@ -126,16 +126,23 @@ export function AiBar() {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" });
   }, [turns, busy]);
 
-  // Grow to fit, between a floor and a ceiling. Collapsed, the floor is one
-  // line so the bar stays slim; open, it is two, so the field reads as a place
-  // to write. The ceiling keeps a pasted page from swallowing the canvas —
-  // past it the field scrolls.
+  // Opening lands on the latest message, before paint, so the thread grows in
+  // already showing the end of the conversation instead of scrolling to it.
+  useLayoutEffect(() => {
+    const el = threadRef.current;
+    if (open && el) el.scrollTop = el.scrollHeight;
+  }, [open]);
+
+  // Grow to fit, between one line and a ceiling. Opening the bar used to raise
+  // the floor to two lines, which pushed the controls onto a row of their own
+  // and made an empty field jump in height for no reason. The ceiling keeps a
+  // pasted page from swallowing the canvas; past it the field scrolls.
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(Math.max(el.scrollHeight, open ? 56 : 32), 240)}px`;
-  }, [prompt, open]);
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 32), 240)}px`;
+  }, [prompt]);
 
   async function run() {
     const text = prompt.trim();
@@ -301,11 +308,12 @@ export function AiBar() {
 
   return (
     <div ref={wrapRef} className="pointer-events-auto w-full max-w-xl">
-      <motion.div
-        layout
-        transition={{ type: "spring", stiffness: 420, damping: 36 }}
+      {/* No `layout` here. It animated the resize as a scale transform, which
+          squashed and stretched the text mid-flight. The card now just follows
+          its content, and the thread below animates its own height. */}
+      <div
         className={cn(
-          "bg-card overflow-hidden rounded-3xl",
+          "bg-card overflow-hidden rounded-3xl transition-shadow duration-200",
           open ? "shadow-lg" : "shadow-md",
         )}
       >
@@ -316,7 +324,13 @@ export function AiBar() {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+              transition={{
+                height: { duration: 0.28, ease: [0.32, 0.72, 0, 1] },
+                opacity: { duration: 0.2, ease: "easeOut" },
+              }}
+              // Clips the thread while its height is still catching up, so
+              // messages never paint over the field below.
+              className="overflow-hidden"
             >
               <div ref={threadRef} className="max-h-[min(28rem,55vh)] space-y-2.5 overflow-y-auto p-3">
                 {turns.map((turn) => (
@@ -354,25 +368,29 @@ export function AiBar() {
               grows, where a thumb expects them. The spark labels an empty field;
               once there is text it has nothing left to say and gives the words
               its width. */}
-          {!prompt && (
-            <span className="flex h-8 shrink-0 items-center self-start">
-              <Sparkles className="text-primary size-4" />
-            </span>
-          )}
+          <AnimatePresence initial={false}>
+            {!prompt && (
+              <FadeWidth key="spark">
+                <Sparkles className="text-primary size-4" />
+              </FadeWidth>
+            )}
+          </AnimatePresence>
           {/* The key that gets you here, at the head of the line beside the
               spark rather than trailing after the placeholder — it belongs with
               the label for the input, not with the send button, and on the right
               it read as something you press to send. Hidden once the bar is open
               or has text, when it is only noise. */}
-          {!open && !prompt && (
-            /* No `sm:` gate of its own any more: `Kbd` is drawn where there
-               is a keyboard to press, which is the question this was asking
-               badly — a 640px viewport with a trackpad had the key and was not
-               told, and a wide tablet without one was. */
-            <span className="flex h-8 shrink-0 items-center self-start">
-              <Kbd className="h-6 min-w-6 rounded-md px-1.5 text-xs">{KEY.askAi}</Kbd>
-            </span>
-          )}
+          {/* No `sm:` gate of its own any more: `Kbd` is drawn where there is
+              a keyboard to press, which is the question this was asking badly —
+              a 640px viewport with a trackpad had the key and was not told, and
+              a wide tablet without one was. */}
+          <AnimatePresence initial={false}>
+            {!open && !prompt && (
+              <FadeWidth key="kbd">
+                <Kbd className="h-6 min-w-6 rounded-md px-1.5 text-xs">{KEY.askAi}</Kbd>
+              </FadeWidth>
+            )}
+          </AnimatePresence>
           <textarea
             ref={inputRef}
             // How `/` finds this from the shell's keyboard layer.
@@ -433,8 +451,27 @@ export function AiBar() {
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowUp className="size-3.5" />}
           </Button>
         </form>
-      </motion.div>
+      </div>
     </div>
+  );
+}
+
+/**
+ * A leading adornment that folds its width away as it fades, so the text
+ * beside it slides over instead of jumping. The negative margin cancels the
+ * row's gap while it is gone.
+ */
+function FadeWidth({ children }: { children: React.ReactNode }) {
+  return (
+    <motion.span
+      initial={{ width: 0, opacity: 0, marginRight: -8 }}
+      animate={{ width: "auto", opacity: 1, marginRight: 0 }}
+      exit={{ width: 0, opacity: 0, marginRight: -8 }}
+      transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+      className="flex h-8 shrink-0 items-center self-start overflow-hidden"
+    >
+      {children}
+    </motion.span>
   );
 }
 
