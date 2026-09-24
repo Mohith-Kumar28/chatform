@@ -72,19 +72,35 @@ export function nodeSize(node: Pick<Node, "type" | "data">): { width: number; he
 /**
  * Which way the flow runs.
  *
- * The canvas reads left to right, the way a form is answered, and it has a
- * whole viewport to do it in. A read-only diagram in a column beside something
- * else does not: nine questions in a row is 2,400px of graph, and fitting that
- * into a 600px pane scales the type down to nothing. Top to bottom costs the
- * pane only the width of one node, so it stays readable at full size and
- * scrolls, which is what a column is for.
+ * Top to bottom, everywhere. The canvas used to read left to right, and a form
+ * is a list: question one, then two, then three. A column reads that way at a
+ * glance, costs only one node's width, and matches the template diagrams.
+ * "LR" is kept for anything that still asks for it by name.
  */
 export type Rankdir = "LR" | "TB";
+
+/**
+ * Marks a saved layout as drawn top to bottom.
+ *
+ * Every layout saved before the canvas turned vertical is a left-to-right
+ * picture, and keeping it would draw old forms sideways forever. A layout
+ * without this key is treated as one of those and laid out again; the canvas
+ * writes the key whenever it saves positions. A key in the record rather than
+ * a new schema field, so no stored document needs rewriting.
+ */
+export const LAYOUT_TB = "__tb";
+
+/** A layout record the canvas can save, tagged as vertical. */
+export function tagVertical(
+  layout: Record<string, { x: number; y: number }>,
+): Record<string, { x: number; y: number }> {
+  return { ...layout, [LAYOUT_TB]: { x: 0, y: 0 } };
+}
 
 export function layoutGraph(
   nodes: Node[],
   edges: Edge[],
-  rankdir: Rankdir = "LR",
+  rankdir: Rankdir = "TB",
 ): Map<string, { x: number; y: number }> {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
@@ -211,12 +227,12 @@ export function placeNodes(
   nodes: Node[],
   edges: Edge[],
   saved: Record<string, { x: number; y: number }>,
-  rankdir: Rankdir = "LR",
+  rankdir: Rankdir = "TB",
 ): Map<string, { x: number; y: number }> {
-  // A layout saved from the canvas is a layout in the canvas's own direction,
-  // so it says nothing about where these nodes go when the flow runs the other
-  // way. The read-only view asks for its own.
-  if (rankdir === "LR" && nodes.every((node) => saved[node.id])) {
+  // A saved layout is kept only if it was drawn in this direction: untagged
+  // means left to right, from before the canvas turned vertical.
+  const drawnThisWay = rankdir === "TB" ? Boolean(saved[LAYOUT_TB]) : !saved[LAYOUT_TB];
+  if (drawnThisWay && nodes.every((node) => saved[node.id])) {
     const kept = new Map<string, { x: number; y: number }>();
     for (const node of nodes) kept.set(node.id, saved[node.id]!);
     return kept;

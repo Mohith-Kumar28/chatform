@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Edge, Node } from "@xyflow/react";
-import { nodeSize, placeNodes } from "../src/components/builder/flow-layout";
+import { LAYOUT_TB, nodeSize, placeNodes, tagVertical } from "../src/components/builder/flow-layout";
 
 /** A straight run of questions, plus one the saved layout has never seen. */
 function graph(): { nodes: Node[]; edges: Edge[] } {
@@ -17,21 +17,34 @@ function graph(): { nodes: Node[]; edges: Edge[] } {
 }
 
 describe("placeNodes", () => {
-  it("keeps a layout that accounts for every node", () => {
+  it("keeps a vertical layout that accounts for every node", () => {
     const { nodes, edges } = graph();
-    const saved = Object.fromEntries(nodes.map((n, i) => [n.id, { x: i * 300, y: 7 }]));
+    const saved = tagVertical(Object.fromEntries(nodes.map((n, i) => [n.id, { x: 7, y: i * 300 }])));
 
     const placed = placeNodes(nodes, edges, saved);
 
     for (const node of nodes) expect(placed.get(node.id)).toEqual(saved[node.id]);
+    // The tag is not a node, and never becomes one.
+    expect(placed.has(LAYOUT_TB)).toBe(false);
+  });
+
+  it("lays out again a complete layout saved before the canvas turned vertical", () => {
+    const { nodes, edges } = graph();
+    // Untagged: a left-to-right photograph from the old canvas.
+    const saved = Object.fromEntries(nodes.map((n, i) => [n.id, { x: i * 300, y: 7 }]));
+
+    const placed = placeNodes(nodes, edges, saved);
+
+    const ys = nodes.map((n) => placed.get(n.id)!.y);
+    for (let i = 1; i < ys.length; i++) expect(ys[i]!).toBeGreaterThan(ys[i - 1]!);
   });
 
   it("lays the whole graph out again once a node is missing from it", () => {
     const { nodes, edges } = graph();
     // The shape a form is in after the AI bar adds a question: most nodes have
     // a position from an older canvas, the new one has none.
-    const saved = Object.fromEntries(
-      nodes.filter((n) => n.id !== "platform").map((n) => [n.id, { x: 9000, y: 9000 }]),
+    const saved = tagVertical(
+      Object.fromEntries(nodes.filter((n) => n.id !== "platform").map((n) => [n.id, { x: 9000, y: 9000 }])),
     );
 
     const placed = placeNodes(nodes, edges, saved);
@@ -39,9 +52,9 @@ describe("placeNodes", () => {
     // Nothing is left in the old frame — a single leftover coordinate is what
     // put question 3 to the left of the welcome block.
     for (const node of nodes) expect(placed.get(node.id)).not.toEqual({ x: 9000, y: 9000 });
-    // And the run reads left to right, in document order.
-    const xs = nodes.map((n) => placed.get(n.id)!.x);
-    for (let i = 1; i < xs.length; i++) expect(xs[i]!).toBeGreaterThan(xs[i - 1]!);
+    // And the run reads top to bottom, in document order.
+    const ys = nodes.map((n) => placed.get(n.id)!.y);
+    for (let i = 1; i < ys.length; i++) expect(ys[i]!).toBeGreaterThan(ys[i - 1]!);
   });
 
   /**
@@ -85,10 +98,10 @@ describe("placeNodes", () => {
     // Every wire runs forwards. A backwards one is a wire doubling back
     // across the canvas, which is what the broken layout looked like.
     for (const [source, target] of wires) {
-      expect(placed.get(target)!.x).toBeGreaterThan(placed.get(source)!.x);
+      expect(placed.get(target)!.y).toBeGreaterThan(placed.get(source)!.y);
     }
     // The two arms sit side by side rather than on top of each other.
-    expect(placed.get("device")!.y).not.toBe(placed.get("email")!.y);
+    expect(placed.get("device")!.x).not.toBe(placed.get("email")!.x);
   });
 
   it("lays out a graph with no saved layout at all", () => {
@@ -99,12 +112,9 @@ describe("placeNodes", () => {
 });
 
 /**
- * The direction the template page's read-only diagram reads in.
- *
- * Everything the canvas relies on has to hold turned ninety degrees, and the
- * two claims that are easy to break are the ones asserted here: the flow still
- * runs forwards, and a branch's arms still come out in the order its rows are
- * listed — which is now a left-to-right order rather than a top-to-bottom one.
+ * Top to bottom, asked for by name: the direction both the canvas and the
+ * template diagram read in. A branch's arms come out in the order its rows are
+ * listed, left to right.
  */
 describe("placeNodes, top to bottom", () => {
   /** A question that splits three ways, with each arm reached only from it. */
@@ -146,16 +156,12 @@ describe("placeNodes, top to bottom", () => {
     expect(centres.size).toBe(1);
   });
 
-  it("ignores a layout saved from the canvas", () => {
+  it("keeps a left-to-right layout only when left to right is asked for", () => {
     const { nodes, edges } = graph();
-    // Complete, so the left-to-right path would keep every one of these.
     const saved = Object.fromEntries(nodes.map((n, i) => [n.id, { x: i * 300, y: 7 }]));
 
-    const placed = placeNodes(nodes, edges, saved, "TB");
-
-    // A photograph of the graph running the other way says nothing about where
-    // these nodes go down a column.
-    expect(nodes.every((n) => placed.get(n.id)!.y === 7)).toBe(false);
+    expect(placeNodes(nodes, edges, saved, "LR").get("end")).toEqual(saved.end);
+    expect(nodes.every((n) => placeNodes(nodes, edges, saved, "TB").get(n.id)!.y === 7)).toBe(false);
   });
 
   it("puts a branch's arms side by side, in the order its rows read", () => {

@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Node } from "@xyflow/react";
 import { Flag, Minus, Play, Plus, Scan, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Block, FormDoc } from "@repo/form-schema";
 import { blockMeta, TONE_ACCENT, TONE_CLASSES } from "@/components/builder/block-library";
 import { BRANCH_HEADER, BRANCH_ROW, nodeSize } from "@/components/builder/flow-layout";
-import { branchData, deriveGraph, isGoto, OTHERWISE } from "@/components/builder/flow-graph";
+import { branchData, deriveGraph, isGoto, OTHERWISE, routeColor } from "@/components/builder/flow-graph";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,6 +47,8 @@ interface Wire {
   label?: string;
   /** Where the label sits — see `labelAt`. */
   at?: Anchor;
+  /** A branch route's colour, shared with its row's dot. Plain wires have none. */
+  color?: string;
 }
 
 /** Breathing room around the graph, so nothing touches the frame. */
@@ -344,6 +346,10 @@ function fitted(el: HTMLElement, gw: number, gh: number, whole = true) {
 
 /** The boxes and wires at 1:1, in graph coordinates. Both viewports scale this. */
 function FlowDrawing({ placed, wires, width, height }: { placed: Placed[]; wires: Wire[]; width: number; height: number }) {
+  // Unique per drawing: the inline flow and the expanded one are both on the
+  // page at once, and a duplicate marker id resolves to whichever came first.
+  const markerBase = `cf-arrow-${useId().replace(/:/g, "")}`;
+  const colors = [...new Set(["var(--border)", ...wires.flatMap((w) => (w.color ? [w.color] : []))])];
   return (
     <>
       <svg
@@ -352,27 +358,32 @@ function FlowDrawing({ placed, wires, width, height }: { placed: Placed[]; wires
         height={height}
         aria-hidden
       >
+        {/* One arrowhead per wire colour: a marker cannot inherit its
+            wire's stroke everywhere yet. */}
         <defs>
-          <marker
-            id="cf-template-arrow"
-            viewBox="0 0 10 10"
-            refX="8"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M0 0 L10 5 L0 10 z" fill="var(--border)" />
-          </marker>
+          {colors.map((color, i) => (
+            <marker
+              key={color}
+              id={`${markerBase}-${i}`}
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto-start-reverse"
+            >
+              <path d="M0 0 L10 5 L0 10 z" fill={color} />
+            </marker>
+          ))}
         </defs>
         {wires.map((w) => (
           <g key={w.id}>
             <path
               d={path(w.from, w.to)}
               fill="none"
-              stroke="var(--border)"
+              stroke={w.color ?? "var(--border)"}
               strokeWidth={1.5}
-              markerEnd="url(#cf-template-arrow)"
+              markerEnd={`url(#${markerBase}-${colors.indexOf(w.color ?? "var(--border)")})`}
             />
             {w.label && <WireLabel wire={w} />}
           </g>
@@ -483,13 +494,13 @@ function FlowNode({ node }: { node: Node }) {
         >
           <span className="truncate">{sourceTitle}</span>
         </div>
-        {cases.map((c) => (
+        {cases.map((c, row) => (
           <div
             key={c.ruleId}
             className="flex items-center px-2 text-[10px]"
             style={{ height: BRANCH_ROW }}
           >
-            <span className="bg-primary mr-1.5 size-1 shrink-0 rounded-full" />
+            <span className="mr-1.5 size-1.5 shrink-0 rounded-full" style={{ background: routeColor(row) }} />
             <span className="truncate font-medium">{c.label}</span>
           </div>
         ))}
@@ -534,7 +545,14 @@ function FlowNode({ node }: { node: Node }) {
  */
 function measure(
   nodes: Node[],
-  edges: { id: string; source: string; target: string; sourceHandle?: string | null; label?: unknown }[],
+  edges: {
+    id: string;
+    source: string;
+    target: string;
+    sourceHandle?: string | null;
+    label?: unknown;
+    style?: { stroke?: string };
+  }[],
 ): { placed: Placed[]; wires: Wire[]; width: number; height: number } {
   const boxes = new Map<string, Placed>();
   for (const node of nodes) {
@@ -567,6 +585,7 @@ function measure(
       to: { x: to.x + to.width / 2, y: to.y },
       label,
       at: label ? labelAt(from, at, edge.sourceHandle ?? undefined) : undefined,
+      color: edge.style?.stroke === "var(--border)" ? undefined : edge.style?.stroke,
     });
   }
 

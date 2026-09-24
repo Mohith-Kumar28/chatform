@@ -47,7 +47,14 @@ export type NodeProblem = { level: "error" | "warning"; messages: string[]; atte
  * "otherwise" — which invented a taxonomy the flow does not have. There are
  * nodes and there are connections between them.
  */
-function wire(id: string, source: string, target: string, label?: string, sourceHandle?: string): Edge {
+function wire(
+  id: string,
+  source: string,
+  target: string,
+  label?: string,
+  sourceHandle?: string,
+  color?: string,
+): Edge {
   return {
     id,
     source,
@@ -55,13 +62,38 @@ function wire(id: string, source: string, target: string, label?: string, source
     sourceHandle,
     label,
     deletable: true,
-    style: { stroke: "var(--border)", strokeWidth: 1.5 },
+    style: { stroke: color ?? "var(--border)", strokeWidth: 1.5 },
     labelStyle: { fontSize: 10, fill: "var(--muted-foreground)" },
     labelBgStyle: { fill: "var(--card)" },
     labelBgPadding: [4, 2],
-    markerEnd: { type: ARROW_CLOSED },
+    // Coloured wires get a matching head; plain ones keep React Flow's default.
+    markerEnd: color ? { type: ARROW_CLOSED, color } : { type: ARROW_CLOSED },
   };
 }
+
+/**
+ * One colour per answer on a branch, so a wire can be followed back to its row.
+ *
+ * With the flow running down the page every route leaves the bottom of the
+ * branch, not level with its own answer, so order alone has to say which line
+ * is which. The row's dot, the socket on the bottom edge and the wire all share
+ * the colour. The chart palette, because it is already tuned to stay legible
+ * on a card in both themes; orange is last since the branch's own border is
+ * amber. Cycles past six, which is rare for one question.
+ */
+const ROUTE_COLORS = [
+  "var(--chart-6)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-5)",
+  "var(--chart-4)",
+  "var(--chart-1)",
+];
+
+export const routeColor = (row: number) => ROUTE_COLORS[row % ROUTE_COLORS.length]!;
+
+/** The fall-through route: derived, so drawn in the quiet colour. */
+export const OTHERWISE_COLOR = "var(--muted-foreground)";
 
 /** A single case on a branch: one condition, one destination. */
 export interface BranchCase {
@@ -124,8 +156,8 @@ export function deriveGraph(
   doc: FormDoc,
   gotoRules: GotoRule[],
   problems: Map<string, NodeProblem> = new Map(),
-  /** The canvas runs left to right; the read-only diagram runs down a column. */
-  rankdir: Rankdir = "LR",
+  /** Both the canvas and the read-only diagram run down a column. */
+  rankdir: Rankdir = "TB",
 ): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
@@ -243,7 +275,7 @@ export function deriveGraph(
         deletable: true,
       });
       edges.push(wire(`into_${b.ref}`, b.ref, branchId));
-      for (const c of cases) {
+      for (const [row, c] of cases.entries()) {
         // A case whose destination is gone gets no wire, which is what makes
         // the unconnected handle on the node the honest picture.
         if (c.missing) continue;
@@ -251,10 +283,10 @@ export function deriveGraph(
         // Repeating it on the wire put a second copy of every option's full
         // text in the gap between nodes, where the labels of neighbouring
         // wires ran over one another.
-        edges.push(wire(`case_${c.ruleId}`, branchId, c.target, undefined, c.ruleId));
+        edges.push(wire(`case_${c.ruleId}`, branchId, c.target, undefined, c.ruleId, routeColor(row)));
       }
       if (fallback) {
-        edges.push(wire(`else_${b.ref}`, branchId, fallback.ref, undefined, OTHERWISE));
+        edges.push(wire(`else_${b.ref}`, branchId, fallback.ref, undefined, OTHERWISE, OTHERWISE_COLOR));
       }
       return;
     }

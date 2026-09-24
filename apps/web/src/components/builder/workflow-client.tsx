@@ -31,7 +31,7 @@ import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspec
 import { EndingInspector } from "./inspector/ending-inspector";
 import { blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
 import { NodeCatalog } from "./node-catalog";
-import { layoutGraph } from "./flow-layout";
+import { layoutGraph, tagVertical } from "./flow-layout";
 import { opInverse, opsValueNeeded, type Op } from "./branch-layout";
 import { ConditionsEditor, type WhenGroup } from "./condition-editor";
 import { FlowTargetCombobox } from "./flow-target-combobox";
@@ -40,6 +40,8 @@ import {
   deriveGraph,
   isGoto,
   OTHERWISE,
+  OTHERWISE_COLOR,
+  routeColor,
   type BranchCase,
   type GotoRule,
 } from "./flow-graph";
@@ -249,7 +251,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
     (id: string, pos: { x: number; y: number }) => {
       const layout: FormDoc["layout"] = {};
       for (const n of nodes) layout[n.id] = n.id === id ? pos : n.position;
-      onChange({ ...doc, layout });
+      onChange({ ...doc, layout: tagVertical(layout) });
     },
     [doc, nodes, onChange],
   );
@@ -364,9 +366,9 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
    * Frame the flow: start at the start.
    *
    * `fitView` centres what it fits, which for a form longer than the viewport
-   * puts the welcome block off the left edge — you arrive in the middle of a
-   * conversation. This anchors the left edge instead and only centres
-   * vertically, so opening the canvas shows the first question.
+   * puts the welcome block off the top edge, so you arrive in the middle of a
+   * conversation. This anchors the top edge instead and only centres
+   * horizontally, so opening the canvas shows the first question.
    */
   const frame = useCallback(
     (duration = 0) => {
@@ -377,8 +379,8 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
       const zoom = Math.min(FIT_VIEW.maxZoom, Math.max(FIT_VIEW.minZoom, fit));
       void setViewport(
         {
-          x: 48 - bounds.x * zoom,
-          y: Math.max(24, (box.height - bounds.height * zoom) / 2) - bounds.y * zoom,
+          x: Math.max(24, (box.width - bounds.width * zoom) / 2) - bounds.x * zoom,
+          y: 48 - bounds.y * zoom,
           zoom,
         },
         { duration },
@@ -407,7 +409,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
     const placed = layoutGraph(nodes, edges);
     const layout: FormDoc["layout"] = {};
     for (const [id, pos] of placed) layout[id] = pos;
-    onChange({ ...doc, layout });
+    onChange({ ...doc, layout: tagVertical(layout) });
     // Let the new positions land before framing them.
     setTimeout(() => frame(300), 60);
   }, [nodes, edges, doc, onChange, frame]);
@@ -1041,7 +1043,7 @@ function StartNode({ id, data, selected }: NodeProps) {
           <span className="tabular text-[0.625rem] opacity-60">{index}</span>
           <span className="max-w-44 truncate text-xs font-semibold">{block.title}</span>
         </div>
-        <Handle type="source" position={Position.Right} className="!bg-green-600" />
+        <Handle type="source" position={Position.Bottom} className="!bg-green-600" />
       </div>
     </NodeMenu>
   );
@@ -1076,7 +1078,7 @@ function QuestionNode({ id, data, selected }: NodeProps) {
         )}
         style={{ boxShadow: selected ? `inset 3px 0 0 0 ${accent}, var(--shadow-md)` : undefined }}
       >
-        <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
+        <Handle type="target" position={Position.Top} className="!bg-muted-foreground" />
         <div className="flex items-center gap-2">
           <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-md", TONE_CLASSES[meta.tone])}>
             <meta.icon className="size-3.5" strokeWidth={2} />
@@ -1101,7 +1103,7 @@ function QuestionNode({ id, data, selected }: NodeProps) {
         ) : (
           <p className="text-muted-foreground mt-1 text-[10px] tracking-wide uppercase">{meta.label}</p>
         )}
-        <Handle type="source" position={Position.Right} style={{ background: accent }} />
+        <Handle type="source" position={Position.Bottom} style={{ background: accent }} />
       </div>
     </NodeMenu>
   );
@@ -1182,7 +1184,7 @@ function EndingNode({ id, data, selected, deletable }: NodeProps) {
           color: screenOut ? "var(--destructive-soft-foreground)" : "var(--success-soft-foreground)",
         }}
       >
-        <Handle type="target" position={Position.Left} style={{ background: accent }} />
+        <Handle type="target" position={Position.Top} style={{ background: accent }} />
         <div className="flex items-center gap-2">
           <Icon className="size-3.5 shrink-0" style={{ color: accent }} />
           <span className="truncate text-xs font-semibold">{title}</span>
@@ -1216,10 +1218,13 @@ function EndingNode({ id, data, selected, deletable }: NodeProps) {
 /**
  * One question, every route out of it.
  *
- * Each case gets its own row and its own handle on the right, so the wire
- * leaving the node starts level with the answer that takes it. The last row is
- * always "otherwise" — the path taken when no case matches, which is real and
- * used to be invisible.
+ * Each case gets its own row, and the last row is always "otherwise": the path
+ * taken when no case matches, which is real and used to be invisible.
+ *
+ * The flow runs down the page, so every route leaves from the bottom edge
+ * rather than level with its row. The sockets sit along that edge in row order,
+ * and each row's dot, its socket and its wire share one colour, so a line can
+ * be read back to the answer that takes it.
  */
 function BranchNode({ id, data, selected }: NodeProps) {
   const { sourceRef, sourceTitle, index, cases, fallback } = data as {
@@ -1231,17 +1236,21 @@ function BranchNode({ id, data, selected }: NodeProps) {
     fallback: { ref: string; title: string; explicit: boolean } | null;
   };
   const broken = cases.some((c) => c.missing);
+  const sockets = [
+    ...cases.map((c, row) => ({ id: c.ruleId, color: routeColor(row), missing: c.missing })),
+    ...(fallback ? [{ id: OTHERWISE, color: OTHERWISE_COLOR, missing: false }] : []),
+  ];
 
   return (
     <NodeMenu id={id} kind="branch" sourceRef={sourceRef}>
       <div
         className={cn(
-          "w-56 rounded-xl border-2 bg-[var(--card)] pb-1 shadow-sm",
+          "relative w-56 rounded-xl border-2 bg-[var(--card)] pb-1 shadow-sm",
           selected ? "border-primary ring-primary/30 shadow-md ring-2" : "border-amber-500/60",
           broken && "!border-[var(--destructive)] ring-2 ring-[var(--destructive)]",
         )}
       >
-        <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
+        <Handle type="target" position={Position.Top} className="!bg-muted-foreground" />
 
         <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">
           <span
@@ -1261,11 +1270,11 @@ function BranchNode({ id, data, selected }: NodeProps) {
         </div>
 
         <div className="border-t border-dashed pt-0.5">
-          {cases.map((c) => (
+          {cases.map((c, row) => (
             <BranchRow
               key={c.ruleId}
               label={c.label}
-              handleId={c.ruleId}
+              color={routeColor(row)}
               missing={c.missing}
               title={
                 c.missing
@@ -1291,7 +1300,7 @@ function BranchNode({ id, data, selected }: NodeProps) {
             <BranchRow
               label="otherwise"
               destination={fallback.title}
-              handleId={OTHERWISE}
+              color={OTHERWISE_COLOR}
               derived={!fallback.explicit}
               title={
                 fallback.explicit
@@ -1301,6 +1310,22 @@ function BranchNode({ id, data, selected }: NodeProps) {
             />
           )}
         </div>
+
+        {/* The sockets, in row order along the bottom edge: the same spread
+            the template diagrams use, so the two pictures agree. */}
+        {sockets.map((sk, i) => (
+          <Handle
+            key={sk.id}
+            type="source"
+            id={sk.id}
+            position={Position.Bottom}
+            className={cn(sk.missing && "!border-2 !border-[var(--destructive)] !bg-[var(--card)]")}
+            style={{
+              left: `${((i + 1) / (sockets.length + 1)) * 100}%`,
+              ...(sk.missing ? {} : { background: sk.color }),
+            }}
+          />
+        ))}
       </div>
     </NodeMenu>
   );
@@ -1309,22 +1334,21 @@ function BranchNode({ id, data, selected }: NodeProps) {
 /**
  * One route out, with its dot beside it.
  *
- * The dot used to be positioned with a `top` measured from the top of the
- * card, while sitting inside a row that is itself positioned — so the offset
- * was applied twice and the handles ended up bunched below the node, nowhere
- * near the answers they belong to. React Flow already centres a handle in its
- * positioned parent; the row is that parent, so the fix is to stop fighting it.
+ * The dot is a key, not a handle: the wire leaves from the socket of the same
+ * colour on the card's bottom edge (see `BranchNode`). A destination that is
+ * gone gets a hollow red dot, matching its hollow socket.
  */
 function BranchRow({
   label,
-  handleId,
+  color,
   destination,
   derived,
   missing,
   title,
 }: {
   label: string;
-  handleId: string;
+  /** Shared with this route's socket and wire. */
+  color: string;
   /** Where this route lands, named on the row when it is worth naming. */
   destination?: string;
   /** Not authored — the fall-through this branch implies. Drawn as such. */
@@ -1335,8 +1359,7 @@ function BranchRow({
 }) {
   return (
     <div
-      // `pr-4` keeps the text clear of the dot, which sits on the card's edge.
-      className={cn("relative flex h-[22px] items-center gap-1.5 pr-4 pl-3", derived && "border-t border-dashed")}
+      className={cn("relative flex h-[22px] items-center gap-1.5 pr-3 pl-3", derived && "border-t border-dashed")}
       title={title ?? label}
     >
       <span
@@ -1368,12 +1391,10 @@ function BranchRow({
       {missing && (
         <span className="text-destructive ml-auto shrink-0 text-[9px] font-medium">no connection</span>
       )}
-      <Handle
-        type="source"
-        id={handleId}
-        position={Position.Right}
-        className={cn(missing && "!border-2 !border-[var(--destructive)] !bg-[var(--card)]")}
-        style={missing ? undefined : { background: derived ? "var(--muted-foreground)" : "var(--primary)" }}
+      <span
+        aria-hidden
+        className={cn("size-2 shrink-0 rounded-full", missing && "border-2 border-[var(--destructive)]")}
+        style={missing ? undefined : { background: color }}
       />
     </div>
   );
