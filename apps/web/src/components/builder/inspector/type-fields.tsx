@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Check } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   isValidUpiId,
@@ -923,7 +923,7 @@ function AccountPicker({
     <div className="space-y-2">
       <Field label="Payment account">
         <Select value={selectedId ?? NO_ACCOUNT} onValueChange={(v) => onChange(accounts.find((a) => a.id === v))}>
-          <SelectTrigger className="h-auto w-full py-2">
+          <SelectTrigger className="h-auto min-h-14 w-full py-2.5">
             <SelectValue>
               {account ? (
                 <AccountOption account={account} />
@@ -938,7 +938,7 @@ function AccountPicker({
             {!selectedId && <SelectItem value={NO_ACCOUNT}>Choose an account</SelectItem>}
             {selectedId && !account && <SelectItem value={selectedId}>No longer connected</SelectItem>}
             {accounts.map((a) => (
-              <SelectItem key={a.id} value={a.id} className="py-2">
+              <SelectItem key={a.id} value={a.id} className="py-2.5">
                 <AccountOption account={a} />
               </SelectItem>
             ))}
@@ -967,30 +967,22 @@ function AccountPicker({
   );
 }
 
-/** One account as a row: its name and tags, then the line that tells it from the others. */
+/**
+ * One account as a row: its name, and under it the email of whoever connected it.
+ *
+ * The gateway's own email would be better, and was tried: Razorpay answers "Access Denied" to
+ * its account endpoint for an OAuth-connected account, so the connector's email is the most
+ * recognisable thing on hand, and the tail of the account id is the fallback.
+ */
 function AccountOption({ account }: { account: PaymentAccount }) {
   const { name, detail } = accountDisplay(account, PAYMENT_PROVIDER_LABELS[account.provider]);
+  const secondary = account.connectedBy?.email ?? account.connectedBy?.name ?? detail;
   return (
-    <span className="flex min-w-0 items-center gap-2.5 text-left">
-      <ProviderLogo provider={account.provider} />
-      <span className="min-w-0 flex-1 space-y-0.5">
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-sm leading-tight font-medium">{name}</span>
-          {account.isDefault && (
-            <span className="text-muted-foreground inline-flex shrink-0 items-center gap-0.5 text-[11px] leading-none">
-              <Check className="size-3" aria-hidden />
-              Default
-            </span>
-          )}
-        </span>
-        <span className="flex min-w-0 items-center gap-1.5 text-xs leading-tight">
-          {account.environment === "test" && (
-            <span className="shrink-0 rounded-sm bg-[var(--warning-soft)] px-1 py-px text-[10px] font-medium text-[var(--warning-soft-foreground)]">
-              Test mode
-            </span>
-          )}
-          {detail && <span className="text-muted-foreground truncate">{detail}</span>}
-        </span>
+    <span className="flex min-w-0 items-center gap-3 text-left">
+      <ProviderLogo provider={account.provider} className="size-9" />
+      <span className="min-w-0 flex-1 space-y-1">
+        <span className="block truncate text-sm leading-none font-medium">{name}</span>
+        {secondary && <span className="text-muted-foreground block truncate text-xs leading-none">{secondary}</span>}
       </span>
     </span>
   );
