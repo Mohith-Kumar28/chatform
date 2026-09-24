@@ -319,7 +319,7 @@ export function CreateFormDialog({
                   the builder is better at collecting, on the screen you are
                   trying to leave. It lands as "Untitled form" and gets its
                   real name in the builder's title field. */}
-              <div className="mt-3">
+              <div className="mt-5">
                 <Button
                   variant="outline"
                   size="sm"
