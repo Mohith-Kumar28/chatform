@@ -62,7 +62,7 @@ import {
   AlertTriangle,
   LayoutGrid,
   Plus,
-  ChevronLeft, ChevronRight, Flag,
+  Flag,
   GitBranch, Play,
   ShieldAlert, Sparkles, Trash2, X,
 } from "lucide-react";
@@ -167,8 +167,6 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
   );
 
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [leftOpen, setLeftOpen] = useState(true);
-  const [rightOpen, setRightOpen] = useState(true);
 
   // apply focus requests (e.g. from Build's Logic button) during render
   const [appliedFocus, setAppliedFocus] = useState<string | null>(focusRef ?? null);
@@ -788,56 +786,42 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
 
   return (
     <div className="relative flex h-full min-h-0">
-      {/* left: node library (collapsible) */}
+      {/* left: node library */}
       <aside
         data-tour="wf-palette"
         /* `w-60 xl:w-72` is the Questions list's width, not a coincidence: the
            two views are one screen apart and a 3rem jump on every switch made
            the canvas look like it had moved. */
-        className={`bg-sidebar relative flex shrink-0 flex-col overflow-y-auto transition-all duration-200 ${leftOpen ? "w-60 xl:w-72" : "w-12"}`}
+        className="bg-sidebar relative flex w-60 shrink-0 flex-col overflow-y-auto xl:w-72"
       >
-        {leftOpen ? (
-          <>
-            <div className="flex items-center justify-between px-3 py-3">
-              <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase">
-                <Sparkles className="text-primary size-3.5" /> Node library
-              </p>
-              <button onClick={() => setLeftOpen(false)} className="text-muted-foreground hover:text-foreground" aria-label="Collapse library">
-                <ChevronLeft className="size-4" />
-              </button>
-            </div>
-            {/*
-              `NodeCatalog` — the same component the Questions picker draws, so
-              the two palettes list the same things in the same order. Branch
-              and Ending used to be hand-written right here, above the shared
-              block list, in a shape of their own; that is why they existed on
-              the canvas and nowhere else.
-            */}
-            <div className="flex-1 px-3 pb-4">
-              <NodeCatalog
-                variant="compact"
-                onDragStart={(item) => {
-                  dragType.current =
-                    item.kind === "branch"
-                      ? { kind: "condition" }
-                      : item.kind === "ending"
-                        ? { kind: "ending" }
-                        : { kind: "block", blockType: item.blockType! };
-                }}
-              />
-            </div>
-            <p className="text-muted-foreground px-3 py-2 text-[10px] leading-relaxed">
-              Drag nodes onto the canvas. Drag from a node&apos;s edge dot to another node to control the flow.
-            </p>
-          </>
-        ) : (
-          <div className="flex flex-col items-center gap-3 pt-3">
-            <button onClick={() => setLeftOpen(true)} className="text-muted-foreground hover:text-foreground" aria-label="Expand library">
-              <ChevronRight className="size-4" />
-            </button>
-            <div className="text-muted-foreground rotate-90 text-[10px] font-semibold uppercase tracking-widest">Library</div>
-          </div>
-        )}
+        <div className="flex items-center px-3 py-3">
+          <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium uppercase">
+            <Sparkles className="text-primary size-3.5" /> Node library
+          </p>
+        </div>
+        {/*
+          `NodeCatalog` — the same component the Questions picker draws, so
+          the two palettes list the same things in the same order. Branch
+          and Ending used to be hand-written right here, above the shared
+          block list, in a shape of their own; that is why they existed on
+          the canvas and nowhere else.
+        */}
+        <div className="flex-1 px-3 pb-4">
+          <NodeCatalog
+            variant="compact"
+            onDragStart={(item) => {
+              dragType.current =
+                item.kind === "branch"
+                  ? { kind: "condition" }
+                  : item.kind === "ending"
+                    ? { kind: "ending" }
+                    : { kind: "block", blockType: item.blockType! };
+            }}
+          />
+        </div>
+        <p className="text-muted-foreground px-3 py-2 text-[10px] leading-relaxed">
+          Drag nodes onto the canvas. Drag from a node&apos;s edge dot to another node to control the flow.
+        </p>
       </aside>
 
       {/* center: toolbar + canvas.
@@ -949,72 +933,54 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
         )}
       </div>
 
-      {/* right: inspector (collapsible) */}
+      {/* right: inspector */}
       <aside
         data-tour="wf-inspector"
-        className={`bg-panel relative flex shrink-0 flex-col overflow-y-auto pb-[var(--fab-clearance)] transition-all duration-200 ${rightOpen ? "w-80 xl:w-96" : "w-12"}`}
+        className="bg-panel relative flex w-80 shrink-0 flex-col overflow-y-auto pb-[var(--fab-clearance)] xl:w-96"
       >
-        {rightOpen ? (
-          <>
-            {/* The block inspector carries its own header (type, ref, delete),
-                so a second "DETAILS" bar above it was duplicate chrome and a
-                stack of dead space. Only the collapse control stays, floated. */}
-            <button
-              onClick={() => setRightOpen(false)}
-              className="text-muted-foreground hover:text-foreground absolute top-3 right-3 z-10"
-              aria-label="Collapse details"
-            >
-              <ChevronRight className="size-4" />
-            </button>
-            <div className="flex-1">
-              {selEdge && !selEdgeRule ? (
-                <div className="px-4 py-4">
-                  <EdgeInfo edgeId={selEdge.id} doc={doc} onDelete={() => onEdgesDelete([selEdge])} />
-                </div>
-              ) : selEdgeRule ? (
-                <div className="px-4 py-4">
-                  <EdgeRuleEditor
-                    rule={selEdgeRule}
-                    doc={doc}
-                    onPatch={patchRule}
-                    onDelete={() => onEdgesDelete([{ id: selEdge!.id } as Edge])}
-                  />
-                </div>
-              ) : selBlock ? (
-                // The shared inspector — same component, same fields, whether
-                // you got here from Questions or from Flow.
-                <SharedBlockInspector />
-              ) : selBranchRef ? (
-                <div className="px-4 py-4">
-                  <BranchInspector
-                    sourceRef={selBranchRef}
-                    rules={selBranchRules}
-                    doc={doc}
-                    answerableBlocks={answerableBlocks}
-                    onPatch={patchRule}
-                    onAddCase={() => addCase(selBranchRef)}
-                    onAddElse={() => addElse(selBranchRef)}
-                    onDeleteCase={(id) => onEdgesDelete([{ id: `case_${id}` } as Edge])}
-                    onDelete={() => onNodesDelete([{ id: `branch_${selBranchRef}` } as Node])}
-                  />
-                </div>
-              ) : selEnding ? (
-                <div className="px-4 py-4"><EndingInspector ending={selEnding} doc={doc} onChange={onChange} /></div>
-              ) : (
-                <p className="text-muted-foreground px-4 py-10 text-center text-sm">
-                  Select a node or wire
-                </p>
-              )}
+        {/* The block inspector carries its own header (type, ref, delete),
+            so there is no "DETAILS" bar above it, and no collapse control:
+            both panels are always open. */}
+        <div className="flex-1">
+          {selEdge && !selEdgeRule ? (
+            <div className="px-4 py-4">
+              <EdgeInfo edgeId={selEdge.id} doc={doc} onDelete={() => onEdgesDelete([selEdge])} />
             </div>
-          </>
-        ) : (
-          <div className="flex flex-col items-center gap-3 pt-3">
-            <button onClick={() => setRightOpen(true)} className="text-muted-foreground hover:text-foreground" aria-label="Expand details">
-              <ChevronLeft className="size-4" />
-            </button>
-            <div className="text-muted-foreground rotate-90 text-[10px] font-semibold uppercase tracking-widest">Details</div>
-          </div>
-        )}
+          ) : selEdgeRule ? (
+            <div className="px-4 py-4">
+              <EdgeRuleEditor
+                rule={selEdgeRule}
+                doc={doc}
+                onPatch={patchRule}
+                onDelete={() => onEdgesDelete([{ id: selEdge!.id } as Edge])}
+              />
+            </div>
+          ) : selBlock ? (
+            // The shared inspector — same component, same fields, whether
+            // you got here from Questions or from Flow.
+            <SharedBlockInspector />
+          ) : selBranchRef ? (
+            <div className="px-4 py-4">
+              <BranchInspector
+                sourceRef={selBranchRef}
+                rules={selBranchRules}
+                doc={doc}
+                answerableBlocks={answerableBlocks}
+                onPatch={patchRule}
+                onAddCase={() => addCase(selBranchRef)}
+                onAddElse={() => addElse(selBranchRef)}
+                onDeleteCase={(id) => onEdgesDelete([{ id: `case_${id}` } as Edge])}
+                onDelete={() => onNodesDelete([{ id: `branch_${selBranchRef}` } as Node])}
+              />
+            </div>
+          ) : selEnding ? (
+            <div className="px-4 py-4"><EndingInspector ending={selEnding} doc={doc} onChange={onChange} /></div>
+          ) : (
+            <p className="text-muted-foreground px-4 py-10 text-center text-sm">
+              Select a node or wire
+            </p>
+          )}
+        </div>
       </aside>
     </div>
   );
