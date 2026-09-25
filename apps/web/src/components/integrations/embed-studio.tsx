@@ -168,7 +168,7 @@ export function EmbedStudio({
   const ownButtonHtml = `<button type="button" data-chatform-open>${config.label || EMBED_DEFAULTS.label}</button>`;
   const unpublished = status !== undefined && status !== "published";
   const modeBlurb = EMBED_MODES.find((m) => m.mode === config.mode)?.blurb;
-  const modified = JSON.stringify(config) !== JSON.stringify(STUDIO_DEFAULTS);
+  const modified = JSON.stringify(chosen) !== JSON.stringify(STUDIO_DEFAULTS);
 
   return (
     <div className="space-y-4">
