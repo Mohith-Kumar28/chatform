@@ -93,6 +93,13 @@ export interface BuilderState {
    * the shell, which already calls it once, puts the result here.
    */
   shortcuts: Shortcut[];
+  /**
+   * The header's Publish, published by the shell that owns it, for the Share
+   * tab's "Publish to get the link". One publish path: the same lint check,
+   * flush, plan-stripping dialog and refetch whichever button is pressed.
+   */
+  publishForm: (() => Promise<void>) | null;
+  publishing: boolean;
 
   saveState: SaveState;
   saveError: string | null;
@@ -135,6 +142,7 @@ export interface BuilderState {
   markPublished: () => void;
   setConflict: (theirs: FormDoc | null, revision?: number | null) => void;
   setShortcuts: (shortcuts: Shortcut[]) => void;
+  setPublishForm: (publishForm: (() => Promise<void>) | null, publishing: boolean) => void;
   /** Discard local edits and adopt the server's document. */
   acceptTheirs: () => void;
   /** Keep the local document and overwrite theirs, deliberately. */
@@ -224,6 +232,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   pickerIndex: null,
   designOpen: false,
   shortcuts: [],
+  publishForm: null,
+  publishing: false,
   saveState: "saved",
   saveError: null,
   lastSavedAt: null,
@@ -407,6 +417,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   setDesignOpen: (open) => set({ designOpen: open }),
 
   setShortcuts: (shortcuts) => set({ shortcuts }),
+  setPublishForm: (publishForm, publishing) => set({ publishForm, publishing }),
 
   addBlock: (block, atIndex, rule) => {
     get().edit((d) => {

@@ -229,6 +229,13 @@ export function BuilderShell({
   // Published for the Settings tab, which renders the same list as a section.
   const setShortcuts = useBuilderStore((s) => s.setShortcuts);
   useEffect(() => setShortcuts(shortcuts), [shortcuts, setShortcuts]);
+  // And the Publish action, for the Share tab. Re-set on every render because
+  // `onPublish` closes over this render's row.
+  const setPublishForm = useBuilderStore((s) => s.setPublishForm);
+  useEffect(() => {
+    setPublishForm(onPublish, publishing);
+    return () => setPublishForm(null, false);
+  });
 
   async function onPublish() {
     const wasPublished = row?.status === "published";

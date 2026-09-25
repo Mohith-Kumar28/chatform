@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Blocks, FileDown, Link2, Mail, QrCode, TriangleAlert } from "lucide-react";
+import { Blocks, FileDown, Link2, Loader2, Mail, QrCode, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
@@ -47,16 +47,6 @@ export function ShareClient({
 
   return (
     <div className="space-y-4">
-      {unpublished && (
-        <div className="flex items-start gap-2 rounded-xl border border-[var(--warning)]/40 bg-[var(--warning-soft)] px-4 py-3">
-          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-[var(--warning-soft-foreground)]" />
-          <p className="text-caption text-[var(--warning-soft-foreground)]">
-            This form isn&apos;t published yet. The link works, but respondents will see a closed
-            message until you hit Publish.
-          </p>
-        </div>
-      )}
-
       <div className="bg-card space-y-6 rounded-2xl p-6">
         <SegmentedControl
           className="mx-auto flex"
@@ -72,67 +62,64 @@ export function ShareClient({
 
         {mode === "link" && (
           <div className="space-y-4">
-            <div className="space-y-1.5">
+            <PublishGate locked={unpublished}>
               <div className="flex gap-2">
                 <Input readOnly value={liveUrl} className="font-mono text-sm" />
                 <CopyButton value={liveUrl} label="Copy" variant="default" />
               </div>
-              <p className="text-muted-foreground text-caption text-center">
-                Make sure your form is published before you share it with the world.
-              </p>
-            </div>
 
-            <div className="flex items-center justify-center gap-1">
-              <ShareIcon href={liveUrl} label="Open the form" icon={ExternalIcon} external />
-              <ShareIcon
-                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(liveUrl)}`}
-                label="Share on Facebook"
-                icon={FacebookIcon}
-                external
-              />
-              <ShareIcon
-                href={`https://x.com/intent/tweet?url=${encodeURIComponent(liveUrl)}`}
-                label="Share on X"
-                icon={XIcon}
-                external
-              />
-              <ShareIcon
-                href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(liveUrl)}`}
-                label="Share on LinkedIn"
-                icon={LinkedinIcon}
-                external
-              />
-              <ShareIcon
-                href={`mailto:?subject=${encodeURIComponent("A quick question")}&body=${encodeURIComponent(liveUrl)}`}
-                label="Share by email"
-                icon={Mail}
-              />
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Show QR code"
-                onClick={() => setShowQr((v) => !v)}
-                className={cn(showQr && "bg-muted")}
-              >
-                <QrCode className="size-4" />
-              </Button>
-              {/*
-                The form on paper. A conversational form has no printable state
-                of its own, so this renders every question at once and hands it
-                to the print dialog, where "Save as PDF" lives on every platform.
-              */}
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Download the questions as a PDF"
-                disabled={!doc}
-                onClick={() => doc && printForm(doc)}
-              >
-                <FileDown className="size-4" />
-              </Button>
-            </div>
+              <div className="flex items-center justify-center gap-1">
+                <ShareIcon href={liveUrl} label="Open the form" icon={ExternalIcon} external />
+                <ShareIcon
+                  href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(liveUrl)}`}
+                  label="Share on Facebook"
+                  icon={FacebookIcon}
+                  external
+                />
+                <ShareIcon
+                  href={`https://x.com/intent/tweet?url=${encodeURIComponent(liveUrl)}`}
+                  label="Share on X"
+                  icon={XIcon}
+                  external
+                />
+                <ShareIcon
+                  href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(liveUrl)}`}
+                  label="Share on LinkedIn"
+                  icon={LinkedinIcon}
+                  external
+                />
+                <ShareIcon
+                  href={`mailto:?subject=${encodeURIComponent("A quick question")}&body=${encodeURIComponent(liveUrl)}`}
+                  label="Share by email"
+                  icon={Mail}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Show QR code"
+                  onClick={() => setShowQr((v) => !v)}
+                  className={cn(showQr && "bg-muted")}
+                >
+                  <QrCode className="size-4" />
+                </Button>
+                {/*
+                  The form on paper. A conversational form has no printable state
+                  of its own, so this renders every question at once and hands it
+                  to the print dialog, where "Save as PDF" lives on every platform.
+                */}
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Download the questions as a PDF"
+                  disabled={!doc}
+                  onClick={() => doc && printForm(doc)}
+                >
+                  <FileDown className="size-4" />
+                </Button>
+              </div>
 
-            {showQr && <QrPanel url={liveUrl} slug={slug} />}
+              {showQr && <QrPanel url={liveUrl} slug={slug} />}
+            </PublishGate>
 
             {/*
               Link settings sit behind a card rather than on this screen: what a
@@ -176,12 +163,60 @@ export function ShareClient({
 
         {mode === "email" && (
           <div className="space-y-4">
-            <Snippet
-              label="Most email clients block iframes, so this is a styled link that opens the conversation in a browser."
-              code={emailSnippet(liveUrl)}
-            />
+            <PublishGate locked={unpublished}>
+              <Snippet
+                label="Most email clients block iframes, so this is a styled link that opens the conversation in a browser."
+                code={emailSnippet(liveUrl)}
+              />
+            </PublishGate>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The link, blurred and out of reach until the form is live.
+ *
+ * A draft's link opens on a "this form is closed" screen, and the Share tab is
+ * exactly where somebody who forgot to publish goes to copy it. So nothing here
+ * can be copied, clicked or tabbed to while it is a draft, and the one thing on
+ * top is the button that fixes it: the header's own Publish, so the lint check,
+ * the plan dialog and the refetch are the same wherever it is pressed.
+ */
+function PublishGate({ locked, children }: { locked: boolean; children: React.ReactNode }) {
+  const publishForm = useBuilderStore((s) => s.publishForm);
+  const publishing = useBuilderStore((s) => s.publishing);
+  if (!locked) return <>{children}</>;
+  return (
+    // One grid cell for both layers, so the section is as tall as whichever is taller:
+    // a short link row must not let the card spill over the controls around it.
+    <div className="grid">
+      <div aria-hidden inert className="pointer-events-none space-y-4 blur-[6px] select-none [grid-area:1/1]">
+        {children}
+      </div>
+      <div className="flex items-center justify-center p-2 [grid-area:1/1]">
+        <div className="bg-card/90 flex max-w-sm flex-col items-center gap-3 rounded-2xl border px-6 py-5 text-center shadow-lg backdrop-blur-sm">
+          <div className="bg-primary/10 text-primary grid size-10 place-items-center rounded-full">
+            <Rocket className="size-5" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold">Publish to get your link</p>
+            <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+              This form is still a draft, so the link would show people a closed form. Publish it and
+              the link is ready to share.
+            </p>
+          </div>
+          <Button
+            shape="pill"
+            disabled={!publishForm || publishing}
+            onClick={() => void publishForm?.().catch(() => {})}
+          >
+            {publishing ? <Loader2 className="size-4 animate-spin" /> : <Rocket className="size-4" />}
+            {publishing ? "Publishing" : "Publish form"}
+          </Button>
+        </div>
       </div>
     </div>
   );
