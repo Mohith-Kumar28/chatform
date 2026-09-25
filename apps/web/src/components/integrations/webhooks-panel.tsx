@@ -2,15 +2,27 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Send, Trash2, Webhook } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  RefreshCw,
+  Send,
+  Trash2,
+  Webhook,
+} from "lucide-react";
 import type { Block } from "@repo/form-schema";
-import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { CopyButton } from "@/components/ui/copy-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Textarea } from "@/components/ui/textarea";
 import { customFetch } from "@/lib/api/mutator";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/format";
@@ -26,15 +38,17 @@ import { aiSetupPrompt, samplePayload } from "./webhook-payload";
  * table; see `apps/api/src/routes/webhook-admin.ts`.
  */
 
-const EVENTS: { name: string; blurb: string }[] = [
-  { name: "response.completed", blurb: "Someone finished the whole conversation." },
-  { name: "response.disqualified", blurb: "Someone was turned away — the form reached a “can’t submit” ending." },
-  { name: "response.partial", blurb: "Someone stopped part-way, with answers worth keeping." },
-  { name: "response.abandoned", blurb: "A session timed out with nothing more coming." },
-  { name: "response.answer_recorded", blurb: "Each individual answer, as it lands." },
-  { name: "session.started", blurb: "Someone opened the form and began." },
-  { name: "form.published", blurb: "A new version of this form went live." },
+const EVENTS: { name: string; label: string; blurb: string }[] = [
+  { name: "response.completed", label: "Response completed", blurb: "Someone finished the whole form." },
+  { name: "response.partial", label: "Partial response", blurb: "Someone stopped part-way, with answers worth keeping." },
+  { name: "response.disqualified", label: "Disqualified", blurb: "Someone reached a “can’t submit” ending." },
+  { name: "response.abandoned", label: "Abandoned", blurb: "A session timed out with nothing more coming." },
+  { name: "response.answer_recorded", label: "Each answer", blurb: "Every individual answer, as it lands." },
+  { name: "session.started", label: "Session started", blurb: "Someone opened the form and began." },
+  { name: "form.published", label: "Form published", blurb: "A new version of this form went live." },
 ];
+
+const eventLabel = (name: string) => EVENTS.find((e) => e.name === name)?.label ?? name;
 
 interface WebhookRow {
   id: string;
@@ -53,12 +67,16 @@ interface WebhookRow {
 interface Delivery {
   id: string;
   event_type: string;
+  /** `success`, `failed` (retry pending) or `dead`. */
   status: string;
   response_status: number | null;
   last_error: string | null;
   attempt: number;
   created_at: number;
+  payload?: string | null;
 }
+
+type TestResult = { ok: boolean; text: string };
 
 export function WebhooksPanel({
   formId,
@@ -69,7 +87,6 @@ export function WebhooksPanel({
   formTitle: string;
   blocks: Block[];
 }) {
-  const queryClient = useQueryClient();
   // Keyed by form: every webhook created here carries this form's id, so
   // listing every endpoint in the organization showed people other forms'
   // integrations on this one's page.
@@ -80,13 +97,140 @@ export function WebhooksPanel({
   });
   const hooks = (Array.isArray(raw) ? raw : []).filter((h) => !h.formId || h.formId === formId);
 
-  const [url, setUrl] = useState("");
-  const [selected, setSelected] = useState<string[]>(["response.completed"]);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const [created, setCreated] = useState<{ url: string; secret: string } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [events, setEvents] = useState<string[]>(["response.completed"]);
 
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey });
+  const open = hooks.find((h) => h.id === openId);
+  if (open) {
+    return <EndpointDetail hook={open} formId={formId} onBack={() => setOpenId(null)} />;
+  }
+
+  const showForm = adding || (!isLoading && hooks.length === 0);
+
+  return (
+    <div className="space-y-6">
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-h3 flex-1">Endpoints</h3>
+          {!showForm && (
+            <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
+              <Plus className="size-3.5" />
+              Add endpoint
+            </Button>
+          )}
+        </div>
+
+        {created && (
+          <div className="border-primary/30 bg-primary-soft/40 space-y-2 rounded-xl border p-4">
+            <p className="text-sm font-medium">Endpoint added. Save the signing secret</p>
+            <p className="text-muted-foreground text-caption">
+              It is shown once. Your server uses it to check that each request really came from
+              ChatForm.
+            </p>
+            <div className="flex gap-2">
+              <Input readOnly value={created.secret} className="font-mono text-xs" />
+              <CopyButton value={created.secret} label="Copy" variant="outline" size="sm" />
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setCreated(null)}>
+              I&apos;ve saved it
+            </Button>
+          </div>
+        )}
+
+        {showForm && (
+          <AddEndpointForm
+            formId={formId}
+            queryKey={queryKey}
+            events={events}
+            onEventsChange={setEvents}
+            canCancel={hooks.length > 0}
+            onCancel={() => setAdding(false)}
+            onCreated={(row) => {
+              setCreated(row);
+              setAdding(false);
+            }}
+          />
+        )}
+
+        {isLoading ? (
+          <div className="bg-muted h-16 animate-pulse rounded-xl" />
+        ) : hooks.length === 0 ? (
+          !showForm && (
+            <EmptyState
+              compact
+              icon={Webhook}
+              title="No endpoints yet"
+              description="Add one and every matching event is sent to it, signed, with retries for two hours."
+            />
+          )
+        ) : (
+          <ul className="divide-y overflow-hidden rounded-xl border">
+            {hooks.map((hook) => (
+              <li key={hook.id}>
+                <button
+                  type="button"
+                  onClick={() => setOpenId(hook.id)}
+                  className="hover:bg-muted/50 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-[var(--duration-micro)]"
+                >
+                  <StatusDot active={hook.active} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{hook.url}</span>
+                    <span className="text-muted-foreground text-caption block truncate">
+                      {hook.events.map(eventLabel).join(", ")}
+                    </span>
+                  </span>
+                  <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <DeveloperSection
+        formId={formId}
+        formTitle={formTitle}
+        blocks={blocks}
+        events={hooks[0]?.events ?? events}
+      />
+    </div>
+  );
+}
+
+function StatusDot({ active }: { active: boolean }) {
+  return (
+    <span
+      className={cn(
+        "size-2 shrink-0 rounded-full",
+        active ? "bg-[var(--success)]" : "bg-muted-foreground/40",
+      )}
+      aria-label={active ? "Active" : "Off"}
+    />
+  );
+}
+
+function AddEndpointForm({
+  formId,
+  queryKey,
+  events,
+  onEventsChange,
+  canCancel,
+  onCancel,
+  onCreated,
+}: {
+  formId: string;
+  queryKey: string[];
+  events: string[];
+  onEventsChange: (events: string[]) => void;
+  canCancel: boolean;
+  onCancel: () => void;
+  onCreated: (row: { url: string; secret: string }) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const create = useMutation({
     mutationFn: (body: { url: string; events: string[]; formId: string }) =>
@@ -98,239 +242,200 @@ export function WebhooksPanel({
       setUrl("");
       setError(null);
       // Shown once, here, because the API will never return it again.
-      setCreated({ url: row.url, secret: row.secret });
-      invalidate();
+      onCreated({ url: row.url, secret: row.secret });
+      void queryClient.invalidateQueries({ queryKey });
     },
     // A refusal used to fall on the floor: the button did nothing and said
     // nothing about why.
     onError: (err: Error) => setError(err.message),
   });
 
-  const remove = useMutation({
-    mutationFn: (id: string) => customFetch(`/api/webhooks/${id}`, { method: "DELETE" }),
-    onSuccess: invalidate,
-  });
-
-  const test = useMutation({
-    mutationFn: (id: string) =>
-      customFetch<{ ok: boolean }>(`/api/webhooks/${id}/test`, { method: "POST" }),
-    onSuccess: (res) =>
-      res.ok
-        ? toast.success("Test event delivered.")
-        : toast.error("Your endpoint didn't accept the test event."),
-    onError: (err: Error) => toast.error(err.message),
-  });
-
   return (
-    <div className="space-y-5">
-      <form
-        className="space-y-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!url || selected.length === 0) return;
-          create.mutate({ url, events: selected, formId });
-        }}
-      >
-        <div className="space-y-1.5">
-          <Label htmlFor="webhook-url">Payload URL</Label>
-          <Input
-            id="webhook-url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://yourapp.com/hooks/chatform"
-          />
-        </div>
+    <form
+      className="bg-muted/30 space-y-4 rounded-xl border p-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!url || events.length === 0) return;
+        create.mutate({ url, events, formId });
+      }}
+    >
+      <div className="space-y-1.5">
+        <Label htmlFor="webhook-url">Endpoint URL</Label>
+        <Input
+          id="webhook-url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://yourapp.com/api/webhooks/chatform"
+        />
+        <p className="text-muted-foreground text-caption">
+          A public https URL on your server. We send a POST here.
+        </p>
+      </div>
 
-        <div className="space-y-1.5">
-          <Label>Events</Label>
-          <div className="flex flex-wrap gap-1.5">
-            {EVENTS.map((event) => {
-              const on = selected.includes(event.name);
-              return (
-                <button
-                  key={event.name}
-                  type="button"
-                  title={event.blurb}
-                  aria-pressed={on}
-                  onClick={() =>
-                    setSelected((prev) =>
-                      on ? prev.filter((x) => x !== event.name) : [...prev, event.name],
+      <div className="space-y-2">
+        <Label>Send me</Label>
+        <div className="space-y-2">
+          {EVENTS.map((event) => {
+            const id = `evt-${event.name}`;
+            const on = events.includes(event.name);
+            return (
+              <label key={event.name} htmlFor={id} className="flex cursor-pointer items-start gap-2.5">
+                <Checkbox
+                  id={id}
+                  checked={on}
+                  onCheckedChange={(checked) =>
+                    onEventsChange(
+                      checked ? [...events, event.name] : events.filter((x) => x !== event.name),
                     )
                   }
-                  className={cn(
-                    "rounded-full border px-3 py-1 font-mono text-xs",
-                    "transition-colors duration-[var(--duration-micro)]",
-                    on
-                      ? "border-primary bg-primary-soft text-primary"
-                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                  )}
-                >
-                  {event.name}
-                </button>
-              );
-            })}
-          </div>
+                  className="mt-0.5"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm">{event.label}</span>
+                  <span className="text-muted-foreground text-caption block">{event.blurb}</span>
+                </span>
+              </label>
+            );
+          })}
         </div>
+      </div>
 
-        {error && <p className="text-caption text-destructive">{error}</p>}
+      {error && <p className="text-caption text-destructive">{error}</p>}
 
-        <Button
-          type="submit"
-          size="sm"
-          shape="pill"
-          disabled={!url || selected.length === 0 || create.isPending}
-        >
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={!url || events.length === 0 || create.isPending}>
           {create.isPending ? "Adding…" : "Add endpoint"}
         </Button>
-      </form>
-
-      {created && (
-        <div className="border-primary/30 bg-primary-soft/40 space-y-2 rounded-xl border p-4">
-          <p className="text-h3">Signing secret</p>
-          <p className="text-muted-foreground text-caption">
-            Shown once. Verify every delivery against it — the signature header is{" "}
-            <code className="bg-muted rounded px-1">x-chatform-signature: t=…, v1=…</code>, an
-            HMAC-SHA256 of <code className="bg-muted rounded px-1">timestamp.body</code>.
-          </p>
-          <div className="flex gap-2">
-            <Input readOnly value={created.secret} className="font-mono text-xs" />
-            <CopyButton value={created.secret} label="Copy" variant="outline" />
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => setCreated(null)}>
-            I&apos;ve saved it
+        {canCancel && (
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+            Cancel
           </Button>
-        </div>
-      )}
-
-      {isLoading ? (
-        <div className="bg-muted h-16 animate-pulse rounded-xl" />
-      ) : hooks.length === 0 ? (
-        <EmptyState
-          compact
-          icon={Webhook}
-          title="No endpoints yet"
-          description="Add one and every matching event is delivered, signed, with retries for two hours."
-        />
-      ) : (
-        <div className="space-y-2">
-          {hooks.map((hook) => (
-            <div key={hook.id} className="bg-muted/30 rounded-xl p-3">
-              <div className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate font-mono text-sm">{hook.url}</span>
-                {!hook.active && <Badge variant="destructive">off</Badge>}
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Send a test event"
-                  disabled={test.isPending}
-                  onClick={() => test.mutate(hook.id)}
-                >
-                  <Send className="size-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Delete this endpoint"
-                  onClick={() => remove.mutate(hook.id)}
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                {hook.events.map((event) => (
-                  <Badge key={event} variant="secondary" className="font-mono text-[0.6875rem]">
-                    {event}
-                  </Badge>
-                ))}
-                <code className="text-muted-foreground ml-auto text-xs">
-                  {hook.secretPreview ?? "whsec_…"}
-                </code>
-              </div>
-              <button
-                type="button"
-                onClick={() => setExpanded(expanded === hook.id ? null : hook.id)}
-                className="text-muted-foreground hover:text-foreground text-micro mt-2 inline-flex items-center gap-1"
-              >
-                <ChevronDown
-                  className={cn(
-                    "size-3 transition-transform duration-[var(--duration-micro)]",
-                    expanded === hook.id && "rotate-180",
-                  )}
-                />
-                Recent deliveries
-              </button>
-              {expanded === hook.id && <Deliveries webhookId={hook.id} />}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <PayloadPreview
-        formId={formId}
-        formTitle={formTitle}
-        blocks={blocks}
-        events={selected.length > 0 ? selected : ["response.completed"]}
-      />
-    </div>
+        )}
+      </div>
+    </form>
   );
 }
 
-/**
- * What the endpoint will receive, and a prompt that has an AI agent build it.
- *
- * Without this the panel asked for a URL and never said what would arrive at
- * it, so nobody could write the receiving side.
- */
-function PayloadPreview({
+/** One endpoint: what it is, a test button, and every delivery made to it. */
+function EndpointDetail({
+  hook,
   formId,
-  formTitle,
-  blocks,
-  events,
+  onBack,
 }: {
+  hook: WebhookRow;
   formId: string;
-  formTitle: string;
-  blocks: Block[];
-  events: string[];
+  onBack: () => void;
 }) {
-  const payload = JSON.stringify(samplePayload(formId, blocks, events[0]), null, 2);
-  const prompt = aiSetupPrompt({ formId, formTitle, blocks, events });
+  const queryClient = useQueryClient();
+  const { confirm, dialog } = useConfirm();
+  const [result, setResult] = useState<TestResult | null>(null);
+  const deliveriesKey = ["webhook-deliveries", hook.id];
+
+  const test = useMutation({
+    mutationFn: () =>
+      customFetch<{ ok: boolean; status?: number | null; error?: string | null }>(
+        `/api/webhooks/${hook.id}/test`,
+        { method: "POST" },
+      ),
+    onSuccess: (res) => {
+      setResult({
+        ok: res.ok,
+        text: res.ok
+          ? `Connected. Your endpoint replied ${res.status ?? "OK"}.`
+          : res.status
+            ? `Failed. Your endpoint replied HTTP ${res.status}.`
+            : `Failed. ${res.error ?? "Could not reach the URL"}.`,
+      });
+      void queryClient.invalidateQueries({ queryKey: deliveriesKey });
+    },
+    onError: (err: Error) => setResult({ ok: false, text: err.message }),
+  });
+
+  const remove = useMutation({
+    mutationFn: () => customFetch(`/api/webhooks/${hook.id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["webhooks", formId] });
+      onBack();
+    },
+  });
 
   return (
-    <div className="space-y-4 border-t pt-5">
-      <div className="space-y-2">
-        <p className="text-h3">Set it up with AI</p>
-        <p className="text-muted-foreground text-caption">
-          Paste this into Claude Code, Cursor or any AI coding tool inside your project. It
-          covers the payload, signature check, retries and a test.
-        </p>
-        <CopyButton
-          value={prompt}
-          label="Copy AI prompt"
-          toastMessage="AI prompt copied"
-          variant="default"
-          size="sm"
-        />
-      </div>
+    <div className="space-y-6">
+      <button
+        type="button"
+        onClick={onBack}
+        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm"
+      >
+        <ArrowLeft className="size-3.5" />
+        All endpoints
+      </button>
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <p className="text-h3 flex-1">Response payload</p>
-          <CopyButton value={payload} label="Copy" toastMessage="Payload copied" />
+      <section className="space-y-4">
+        <div className="space-y-1.5">
+          <Label>Endpoint URL</Label>
+          <div className="flex items-start gap-2">
+            <p className="bg-muted/40 min-w-0 flex-1 rounded-lg px-3 py-2 font-mono text-xs break-all">
+              {hook.url}
+            </p>
+            <CopyButton value={hook.url} />
+          </div>
         </div>
-        <p className="text-muted-foreground text-caption">
-          A <code className="bg-muted rounded px-1">POST</code> with this JSON body, for{" "}
-          <code className="bg-muted rounded px-1">{events[0]}</code>. Answers use this
-          form&apos;s own question refs; values are samples.
-        </p>
-        <pre className="bg-muted/50 max-h-96 overflow-auto rounded-xl p-3 font-mono text-xs leading-relaxed">
-          {payload}
-        </pre>
-        <p className="text-muted-foreground text-caption">
-          Headers: <code className="bg-muted rounded px-1">x-chatform-event</code>,{" "}
-          <code className="bg-muted rounded px-1">x-chatform-delivery</code>,{" "}
-          <code className="bg-muted rounded px-1">x-chatform-signature: t=…, v1=…</code>
-        </p>
-      </div>
+
+        <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-3 text-sm">
+          <dt className="text-muted-foreground">Status</dt>
+          <dd className="flex items-center gap-2">
+            <StatusDot active={hook.active} />
+            {hook.active ? "Active" : "Off after repeated failures"}
+          </dd>
+          <dt className="text-muted-foreground">Events</dt>
+          <dd className="flex flex-wrap gap-1.5">
+            {hook.events.map((event) => (
+              <Badge key={event} variant="secondary" title={event}>
+                {eventLabel(event)}
+              </Badge>
+            ))}
+          </dd>
+          <dt className="text-muted-foreground">Signing secret</dt>
+          <dd className="font-mono text-xs">{hook.secretPreview ?? "whsec_…"}</dd>
+        </dl>
+
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <Button size="sm" disabled={test.isPending} onClick={() => test.mutate()}>
+              <Send className="size-3.5" />
+              {test.isPending ? "Testing…" : "Test connection"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() =>
+                confirm({
+                  title: "Delete this endpoint?",
+                  description: "ChatForm stops sending events to it right away.",
+                  onConfirm: () => remove.mutateAsync().then(() => undefined),
+                })
+              }
+            >
+              <Trash2 className="size-3.5" />
+              Delete
+            </Button>
+          </div>
+          {result && (
+            <p
+              className={cn(
+                "text-caption",
+                result.ok ? "text-[var(--success)]" : "text-destructive",
+              )}
+            >
+              {result.text}
+            </p>
+          )}
+        </div>
+      </section>
+
+      <Deliveries webhookId={hook.id} queryKey={deliveriesKey} />
+      {dialog}
     </div>
   );
 }
@@ -341,42 +446,195 @@ function PayloadPreview({
  * The endpoint has existed since webhooks shipped and nothing ever called it,
  * which meant "my webhook isn't firing" had no answer inside the product.
  */
-function Deliveries({ webhookId }: { webhookId: string }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ["webhook-deliveries", webhookId],
+function Deliveries({ webhookId, queryKey }: { webhookId: string; queryKey: string[] }) {
+  const { data, isLoading, isFetching, refetch } = useQuery({
+    queryKey,
     queryFn: () => customFetch<Delivery[]>(`/api/webhooks/${webhookId}/deliveries`),
   });
   const rows = Array.isArray(data) ? data : [];
-
-  if (isLoading) return <div className="bg-muted mt-2 h-10 animate-pulse rounded-lg" />;
-  if (rows.length === 0) {
-    return <p className="text-muted-foreground text-micro mt-2">Nothing delivered yet.</p>;
-  }
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
-    <ul className="mt-2 space-y-1">
-      {rows.slice(0, 10).map((row) => (
-        <li key={row.id} className="text-micro flex items-center gap-2">
-          <span
-            className={cn(
-              "size-1.5 shrink-0 rounded-full",
-              row.status === "delivered"
-                ? "bg-[var(--success)]"
-                : row.status === "pending"
-                  ? "bg-[var(--warning)]"
-                  : "bg-destructive",
-            )}
+    <section className="space-y-2">
+      <div className="flex items-center gap-2">
+        <h3 className="text-h3 flex-1">Deliveries</h3>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Refresh deliveries"
+          disabled={isFetching}
+          onClick={() => void refetch()}
+        >
+          <RefreshCw className={cn("size-3.5", isFetching && "animate-spin")} />
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="bg-muted h-12 animate-pulse rounded-xl" />
+      ) : rows.length === 0 ? (
+        <p className="text-muted-foreground text-caption rounded-xl border border-dashed p-4">
+          Nothing sent yet. Press Test connection, or submit a response to this form.
+        </p>
+      ) : (
+        <ul className="divide-y overflow-hidden rounded-xl border">
+          {rows.map((row) => {
+            const ok = row.status === "success";
+            const isOpen = expanded === row.id;
+            return (
+              <li key={row.id}>
+                <button
+                  type="button"
+                  onClick={() => setExpanded(isOpen ? null : row.id)}
+                  className="hover:bg-muted/50 flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm"
+                >
+                  <span
+                    className={cn(
+                      "size-1.5 shrink-0 rounded-full",
+                      ok
+                        ? "bg-[var(--success)]"
+                        : row.status === "failed"
+                          ? "bg-[var(--warning)]"
+                          : "bg-destructive",
+                    )}
+                  />
+                  <span className="min-w-0 flex-1 truncate">
+                    {row.event_type === "test" ? "Test" : eventLabel(row.event_type)}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-caption shrink-0",
+                      ok ? "text-muted-foreground" : "text-destructive",
+                    )}
+                  >
+                    {row.response_status ?? (ok ? "OK" : "Error")}
+                  </span>
+                  <span className="text-muted-foreground text-caption shrink-0">
+                    {formatDateTime(row.created_at)}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "text-muted-foreground size-3.5 shrink-0 transition-transform duration-[var(--duration-micro)]",
+                      isOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+                {isOpen && (
+                  <div className="space-y-2 px-3 pb-3">
+                    <p className="text-caption text-muted-foreground">
+                      {ok
+                        ? "Delivered."
+                        : row.status === "failed"
+                          ? `Failed (${row.last_error ?? "error"}). Attempt ${row.attempt}, retrying.`
+                          : `Failed (${row.last_error ?? "error"}). Gave up after ${row.attempt} attempts.`}
+                    </p>
+                    {row.payload && <JsonBlock json={prettyJson(row.payload)} />}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function prettyJson(raw: string) {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+}
+
+function JsonBlock({ json }: { json: string }) {
+  return (
+    <div className="relative">
+      <pre className="bg-muted/50 max-h-96 overflow-auto rounded-xl p-3 pr-10 font-mono text-xs leading-relaxed">
+        {json}
+      </pre>
+      <CopyButton value={json} className="absolute top-2 right-2" toastMessage="Copied" />
+    </div>
+  );
+}
+
+/**
+ * What the endpoint will receive, and a prompt that has an AI agent build it.
+ *
+ * Without this the panel asked for a URL and never said what would arrive at
+ * it, so nobody could write the receiving side.
+ */
+function DeveloperSection({
+  formId,
+  formTitle,
+  blocks,
+  events,
+}: {
+  formId: string;
+  formTitle: string;
+  blocks: Block[];
+  events: string[];
+}) {
+  const [view, setView] = useState<"prompt" | "payload">("prompt");
+  const payload = JSON.stringify(samplePayload(formId, blocks, events[0]), null, 2);
+  const prompt = aiSetupPrompt({ formId, formTitle, blocks, events });
+
+  return (
+    <section className="space-y-3 border-t pt-6">
+      <div className="flex items-center gap-2">
+        <h3 className="text-h3 flex-1">Build the receiving side</h3>
+        <SegmentedControl
+          options={[
+            { value: "prompt", label: "AI prompt" },
+            { value: "payload", label: "Payload" },
+          ]}
+          value={view}
+          onChange={setView}
+          size="sm"
+          ariaLabel="Show"
+        />
+      </div>
+
+      {view === "prompt" ? (
+        <div className="space-y-2">
+          <p className="text-muted-foreground text-caption">
+            Paste into Claude Code, Cursor or any AI coding tool, inside your project. It adds
+            the endpoint, checks the signature and maps every question on this form.
+          </p>
+          <Textarea
+            readOnly
+            value={prompt}
+            rows={12}
+            className="font-mono text-xs leading-relaxed"
+            onFocus={(e) => e.currentTarget.select()}
           />
-          <span className="text-muted-foreground font-mono">{row.event_type}</span>
-          <span className="text-muted-foreground">
-            {row.response_status ?? row.status}
-            {row.attempt > 0 && ` · attempt ${row.attempt + 1}`}
-          </span>
-          <span className="text-muted-foreground ml-auto shrink-0">
-            {formatDateTime(row.created_at)}
-          </span>
-        </li>
-      ))}
-    </ul>
+          <CopyButton
+            value={prompt}
+            label="Copy AI prompt"
+            toastMessage="AI prompt copied"
+            variant="default"
+            size="sm"
+          />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-muted-foreground text-caption">
+            Each event is a POST with this JSON body. Every answer carries its question, type,
+            options, the raw value and a readable version. Values here are samples.
+          </p>
+          <JsonBlock json={payload} />
+          <dl className="text-caption grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+            <dt className="font-mono">x-chatform-event</dt>
+            <dd className="text-muted-foreground">The event name</dd>
+            <dt className="font-mono">x-chatform-delivery</dt>
+            <dd className="text-muted-foreground">Unique id, for skipping repeats</dd>
+            <dt className="font-mono">x-chatform-signature</dt>
+            <dd className="text-muted-foreground">
+              <code>t=…, v1=…</code>, HMAC-SHA256 of <code>t.body</code> with your secret
+            </dd>
+          </dl>
+        </div>
+      )}
+    </section>
   );
 }

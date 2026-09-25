@@ -142,7 +142,7 @@ webhooksRouter.get(
     const id = c.req.param("id");
     const orgId = c.get("orgId");
     const rows = await c.env.DB.prepare(
-      `SELECT d.id, d.event_type, d.status, d.response_status, d.last_error, d.attempt, d.created_at
+      `SELECT d.id, d.event_type, d.status, d.response_status, d.last_error, d.attempt, d.created_at, d.payload
          FROM webhook_deliveries d
          JOIN webhooks w ON w.id = d.webhook_id AND w.organization_id = ?
         WHERE d.webhook_id = ? ORDER BY d.created_at DESC LIMIT 25`,
@@ -155,7 +155,7 @@ webhooksRouter.get(
 
 webhooksRouter.post(
   "/webhooks/:id/test",
-  describeRoute({ tags: ["dashboard"], summary: "Send a signed test event", responses: { 200: { description: "Test sent", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean(), signature: z.string() })) } } } } }),
+  describeRoute({ tags: ["dashboard"], summary: "Send a signed test event", responses: { 200: { description: "Test sent", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean(), status: z.number().nullable(), error: z.string().nullable(), signature: z.string() })) } } } } }),
   async (c) => {
     const id = c.req.param("id");
     const orgId = c.get("orgId");
@@ -167,6 +167,9 @@ webhooksRouter.post(
     const timestamp = Math.floor(Date.now() / 1000);
     const signature = await hmac(hook.secret, `${timestamp}.${body}`);
     let ok = false;
+    // What the endpoint said, so "didn't accept it" can say how.
+    let status: number | null = null;
+    let error: string | null = null;
     try {
       const res = await fetch(hook.url, {
         method: "POST",
@@ -179,9 +182,29 @@ webhooksRouter.post(
         signal: AbortSignal.timeout(8000),
       });
       ok = res.status < 400;
-    } catch {
+      status = res.status;
+    } catch (err) {
       ok = false;
+      error = err instanceof Error && err.name === "TimeoutError" ? "Timed out after 8s" : "Could not reach the URL";
     }
-    return c.json({ ok, signature: `t=${timestamp}, v1=${signature.slice(0, 16)}…` });
+    /**
+     * Logged like any delivery, so the endpoint's history shows the test.
+     * No message and no retry time: the retry sweep never picks it up.
+     */
+    await c.env.DB.prepare(
+      `INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, message_json, attempt, status, response_status, last_error, next_retry_at, created_at)
+       VALUES (?, ?, 'test', ?, NULL, 1, ?, ?, ?, NULL, ?)`,
+    )
+      .bind(
+        `whd_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+        id,
+        body,
+        ok ? "success" : "failed",
+        status,
+        ok ? null : (error ?? `HTTP ${status}`),
+        Date.now(),
+      )
+      .run();
+    return c.json({ ok, status, error, signature: `t=${timestamp}, v1=${signature.slice(0, 16)}…` });
   },
 );

@@ -1,4 +1,4 @@
-import { ANSWER_CATALOG, type Block } from "@repo/form-schema";
+import { ANSWER_CATALOG, displayAnswer, type Block } from "@repo/form-schema";
 
 /**
  * What a delivery looks like, built from this form's own questions.
@@ -41,7 +41,18 @@ export function samplePayload(formId: string, blocks: Block[], event = "response
   const now = Date.now();
   const answers = blocks.flatMap((block) => {
     const value = sampleValue(block);
-    return value === undefined ? [] : [{ ref: block.ref, type: block.type, value }];
+    if (value === undefined) return [];
+    const options =
+      "options" in block && Array.isArray(block.options)
+        ? block.options.map((o: { id: string; label: string }) => ({ id: o.id, label: o.label }))
+        : null;
+    let display: string | null = null;
+    try {
+      display = displayAnswer(block, value);
+    } catch {
+      display = null;
+    }
+    return [{ ref: block.ref, type: block.type, question: block.title, options, value, display }];
   });
   return {
     event,
@@ -106,6 +117,8 @@ Notes on the body:
 - \`timestamp\`, \`submission.started_at\` and \`submission.completed_at\` are Unix epoch milliseconds.
 - \`submission.hidden_fields\` and \`submission.meta\` are JSON-encoded strings or null. Parse them with JSON.parse.
 - \`answers\` is an array. Look answers up by \`ref\`, never by position. A question the respondent skipped is missing from the array.
+- Each answer carries \`question\` (the question text), \`type\`, \`options\` (\`[{ id, label }]\` for choice questions, otherwise null), \`value\` (the raw stored answer; choice answers are option ids) and \`display\` (the answer as readable text, e.g. the chosen option's label). \`question\` and \`options\` are null if the question was later deleted from the form.
+- Store \`value\` for logic and \`display\` for humans (emails, CRM notes, Slack).
 - \`submission.status\` is one of: completed, disqualified, abandoned, in_progress.
 
 The form's questions, by ref:
@@ -122,10 +135,10 @@ ${questions || "- (this form has no answerable questions yet)"}
    - Reject requests where \`t\` is more than 5 minutes from the current time, to stop replays.
 4. Read the secret from an environment variable named \`CHATFORM_WEBHOOK_SECRET\`. Add it to the project's env example file and config/validation if one exists. Never hardcode it.
 5. Parse the JSON body, switch on \`event\`, and map the answers into a typed object keyed by the refs above. Write TypeScript types (or the language's equivalent) for the payload.
-6. The "Send a test event" button in ChatForm sends \`{ "event": "test", "timestamp": ..., "formId": null }\` with the same headers and signature, and no answers. Verify it, then respond 200 without running business logic.
+6. The "Test connection" button in ChatForm sends \`{ "event": "test", "timestamp": ..., "formId": null }\` with the same \`x-chatform-signature\` header (no \`x-chatform-delivery\`), and no answers. Verify it, then respond 200 without running business logic.
 7. Make the handler idempotent: store processed \`x-chatform-delivery\` ids (or \`submission.id\` + \`event\`) and skip repeats. ChatForm retries failed deliveries for up to two hours (after 1m, 5m, 30m, 2h), so the same event can arrive more than once.
 8. Respond with a 2xx within 10 seconds. Any non-2xx or timeout counts as a failure and is retried. Do slow work (emails, CRM calls) after responding or in a background job. After 20 consecutive failures ChatForm switches the endpoint off.
 9. Put a clear TODO where my business logic goes (save to the database, notify, etc.). If the project already has a database layer, save the response there.
 10. Add a test that signs a sample body with a test secret and asserts the handler accepts it, and rejects a wrong signature.
-11. Tell me the final public URL path to paste into ChatForm (Integrate tab, Webhooks, Payload URL). It must be a public https URL; for local testing suggest a tunnel such as ngrok or cloudflared. ChatForm's "Send a test event" button can then be used to check it.`;
+11. Tell me the final public URL path to paste into ChatForm (Integrate tab, Webhooks, Payload URL). It must be a public https URL; for local testing suggest a tunnel such as ngrok or cloudflared. ChatForm's "Test connection" button can then be used to check it.`;
 }

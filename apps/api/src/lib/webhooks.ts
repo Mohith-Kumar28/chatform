@@ -1,3 +1,4 @@
+import { displayAnswer, readFormDoc, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { deliverableUrl } from "./webhook-url.js";
 import { sign as signStandard } from "./dodo-webhook.js";
@@ -78,6 +79,51 @@ export async function hmac(secret: string, payload: string): Promise<string> {
   return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** The form's blocks by ref, or none when the doc is missing or unreadable. */
+function formBlocks(schemaJson: string | null | undefined): Map<string, Block> {
+  if (!schemaJson) return new Map();
+  try {
+    return new Map(readFormDoc(JSON.parse(schemaJson)).blocks.map((b) => [b.ref, b]));
+  } catch {
+    return new Map();
+  }
+}
+
+/**
+ * One answer, readable without the form in hand.
+ *
+ * `value` is the stored shape (option ids, not labels), so an integrator used
+ * to need the form doc to know what "opt_x1" meant. The question, its choices
+ * and the answer as text now travel with it. `question` and `options` are null
+ * when the question has since been deleted from the form.
+ */
+export function describeAnswer(
+  a: { block_ref: string; block_type: string; value_json: string },
+  block: Block | undefined,
+) {
+  const value = JSON.parse(a.value_json) as unknown;
+  const options =
+    block && "options" in block && Array.isArray(block.options)
+      ? block.options.map((o: { id: string; label: string }) => ({ id: o.id, label: o.label }))
+      : null;
+  let display: string | null = null;
+  if (block) {
+    try {
+      display = displayAnswer(block, value);
+    } catch {
+      display = null;
+    }
+  }
+  return {
+    ref: a.block_ref,
+    type: a.block_type,
+    question: block?.title ?? null,
+    options,
+    value,
+    display,
+  };
+}
+
 /** Deliver one event to all matching webhooks. Called per queue message. */
 export async function deliverWebhookEvent(env: Bindings, evt: WebhookEvent): Promise<void> {
   // resolve payload once
@@ -90,7 +136,7 @@ export async function deliverWebhookEvent(env: Bindings, evt: WebhookEvent): Pro
    * reads; awaited in turn they were three hops to D1 before the first delivery
    * left, on the path a queue consumer runs for every event.
    */
-  const [hooksRes, subRes, answersRes] = (await env.DB.batch([
+  const [hooksRes, subRes, answersRes, docRes] = (await env.DB.batch([
     // Form-specific and org-wide, in one list.
     env.DB
       .prepare(
@@ -107,21 +153,31 @@ export async function deliverWebhookEvent(env: Bindings, evt: WebhookEvent): Pro
           env.DB
             .prepare(`SELECT block_ref, block_type, value_json FROM submission_answers WHERE submission_id = ?`)
             .bind(evt.submissionId),
+          /**
+           * The questions the response was answered against: its own version,
+           * else the live one, else the draft (a preview response).
+           */
+          env.DB
+            .prepare(
+              `SELECT COALESCE(
+                 (SELECT fv.schema_json FROM submissions s JOIN form_versions fv ON fv.id = s.form_version_id WHERE s.id = ?),
+                 (SELECT COALESCE(fv.schema_json, f.working_schema) FROM forms f LEFT JOIN form_versions fv ON fv.id = f.active_version_id WHERE f.id = ?)
+               ) AS schema_json`,
+            )
+            .bind(evt.submissionId, evt.formId),
         ]
       : []),
   ])) as [
     D1Result<{ id: string; url: string; secret: string; events: string }>,
     D1Result<Record<string, unknown>>?,
     D1Result<{ block_ref: string; block_type: string; value_json: string }>?,
+    D1Result<{ schema_json: string | null }>?,
   ];
 
   if (evt.submissionId) {
     payload.submission = (subRes?.results ?? [])[0] ?? null;
-    payload.answers = (answersRes?.results ?? []).map((a) => ({
-      ref: a.block_ref,
-      type: a.block_type,
-      value: JSON.parse(a.value_json),
-    }));
+    const blocks = formBlocks(docRes?.results?.[0]?.schema_json);
+    payload.answers = (answersRes?.results ?? []).map((a) => describeAnswer(a, blocks.get(a.block_ref)));
   }
 
   /**
