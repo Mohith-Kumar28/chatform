@@ -213,7 +213,7 @@ function PublishGate({ locked, children }: { locked: boolean; children: React.Re
             disabled={!publishForm || publishing}
             onClick={() => void publishForm?.().catch(() => {})}
           >
-            {publishing ? <Loader2 className="size-4 animate-spin" /> : <Rocket className="size-4" />}
+            {publishing && <Loader2 className="size-4 animate-spin" />}
             {publishing ? "Publishing" : "Publish form"}
           </Button>
         </div>
