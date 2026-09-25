@@ -245,14 +245,19 @@ export function FeedbackPanel({
         "bg-popover text-popover-foreground fixed z-[var(--z-fab)] flex flex-col outline-none",
         "border-border border shadow-2xl",
         "animate-in fade-in-0 slide-in-from-bottom-2 duration-200 motion-reduce:animate-none",
-        // A sheet on a phone, a card above the button everywhere else.
-        "inset-x-0 bottom-0 max-h-[90svh] rounded-t-2xl",
-        "sm:inset-x-auto sm:right-4 sm:bottom-[4.25rem] sm:max-h-[min(44rem,calc(100svh-6rem))] sm:w-[26rem] sm:rounded-2xl",
+        /*
+          A sheet on a phone, a card above the button everywhere else, and one
+          fixed height for all three kinds: sized to the tallest (a bug), so
+          switching Bug / Feature / Feedback never moves the panel's top edge.
+          The fields scroll inside it when the window is short.
+        */
+        "inset-x-0 bottom-0 h-[min(40rem,90svh)] rounded-t-2xl",
+        "sm:inset-x-auto sm:right-4 sm:bottom-[4.25rem] sm:h-[min(44rem,calc(100svh-6rem))] sm:w-[26rem] sm:rounded-2xl",
         dragging && "ring-brand-violet ring-2",
       )}
     >
       {sent ? (
-        <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-14 text-center">
           <div className="bg-primary text-primary-foreground grid size-12 place-items-center rounded-full">
             <Check className="size-6" strokeWidth={2.5} />
           </div>
