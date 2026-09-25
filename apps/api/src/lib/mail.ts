@@ -393,6 +393,14 @@ export type MailJob =
     }
   | {
       /**
+       * Somebody who builds forms sent a bug, a feature request or feedback from
+       * the "?" button. Mailed to `PLATFORM_ADMIN_EMAILS`, replying to them.
+       */
+      kind: "builder_feedback";
+      feedbackId: string;
+    }
+  | {
+      /**
        * One nudge for a response somebody abandoned.
        *
        * Carries only the row id, for the same reason `submission` carries only

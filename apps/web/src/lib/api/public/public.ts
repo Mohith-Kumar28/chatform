@@ -25,6 +25,13 @@ import type {
   PostPFormsBySlugSessions403,
   PostPFormsBySlugSessions404,
   PostPFormsBySlugSessionsBody,
+  PostPSessionsByIdPayments200,
+  PostPSessionsByIdPayments402,
+  PostPSessionsByIdPayments403,
+  PostPSessionsByIdPayments409,
+  PostPSessionsByIdPayments422,
+  PostPSessionsByIdPayments429,
+  PostPSessionsByIdPaymentsByRecordIdConfirm200,
   PostPSessionsByIdUploadsByFileIdConfirm200,
   PostPSessionsByIdUploadsIntent200,
   PostPSessionsByIdUploadsIntentBody,
@@ -53,7 +60,307 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getPFeedByTokenResponse200 = {
+export type postPPaymentsWebhooksCashfreeResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postPPaymentsWebhooksCashfreeResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postPPaymentsWebhooksCashfreeResponse401 = {
+  data: void
+  status: 401
+}
+
+export type postPPaymentsWebhooksCashfreeResponse500 = {
+  data: void
+  status: 500
+}
+
+export type postPPaymentsWebhooksCashfreeResponseSuccess = (postPPaymentsWebhooksCashfreeResponse200) & {
+  headers: Headers;
+};
+export type postPPaymentsWebhooksCashfreeResponseError = (postPPaymentsWebhooksCashfreeResponse400 | postPPaymentsWebhooksCashfreeResponse401 | postPPaymentsWebhooksCashfreeResponse500) & {
+  headers: Headers;
+};
+
+export type postPPaymentsWebhooksCashfreeResponse = (postPPaymentsWebhooksCashfreeResponseSuccess | postPPaymentsWebhooksCashfreeResponseError)
+
+export const getPostPPaymentsWebhooksCashfreeUrl = () => {
+
+
+
+
+  return `/p/payments/webhooks/cashfree`
+}
+
+/**
+ * @summary Cashfree payment webhook
+ */
+export const postPPaymentsWebhooksCashfree = async ( options?: Parameters<typeof customFetch>[1]): Promise<postPPaymentsWebhooksCashfreeResponse> => {
+
+  return customFetch<postPPaymentsWebhooksCashfreeResponse>(getPostPPaymentsWebhooksCashfreeUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostPPaymentsWebhooksCashfreeMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksCashfree>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksCashfree>>, TError,void, TContext> => {
+
+const mutationKey = ['postPPaymentsWebhooksCashfree'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postPPaymentsWebhooksCashfree>>, void> = () => {
+
+
+          return  postPPaymentsWebhooksCashfree(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostPPaymentsWebhooksCashfreeMutationResult = NonNullable<Awaited<ReturnType<typeof postPPaymentsWebhooksCashfree>>>
+
+    export type PostPPaymentsWebhooksCashfreeMutationError = void
+
+
+    /**
+ * @summary Cashfree payment webhook
+ */
+export const usePostPPaymentsWebhooksCashfree = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksCashfree>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postPPaymentsWebhooksCashfree>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getPostPPaymentsWebhooksCashfreeMutationOptions(options));
+    }
+    export type postPPaymentsWebhooksRazorpayResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postPPaymentsWebhooksRazorpayResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postPPaymentsWebhooksRazorpayResponse401 = {
+  data: void
+  status: 401
+}
+
+export type postPPaymentsWebhooksRazorpayResponse500 = {
+  data: void
+  status: 500
+}
+
+export type postPPaymentsWebhooksRazorpayResponseSuccess = (postPPaymentsWebhooksRazorpayResponse200) & {
+  headers: Headers;
+};
+export type postPPaymentsWebhooksRazorpayResponseError = (postPPaymentsWebhooksRazorpayResponse400 | postPPaymentsWebhooksRazorpayResponse401 | postPPaymentsWebhooksRazorpayResponse500) & {
+  headers: Headers;
+};
+
+export type postPPaymentsWebhooksRazorpayResponse = (postPPaymentsWebhooksRazorpayResponseSuccess | postPPaymentsWebhooksRazorpayResponseError)
+
+export const getPostPPaymentsWebhooksRazorpayUrl = () => {
+
+
+
+
+  return `/p/payments/webhooks/razorpay`
+}
+
+/**
+ * @summary Razorpay payment webhook
+ */
+export const postPPaymentsWebhooksRazorpay = async ( options?: Parameters<typeof customFetch>[1]): Promise<postPPaymentsWebhooksRazorpayResponse> => {
+
+  return customFetch<postPPaymentsWebhooksRazorpayResponse>(getPostPPaymentsWebhooksRazorpayUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostPPaymentsWebhooksRazorpayMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksRazorpay>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksRazorpay>>, TError,void, TContext> => {
+
+const mutationKey = ['postPPaymentsWebhooksRazorpay'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postPPaymentsWebhooksRazorpay>>, void> = () => {
+
+
+          return  postPPaymentsWebhooksRazorpay(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostPPaymentsWebhooksRazorpayMutationResult = NonNullable<Awaited<ReturnType<typeof postPPaymentsWebhooksRazorpay>>>
+
+    export type PostPPaymentsWebhooksRazorpayMutationError = void
+
+
+    /**
+ * @summary Razorpay payment webhook
+ */
+export const usePostPPaymentsWebhooksRazorpay = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksRazorpay>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postPPaymentsWebhooksRazorpay>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getPostPPaymentsWebhooksRazorpayMutationOptions(options));
+    }
+    export type postPPaymentsWebhooksStripeByAccountIdResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postPPaymentsWebhooksStripeByAccountIdResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postPPaymentsWebhooksStripeByAccountIdResponse401 = {
+  data: void
+  status: 401
+}
+
+export type postPPaymentsWebhooksStripeByAccountIdResponse500 = {
+  data: void
+  status: 500
+}
+
+export type postPPaymentsWebhooksStripeByAccountIdResponseSuccess = (postPPaymentsWebhooksStripeByAccountIdResponse200) & {
+  headers: Headers;
+};
+export type postPPaymentsWebhooksStripeByAccountIdResponseError = (postPPaymentsWebhooksStripeByAccountIdResponse400 | postPPaymentsWebhooksStripeByAccountIdResponse401 | postPPaymentsWebhooksStripeByAccountIdResponse500) & {
+  headers: Headers;
+};
+
+export type postPPaymentsWebhooksStripeByAccountIdResponse = (postPPaymentsWebhooksStripeByAccountIdResponseSuccess | postPPaymentsWebhooksStripeByAccountIdResponseError)
+
+export const getPostPPaymentsWebhooksStripeByAccountIdUrl = (accountId: string,) => {
+
+
+
+
+  return `/p/payments/webhooks/stripe/${accountId}`
+}
+
+/**
+ * @summary Stripe payment webhook
+ */
+export const postPPaymentsWebhooksStripeByAccountId = async (accountId: string, options?: Parameters<typeof customFetch>[1]): Promise<postPPaymentsWebhooksStripeByAccountIdResponse> => {
+
+  return customFetch<postPPaymentsWebhooksStripeByAccountIdResponse>(getPostPPaymentsWebhooksStripeByAccountIdUrl(accountId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostPPaymentsWebhooksStripeByAccountIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksStripeByAccountId>>, TError,PostPPaymentsWebhooksStripeByAccountIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksStripeByAccountId>>, TError,PostPPaymentsWebhooksStripeByAccountIdMutationVariables, TContext> => {
+
+const mutationKey = ['postPPaymentsWebhooksStripeByAccountId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postPPaymentsWebhooksStripeByAccountId>>, PostPPaymentsWebhooksStripeByAccountIdMutationVariables> = (props) => {
+          const {accountId} = props ?? {};
+
+          return  postPPaymentsWebhooksStripeByAccountId(accountId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostPPaymentsWebhooksStripeByAccountIdMutationResult = NonNullable<Awaited<ReturnType<typeof postPPaymentsWebhooksStripeByAccountId>>>
+
+    export type PostPPaymentsWebhooksStripeByAccountIdMutationError = void
+    export type PostPPaymentsWebhooksStripeByAccountIdMutationVariables = {accountId: string}
+
+    /**
+ * @summary Stripe payment webhook
+ */
+export const usePostPPaymentsWebhooksStripeByAccountId = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksStripeByAccountId>>, TError,PostPPaymentsWebhooksStripeByAccountIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postPPaymentsWebhooksStripeByAccountId>>,
+        TError,
+        PostPPaymentsWebhooksStripeByAccountIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostPPaymentsWebhooksStripeByAccountIdMutationOptions(options));
+    }
+    export type getPFeedByTokenResponse200 = {
   data: string
   status: 200
 }
@@ -345,6 +652,213 @@ export const usePostPFormsBySlugSessions = <TError = PostPFormsBySlugSessions403
         TContext
       > => {
       return useMutation(getPostPFormsBySlugSessionsMutationOptions(options));
+    }
+    export type postPSessionsByIdPaymentsResponse200 = {
+  data: PostPSessionsByIdPayments200
+  status: 200
+}
+
+export type postPSessionsByIdPaymentsResponse402 = {
+  data: PostPSessionsByIdPayments402
+  status: 402
+}
+
+export type postPSessionsByIdPaymentsResponse403 = {
+  data: PostPSessionsByIdPayments403
+  status: 403
+}
+
+export type postPSessionsByIdPaymentsResponse409 = {
+  data: PostPSessionsByIdPayments409
+  status: 409
+}
+
+export type postPSessionsByIdPaymentsResponse422 = {
+  data: PostPSessionsByIdPayments422
+  status: 422
+}
+
+export type postPSessionsByIdPaymentsResponse429 = {
+  data: PostPSessionsByIdPayments429
+  status: 429
+}
+
+export type postPSessionsByIdPaymentsResponseSuccess = (postPSessionsByIdPaymentsResponse200) & {
+  headers: Headers;
+};
+export type postPSessionsByIdPaymentsResponseError = (postPSessionsByIdPaymentsResponse402 | postPSessionsByIdPaymentsResponse403 | postPSessionsByIdPaymentsResponse409 | postPSessionsByIdPaymentsResponse422 | postPSessionsByIdPaymentsResponse429) & {
+  headers: Headers;
+};
+
+export type postPSessionsByIdPaymentsResponse = (postPSessionsByIdPaymentsResponseSuccess | postPSessionsByIdPaymentsResponseError)
+
+export const getPostPSessionsByIdPaymentsUrl = (id: string,) => {
+
+
+
+
+  return `/p/sessions/${id}/payments`
+}
+
+/**
+ * @summary Open a verified checkout for the current payment question
+ */
+export const postPSessionsByIdPayments = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postPSessionsByIdPaymentsResponse> => {
+
+  return customFetch<postPSessionsByIdPaymentsResponse>(getPostPSessionsByIdPaymentsUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostPSessionsByIdPaymentsMutationOptions = <TError = PostPSessionsByIdPayments402 | PostPSessionsByIdPayments403 | PostPSessionsByIdPayments409 | PostPSessionsByIdPayments422 | PostPSessionsByIdPayments429,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdPayments>>, TError,PostPSessionsByIdPaymentsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdPayments>>, TError,PostPSessionsByIdPaymentsMutationVariables, TContext> => {
+
+const mutationKey = ['postPSessionsByIdPayments'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postPSessionsByIdPayments>>, PostPSessionsByIdPaymentsMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postPSessionsByIdPayments(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostPSessionsByIdPaymentsMutationResult = NonNullable<Awaited<ReturnType<typeof postPSessionsByIdPayments>>>
+
+    export type PostPSessionsByIdPaymentsMutationError = PostPSessionsByIdPayments402 | PostPSessionsByIdPayments403 | PostPSessionsByIdPayments409 | PostPSessionsByIdPayments422 | PostPSessionsByIdPayments429
+    export type PostPSessionsByIdPaymentsMutationVariables = {id: string}
+
+    /**
+ * @summary Open a verified checkout for the current payment question
+ */
+export const usePostPSessionsByIdPayments = <TError = PostPSessionsByIdPayments402 | PostPSessionsByIdPayments403 | PostPSessionsByIdPayments409 | PostPSessionsByIdPayments422 | PostPSessionsByIdPayments429,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdPayments>>, TError,PostPSessionsByIdPaymentsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postPSessionsByIdPayments>>,
+        TError,
+        PostPSessionsByIdPaymentsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostPSessionsByIdPaymentsMutationOptions(options));
+    }
+    export type postPSessionsByIdPaymentsByRecordIdConfirmResponse200 = {
+  data: PostPSessionsByIdPaymentsByRecordIdConfirm200
+  status: 200
+}
+
+export type postPSessionsByIdPaymentsByRecordIdConfirmResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postPSessionsByIdPaymentsByRecordIdConfirmResponse502 = {
+  data: void
+  status: 502
+}
+
+export type postPSessionsByIdPaymentsByRecordIdConfirmResponseSuccess = (postPSessionsByIdPaymentsByRecordIdConfirmResponse200) & {
+  headers: Headers;
+};
+export type postPSessionsByIdPaymentsByRecordIdConfirmResponseError = (postPSessionsByIdPaymentsByRecordIdConfirmResponse404 | postPSessionsByIdPaymentsByRecordIdConfirmResponse502) & {
+  headers: Headers;
+};
+
+export type postPSessionsByIdPaymentsByRecordIdConfirmResponse = (postPSessionsByIdPaymentsByRecordIdConfirmResponseSuccess | postPSessionsByIdPaymentsByRecordIdConfirmResponseError)
+
+export const getPostPSessionsByIdPaymentsByRecordIdConfirmUrl = (id: string,
+    recordId: string,) => {
+
+
+
+
+  return `/p/sessions/${id}/payments/${recordId}/confirm`
+}
+
+/**
+ * @summary Re-check a checkout with the gateway and settle it if paid
+ */
+export const postPSessionsByIdPaymentsByRecordIdConfirm = async (id: string,
+    recordId: string, options?: Parameters<typeof customFetch>[1]): Promise<postPSessionsByIdPaymentsByRecordIdConfirmResponse> => {
+
+  return customFetch<postPSessionsByIdPaymentsByRecordIdConfirmResponse>(getPostPSessionsByIdPaymentsByRecordIdConfirmUrl(id,recordId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostPSessionsByIdPaymentsByRecordIdConfirmMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdPaymentsByRecordIdConfirm>>, TError,PostPSessionsByIdPaymentsByRecordIdConfirmMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdPaymentsByRecordIdConfirm>>, TError,PostPSessionsByIdPaymentsByRecordIdConfirmMutationVariables, TContext> => {
+
+const mutationKey = ['postPSessionsByIdPaymentsByRecordIdConfirm'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postPSessionsByIdPaymentsByRecordIdConfirm>>, PostPSessionsByIdPaymentsByRecordIdConfirmMutationVariables> = (props) => {
+          const {id,recordId} = props ?? {};
+
+          return  postPSessionsByIdPaymentsByRecordIdConfirm(id,recordId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostPSessionsByIdPaymentsByRecordIdConfirmMutationResult = NonNullable<Awaited<ReturnType<typeof postPSessionsByIdPaymentsByRecordIdConfirm>>>
+
+    export type PostPSessionsByIdPaymentsByRecordIdConfirmMutationError = void
+    export type PostPSessionsByIdPaymentsByRecordIdConfirmMutationVariables = {id: string;recordId: string}
+
+    /**
+ * @summary Re-check a checkout with the gateway and settle it if paid
+ */
+export const usePostPSessionsByIdPaymentsByRecordIdConfirm = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdPaymentsByRecordIdConfirm>>, TError,PostPSessionsByIdPaymentsByRecordIdConfirmMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postPSessionsByIdPaymentsByRecordIdConfirm>>,
+        TError,
+        PostPSessionsByIdPaymentsByRecordIdConfirmMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostPSessionsByIdPaymentsByRecordIdConfirmMutationOptions(options));
     }
     export type postPSessionsByIdUploadsIntentResponse200 = {
   data: PostPSessionsByIdUploadsIntent200

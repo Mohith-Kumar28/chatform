@@ -5,6 +5,7 @@ import { MODELS, chatModel, reportedUsage, telemetry, type TokenUsage } from "./
 import { logAiGeneration } from "./ai-usage.js";
 import {
   ISSUE_CANDIDATES,
+  ISSUE_DECIDE_BUILDER_SYSTEM,
   ISSUE_DECIDE_SYSTEM,
   ISSUE_FLOOR,
   ISSUE_TITLE_MAX,
@@ -30,6 +31,60 @@ import { bindChunks, holesFor } from "./d1-bindings.js";
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Which reports an issue groups.
+ *
+ * Respondents' bug reports and builders' bugs and requests share `feedback_issues`
+ * and all the matching below, and nothing else: a pool names its report table,
+ * its embeddings table, the text a report is matched on, and the prompt the
+ * decider reads. A match never crosses pools, because the shortlist only offers
+ * issues with a member in the pool's own table.
+ *
+ * Table names are constants interpolated into SQL, never input.
+ */
+export interface IssuePool {
+  name: "respondent" | "builder";
+  reports: string;
+  embeddings: string;
+  /** The text a report is matched on, as an expression over `fb`. */
+  note: string;
+  /** The session a report came from, for the AI usage log. */
+  session: string;
+  /**
+   * When set, an issue is only offered to a report of the same kind. A bug and
+   * a feature request about the CSV export are two different pieces of work.
+   */
+  kind: string | null;
+  system: string;
+}
+
+export const RESPONDENT_POOL: IssuePool = {
+  name: "respondent",
+  reports: "respondent_feedback",
+  embeddings: "feedback_embeddings",
+  note: "fb.message",
+  session: "fb.session_id",
+  kind: null,
+  system: ISSUE_DECIDE_SYSTEM,
+};
+
+export const BUILDER_POOL: IssuePool = {
+  name: "builder",
+  reports: "builder_feedback",
+  embeddings: "builder_feedback_embeddings",
+  note: `(CASE fb.kind WHEN 'bug' THEN 'Bug: ' WHEN 'feature' THEN 'Feature request: ' ELSE 'Feedback: ' END)
+         || fb.message
+         || COALESCE(char(10) || 'Why: ' || fb.why, '')
+         || COALESCE(char(10) || 'Expected: ' || fb.expected, '')`,
+  session: "NULL",
+  kind: "fb.kind",
+  system: ISSUE_DECIDE_BUILDER_SYSTEM,
+};
+
+export function poolNamed(name: string | null | undefined): IssuePool {
+  return name === "builder" ? BUILDER_POOL : RESPONDENT_POOL;
+}
 
 export function newIssueId(): string {
   return `fis_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
@@ -84,6 +139,7 @@ export function meanOf(vectors: Float32Array[]): Float32Array {
 
 export type Embedder = (text: string) => Promise<ArrayLike<number>>;
 export type Decider = (input: {
+  system?: string;
   note: string;
   candidates: { id: string; title: string; examples: string[] }[];
 }) => Promise<{ match: string | null; title: string; usage?: TokenUsage }>;
@@ -107,11 +163,11 @@ const Decision = z.object({
 
 const modelDecider =
   (env: Bindings): Decider =>
-  async ({ note, candidates }) => {
+  async ({ system, note, candidates }) => {
     const result = await generateObject({
       model: chatModel(env, MODELS.extraction),
       schema: Decision,
-      system: ISSUE_DECIDE_SYSTEM,
+      system: system ?? ISSUE_DECIDE_SYSTEM,
       prompt: issueDecidePrompt(note, candidates),
       providerOptions: telemetry(env, {}, { kind: "feedback_issue", organizationId: "platform", source: "system" }),
       abortSignal: AbortSignal.timeout(15_000),
@@ -156,15 +212,23 @@ interface Candidate {
  * report of a problem somebody marked fixed is exactly the report that should
  * land on it, and reopen it.
  */
-async function nearest(env: Bindings, vector: Float32Array, limit: number, exclude?: string | null): Promise<Candidate[]> {
+async function nearest(
+  env: Bindings,
+  pool: IssuePool,
+  vector: Float32Array,
+  limit: number,
+  exclude?: string | null,
+  kind?: string | null,
+): Promise<Candidate[]> {
   const since = Date.now() - ISSUE_WINDOW_DAYS * DAY_MS;
+  const sameKind = pool.kind && kind ? " AND r.kind = ?2" : "";
   const rows = await env.DB.prepare(
     `SELECT i.id, i.title, i.centroid FROM feedback_issues i
-      WHERE i.merged_into IS NULL
-        AND EXISTS (SELECT 1 FROM respondent_feedback r
-                     WHERE r.issue_id = i.id AND r.created_at >= ?1 AND r.status != 'spam')`,
+      WHERE i.merged_into IS NULL AND i.pool = '${pool.name}'
+        AND EXISTS (SELECT 1 FROM ${pool.reports} r
+                     WHERE r.issue_id = i.id AND r.created_at >= ?1 AND r.status != 'spam'${sameKind})`,
   )
-    .bind(since)
+    .bind(...(sameKind ? [since, kind] : [since]))
     .all<{ id: string; title: string; centroid: string }>();
 
   return (rows.results ?? [])
@@ -179,13 +243,13 @@ async function nearest(env: Bindings, vector: Float32Array, limit: number, exclu
 }
 
 /** Two recent notes per issue, so the model reads what the issue actually is and not only its title. */
-async function examplesFor(env: Bindings, issueIds: string[]): Promise<Map<string, string[]>> {
+async function examplesFor(env: Bindings, pool: IssuePool, issueIds: string[]): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>();
   for (const id of issueIds) {
     const rows = await env.DB.prepare(
-      `SELECT message FROM respondent_feedback
-        WHERE issue_id = ?1 AND message IS NOT NULL AND message != '' AND status != 'spam'
-        ORDER BY created_at DESC LIMIT 2`,
+      `SELECT ${pool.note} AS message FROM ${pool.reports} fb
+        WHERE fb.issue_id = ?1 AND fb.message IS NOT NULL AND fb.message != '' AND fb.status != 'spam'
+        ORDER BY fb.created_at DESC LIMIT 2`,
     )
       .bind(id)
       .all<{ message: string }>();
@@ -209,11 +273,17 @@ export interface Assignment {
  * part-way leaves nothing half done for the retry to trip on. Returns null for a
  * report with nothing to match: no note, no model available, or a model error.
  */
-export async function assignIssue(env: Bindings, feedbackId: string, deps?: IssueDeps): Promise<Assignment | null> {
+export async function assignIssue(
+  env: Bindings,
+  feedbackId: string,
+  deps?: IssueDeps,
+  pool: IssuePool = RESPONDENT_POOL,
+): Promise<Assignment | null> {
   const row = await env.DB.prepare(
-    `SELECT fb.message, fb.topic, fb.issue_id, fb.session_id, fb.form_id, fb.organization_id, e.vector
-       FROM respondent_feedback fb
-       LEFT JOIN feedback_embeddings e ON e.feedback_id = fb.id
+    `SELECT ${pool.note} AS message, fb.topic, fb.issue_id, ${pool.session} AS session_id, fb.form_id,
+            fb.organization_id, ${pool.kind ?? "NULL"} AS kind, e.vector
+       FROM ${pool.reports} fb
+       LEFT JOIN ${pool.embeddings} e ON e.feedback_id = fb.id
       WHERE fb.id = ?1`,
   )
     .bind(feedbackId)
@@ -224,6 +294,7 @@ export async function assignIssue(env: Bindings, feedbackId: string, deps?: Issu
       session_id: string | null;
       form_id: string | null;
       organization_id: string | null;
+      kind: string | null;
       vector: string | null;
     }>();
   if (!row) return null;
@@ -238,10 +309,11 @@ export async function assignIssue(env: Bindings, feedbackId: string, deps?: Issu
   try {
     // A retry reuses the stored vector rather than paying for the same embedding twice.
     const vector = row.vector ? decodeVector(row.vector) : normalise(await run.embed(note));
-    const shortlist = await nearest(env, vector, ISSUE_CANDIDATES);
-    const examples = await examplesFor(env, shortlist.map((c) => c.id));
+    const shortlist = await nearest(env, pool, vector, ISSUE_CANDIDATES, null, row.kind);
+    const examples = await examplesFor(env, pool, shortlist.map((c) => c.id));
 
     const decision = await run.decide({
+      system: pool.system,
       note,
       candidates: shortlist.map((c) => ({ id: c.id, title: c.title, examples: examples.get(c.id) ?? [] })),
     });
@@ -261,7 +333,7 @@ export async function assignIssue(env: Bindings, feedbackId: string, deps?: Issu
     const joined = shortlist.find((c) => c.id === decision.match) ?? null;
     const now = Date.now();
     const writes: D1PreparedStatement[] = [
-      env.DB.prepare(`INSERT OR REPLACE INTO feedback_embeddings (feedback_id, vector, created_at) VALUES (?1, ?2, ?3)`).bind(
+      env.DB.prepare(`INSERT OR REPLACE INTO ${pool.embeddings} (feedback_id, vector, created_at) VALUES (?1, ?2, ?3)`).bind(
         feedbackId,
         encodeVector(vector),
         now,
@@ -299,14 +371,14 @@ export async function assignIssue(env: Bindings, feedbackId: string, deps?: Issu
       const title = cleanTitle(decision.title, note);
       writes.push(
         env.DB.prepare(
-          `INSERT INTO feedback_issues (id, title, title_edited, topic, centroid, centroid_n, created_at)
-           VALUES (?1, ?2, 0, ?3, ?4, 1, ?5)`,
-        ).bind(issueId, title, row.topic, encodeVector(vector), now),
+          `INSERT INTO feedback_issues (id, title, title_edited, topic, centroid, centroid_n, pool, created_at)
+           VALUES (?1, ?2, 0, ?3, ?4, 1, ?5, ?6)`,
+        ).bind(issueId, title, row.topic, encodeVector(vector), pool.name, now),
       );
     }
     writes.push(
       env.DB.prepare(
-        `UPDATE respondent_feedback SET issue_id = ?1, issue_similarity = ?2 WHERE id = ?3 AND issue_id IS NULL`,
+        `UPDATE ${pool.reports} SET issue_id = ?1, issue_similarity = ?2 WHERE id = ?3 AND issue_id IS NULL`,
       ).bind(issueId, similarity, feedbackId),
     );
     await env.DB.batch(writes);
@@ -334,15 +406,15 @@ function cleanTitle(title: string | null | undefined, note: string): string {
  * An issue left with no members is deleted: nothing points at it, and it would
  * otherwise keep being offered to the matcher as a ghost.
  */
-export async function recomputeIssue(env: Bindings, issueId: string): Promise<void> {
+export async function recomputeIssue(env: Bindings, issueId: string, pool: IssuePool = RESPONDENT_POOL): Promise<void> {
   const rows = await env.DB.prepare(
-    `SELECT e.vector FROM respondent_feedback fb JOIN feedback_embeddings e ON e.feedback_id = fb.id WHERE fb.issue_id = ?1`,
+    `SELECT e.vector FROM ${pool.reports} fb JOIN ${pool.embeddings} e ON e.feedback_id = fb.id WHERE fb.issue_id = ?1`,
   )
     .bind(issueId)
     .all<{ vector: string }>();
   const vectors = (rows.results ?? []).map((r) => decodeVector(r.vector));
   if (vectors.length === 0) {
-    const members = await env.DB.prepare(`SELECT COUNT(*) AS n FROM respondent_feedback WHERE issue_id = ?1`)
+    const members = await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${pool.reports} WHERE issue_id = ?1`)
       .bind(issueId)
       .first<{ n: number }>();
     if (Number(members?.n ?? 0) === 0) {
@@ -365,20 +437,26 @@ export async function recomputeIssue(env: Bindings, issueId: string): Promise<vo
  * The loser is tombstoned rather than deleted so a link to it still leads
  * somewhere, and the survivor's centroid is recomputed from every member.
  */
-export async function mergeIssues(env: Bindings, fromId: string, intoId: string): Promise<boolean> {
+export async function mergeIssues(
+  env: Bindings,
+  fromId: string,
+  intoId: string,
+  pool: IssuePool = RESPONDENT_POOL,
+): Promise<boolean> {
   if (fromId === intoId) return false;
+  // Both in this pool: a respondent's bug and a builder's request are never one issue.
   const both = await env.DB.prepare(
-    `SELECT id FROM feedback_issues WHERE id IN (?1, ?2) AND merged_into IS NULL`,
+    `SELECT id FROM feedback_issues WHERE id IN (?1, ?2) AND merged_into IS NULL AND pool = ?3`,
   )
-    .bind(fromId, intoId)
+    .bind(fromId, intoId, pool.name)
     .all<{ id: string }>();
   if ((both.results ?? []).length !== 2) return false;
   await env.DB.batch([
-    env.DB.prepare(`UPDATE respondent_feedback SET issue_id = ?1 WHERE issue_id = ?2`).bind(intoId, fromId),
+    env.DB.prepare(`UPDATE ${pool.reports} SET issue_id = ?1 WHERE issue_id = ?2`).bind(intoId, fromId),
     env.DB.prepare(`UPDATE feedback_issues SET merged_into = ?1 WHERE id = ?2`).bind(intoId, fromId),
     env.DB.prepare(`UPDATE feedback_issues SET merged_into = ?1 WHERE merged_into = ?2`).bind(intoId, fromId),
   ]);
-  await recomputeIssue(env, intoId);
+  await recomputeIssue(env, intoId, pool);
   return true;
 }
 
@@ -388,8 +466,13 @@ export async function mergeIssues(env: Bindings, fromId: string, intoId: string)
  * To an existing issue, or to a new one of its own titled from its note. Both
  * sides' centroids are recomputed, and an issue left empty disappears.
  */
-export async function moveReport(env: Bindings, feedbackId: string, target: string): Promise<string | null> {
-  const row = await env.DB.prepare(`SELECT issue_id, message, topic FROM respondent_feedback WHERE id = ?1`)
+export async function moveReport(
+  env: Bindings,
+  feedbackId: string,
+  target: string,
+  pool: IssuePool = RESPONDENT_POOL,
+): Promise<string | null> {
+  const row = await env.DB.prepare(`SELECT issue_id, message, topic FROM ${pool.reports} WHERE id = ?1`)
     .bind(feedbackId)
     .first<{ issue_id: string | null; message: string | null; topic: string | null }>();
   if (!row) return null;
@@ -397,29 +480,31 @@ export async function moveReport(env: Bindings, feedbackId: string, target: stri
 
   let issueId = target;
   if (target === "new") {
-    const vector = await env.DB.prepare(`SELECT vector FROM feedback_embeddings WHERE feedback_id = ?1`)
+    const vector = await env.DB.prepare(`SELECT vector FROM ${pool.embeddings} WHERE feedback_id = ?1`)
       .bind(feedbackId)
       .first<{ vector: string }>();
     if (!vector) return null;
     issueId = newIssueId();
     await env.DB.prepare(
-      `INSERT INTO feedback_issues (id, title, title_edited, topic, centroid, centroid_n, created_at)
-       VALUES (?1, ?2, 0, ?3, ?4, 1, ?5)`,
+      `INSERT INTO feedback_issues (id, title, title_edited, topic, centroid, centroid_n, pool, created_at)
+       VALUES (?1, ?2, 0, ?3, ?4, 1, ?5, ?6)`,
     )
-      .bind(issueId, cleanTitle(null, row.message ?? "Untitled issue"), row.topic, vector.vector, Date.now())
+      .bind(issueId, cleanTitle(null, row.message ?? "Untitled issue"), row.topic, vector.vector, pool.name, Date.now())
       .run();
   } else {
-    const exists = await env.DB.prepare(`SELECT id FROM feedback_issues WHERE id = ?1 AND merged_into IS NULL`)
-      .bind(target)
+    const exists = await env.DB.prepare(
+      `SELECT id FROM feedback_issues WHERE id = ?1 AND merged_into IS NULL AND pool = ?2`,
+    )
+      .bind(target, pool.name)
       .first<{ id: string }>();
     if (!exists) return null;
   }
 
-  await env.DB.prepare(`UPDATE respondent_feedback SET issue_id = ?1, issue_similarity = NULL WHERE id = ?2`)
+  await env.DB.prepare(`UPDATE ${pool.reports} SET issue_id = ?1, issue_similarity = NULL WHERE id = ?2`)
     .bind(issueId, feedbackId)
     .run();
-  await recomputeIssue(env, issueId);
-  if (previous && previous !== issueId) await recomputeIssue(env, previous);
+  await recomputeIssue(env, issueId, pool);
+  if (previous && previous !== issueId) await recomputeIssue(env, previous, pool);
   return issueId;
 }
 
@@ -428,15 +513,17 @@ export async function nearestIssuesFor(
   env: Bindings,
   feedbackId: string,
   limit = 5,
+  pool: IssuePool = RESPONDENT_POOL,
 ): Promise<{ id: string; title: string; score: number }[]> {
   const row = await env.DB.prepare(
-    `SELECT fb.issue_id, e.vector FROM respondent_feedback fb
-       LEFT JOIN feedback_embeddings e ON e.feedback_id = fb.id WHERE fb.id = ?1`,
+    `SELECT fb.issue_id, e.vector FROM ${pool.reports} fb
+       LEFT JOIN ${pool.embeddings} e ON e.feedback_id = fb.id WHERE fb.id = ?1`,
   )
     .bind(feedbackId)
     .first<{ issue_id: string | null; vector: string | null }>();
   if (!row?.vector) return [];
-  const found = await nearest(env, decodeVector(row.vector), limit, row.issue_id);
+  // Any kind: moving a report is the correction for a grouping the matcher got wrong.
+  const found = await nearest(env, pool, decodeVector(row.vector), limit, row.issue_id);
   return found.map((c) => ({ id: c.id, title: c.title, score: Math.round(c.score * 1000) / 1000 }));
 }
 

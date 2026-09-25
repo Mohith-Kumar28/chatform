@@ -1700,6 +1700,8 @@ export const feedbackIssues = sqliteTable("feedback_issues", {
   centroidN: integer("centroid_n").notNull().default(1),
   /** Set when merged away. Never matched against again. */
   mergedInto: text("merged_into"),
+  /** `respondent` | `builder` — which reports it groups. A match never crosses pools. */
+  pool: text("pool").notNull().default("respondent"),
   createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
 });
 
@@ -1708,6 +1710,80 @@ export const feedbackEmbeddings = sqliteTable("feedback_embeddings", {
   feedbackId: text("feedback_id")
     .primaryKey()
     .references(() => respondentFeedback.id, { onDelete: "cascade" }),
+  vector: text("vector").notNull(),
+  createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+});
+
+/**
+ * Feedback from the people who build forms, filed from the "?" button in the
+ * dashboard and the builder: a bug, a feature request, or general feedback.
+ *
+ * Its own table rather than more rows in `respondent_feedback`: that one is an
+ * anonymous respondent rating one conversation, and this is a signed-in account
+ * owner on a plan writing a structured report with screenshots. They share the
+ * triage columns and the issue grouping (`feedback_issues.pool = 'builder'`).
+ * See `0039_builder_feedback.sql`.
+ */
+export const builderFeedback = sqliteTable(
+  "builder_feedback",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id"),
+    /** Copied at filing, so a reply still reaches them after they change it or leave. */
+    userEmail: text("user_email"),
+    userName: text("user_name"),
+    organizationId: text("organization_id"),
+    workspaceId: text("workspace_id"),
+    /** The plan and role when they filed it, not whatever they are on now. */
+    planId: text("plan_id"),
+    role: text("role"),
+    /** Set when a platform admin filed it while acting as the user. */
+    impersonatorEmail: text("impersonator_email"),
+    /** `bug` | `feature` | `feedback` */
+    kind: text("kind").notNull(),
+    area: text("area"),
+    /** 1 to 5, feedback only. */
+    rating: integer("rating"),
+    /** Bug: `minor` | `annoying` | `blocking`. Feature: `nice` | `important` | `critical`. */
+    severity: text("severity"),
+    /** A short summary written by the tagger. */
+    title: text("title"),
+    message: text("message").notNull(),
+    steps: text("steps"),
+    expected: text("expected"),
+    why: text("why"),
+    url: text("url"),
+    formId: text("form_id"),
+    /** Viewport, locale, timezone, theme, recent console errors. Printed, never queried. */
+    contextJson: text("context_json"),
+    userAgent: text("user_agent"),
+    /** JSON `[{ key, bytes, type, auto }]`, R2 objects under `builder-feedback/`. */
+    attachmentsJson: text("attachments_json"),
+    status: text("status").notNull().default("new"),
+    statusAt: ts("status_at"),
+    statusBy: text("status_by"),
+    internalNote: text("internal_note"),
+    topic: text("topic"),
+    tags: text("tags"),
+    sentiment: real("sentiment"),
+    taggedAt: ts("tagged_at"),
+    issueId: text("issue_id"),
+    issueSimilarity: real("issue_similarity"),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [
+    index("idx_builder_feedback_created").on(t.createdAt),
+    index("idx_builder_feedback_status_created").on(t.status, t.createdAt),
+    index("idx_builder_feedback_org_created").on(t.organizationId, t.createdAt),
+    index("idx_builder_feedback_user_created").on(t.userId, t.createdAt),
+    index("idx_builder_feedback_issue").on(t.issueId, t.createdAt),
+  ],
+);
+
+export const builderFeedbackEmbeddings = sqliteTable("builder_feedback_embeddings", {
+  feedbackId: text("feedback_id")
+    .primaryKey()
+    .references(() => builderFeedback.id, { onDelete: "cascade" }),
   vector: text("vector").notNull(),
   createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
 });

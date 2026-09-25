@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Angry, Check, Frown, Laugh, Meh, Smile, X } from "lucide-react";
-import { FEEDBACK_LABELS, FEEDBACK_NOTE_MAX } from "@repo/form-schema";
+import { Check, X } from "lucide-react";
+import { FEEDBACK_NOTE_MAX } from "@repo/form-schema";
+import { FaceRating } from "@/components/feedback/face-rating";
 import { KeyHint, modKeyLabel } from "./composers/primitives";
 import { cn } from "@/lib/utils";
 
@@ -24,33 +25,7 @@ import { cn } from "@/lib/utils";
  * dropped on a dark page.
  */
 
-/**
- * Five faces, and a word under each.
- *
- * The faces are what make a rating a two-second decision — nobody reads a 1-5
- * scale, they point at the face that matches their morning — but a face on its
- * own is ambiguous in both directions: a grimace can read as "broken" or as
- * "annoying", and screen readers get nothing at all from an icon. So the label
- * is the accessible name, and it is shown under the selected face so the person
- * tapping can see which of the five they landed on.
- *
- * Lucide rather than emoji: emoji are rendered by the operating system, so the
- * same five characters are a different set of faces — sometimes a different
- * *sentiment* — on a phone, a Mac and a Windows machine, and none of them take
- * the form's colour.
- *
- * The words come from `@repo/form-schema`, because the API says them back: the
- * mail the founders get names the face that was picked, and a second list here
- * would let a report filed as "Bad" arrive in an inbox labelled "Okay". Only
- * the icons are local — they are the one part nothing else reads.
- */
-const FACES = [
-  { rating: 1, label: FEEDBACK_LABELS[1], Icon: Angry },
-  { rating: 2, label: FEEDBACK_LABELS[2], Icon: Frown },
-  { rating: 3, label: FEEDBACK_LABELS[3], Icon: Meh },
-  { rating: 4, label: FEEDBACK_LABELS[4], Icon: Smile },
-  { rating: 5, label: FEEDBACK_LABELS[5], Icon: Laugh },
-] as const;
+/* The five faces live in `FaceRating`, shared with the builder's feedback panel. */
 
 /** How long the receipt stays up before the panel closes itself. */
 const SENT_MS = 1400;
@@ -157,8 +132,6 @@ export function FeedbackDialog({
     return () => clearTimeout(t);
   }, [sent, onClose]);
 
-  const picked = FACES.find((f) => f.rating === rating);
-
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       {/*
@@ -235,51 +208,14 @@ export function FeedbackDialog({
                 : "This goes to the team who build the software running this form, not to the people who made this form."}
             </p>
 
-            <div className="mt-5 flex items-end justify-between gap-1.5">
-              {FACES.map(({ rating: value, label, Icon }) => {
-                const on = rating === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setRating(value)}
-                    aria-label={label}
-                    aria-pressed={on}
-                    /*
-                      Each face wears its own step of the rating ramp — red for
-                      terrible through bright green for great — so the scale reads
-                      as a scale before a word is read. Muted until hovered, full
-                      once picked, and the picked one gets a wash and an edge of
-                      the same colour rather than the form's accent: the accent is
-                      the author's brand, and "terrible" in the brand colour says
-                      something nobody meant.
-                    */
-                    style={
-                      {
-                        "--face": `var(--cf-rating-${value})`,
-                        color: "var(--face)",
-                      } as React.CSSProperties
-                    }
-                    className={cn(
-                      "flex flex-1 flex-col items-center gap-1 rounded-xl border px-1 py-2.5",
-                      "transition-[background-color,border-color,transform,opacity] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
-                      "active:scale-[0.96] motion-reduce:active:scale-100",
-                      on
-                        ? "border-[var(--face)] bg-[color-mix(in_oklch,var(--face)_14%,var(--cf-chip-bg))]"
-                        : "border-transparent opacity-50 hover:opacity-100",
-                    )}
-                  >
-                    <Icon className="size-7" strokeWidth={on ? 2 : 1.75} />
-                  </button>
-                );
-              })}
-            </div>
-            {/*
-              The word for the face they picked, in a line that is always there.
-              Rendering it only once something is selected would move every
-              control below it down by a row on the first tap.
-            */}
-            <p className="mt-1.5 h-4 text-center text-xs font-medium opacity-70">{picked?.label ?? ""}</p>
+            {/* Themed from the form's own ramp, so the scale arrives in its palette. */}
+            <FaceRating
+              className="mt-5"
+              value={rating}
+              onChange={setRating}
+              ramp="--cf-rating"
+              pickedGround="var(--cf-chip-bg)"
+            />
 
             <textarea
               value={message}

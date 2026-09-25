@@ -8,7 +8,12 @@ import { pruneFormActivity } from "./lib/form-activity.js";
 import { runExport, pruneExpiredExports, type ExportMessage } from "./lib/exports.js";
 import { runMailJob } from "./lib/mail-jobs.js";
 import { ingestSource } from "./lib/knowledge-service.js";
-import { runFeedbackTriage, type FeedbackTriageMessage } from "./lib/feedback-triage.js";
+import {
+  runFeedbackTriage,
+  type BuilderFeedbackTriageMessage,
+  type FeedbackTriageMessage,
+} from "./lib/feedback-triage.js";
+import { runBuilderFeedbackTriage } from "./lib/builder-feedback.js";
 import { sweepDeletedFormFeedback } from "./lib/feedback-issues.js";
 import { pruneMailDeliveries, recordMailDelivery, type MailJob } from "./lib/mail.js";
 import {
@@ -73,10 +78,14 @@ export default {
           run: retrying a report whose model call failed would pay for the same
           failure again, and an unmatched report is still mailed.
         */
-        const body = msg.body as Partial<FeedbackTriageMessage>;
+        const body = msg.body as Partial<FeedbackTriageMessage | BuilderFeedbackTriageMessage>;
         if (body.kind === "feedback_triage" && body.feedbackId) {
           await runFeedbackTriage(env, body as FeedbackTriageMessage).catch((err: unknown) =>
             console.error("feedback_triage_failed", { feedbackId: body.feedbackId, err: String(err) }),
+          );
+        } else if (body.kind === "builder_feedback_triage" && body.feedbackId) {
+          await runBuilderFeedbackTriage(env, body as BuilderFeedbackTriageMessage).catch((err: unknown) =>
+            console.error("builder_feedback_triage_failed", { feedbackId: body.feedbackId, err: String(err) }),
           );
         }
         msg.ack();

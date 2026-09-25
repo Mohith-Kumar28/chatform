@@ -3,6 +3,7 @@ import type { Bindings } from "../../env.js";
 import { requirePlatformAdmin, type PlatformAdminVars } from "../../lib/platform-admin.js";
 import { coreRouter } from "./core.js";
 import { feedbackRouter } from "./feedback.js";
+import { builderFeedbackAdminRouter } from "./builder-feedback.js";
 import { productRouter } from "./product.js";
 import { revenueRouter } from "./revenue.js";
 import { aiRouter } from "./ai.js";
@@ -40,6 +41,7 @@ adminRouter.use("/admin/*", requirePlatformAdmin);
 
 adminRouter.route("/", coreRouter);
 adminRouter.route("/", feedbackRouter);
+adminRouter.route("/", builderFeedbackAdminRouter);
 adminRouter.route("/", productRouter);
 adminRouter.route("/", revenueRouter);
 adminRouter.route("/", aiRouter);

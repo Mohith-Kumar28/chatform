@@ -195,6 +195,7 @@ const DASHBOARD_ONLY: Record<string, string> = {
   "/api/forms/{id}/history": "the builder's activity feed; /v1/forms/{id}/versions is the API form",
   "/api/workspaces": "workspaces are an organization-management concern, not a form one",
   "/api/workspaces/{id}": "see /api/workspaces",
+  "/api/feedback": "a signed-in person telling the chatform team something, not a thing an integration does",
 
   /**
    * The platform console, and the one group here that must never gain a `/v1`
@@ -230,6 +231,16 @@ const DASHBOARD_ONLY: Record<string, string> = {
   "/api/admin/feedback/issues/rebuild": "see /api/admin/feedback",
   "/api/admin/feedback/reports/{id}/nearest": "see /api/admin/feedback",
   "/api/admin/feedback/reports/{id}/move": "see /api/admin/feedback",
+  "/api/admin/feedback/builder/reports": "see /api/admin/feedback; the same console, over what form builders sent",
+  "/api/admin/feedback/builder/reports/{id}": "see /api/admin/feedback; the same console, over what form builders sent",
+  "/api/admin/feedback/builder/reports/{id}/attachments/{n}": "see /api/admin/feedback; the same console, over what form builders sent",
+  "/api/admin/feedback/builder/reports/{id}/nearest": "see /api/admin/feedback; the same console, over what form builders sent",
+  "/api/admin/feedback/builder/reports/{id}/move": "see /api/admin/feedback; the same console, over what form builders sent",
+  "/api/admin/feedback/builder/issues": "see /api/admin/feedback; the same console, over what form builders sent",
+  "/api/admin/feedback/builder/issues/{id}": "see /api/admin/feedback; the same console, over what form builders sent",
+  "/api/admin/feedback/builder/issues/{id}/merge": "see /api/admin/feedback; the same console, over what form builders sent",
+  "/api/admin/feedback/builder/issues/rebuild": "see /api/admin/feedback; the same console, over what form builders sent",
+  "/api/admin/feedback/builder/stats": "see /api/admin/feedback; the same console, over what form builders sent",
   "/api/admin/billing-events/{id}/reprocess": "see /api/admin/me",
   "/api/admin/subscriptions/{id}/grace": "see /api/admin/me",
   "/api/admin/accounts/{orgId}/overrides": "see /api/admin/me",

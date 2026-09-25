@@ -24,6 +24,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { FeedbackLauncher } from "@/components/feedback/feedback-launcher";
 import { useModLabel } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 
@@ -207,7 +208,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </SheetContent>
         </Sheet>
 
-        <main className="min-h-0 flex-1">{children}</main>
+        {/* `fab-clear` keeps the last row of a page out from under the "?" button. */}
+        <main className="fab-clear min-h-0 flex-1">{children}</main>
+        <FeedbackLauncher />
         <CommandPalette />
         <ShortcutsDialog
           open={helpOpen}

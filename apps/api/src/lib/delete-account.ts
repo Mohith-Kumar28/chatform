@@ -1,5 +1,6 @@
 import type { Bindings } from "../env.js";
 import { deleteOrganizationReports } from "./feedback-issues.js";
+import { deleteOrganizationBuilderFeedback } from "./builder-feedback.js";
 import { revokeOrganizationPaymentAccounts } from "./payments/accounts.js";
 
 /**
@@ -75,6 +76,8 @@ export async function purgeUserData(env: Bindings, userId: string): Promise<void
     // Bug reports name the organization without a foreign key, so nothing
     // cascades them — nor the vectors and issues built from them.
     await deleteOrganizationReports(env, org);
+    // And what their own people told us from the dashboard, screenshots included.
+    await deleteOrganizationBuilderFeedback(env, org);
     /*
       Connected payment gateways. Their rows go with the organization's cascade — and the
       payments recorded against them with the forms — but the grants live at Cashfree, Razorpay

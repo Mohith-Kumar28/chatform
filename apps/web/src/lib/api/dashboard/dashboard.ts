@@ -25,6 +25,8 @@ import type {
   DeleteApiFormsByIdSubmissions200,
   DeleteApiFormsByIdSubmissionsBody,
   DeleteApiKeysById200,
+  DeleteApiPaymentAccountsById200,
+  DeleteApiPaymentAccountsById404,
   DeleteApiWebhooksById200,
   GetApiAuditLogs200,
   GetApiAuditLogsParams,
@@ -39,6 +41,8 @@ import type {
   GetApiFormsByIdHistoryParams,
   GetApiFormsByIdIntegrations200Item,
   GetApiFormsByIdKnowledge200,
+  GetApiFormsByIdPayments200,
+  GetApiFormsByIdPaymentsParams,
   GetApiFormsByIdSubmissions200,
   GetApiFormsByIdSubmissionsParams,
   GetApiFormsByIdVersions200Item,
@@ -48,6 +52,7 @@ import type {
   GetApiFormsParams,
   GetApiInvitationPreview200,
   GetApiKeys200Item,
+  GetApiPaymentAccounts200,
   GetApiTemplates200Item,
   GetApiTemplatesBySlug200,
   GetApiTemplatesBySlug404,
@@ -56,6 +61,9 @@ import type {
   PatchApiFormsByIdWorkspace200,
   PatchApiFormsByIdWorkspace404,
   PatchApiFormsByIdWorkspaceBody,
+  PatchApiPaymentAccountsById200,
+  PatchApiPaymentAccountsById404,
+  PatchApiPaymentAccountsByIdBody,
   PatchApiWorkspacesById200,
   PatchApiWorkspacesByIdBody,
   PostApiAiAddBlocks200,
@@ -68,6 +76,7 @@ import type {
   PostApiAiGenerateForm200,
   PostApiAiGenerateFormBody,
   PostApiAiGenerateFormStreamBody,
+  PostApiFeedback200,
   PostApiForms200,
   PostApiForms403,
   PostApiFormsBody,
@@ -99,6 +108,19 @@ import type {
   PostApiKeysBody,
   PostApiKeysByIdRotate200,
   PostApiKeysByIdRotateBody,
+  PostApiPaymentAccountsCashfreeOnboard200,
+  PostApiPaymentAccountsCashfreeOnboard402,
+  PostApiPaymentAccountsCashfreeOnboardBody,
+  PostApiPaymentAccountsOauthByProviderStart200,
+  PostApiPaymentAccountsOauthByProviderStart402,
+  PostApiPaymentAccountsOauthByProviderStart403,
+  PostApiPaymentAccountsOauthByProviderStart422,
+  PostApiPaymentAccountsOauthByProviderStartBody,
+  PostApiPaymentAccountsStripe200,
+  PostApiPaymentAccountsStripe402,
+  PostApiPaymentAccountsStripe409,
+  PostApiPaymentAccountsStripe422,
+  PostApiPaymentAccountsStripeBody,
   PostApiTemplatesBySlugUse403,
   PostApiTemplatesBySlugUse404,
   PostApiTemplatesBySlugUseParams,
@@ -134,6 +156,95 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export type getApiPaymentAccountsOauthByProviderCallbackResponse302 = {
+  data: void
+  status: 302
+}
+
+;
+export type getApiPaymentAccountsOauthByProviderCallbackResponseError = (getApiPaymentAccountsOauthByProviderCallbackResponse302) & {
+  headers: Headers;
+};
+
+export type getApiPaymentAccountsOauthByProviderCallbackResponse = (getApiPaymentAccountsOauthByProviderCallbackResponseError)
+
+export const getGetApiPaymentAccountsOauthByProviderCallbackUrl = (provider: string,) => {
+
+
+
+
+  return `/api/payment-accounts/oauth/${provider}/callback`
+}
+
+/**
+ * A browser redirect, not an API. Redirects to the returnTo page with `?payments=connected&provider=…` or `?payments=error&reason=…`.
+ * @summary OAuth callback from Cashfree or Razorpay
+ */
+export const getApiPaymentAccountsOauthByProviderCallback = async (provider: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiPaymentAccountsOauthByProviderCallbackResponse> => {
+
+  return customFetch<getApiPaymentAccountsOauthByProviderCallbackResponse>(getGetApiPaymentAccountsOauthByProviderCallbackUrl(provider),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiPaymentAccountsOauthByProviderCallbackQueryKey = (provider: string,) => {
+    return [
+    `/api/payment-accounts/oauth/${provider}/callback`
+    ] as const;
+    }
+
+
+export const getGetApiPaymentAccountsOauthByProviderCallbackQueryOptions = <TData = Awaited<ReturnType<typeof getApiPaymentAccountsOauthByProviderCallback>>, TError = void>(provider: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiPaymentAccountsOauthByProviderCallback>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiPaymentAccountsOauthByProviderCallbackQueryKey(provider);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiPaymentAccountsOauthByProviderCallback>>> = ({ signal }) => getApiPaymentAccountsOauthByProviderCallback(provider, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: provider !== null && provider !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiPaymentAccountsOauthByProviderCallback>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiPaymentAccountsOauthByProviderCallbackQueryResult = NonNullable<Awaited<ReturnType<typeof getApiPaymentAccountsOauthByProviderCallback>>>
+export type GetApiPaymentAccountsOauthByProviderCallbackQueryError = void
+
+
+/**
+ * @summary OAuth callback from Cashfree or Razorpay
+ */
+
+export function useGetApiPaymentAccountsOauthByProviderCallback<TData = Awaited<ReturnType<typeof getApiPaymentAccountsOauthByProviderCallback>>, TError = void>(
+ provider: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiPaymentAccountsOauthByProviderCallback>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiPaymentAccountsOauthByProviderCallbackQueryOptions(provider,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
 
 export type getApiAuthProvidersResponse200 = {
   data: GetApiAuthProviders200
@@ -2079,6 +2190,107 @@ export const useDeleteApiWorkspacesById = <TError = void,
         TContext
       > => {
       return useMutation(getDeleteApiWorkspacesByIdMutationOptions(options));
+    }
+    export type postApiFeedbackResponse200 = {
+  data: PostApiFeedback200
+  status: 200
+}
+
+export type postApiFeedbackResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postApiFeedbackResponse413 = {
+  data: void
+  status: 413
+}
+
+export type postApiFeedbackResponse429 = {
+  data: void
+  status: 429
+}
+
+export type postApiFeedbackResponseSuccess = (postApiFeedbackResponse200) & {
+  headers: Headers;
+};
+export type postApiFeedbackResponseError = (postApiFeedbackResponse400 | postApiFeedbackResponse413 | postApiFeedbackResponse429) & {
+  headers: Headers;
+};
+
+export type postApiFeedbackResponse = (postApiFeedbackResponseSuccess | postApiFeedbackResponseError)
+
+export const getPostApiFeedbackUrl = () => {
+
+
+
+
+  return `/api/feedback`
+}
+
+/**
+ * multipart/form-data: a `payload` part (JSON) and up to five `images`. Emailed to the team and filed in the platform console.
+ * @summary Send the chatform team a bug report, feature request or feedback
+ */
+export const postApiFeedback = async ( options?: Parameters<typeof customFetch>[1]): Promise<postApiFeedbackResponse> => {
+
+  return customFetch<postApiFeedbackResponse>(getPostApiFeedbackUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiFeedbackMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFeedback>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFeedback>>, TError,void, TContext> => {
+
+const mutationKey = ['postApiFeedback'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFeedback>>, void> = () => {
+
+
+          return  postApiFeedback(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFeedbackMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFeedback>>>
+
+    export type PostApiFeedbackMutationError = void
+
+
+    /**
+ * @summary Send the chatform team a bug report, feature request or feedback
+ */
+export const usePostApiFeedback = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFeedback>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFeedback>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getPostApiFeedbackMutationOptions(options));
     }
     export type postApiAiGenerateFormResponse200 = {
   data: PostApiAiGenerateForm200
@@ -4394,7 +4606,698 @@ export const useDeleteApiFormsByIdIntegrationsSpreadsheet = <TError = unknown,
       > => {
       return useMutation(getDeleteApiFormsByIdIntegrationsSpreadsheetMutationOptions(options));
     }
-    export type postApiFormsByIdPreviewSessionsResponse200 = {
+    export type getApiPaymentAccountsResponse200 = {
+  data: GetApiPaymentAccounts200
+  status: 200
+}
+
+export type getApiPaymentAccountsResponseSuccess = (getApiPaymentAccountsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiPaymentAccountsResponse = (getApiPaymentAccountsResponseSuccess)
+
+export const getGetApiPaymentAccountsUrl = () => {
+
+
+
+
+  return `/api/payment-accounts`
+}
+
+/**
+ * Never returns a credential. `enabled` says whether verified payments are on for this organization.
+ * @summary List connected payment gateway accounts
+ */
+export const getApiPaymentAccounts = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiPaymentAccountsResponse> => {
+
+  return customFetch<getApiPaymentAccountsResponse>(getGetApiPaymentAccountsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiPaymentAccountsQueryKey = () => {
+    return [
+    `/api/payment-accounts`
+    ] as const;
+    }
+
+
+export const getGetApiPaymentAccountsQueryOptions = <TData = Awaited<ReturnType<typeof getApiPaymentAccounts>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiPaymentAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiPaymentAccountsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiPaymentAccounts>>> = ({ signal }) => getApiPaymentAccounts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiPaymentAccounts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiPaymentAccountsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiPaymentAccounts>>>
+export type GetApiPaymentAccountsQueryError = unknown
+
+
+/**
+ * @summary List connected payment gateway accounts
+ */
+
+export function useGetApiPaymentAccounts<TData = Awaited<ReturnType<typeof getApiPaymentAccounts>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiPaymentAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiPaymentAccountsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postApiPaymentAccountsOauthByProviderStartResponse200 = {
+  data: PostApiPaymentAccountsOauthByProviderStart200
+  status: 200
+}
+
+export type postApiPaymentAccountsOauthByProviderStartResponse402 = {
+  data: PostApiPaymentAccountsOauthByProviderStart402
+  status: 402
+}
+
+export type postApiPaymentAccountsOauthByProviderStartResponse403 = {
+  data: PostApiPaymentAccountsOauthByProviderStart403
+  status: 403
+}
+
+export type postApiPaymentAccountsOauthByProviderStartResponse422 = {
+  data: PostApiPaymentAccountsOauthByProviderStart422
+  status: 422
+}
+
+export type postApiPaymentAccountsOauthByProviderStartResponseSuccess = (postApiPaymentAccountsOauthByProviderStartResponse200) & {
+  headers: Headers;
+};
+export type postApiPaymentAccountsOauthByProviderStartResponseError = (postApiPaymentAccountsOauthByProviderStartResponse402 | postApiPaymentAccountsOauthByProviderStartResponse403 | postApiPaymentAccountsOauthByProviderStartResponse422) & {
+  headers: Headers;
+};
+
+export type postApiPaymentAccountsOauthByProviderStartResponse = (postApiPaymentAccountsOauthByProviderStartResponseSuccess | postApiPaymentAccountsOauthByProviderStartResponseError)
+
+export const getPostApiPaymentAccountsOauthByProviderStartUrl = (provider: string,) => {
+
+
+
+
+  return `/api/payment-accounts/oauth/${provider}/start`
+}
+
+/**
+ * Returns the gateway's consent URL. The state inside it is signed, single-use, expires in ten minutes, and can only be completed by the same signed-in user.
+ * @summary Start connecting a Cashfree or Razorpay account
+ */
+export const postApiPaymentAccountsOauthByProviderStart = async (provider: string,
+    postApiPaymentAccountsOauthByProviderStartBody: PostApiPaymentAccountsOauthByProviderStartBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiPaymentAccountsOauthByProviderStartResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiPaymentAccountsOauthByProviderStartResponse>(getPostApiPaymentAccountsOauthByProviderStartUrl(provider),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiPaymentAccountsOauthByProviderStartBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiPaymentAccountsOauthByProviderStartMutationOptions = <TError = PostApiPaymentAccountsOauthByProviderStart402 | PostApiPaymentAccountsOauthByProviderStart403 | PostApiPaymentAccountsOauthByProviderStart422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPaymentAccountsOauthByProviderStart>>, TError,PostApiPaymentAccountsOauthByProviderStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiPaymentAccountsOauthByProviderStart>>, TError,PostApiPaymentAccountsOauthByProviderStartMutationVariables, TContext> => {
+
+const mutationKey = ['postApiPaymentAccountsOauthByProviderStart'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiPaymentAccountsOauthByProviderStart>>, PostApiPaymentAccountsOauthByProviderStartMutationVariables> = (props) => {
+          const {provider,data} = props ?? {};
+
+          return  postApiPaymentAccountsOauthByProviderStart(provider,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiPaymentAccountsOauthByProviderStartMutationResult = NonNullable<Awaited<ReturnType<typeof postApiPaymentAccountsOauthByProviderStart>>>
+    export type PostApiPaymentAccountsOauthByProviderStartMutationBody = PostApiPaymentAccountsOauthByProviderStartBody
+    export type PostApiPaymentAccountsOauthByProviderStartMutationError = PostApiPaymentAccountsOauthByProviderStart402 | PostApiPaymentAccountsOauthByProviderStart403 | PostApiPaymentAccountsOauthByProviderStart422
+    export type PostApiPaymentAccountsOauthByProviderStartMutationVariables = {provider: string;data: PostApiPaymentAccountsOauthByProviderStartBody}
+
+    /**
+ * @summary Start connecting a Cashfree or Razorpay account
+ */
+export const usePostApiPaymentAccountsOauthByProviderStart = <TError = PostApiPaymentAccountsOauthByProviderStart402 | PostApiPaymentAccountsOauthByProviderStart403 | PostApiPaymentAccountsOauthByProviderStart422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPaymentAccountsOauthByProviderStart>>, TError,PostApiPaymentAccountsOauthByProviderStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiPaymentAccountsOauthByProviderStart>>,
+        TError,
+        PostApiPaymentAccountsOauthByProviderStartMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiPaymentAccountsOauthByProviderStartMutationOptions(options));
+    }
+    export type postApiPaymentAccountsStripeResponse200 = {
+  data: PostApiPaymentAccountsStripe200
+  status: 200
+}
+
+export type postApiPaymentAccountsStripeResponse402 = {
+  data: PostApiPaymentAccountsStripe402
+  status: 402
+}
+
+export type postApiPaymentAccountsStripeResponse409 = {
+  data: PostApiPaymentAccountsStripe409
+  status: 409
+}
+
+export type postApiPaymentAccountsStripeResponse422 = {
+  data: PostApiPaymentAccountsStripe422
+  status: 422
+}
+
+export type postApiPaymentAccountsStripeResponseSuccess = (postApiPaymentAccountsStripeResponse200) & {
+  headers: Headers;
+};
+export type postApiPaymentAccountsStripeResponseError = (postApiPaymentAccountsStripeResponse402 | postApiPaymentAccountsStripeResponse409 | postApiPaymentAccountsStripeResponse422) & {
+  headers: Headers;
+};
+
+export type postApiPaymentAccountsStripeResponse = (postApiPaymentAccountsStripeResponseSuccess | postApiPaymentAccountsStripeResponseError)
+
+export const getPostApiPaymentAccountsStripeUrl = () => {
+
+
+
+
+  return `/api/payment-accounts/stripe`
+}
+
+/**
+ * Accepts only `rk_test_…` / `rk_live_…`. The key is exercised (account read, a Checkout Session created and expired, a webhook endpoint created) before it is stored, sealed.
+ * @summary Connect a Stripe account with a restricted key
+ */
+export const postApiPaymentAccountsStripe = async (postApiPaymentAccountsStripeBody: PostApiPaymentAccountsStripeBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiPaymentAccountsStripeResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiPaymentAccountsStripeResponse>(getPostApiPaymentAccountsStripeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiPaymentAccountsStripeBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiPaymentAccountsStripeMutationOptions = <TError = PostApiPaymentAccountsStripe402 | PostApiPaymentAccountsStripe409 | PostApiPaymentAccountsStripe422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPaymentAccountsStripe>>, TError,PostApiPaymentAccountsStripeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiPaymentAccountsStripe>>, TError,PostApiPaymentAccountsStripeMutationVariables, TContext> => {
+
+const mutationKey = ['postApiPaymentAccountsStripe'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiPaymentAccountsStripe>>, PostApiPaymentAccountsStripeMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiPaymentAccountsStripe(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiPaymentAccountsStripeMutationResult = NonNullable<Awaited<ReturnType<typeof postApiPaymentAccountsStripe>>>
+    export type PostApiPaymentAccountsStripeMutationBody = PostApiPaymentAccountsStripeBody
+    export type PostApiPaymentAccountsStripeMutationError = PostApiPaymentAccountsStripe402 | PostApiPaymentAccountsStripe409 | PostApiPaymentAccountsStripe422
+    export type PostApiPaymentAccountsStripeMutationVariables = {data: PostApiPaymentAccountsStripeBody}
+
+    /**
+ * @summary Connect a Stripe account with a restricted key
+ */
+export const usePostApiPaymentAccountsStripe = <TError = PostApiPaymentAccountsStripe402 | PostApiPaymentAccountsStripe409 | PostApiPaymentAccountsStripe422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPaymentAccountsStripe>>, TError,PostApiPaymentAccountsStripeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiPaymentAccountsStripe>>,
+        TError,
+        PostApiPaymentAccountsStripeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiPaymentAccountsStripeMutationOptions(options));
+    }
+    export type postApiPaymentAccountsCashfreeOnboardResponse200 = {
+  data: PostApiPaymentAccountsCashfreeOnboard200
+  status: 200
+}
+
+export type postApiPaymentAccountsCashfreeOnboardResponse402 = {
+  data: PostApiPaymentAccountsCashfreeOnboard402
+  status: 402
+}
+
+export type postApiPaymentAccountsCashfreeOnboardResponseSuccess = (postApiPaymentAccountsCashfreeOnboardResponse200) & {
+  headers: Headers;
+};
+export type postApiPaymentAccountsCashfreeOnboardResponseError = (postApiPaymentAccountsCashfreeOnboardResponse402) & {
+  headers: Headers;
+};
+
+export type postApiPaymentAccountsCashfreeOnboardResponse = (postApiPaymentAccountsCashfreeOnboardResponseSuccess | postApiPaymentAccountsCashfreeOnboardResponseError)
+
+export const getPostApiPaymentAccountsCashfreeOnboardUrl = () => {
+
+
+
+
+  return `/api/payment-accounts/cashfree/onboard`
+}
+
+/**
+ * Returns the KYC link, or `{ useOAuth: true }` when the email already has a Cashfree account.
+ * @summary Create a Cashfree account for an admin who has none
+ */
+export const postApiPaymentAccountsCashfreeOnboard = async (postApiPaymentAccountsCashfreeOnboardBody: PostApiPaymentAccountsCashfreeOnboardBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiPaymentAccountsCashfreeOnboardResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiPaymentAccountsCashfreeOnboardResponse>(getPostApiPaymentAccountsCashfreeOnboardUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiPaymentAccountsCashfreeOnboardBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiPaymentAccountsCashfreeOnboardMutationOptions = <TError = PostApiPaymentAccountsCashfreeOnboard402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPaymentAccountsCashfreeOnboard>>, TError,PostApiPaymentAccountsCashfreeOnboardMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiPaymentAccountsCashfreeOnboard>>, TError,PostApiPaymentAccountsCashfreeOnboardMutationVariables, TContext> => {
+
+const mutationKey = ['postApiPaymentAccountsCashfreeOnboard'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiPaymentAccountsCashfreeOnboard>>, PostApiPaymentAccountsCashfreeOnboardMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiPaymentAccountsCashfreeOnboard(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiPaymentAccountsCashfreeOnboardMutationResult = NonNullable<Awaited<ReturnType<typeof postApiPaymentAccountsCashfreeOnboard>>>
+    export type PostApiPaymentAccountsCashfreeOnboardMutationBody = PostApiPaymentAccountsCashfreeOnboardBody
+    export type PostApiPaymentAccountsCashfreeOnboardMutationError = PostApiPaymentAccountsCashfreeOnboard402
+    export type PostApiPaymentAccountsCashfreeOnboardMutationVariables = {data: PostApiPaymentAccountsCashfreeOnboardBody}
+
+    /**
+ * @summary Create a Cashfree account for an admin who has none
+ */
+export const usePostApiPaymentAccountsCashfreeOnboard = <TError = PostApiPaymentAccountsCashfreeOnboard402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPaymentAccountsCashfreeOnboard>>, TError,PostApiPaymentAccountsCashfreeOnboardMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiPaymentAccountsCashfreeOnboard>>,
+        TError,
+        PostApiPaymentAccountsCashfreeOnboardMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiPaymentAccountsCashfreeOnboardMutationOptions(options));
+    }
+    export type patchApiPaymentAccountsByIdResponse200 = {
+  data: PatchApiPaymentAccountsById200
+  status: 200
+}
+
+export type patchApiPaymentAccountsByIdResponse404 = {
+  data: PatchApiPaymentAccountsById404
+  status: 404
+}
+
+export type patchApiPaymentAccountsByIdResponseSuccess = (patchApiPaymentAccountsByIdResponse200) & {
+  headers: Headers;
+};
+export type patchApiPaymentAccountsByIdResponseError = (patchApiPaymentAccountsByIdResponse404) & {
+  headers: Headers;
+};
+
+export type patchApiPaymentAccountsByIdResponse = (patchApiPaymentAccountsByIdResponseSuccess | patchApiPaymentAccountsByIdResponseError)
+
+export const getPatchApiPaymentAccountsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/payment-accounts/${id}`
+}
+
+/**
+ * `label` sets the name the account is shown under in the builder. `isDefault: true` makes it the account new verified-checkout questions start on. Nothing changes at the gateway.
+ * @summary Rename a payment account, or make it the default
+ */
+export const patchApiPaymentAccountsById = async (id: string,
+    patchApiPaymentAccountsByIdBody: PatchApiPaymentAccountsByIdBody, options?: Parameters<typeof customFetch>[1]): Promise<patchApiPaymentAccountsByIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<patchApiPaymentAccountsByIdResponse>(getPatchApiPaymentAccountsByIdUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(patchApiPaymentAccountsByIdBody)
+  }
+);}
+
+
+
+
+
+export const getPatchApiPaymentAccountsByIdMutationOptions = <TError = PatchApiPaymentAccountsById404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiPaymentAccountsById>>, TError,PatchApiPaymentAccountsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiPaymentAccountsById>>, TError,PatchApiPaymentAccountsByIdMutationVariables, TContext> => {
+
+const mutationKey = ['patchApiPaymentAccountsById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiPaymentAccountsById>>, PatchApiPaymentAccountsByIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  patchApiPaymentAccountsById(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchApiPaymentAccountsByIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiPaymentAccountsById>>>
+    export type PatchApiPaymentAccountsByIdMutationBody = PatchApiPaymentAccountsByIdBody
+    export type PatchApiPaymentAccountsByIdMutationError = PatchApiPaymentAccountsById404
+    export type PatchApiPaymentAccountsByIdMutationVariables = {id: string;data: PatchApiPaymentAccountsByIdBody}
+
+    /**
+ * @summary Rename a payment account, or make it the default
+ */
+export const usePatchApiPaymentAccountsById = <TError = PatchApiPaymentAccountsById404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiPaymentAccountsById>>, TError,PatchApiPaymentAccountsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchApiPaymentAccountsById>>,
+        TError,
+        PatchApiPaymentAccountsByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchApiPaymentAccountsByIdMutationOptions(options));
+    }
+    export type deleteApiPaymentAccountsByIdResponse200 = {
+  data: DeleteApiPaymentAccountsById200
+  status: 200
+}
+
+export type deleteApiPaymentAccountsByIdResponse404 = {
+  data: DeleteApiPaymentAccountsById404
+  status: 404
+}
+
+export type deleteApiPaymentAccountsByIdResponseSuccess = (deleteApiPaymentAccountsByIdResponse200) & {
+  headers: Headers;
+};
+export type deleteApiPaymentAccountsByIdResponseError = (deleteApiPaymentAccountsByIdResponse404) & {
+  headers: Headers;
+};
+
+export type deleteApiPaymentAccountsByIdResponse = (deleteApiPaymentAccountsByIdResponseSuccess | deleteApiPaymentAccountsByIdResponseError)
+
+export const getDeleteApiPaymentAccountsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/payment-accounts/${id}`
+}
+
+/**
+ * Revokes the grant or deletes the Stripe webhook at the gateway, then wipes the stored credentials.
+ * @summary Disconnect a payment account
+ */
+export const deleteApiPaymentAccountsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteApiPaymentAccountsByIdResponse> => {
+
+  return customFetch<deleteApiPaymentAccountsByIdResponse>(getDeleteApiPaymentAccountsByIdUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiPaymentAccountsByIdMutationOptions = <TError = DeleteApiPaymentAccountsById404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiPaymentAccountsById>>, TError,DeleteApiPaymentAccountsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiPaymentAccountsById>>, TError,DeleteApiPaymentAccountsByIdMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiPaymentAccountsById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiPaymentAccountsById>>, DeleteApiPaymentAccountsByIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiPaymentAccountsById(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiPaymentAccountsByIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiPaymentAccountsById>>>
+
+    export type DeleteApiPaymentAccountsByIdMutationError = DeleteApiPaymentAccountsById404
+    export type DeleteApiPaymentAccountsByIdMutationVariables = {id: string}
+
+    /**
+ * @summary Disconnect a payment account
+ */
+export const useDeleteApiPaymentAccountsById = <TError = DeleteApiPaymentAccountsById404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiPaymentAccountsById>>, TError,DeleteApiPaymentAccountsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiPaymentAccountsById>>,
+        TError,
+        DeleteApiPaymentAccountsByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiPaymentAccountsByIdMutationOptions(options));
+    }
+    export type getApiFormsByIdPaymentsResponse200 = {
+  data: GetApiFormsByIdPayments200
+  status: 200
+}
+
+export type getApiFormsByIdPaymentsResponseSuccess = (getApiFormsByIdPaymentsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiFormsByIdPaymentsResponse = (getApiFormsByIdPaymentsResponseSuccess)
+
+export const getGetApiFormsByIdPaymentsUrl = (id: string,
+    params?: GetApiFormsByIdPaymentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/forms/${id}/payments?${stringifiedParams}` : `/api/forms/${id}/payments`
+}
+
+/**
+ * Every checkout opened on a verified payment block, including attempts that never became an answer: late payments, duplicates and failures. For reconciling against the gateway's own dashboard.
+ * @summary List a form's payment attempts, newest first
+ */
+export const getApiFormsByIdPayments = async (id: string,
+    params?: GetApiFormsByIdPaymentsParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdPaymentsResponse> => {
+
+  return customFetch<getApiFormsByIdPaymentsResponse>(getGetApiFormsByIdPaymentsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiFormsByIdPaymentsQueryKey = (id: string,
+    params?: GetApiFormsByIdPaymentsParams,) => {
+    return [
+    `/api/forms/${id}/payments`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiFormsByIdPaymentsQueryOptions = <TData = Awaited<ReturnType<typeof getApiFormsByIdPayments>>, TError = unknown>(id: string,
+    params?: GetApiFormsByIdPaymentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdPayments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsByIdPaymentsQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFormsByIdPayments>>> = ({ signal }) => getApiFormsByIdPayments(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdPayments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiFormsByIdPaymentsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFormsByIdPayments>>>
+export type GetApiFormsByIdPaymentsQueryError = unknown
+
+
+/**
+ * @summary List a form's payment attempts, newest first
+ */
+
+export function useGetApiFormsByIdPayments<TData = Awaited<ReturnType<typeof getApiFormsByIdPayments>>, TError = unknown>(
+ id: string,
+    params?: GetApiFormsByIdPaymentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdPayments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiFormsByIdPaymentsQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postApiFormsByIdPreviewSessionsResponse200 = {
   data: PostApiFormsByIdPreviewSessions200
   status: 200
 }

@@ -22,6 +22,7 @@ import type {
 import type {
   DeleteApiAdminAccountsByOrgIdOverridesByKey200,
   DeleteApiAdminAccountsByOrgIdPlan200,
+  DeleteApiAdminFeedbackBuilderReportsById200,
   DeleteApiAdminFeedbackReportsById200,
   GetApiAdminAccounts200,
   GetApiAdminAccountsByOrgId200,
@@ -30,6 +31,15 @@ import type {
   GetApiAdminAi200,
   GetApiAdminAiParams,
   GetApiAdminFeedback200,
+  GetApiAdminFeedbackBuilderIssues200,
+  GetApiAdminFeedbackBuilderIssuesById200,
+  GetApiAdminFeedbackBuilderIssuesParams,
+  GetApiAdminFeedbackBuilderReports200,
+  GetApiAdminFeedbackBuilderReportsById200,
+  GetApiAdminFeedbackBuilderReportsByIdNearest200,
+  GetApiAdminFeedbackBuilderReportsParams,
+  GetApiAdminFeedbackBuilderStats200,
+  GetApiAdminFeedbackBuilderStatsParams,
   GetApiAdminFeedbackIssues200,
   GetApiAdminFeedbackIssuesById200,
   GetApiAdminFeedbackIssuesParams,
@@ -54,6 +64,10 @@ import type {
   GetApiAdminRevenueParams,
   GetApiAdminUsers200,
   GetApiAdminUsersParams,
+  PatchApiAdminFeedbackBuilderIssuesById200,
+  PatchApiAdminFeedbackBuilderIssuesByIdBody,
+  PatchApiAdminFeedbackBuilderReportsById200,
+  PatchApiAdminFeedbackBuilderReportsByIdBody,
   PatchApiAdminFeedbackIssuesById200,
   PatchApiAdminFeedbackIssuesByIdBody,
   PatchApiAdminFeedbackReportsById200,
@@ -64,6 +78,11 @@ import type {
   PostApiAdminAccountsByOrgIdPlanBody,
   PostApiAdminAccountsByOrgIdRefreshEntitlements200,
   PostApiAdminBillingEventsByIdReprocess200,
+  PostApiAdminFeedbackBuilderIssuesByIdMerge200,
+  PostApiAdminFeedbackBuilderIssuesByIdMergeBody,
+  PostApiAdminFeedbackBuilderIssuesRebuild200,
+  PostApiAdminFeedbackBuilderReportsByIdMove200,
+  PostApiAdminFeedbackBuilderReportsByIdMoveBody,
   PostApiAdminFeedbackIssuesByIdMerge200,
   PostApiAdminFeedbackIssuesByIdMergeBody,
   PostApiAdminFeedbackIssuesRebuild200,
@@ -2037,7 +2056,1266 @@ export const usePostApiAdminFeedbackIssuesRebuild = <TError = void,
       > => {
       return useMutation(getPostApiAdminFeedbackIssuesRebuildMutationOptions(options));
     }
-    export type getApiAdminProductResponse200 = {
+    export type getApiAdminFeedbackBuilderReportsResponse200 = {
+  data: GetApiAdminFeedbackBuilderReports200
+  status: 200
+}
+
+export type getApiAdminFeedbackBuilderReportsResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackBuilderReportsResponseSuccess = (getApiAdminFeedbackBuilderReportsResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackBuilderReportsResponseError = (getApiAdminFeedbackBuilderReportsResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackBuilderReportsResponse = (getApiAdminFeedbackBuilderReportsResponseSuccess | getApiAdminFeedbackBuilderReportsResponseError)
+
+export const getGetApiAdminFeedbackBuilderReportsUrl = (params?: GetApiAdminFeedbackBuilderReportsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/feedback/builder/reports?${stringifiedParams}` : `/api/admin/feedback/builder/reports`
+}
+
+/**
+ * @summary Bugs, feature requests and feedback from form builders, filtered and paged
+ */
+export const getApiAdminFeedbackBuilderReports = async (params?: GetApiAdminFeedbackBuilderReportsParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackBuilderReportsResponse> => {
+
+  return customFetch<getApiAdminFeedbackBuilderReportsResponse>(getGetApiAdminFeedbackBuilderReportsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackBuilderReportsQueryKey = (params?: GetApiAdminFeedbackBuilderReportsParams,) => {
+    return [
+    `/api/admin/feedback/builder/reports`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackBuilderReportsQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReports>>, TError = void>(params?: GetApiAdminFeedbackBuilderReportsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReports>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackBuilderReportsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReports>>> = ({ signal }) => getApiAdminFeedbackBuilderReports(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReports>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackBuilderReportsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReports>>>
+export type GetApiAdminFeedbackBuilderReportsQueryError = void
+
+
+/**
+ * @summary Bugs, feature requests and feedback from form builders, filtered and paged
+ */
+
+export function useGetApiAdminFeedbackBuilderReports<TData = Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReports>>, TError = void>(
+ params?: GetApiAdminFeedbackBuilderReportsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReports>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackBuilderReportsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAdminFeedbackBuilderReportsByIdResponse200 = {
+  data: GetApiAdminFeedbackBuilderReportsById200
+  status: 200
+}
+
+export type getApiAdminFeedbackBuilderReportsByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackBuilderReportsByIdResponseSuccess = (getApiAdminFeedbackBuilderReportsByIdResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackBuilderReportsByIdResponseError = (getApiAdminFeedbackBuilderReportsByIdResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackBuilderReportsByIdResponse = (getApiAdminFeedbackBuilderReportsByIdResponseSuccess | getApiAdminFeedbackBuilderReportsByIdResponseError)
+
+export const getGetApiAdminFeedbackBuilderReportsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/builder/reports/${id}`
+}
+
+/**
+ * @summary One report from a form builder, with its account and context
+ */
+export const getApiAdminFeedbackBuilderReportsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackBuilderReportsByIdResponse> => {
+
+  return customFetch<getApiAdminFeedbackBuilderReportsByIdResponse>(getGetApiAdminFeedbackBuilderReportsByIdUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackBuilderReportsByIdQueryKey = (id: string,) => {
+    return [
+    `/api/admin/feedback/builder/reports/${id}`
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackBuilderReportsByIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsById>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackBuilderReportsByIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsById>>> = ({ signal }) => getApiAdminFeedbackBuilderReportsById(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsById>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackBuilderReportsByIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsById>>>
+export type GetApiAdminFeedbackBuilderReportsByIdQueryError = void
+
+
+/**
+ * @summary One report from a form builder, with its account and context
+ */
+
+export function useGetApiAdminFeedbackBuilderReportsById<TData = Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsById>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackBuilderReportsByIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type patchApiAdminFeedbackBuilderReportsByIdResponse200 = {
+  data: PatchApiAdminFeedbackBuilderReportsById200
+  status: 200
+}
+
+export type patchApiAdminFeedbackBuilderReportsByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type patchApiAdminFeedbackBuilderReportsByIdResponseSuccess = (patchApiAdminFeedbackBuilderReportsByIdResponse200) & {
+  headers: Headers;
+};
+export type patchApiAdminFeedbackBuilderReportsByIdResponseError = (patchApiAdminFeedbackBuilderReportsByIdResponse404) & {
+  headers: Headers;
+};
+
+export type patchApiAdminFeedbackBuilderReportsByIdResponse = (patchApiAdminFeedbackBuilderReportsByIdResponseSuccess | patchApiAdminFeedbackBuilderReportsByIdResponseError)
+
+export const getPatchApiAdminFeedbackBuilderReportsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/builder/reports/${id}`
+}
+
+/**
+ * @summary Resolve or reopen a builder's report, or attach an internal note
+ */
+export const patchApiAdminFeedbackBuilderReportsById = async (id: string,
+    patchApiAdminFeedbackBuilderReportsByIdBody: PatchApiAdminFeedbackBuilderReportsByIdBody, options?: Parameters<typeof customFetch>[1]): Promise<patchApiAdminFeedbackBuilderReportsByIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<patchApiAdminFeedbackBuilderReportsByIdResponse>(getPatchApiAdminFeedbackBuilderReportsByIdUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(patchApiAdminFeedbackBuilderReportsByIdBody)
+  }
+);}
+
+
+
+
+
+export const getPatchApiAdminFeedbackBuilderReportsByIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminFeedbackBuilderReportsById>>, TError,PatchApiAdminFeedbackBuilderReportsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminFeedbackBuilderReportsById>>, TError,PatchApiAdminFeedbackBuilderReportsByIdMutationVariables, TContext> => {
+
+const mutationKey = ['patchApiAdminFeedbackBuilderReportsById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiAdminFeedbackBuilderReportsById>>, PatchApiAdminFeedbackBuilderReportsByIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  patchApiAdminFeedbackBuilderReportsById(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchApiAdminFeedbackBuilderReportsByIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiAdminFeedbackBuilderReportsById>>>
+    export type PatchApiAdminFeedbackBuilderReportsByIdMutationBody = PatchApiAdminFeedbackBuilderReportsByIdBody
+    export type PatchApiAdminFeedbackBuilderReportsByIdMutationError = void
+    export type PatchApiAdminFeedbackBuilderReportsByIdMutationVariables = {id: string;data: PatchApiAdminFeedbackBuilderReportsByIdBody}
+
+    /**
+ * @summary Resolve or reopen a builder's report, or attach an internal note
+ */
+export const usePatchApiAdminFeedbackBuilderReportsById = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminFeedbackBuilderReportsById>>, TError,PatchApiAdminFeedbackBuilderReportsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchApiAdminFeedbackBuilderReportsById>>,
+        TError,
+        PatchApiAdminFeedbackBuilderReportsByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchApiAdminFeedbackBuilderReportsByIdMutationOptions(options));
+    }
+    export type deleteApiAdminFeedbackBuilderReportsByIdResponse200 = {
+  data: DeleteApiAdminFeedbackBuilderReportsById200
+  status: 200
+}
+
+export type deleteApiAdminFeedbackBuilderReportsByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type deleteApiAdminFeedbackBuilderReportsByIdResponseSuccess = (deleteApiAdminFeedbackBuilderReportsByIdResponse200) & {
+  headers: Headers;
+};
+export type deleteApiAdminFeedbackBuilderReportsByIdResponseError = (deleteApiAdminFeedbackBuilderReportsByIdResponse404) & {
+  headers: Headers;
+};
+
+export type deleteApiAdminFeedbackBuilderReportsByIdResponse = (deleteApiAdminFeedbackBuilderReportsByIdResponseSuccess | deleteApiAdminFeedbackBuilderReportsByIdResponseError)
+
+export const getDeleteApiAdminFeedbackBuilderReportsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/builder/reports/${id}`
+}
+
+/**
+ * @summary Delete a builder's report, its images and its vector
+ */
+export const deleteApiAdminFeedbackBuilderReportsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteApiAdminFeedbackBuilderReportsByIdResponse> => {
+
+  return customFetch<deleteApiAdminFeedbackBuilderReportsByIdResponse>(getDeleteApiAdminFeedbackBuilderReportsByIdUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiAdminFeedbackBuilderReportsByIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiAdminFeedbackBuilderReportsById>>, TError,DeleteApiAdminFeedbackBuilderReportsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiAdminFeedbackBuilderReportsById>>, TError,DeleteApiAdminFeedbackBuilderReportsByIdMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiAdminFeedbackBuilderReportsById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiAdminFeedbackBuilderReportsById>>, DeleteApiAdminFeedbackBuilderReportsByIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiAdminFeedbackBuilderReportsById(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiAdminFeedbackBuilderReportsByIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiAdminFeedbackBuilderReportsById>>>
+
+    export type DeleteApiAdminFeedbackBuilderReportsByIdMutationError = void
+    export type DeleteApiAdminFeedbackBuilderReportsByIdMutationVariables = {id: string}
+
+    /**
+ * @summary Delete a builder's report, its images and its vector
+ */
+export const useDeleteApiAdminFeedbackBuilderReportsById = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiAdminFeedbackBuilderReportsById>>, TError,DeleteApiAdminFeedbackBuilderReportsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiAdminFeedbackBuilderReportsById>>,
+        TError,
+        DeleteApiAdminFeedbackBuilderReportsByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiAdminFeedbackBuilderReportsByIdMutationOptions(options));
+    }
+    export type getApiAdminFeedbackBuilderReportsByIdAttachmentsByNResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getApiAdminFeedbackBuilderReportsByIdAttachmentsByNResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackBuilderReportsByIdAttachmentsByNResponseSuccess = (getApiAdminFeedbackBuilderReportsByIdAttachmentsByNResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackBuilderReportsByIdAttachmentsByNResponseError = (getApiAdminFeedbackBuilderReportsByIdAttachmentsByNResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackBuilderReportsByIdAttachmentsByNResponse = (getApiAdminFeedbackBuilderReportsByIdAttachmentsByNResponseSuccess | getApiAdminFeedbackBuilderReportsByIdAttachmentsByNResponseError)
+
+export const getGetApiAdminFeedbackBuilderReportsByIdAttachmentsByNUrl = (id: string,
+    n: string,) => {
+
+
+
+
+  return `/api/admin/feedback/builder/reports/${id}/attachments/${n}`
+}
+
+/**
+ * @summary One image attached to a builder's report
+ */
+export const getApiAdminFeedbackBuilderReportsByIdAttachmentsByN = async (id: string,
+    n: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackBuilderReportsByIdAttachmentsByNResponse> => {
+
+  return customFetch<getApiAdminFeedbackBuilderReportsByIdAttachmentsByNResponse>(getGetApiAdminFeedbackBuilderReportsByIdAttachmentsByNUrl(id,n),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackBuilderReportsByIdAttachmentsByNQueryKey = (id: string,
+    n: string,) => {
+    return [
+    `/api/admin/feedback/builder/reports/${id}/attachments/${n}`
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackBuilderReportsByIdAttachmentsByNQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsByIdAttachmentsByN>>, TError = void>(id: string,
+    n: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsByIdAttachmentsByN>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackBuilderReportsByIdAttachmentsByNQueryKey(id,n);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsByIdAttachmentsByN>>> = ({ signal }) => getApiAdminFeedbackBuilderReportsByIdAttachmentsByN(id,n, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && n !== null && n !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsByIdAttachmentsByN>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackBuilderReportsByIdAttachmentsByNQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsByIdAttachmentsByN>>>
+export type GetApiAdminFeedbackBuilderReportsByIdAttachmentsByNQueryError = void
+
+
+/**
+ * @summary One image attached to a builder's report
+ */
+
+export function useGetApiAdminFeedbackBuilderReportsByIdAttachmentsByN<TData = Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsByIdAttachmentsByN>>, TError = void>(
+ id: string,
+    n: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsByIdAttachmentsByN>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackBuilderReportsByIdAttachmentsByNQueryOptions(id,n,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAdminFeedbackBuilderIssuesResponse200 = {
+  data: GetApiAdminFeedbackBuilderIssues200
+  status: 200
+}
+
+export type getApiAdminFeedbackBuilderIssuesResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackBuilderIssuesResponseSuccess = (getApiAdminFeedbackBuilderIssuesResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackBuilderIssuesResponseError = (getApiAdminFeedbackBuilderIssuesResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackBuilderIssuesResponse = (getApiAdminFeedbackBuilderIssuesResponseSuccess | getApiAdminFeedbackBuilderIssuesResponseError)
+
+export const getGetApiAdminFeedbackBuilderIssuesUrl = (params?: GetApiAdminFeedbackBuilderIssuesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/feedback/builder/issues?${stringifiedParams}` : `/api/admin/feedback/builder/issues`
+}
+
+/**
+ * @summary Builders' reports grouped into issues
+ */
+export const getApiAdminFeedbackBuilderIssues = async (params?: GetApiAdminFeedbackBuilderIssuesParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackBuilderIssuesResponse> => {
+
+  return customFetch<getApiAdminFeedbackBuilderIssuesResponse>(getGetApiAdminFeedbackBuilderIssuesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackBuilderIssuesQueryKey = (params?: GetApiAdminFeedbackBuilderIssuesParams,) => {
+    return [
+    `/api/admin/feedback/builder/issues`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackBuilderIssuesQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedbackBuilderIssues>>, TError = void>(params?: GetApiAdminFeedbackBuilderIssuesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderIssues>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackBuilderIssuesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderIssues>>> = ({ signal }) => getApiAdminFeedbackBuilderIssues(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderIssues>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackBuilderIssuesQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderIssues>>>
+export type GetApiAdminFeedbackBuilderIssuesQueryError = void
+
+
+/**
+ * @summary Builders' reports grouped into issues
+ */
+
+export function useGetApiAdminFeedbackBuilderIssues<TData = Awaited<ReturnType<typeof getApiAdminFeedbackBuilderIssues>>, TError = void>(
+ params?: GetApiAdminFeedbackBuilderIssuesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderIssues>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackBuilderIssuesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAdminFeedbackBuilderIssuesByIdResponse200 = {
+  data: GetApiAdminFeedbackBuilderIssuesById200
+  status: 200
+}
+
+export type getApiAdminFeedbackBuilderIssuesByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackBuilderIssuesByIdResponseSuccess = (getApiAdminFeedbackBuilderIssuesByIdResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackBuilderIssuesByIdResponseError = (getApiAdminFeedbackBuilderIssuesByIdResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackBuilderIssuesByIdResponse = (getApiAdminFeedbackBuilderIssuesByIdResponseSuccess | getApiAdminFeedbackBuilderIssuesByIdResponseError)
+
+export const getGetApiAdminFeedbackBuilderIssuesByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/builder/issues/${id}`
+}
+
+/**
+ * @summary One builder issue, with counts derived from its reports
+ */
+export const getApiAdminFeedbackBuilderIssuesById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackBuilderIssuesByIdResponse> => {
+
+  return customFetch<getApiAdminFeedbackBuilderIssuesByIdResponse>(getGetApiAdminFeedbackBuilderIssuesByIdUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackBuilderIssuesByIdQueryKey = (id: string,) => {
+    return [
+    `/api/admin/feedback/builder/issues/${id}`
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackBuilderIssuesByIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedbackBuilderIssuesById>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderIssuesById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackBuilderIssuesByIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderIssuesById>>> = ({ signal }) => getApiAdminFeedbackBuilderIssuesById(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderIssuesById>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackBuilderIssuesByIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderIssuesById>>>
+export type GetApiAdminFeedbackBuilderIssuesByIdQueryError = void
+
+
+/**
+ * @summary One builder issue, with counts derived from its reports
+ */
+
+export function useGetApiAdminFeedbackBuilderIssuesById<TData = Awaited<ReturnType<typeof getApiAdminFeedbackBuilderIssuesById>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderIssuesById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackBuilderIssuesByIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type patchApiAdminFeedbackBuilderIssuesByIdResponse200 = {
+  data: PatchApiAdminFeedbackBuilderIssuesById200
+  status: 200
+}
+
+export type patchApiAdminFeedbackBuilderIssuesByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type patchApiAdminFeedbackBuilderIssuesByIdResponseSuccess = (patchApiAdminFeedbackBuilderIssuesByIdResponse200) & {
+  headers: Headers;
+};
+export type patchApiAdminFeedbackBuilderIssuesByIdResponseError = (patchApiAdminFeedbackBuilderIssuesByIdResponse404) & {
+  headers: Headers;
+};
+
+export type patchApiAdminFeedbackBuilderIssuesByIdResponse = (patchApiAdminFeedbackBuilderIssuesByIdResponseSuccess | patchApiAdminFeedbackBuilderIssuesByIdResponseError)
+
+export const getPatchApiAdminFeedbackBuilderIssuesByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/builder/issues/${id}`
+}
+
+/**
+ * @summary Resolve, reopen or rename a builder issue
+ */
+export const patchApiAdminFeedbackBuilderIssuesById = async (id: string,
+    patchApiAdminFeedbackBuilderIssuesByIdBody: PatchApiAdminFeedbackBuilderIssuesByIdBody, options?: Parameters<typeof customFetch>[1]): Promise<patchApiAdminFeedbackBuilderIssuesByIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<patchApiAdminFeedbackBuilderIssuesByIdResponse>(getPatchApiAdminFeedbackBuilderIssuesByIdUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(patchApiAdminFeedbackBuilderIssuesByIdBody)
+  }
+);}
+
+
+
+
+
+export const getPatchApiAdminFeedbackBuilderIssuesByIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminFeedbackBuilderIssuesById>>, TError,PatchApiAdminFeedbackBuilderIssuesByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminFeedbackBuilderIssuesById>>, TError,PatchApiAdminFeedbackBuilderIssuesByIdMutationVariables, TContext> => {
+
+const mutationKey = ['patchApiAdminFeedbackBuilderIssuesById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiAdminFeedbackBuilderIssuesById>>, PatchApiAdminFeedbackBuilderIssuesByIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  patchApiAdminFeedbackBuilderIssuesById(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchApiAdminFeedbackBuilderIssuesByIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiAdminFeedbackBuilderIssuesById>>>
+    export type PatchApiAdminFeedbackBuilderIssuesByIdMutationBody = PatchApiAdminFeedbackBuilderIssuesByIdBody
+    export type PatchApiAdminFeedbackBuilderIssuesByIdMutationError = void
+    export type PatchApiAdminFeedbackBuilderIssuesByIdMutationVariables = {id: string;data: PatchApiAdminFeedbackBuilderIssuesByIdBody}
+
+    /**
+ * @summary Resolve, reopen or rename a builder issue
+ */
+export const usePatchApiAdminFeedbackBuilderIssuesById = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminFeedbackBuilderIssuesById>>, TError,PatchApiAdminFeedbackBuilderIssuesByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchApiAdminFeedbackBuilderIssuesById>>,
+        TError,
+        PatchApiAdminFeedbackBuilderIssuesByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchApiAdminFeedbackBuilderIssuesByIdMutationOptions(options));
+    }
+    export type postApiAdminFeedbackBuilderIssuesByIdMergeResponse200 = {
+  data: PostApiAdminFeedbackBuilderIssuesByIdMerge200
+  status: 200
+}
+
+export type postApiAdminFeedbackBuilderIssuesByIdMergeResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiAdminFeedbackBuilderIssuesByIdMergeResponseSuccess = (postApiAdminFeedbackBuilderIssuesByIdMergeResponse200) & {
+  headers: Headers;
+};
+export type postApiAdminFeedbackBuilderIssuesByIdMergeResponseError = (postApiAdminFeedbackBuilderIssuesByIdMergeResponse404) & {
+  headers: Headers;
+};
+
+export type postApiAdminFeedbackBuilderIssuesByIdMergeResponse = (postApiAdminFeedbackBuilderIssuesByIdMergeResponseSuccess | postApiAdminFeedbackBuilderIssuesByIdMergeResponseError)
+
+export const getPostApiAdminFeedbackBuilderIssuesByIdMergeUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/builder/issues/${id}/merge`
+}
+
+/**
+ * @summary Merge a builder issue into another
+ */
+export const postApiAdminFeedbackBuilderIssuesByIdMerge = async (id: string,
+    postApiAdminFeedbackBuilderIssuesByIdMergeBody: PostApiAdminFeedbackBuilderIssuesByIdMergeBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAdminFeedbackBuilderIssuesByIdMergeResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiAdminFeedbackBuilderIssuesByIdMergeResponse>(getPostApiAdminFeedbackBuilderIssuesByIdMergeUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiAdminFeedbackBuilderIssuesByIdMergeBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiAdminFeedbackBuilderIssuesByIdMergeMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderIssuesByIdMerge>>, TError,PostApiAdminFeedbackBuilderIssuesByIdMergeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderIssuesByIdMerge>>, TError,PostApiAdminFeedbackBuilderIssuesByIdMergeMutationVariables, TContext> => {
+
+const mutationKey = ['postApiAdminFeedbackBuilderIssuesByIdMerge'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderIssuesByIdMerge>>, PostApiAdminFeedbackBuilderIssuesByIdMergeMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postApiAdminFeedbackBuilderIssuesByIdMerge(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiAdminFeedbackBuilderIssuesByIdMergeMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderIssuesByIdMerge>>>
+    export type PostApiAdminFeedbackBuilderIssuesByIdMergeMutationBody = PostApiAdminFeedbackBuilderIssuesByIdMergeBody
+    export type PostApiAdminFeedbackBuilderIssuesByIdMergeMutationError = void
+    export type PostApiAdminFeedbackBuilderIssuesByIdMergeMutationVariables = {id: string;data: PostApiAdminFeedbackBuilderIssuesByIdMergeBody}
+
+    /**
+ * @summary Merge a builder issue into another
+ */
+export const usePostApiAdminFeedbackBuilderIssuesByIdMerge = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderIssuesByIdMerge>>, TError,PostApiAdminFeedbackBuilderIssuesByIdMergeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiAdminFeedbackBuilderIssuesByIdMerge>>,
+        TError,
+        PostApiAdminFeedbackBuilderIssuesByIdMergeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiAdminFeedbackBuilderIssuesByIdMergeMutationOptions(options));
+    }
+    export type getApiAdminFeedbackBuilderReportsByIdNearestResponse200 = {
+  data: GetApiAdminFeedbackBuilderReportsByIdNearest200
+  status: 200
+}
+
+export type getApiAdminFeedbackBuilderReportsByIdNearestResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackBuilderReportsByIdNearestResponseSuccess = (getApiAdminFeedbackBuilderReportsByIdNearestResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackBuilderReportsByIdNearestResponseError = (getApiAdminFeedbackBuilderReportsByIdNearestResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackBuilderReportsByIdNearestResponse = (getApiAdminFeedbackBuilderReportsByIdNearestResponseSuccess | getApiAdminFeedbackBuilderReportsByIdNearestResponseError)
+
+export const getGetApiAdminFeedbackBuilderReportsByIdNearestUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/builder/reports/${id}/nearest`
+}
+
+/**
+ * @summary The builder issues a report could be moved to, nearest first
+ */
+export const getApiAdminFeedbackBuilderReportsByIdNearest = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackBuilderReportsByIdNearestResponse> => {
+
+  return customFetch<getApiAdminFeedbackBuilderReportsByIdNearestResponse>(getGetApiAdminFeedbackBuilderReportsByIdNearestUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackBuilderReportsByIdNearestQueryKey = (id: string,) => {
+    return [
+    `/api/admin/feedback/builder/reports/${id}/nearest`
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackBuilderReportsByIdNearestQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsByIdNearest>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsByIdNearest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackBuilderReportsByIdNearestQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsByIdNearest>>> = ({ signal }) => getApiAdminFeedbackBuilderReportsByIdNearest(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsByIdNearest>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackBuilderReportsByIdNearestQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsByIdNearest>>>
+export type GetApiAdminFeedbackBuilderReportsByIdNearestQueryError = void
+
+
+/**
+ * @summary The builder issues a report could be moved to, nearest first
+ */
+
+export function useGetApiAdminFeedbackBuilderReportsByIdNearest<TData = Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsByIdNearest>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderReportsByIdNearest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackBuilderReportsByIdNearestQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postApiAdminFeedbackBuilderReportsByIdMoveResponse200 = {
+  data: PostApiAdminFeedbackBuilderReportsByIdMove200
+  status: 200
+}
+
+export type postApiAdminFeedbackBuilderReportsByIdMoveResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiAdminFeedbackBuilderReportsByIdMoveResponseSuccess = (postApiAdminFeedbackBuilderReportsByIdMoveResponse200) & {
+  headers: Headers;
+};
+export type postApiAdminFeedbackBuilderReportsByIdMoveResponseError = (postApiAdminFeedbackBuilderReportsByIdMoveResponse404) & {
+  headers: Headers;
+};
+
+export type postApiAdminFeedbackBuilderReportsByIdMoveResponse = (postApiAdminFeedbackBuilderReportsByIdMoveResponseSuccess | postApiAdminFeedbackBuilderReportsByIdMoveResponseError)
+
+export const getPostApiAdminFeedbackBuilderReportsByIdMoveUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/feedback/builder/reports/${id}/move`
+}
+
+/**
+ * @summary Move a builder report to another issue, or to a new one of its own (`issueId: "new"`)
+ */
+export const postApiAdminFeedbackBuilderReportsByIdMove = async (id: string,
+    postApiAdminFeedbackBuilderReportsByIdMoveBody: PostApiAdminFeedbackBuilderReportsByIdMoveBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAdminFeedbackBuilderReportsByIdMoveResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiAdminFeedbackBuilderReportsByIdMoveResponse>(getPostApiAdminFeedbackBuilderReportsByIdMoveUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiAdminFeedbackBuilderReportsByIdMoveBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiAdminFeedbackBuilderReportsByIdMoveMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderReportsByIdMove>>, TError,PostApiAdminFeedbackBuilderReportsByIdMoveMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderReportsByIdMove>>, TError,PostApiAdminFeedbackBuilderReportsByIdMoveMutationVariables, TContext> => {
+
+const mutationKey = ['postApiAdminFeedbackBuilderReportsByIdMove'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderReportsByIdMove>>, PostApiAdminFeedbackBuilderReportsByIdMoveMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postApiAdminFeedbackBuilderReportsByIdMove(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiAdminFeedbackBuilderReportsByIdMoveMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderReportsByIdMove>>>
+    export type PostApiAdminFeedbackBuilderReportsByIdMoveMutationBody = PostApiAdminFeedbackBuilderReportsByIdMoveBody
+    export type PostApiAdminFeedbackBuilderReportsByIdMoveMutationError = void
+    export type PostApiAdminFeedbackBuilderReportsByIdMoveMutationVariables = {id: string;data: PostApiAdminFeedbackBuilderReportsByIdMoveBody}
+
+    /**
+ * @summary Move a builder report to another issue, or to a new one of its own (`issueId: "new"`)
+ */
+export const usePostApiAdminFeedbackBuilderReportsByIdMove = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderReportsByIdMove>>, TError,PostApiAdminFeedbackBuilderReportsByIdMoveMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiAdminFeedbackBuilderReportsByIdMove>>,
+        TError,
+        PostApiAdminFeedbackBuilderReportsByIdMoveMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiAdminFeedbackBuilderReportsByIdMoveMutationOptions(options));
+    }
+    export type postApiAdminFeedbackBuilderIssuesRebuildResponse200 = {
+  data: PostApiAdminFeedbackBuilderIssuesRebuild200
+  status: 200
+}
+
+export type postApiAdminFeedbackBuilderIssuesRebuildResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiAdminFeedbackBuilderIssuesRebuildResponseSuccess = (postApiAdminFeedbackBuilderIssuesRebuildResponse200) & {
+  headers: Headers;
+};
+export type postApiAdminFeedbackBuilderIssuesRebuildResponseError = (postApiAdminFeedbackBuilderIssuesRebuildResponse404) & {
+  headers: Headers;
+};
+
+export type postApiAdminFeedbackBuilderIssuesRebuildResponse = (postApiAdminFeedbackBuilderIssuesRebuildResponseSuccess | postApiAdminFeedbackBuilderIssuesRebuildResponseError)
+
+export const getPostApiAdminFeedbackBuilderIssuesRebuildUrl = () => {
+
+
+
+
+  return `/api/admin/feedback/builder/issues/rebuild`
+}
+
+/**
+ * @summary Discard all builder issues and re-match every builder report
+ */
+export const postApiAdminFeedbackBuilderIssuesRebuild = async ( options?: Parameters<typeof customFetch>[1]): Promise<postApiAdminFeedbackBuilderIssuesRebuildResponse> => {
+
+  return customFetch<postApiAdminFeedbackBuilderIssuesRebuildResponse>(getPostApiAdminFeedbackBuilderIssuesRebuildUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiAdminFeedbackBuilderIssuesRebuildMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderIssuesRebuild>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderIssuesRebuild>>, TError,void, TContext> => {
+
+const mutationKey = ['postApiAdminFeedbackBuilderIssuesRebuild'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderIssuesRebuild>>, void> = () => {
+
+
+          return  postApiAdminFeedbackBuilderIssuesRebuild(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiAdminFeedbackBuilderIssuesRebuildMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderIssuesRebuild>>>
+
+    export type PostApiAdminFeedbackBuilderIssuesRebuildMutationError = void
+
+
+    /**
+ * @summary Discard all builder issues and re-match every builder report
+ */
+export const usePostApiAdminFeedbackBuilderIssuesRebuild = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminFeedbackBuilderIssuesRebuild>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiAdminFeedbackBuilderIssuesRebuild>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getPostApiAdminFeedbackBuilderIssuesRebuildMutationOptions(options));
+    }
+    export type getApiAdminFeedbackBuilderStatsResponse200 = {
+  data: GetApiAdminFeedbackBuilderStats200
+  status: 200
+}
+
+export type getApiAdminFeedbackBuilderStatsResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminFeedbackBuilderStatsResponseSuccess = (getApiAdminFeedbackBuilderStatsResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminFeedbackBuilderStatsResponseError = (getApiAdminFeedbackBuilderStatsResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminFeedbackBuilderStatsResponse = (getApiAdminFeedbackBuilderStatsResponseSuccess | getApiAdminFeedbackBuilderStatsResponseError)
+
+export const getGetApiAdminFeedbackBuilderStatsUrl = (params?: GetApiAdminFeedbackBuilderStatsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/feedback/builder/stats?${stringifiedParams}` : `/api/admin/feedback/builder/stats`
+}
+
+/**
+ * @summary Volume of builders' bugs, requests and feedback over a period
+ */
+export const getApiAdminFeedbackBuilderStats = async (params?: GetApiAdminFeedbackBuilderStatsParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminFeedbackBuilderStatsResponse> => {
+
+  return customFetch<getApiAdminFeedbackBuilderStatsResponse>(getGetApiAdminFeedbackBuilderStatsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminFeedbackBuilderStatsQueryKey = (params?: GetApiAdminFeedbackBuilderStatsParams,) => {
+    return [
+    `/api/admin/feedback/builder/stats`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiAdminFeedbackBuilderStatsQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminFeedbackBuilderStats>>, TError = void>(params?: GetApiAdminFeedbackBuilderStatsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminFeedbackBuilderStatsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderStats>>> = ({ signal }) => getApiAdminFeedbackBuilderStats(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminFeedbackBuilderStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderStats>>>
+export type GetApiAdminFeedbackBuilderStatsQueryError = void
+
+
+/**
+ * @summary Volume of builders' bugs, requests and feedback over a period
+ */
+
+export function useGetApiAdminFeedbackBuilderStats<TData = Awaited<ReturnType<typeof getApiAdminFeedbackBuilderStats>>, TError = void>(
+ params?: GetApiAdminFeedbackBuilderStatsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminFeedbackBuilderStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminFeedbackBuilderStatsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAdminProductResponse200 = {
   data: GetApiAdminProduct200
   status: 200
 }

@@ -56,8 +56,10 @@ export interface SettingsShellProps {
 export function SettingsShell({ nav, header, children, className, paneClassName }: SettingsShellProps) {
   return (
     <div
+      // Pads itself for the feedback button: see `.fab-clear` in globals.css.
+      data-fill-viewport=""
       className={cn(
-        "mx-auto flex w-full max-w-6xl flex-col px-4 py-8 sm:px-6",
+        "mx-auto flex w-full max-w-6xl flex-col px-4 pt-8 pb-[calc(2rem+var(--fab-clearance))] sm:px-6 md:pb-8",
         "md:h-[calc(100svh-var(--app-header-h))] md:min-h-[var(--settings-pane-min-h)]",
         className,
       )}
@@ -80,7 +82,7 @@ export function SettingsShell({ nav, header, children, className, paneClassName 
         */}
         <div
           className={cn(
-            "@container/settings min-w-0 flex-1 md:overflow-y-auto md:overscroll-contain md:p-6",
+            "@container/settings min-w-0 flex-1 md:overflow-y-auto md:overscroll-contain md:p-6 md:pb-[var(--fab-clearance)]",
             paneClassName,
           )}
         >

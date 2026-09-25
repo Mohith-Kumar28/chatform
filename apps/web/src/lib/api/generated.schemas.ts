@@ -760,6 +760,454 @@ export type PostApiAdminFeedbackIssuesRebuild200 = {
   queued: number;
 };
 
+export type GetApiAdminFeedbackBuilderReportsParams = {
+status?: GetApiAdminFeedbackBuilderReportsStatus;
+kind?: GetApiAdminFeedbackBuilderReportsKind;
+area?: GetApiAdminFeedbackBuilderReportsArea;
+/**
+ * @maxLength 20
+ */
+plan?: string;
+/**
+ * @maxLength 64
+ */
+orgId?: string;
+/**
+ * @maxLength 64
+ */
+userId?: string;
+/**
+ * @maxLength 64
+ */
+issue?: string;
+/**
+ * @maxLength 120
+ */
+q?: string;
+sort?: GetApiAdminFeedbackBuilderReportsSort;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minimum 0
+ * @maximum 9007199254740991
+ */
+offset?: number;
+};
+
+export type GetApiAdminFeedbackBuilderReportsStatus = typeof GetApiAdminFeedbackBuilderReportsStatus[keyof typeof GetApiAdminFeedbackBuilderReportsStatus];
+
+
+export const GetApiAdminFeedbackBuilderReportsStatus = {
+  new: 'new',
+  resolved: 'resolved',
+  all: 'all',
+} as const;
+
+export type GetApiAdminFeedbackBuilderReportsKind = typeof GetApiAdminFeedbackBuilderReportsKind[keyof typeof GetApiAdminFeedbackBuilderReportsKind];
+
+
+export const GetApiAdminFeedbackBuilderReportsKind = {
+  bug: 'bug',
+  feature: 'feature',
+  feedback: 'feedback',
+} as const;
+
+export type GetApiAdminFeedbackBuilderReportsArea = typeof GetApiAdminFeedbackBuilderReportsArea[keyof typeof GetApiAdminFeedbackBuilderReportsArea];
+
+
+export const GetApiAdminFeedbackBuilderReportsArea = {
+  questions: 'questions',
+  flow: 'flow',
+  design: 'design',
+  agent: 'agent',
+  results: 'results',
+  share: 'share',
+  integrate: 'integrate',
+  form_settings: 'form_settings',
+  forms: 'forms',
+  templates: 'templates',
+  team: 'team',
+  billing: 'billing',
+  api: 'api',
+  account: 'account',
+  other: 'other',
+} as const;
+
+export type GetApiAdminFeedbackBuilderReportsSort = typeof GetApiAdminFeedbackBuilderReportsSort[keyof typeof GetApiAdminFeedbackBuilderReportsSort];
+
+
+export const GetApiAdminFeedbackBuilderReportsSort = {
+  newest: 'newest',
+  oldest: 'oldest',
+} as const;
+
+export type GetApiAdminFeedbackBuilderReports200ReportsItemContext = {[key: string]: unknown} | null;
+
+export type GetApiAdminFeedbackBuilderReports200ReportsItemAttachmentsItem = {
+  n: number;
+  type: string;
+  bytes: number;
+  auto: boolean;
+};
+
+export type GetApiAdminFeedbackBuilderReports200ReportsItem = {
+  id: string;
+  kind: string;
+  area: string | null;
+  areaPicked: string | null;
+  rating: number | null;
+  severity: string | null;
+  title: string | null;
+  message: string;
+  steps: string | null;
+  expected: string | null;
+  why: string | null;
+  url: string | null;
+  formId: string | null;
+  formTitle: string | null;
+  userId: string | null;
+  userEmail: string | null;
+  userName: string | null;
+  userReportCount: number;
+  role: string | null;
+  planId: string | null;
+  organizationId: string | null;
+  organizationName: string | null;
+  workspaceName: string | null;
+  impersonatorEmail: string | null;
+  context: GetApiAdminFeedbackBuilderReports200ReportsItemContext;
+  userAgent: string | null;
+  attachments: GetApiAdminFeedbackBuilderReports200ReportsItemAttachmentsItem[];
+  status: string;
+  statusAt: number | null;
+  statusBy: string | null;
+  internalNote: string | null;
+  tags: string[];
+  sentiment: number | null;
+  issueId: string | null;
+  issueTitle: string | null;
+  createdAt: number;
+};
+
+export type GetApiAdminFeedbackBuilderReports200Counts = {
+  new: number;
+  resolved: number;
+};
+
+export type GetApiAdminFeedbackBuilderReports200KindCountsItem = {
+  kind: string;
+  count: number;
+};
+
+export type GetApiAdminFeedbackBuilderReports200AreaCountsItem = {
+  area: string;
+  count: number;
+};
+
+export type GetApiAdminFeedbackBuilderReports200 = {
+  reports: GetApiAdminFeedbackBuilderReports200ReportsItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  counts: GetApiAdminFeedbackBuilderReports200Counts;
+  kindCounts: GetApiAdminFeedbackBuilderReports200KindCountsItem[];
+  areaCounts: GetApiAdminFeedbackBuilderReports200AreaCountsItem[];
+};
+
+export type GetApiAdminFeedbackBuilderReportsById200Context = {[key: string]: unknown} | null;
+
+export type GetApiAdminFeedbackBuilderReportsById200AttachmentsItem = {
+  n: number;
+  type: string;
+  bytes: number;
+  auto: boolean;
+};
+
+export type GetApiAdminFeedbackBuilderReportsById200 = {
+  id: string;
+  kind: string;
+  area: string | null;
+  areaPicked: string | null;
+  rating: number | null;
+  severity: string | null;
+  title: string | null;
+  message: string;
+  steps: string | null;
+  expected: string | null;
+  why: string | null;
+  url: string | null;
+  formId: string | null;
+  formTitle: string | null;
+  userId: string | null;
+  userEmail: string | null;
+  userName: string | null;
+  userReportCount: number;
+  role: string | null;
+  planId: string | null;
+  organizationId: string | null;
+  organizationName: string | null;
+  workspaceName: string | null;
+  impersonatorEmail: string | null;
+  context: GetApiAdminFeedbackBuilderReportsById200Context;
+  userAgent: string | null;
+  attachments: GetApiAdminFeedbackBuilderReportsById200AttachmentsItem[];
+  status: string;
+  statusAt: number | null;
+  statusBy: string | null;
+  internalNote: string | null;
+  tags: string[];
+  sentiment: number | null;
+  issueId: string | null;
+  issueTitle: string | null;
+  createdAt: number;
+};
+
+export type PatchApiAdminFeedbackBuilderReportsByIdBodyStatus = typeof PatchApiAdminFeedbackBuilderReportsByIdBodyStatus[keyof typeof PatchApiAdminFeedbackBuilderReportsByIdBodyStatus];
+
+
+export const PatchApiAdminFeedbackBuilderReportsByIdBodyStatus = {
+  new: 'new',
+  resolved: 'resolved',
+} as const;
+
+export type PatchApiAdminFeedbackBuilderReportsByIdBody = {
+  status?: PatchApiAdminFeedbackBuilderReportsByIdBodyStatus;
+  internalNote?: string | null;
+};
+
+export type PatchApiAdminFeedbackBuilderReportsById200 = {
+  ok: boolean;
+};
+
+export type DeleteApiAdminFeedbackBuilderReportsById200 = {
+  ok: boolean;
+};
+
+export type GetApiAdminFeedbackBuilderIssuesParams = {
+status?: GetApiAdminFeedbackBuilderIssuesStatus;
+kind?: GetApiAdminFeedbackBuilderIssuesKind;
+sort?: GetApiAdminFeedbackBuilderIssuesSort;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @minimum 0
+ * @maximum 9007199254740991
+ */
+offset?: number;
+};
+
+export type GetApiAdminFeedbackBuilderIssuesStatus = typeof GetApiAdminFeedbackBuilderIssuesStatus[keyof typeof GetApiAdminFeedbackBuilderIssuesStatus];
+
+
+export const GetApiAdminFeedbackBuilderIssuesStatus = {
+  new: 'new',
+  resolved: 'resolved',
+  all: 'all',
+} as const;
+
+export type GetApiAdminFeedbackBuilderIssuesKind = typeof GetApiAdminFeedbackBuilderIssuesKind[keyof typeof GetApiAdminFeedbackBuilderIssuesKind];
+
+
+export const GetApiAdminFeedbackBuilderIssuesKind = {
+  bug: 'bug',
+  feature: 'feature',
+  feedback: 'feedback',
+} as const;
+
+export type GetApiAdminFeedbackBuilderIssuesSort = typeof GetApiAdminFeedbackBuilderIssuesSort[keyof typeof GetApiAdminFeedbackBuilderIssuesSort];
+
+
+export const GetApiAdminFeedbackBuilderIssuesSort = {
+  priority: 'priority',
+  recent: 'recent',
+  reports: 'reports',
+} as const;
+
+export type GetApiAdminFeedbackBuilderIssues200IssuesItemStatus = typeof GetApiAdminFeedbackBuilderIssues200IssuesItemStatus[keyof typeof GetApiAdminFeedbackBuilderIssues200IssuesItemStatus];
+
+
+export const GetApiAdminFeedbackBuilderIssues200IssuesItemStatus = {
+  new: 'new',
+  resolved: 'resolved',
+} as const;
+
+export type GetApiAdminFeedbackBuilderIssues200IssuesItem = {
+  id: string;
+  title: string;
+  kind: string;
+  area: string | null;
+  reports: number;
+  people: number;
+  accounts: number;
+  paid: number;
+  lastSeenAt: number;
+  status: GetApiAdminFeedbackBuilderIssues200IssuesItemStatus;
+  reopened: boolean;
+};
+
+export type GetApiAdminFeedbackBuilderIssues200Counts = {
+  new: number;
+  resolved: number;
+};
+
+export type GetApiAdminFeedbackBuilderIssues200 = {
+  issues: GetApiAdminFeedbackBuilderIssues200IssuesItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  counts: GetApiAdminFeedbackBuilderIssues200Counts;
+  ungrouped: number;
+};
+
+export type GetApiAdminFeedbackBuilderIssuesById200Status = typeof GetApiAdminFeedbackBuilderIssuesById200Status[keyof typeof GetApiAdminFeedbackBuilderIssuesById200Status];
+
+
+export const GetApiAdminFeedbackBuilderIssuesById200Status = {
+  new: 'new',
+  resolved: 'resolved',
+} as const;
+
+export type GetApiAdminFeedbackBuilderIssuesById200 = {
+  id: string;
+  title: string;
+  kind: string;
+  area: string | null;
+  reports: number;
+  people: number;
+  accounts: number;
+  paid: number;
+  lastSeenAt: number;
+  status: GetApiAdminFeedbackBuilderIssuesById200Status;
+  reopened: boolean;
+};
+
+export type PatchApiAdminFeedbackBuilderIssuesByIdBodyStatus = typeof PatchApiAdminFeedbackBuilderIssuesByIdBodyStatus[keyof typeof PatchApiAdminFeedbackBuilderIssuesByIdBodyStatus];
+
+
+export const PatchApiAdminFeedbackBuilderIssuesByIdBodyStatus = {
+  new: 'new',
+  resolved: 'resolved',
+} as const;
+
+export type PatchApiAdminFeedbackBuilderIssuesByIdBody = {
+  status?: PatchApiAdminFeedbackBuilderIssuesByIdBodyStatus;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  title?: string;
+};
+
+export type PatchApiAdminFeedbackBuilderIssuesById200 = {
+  ok: boolean;
+};
+
+export type PostApiAdminFeedbackBuilderIssuesByIdMergeBody = {
+  /** @maxLength 64 */
+  into: string;
+};
+
+export type PostApiAdminFeedbackBuilderIssuesByIdMerge200 = {
+  ok: boolean;
+};
+
+export type GetApiAdminFeedbackBuilderReportsByIdNearest200IssuesItem = {
+  id: string;
+  title: string;
+  score: number;
+};
+
+export type GetApiAdminFeedbackBuilderReportsByIdNearest200 = {
+  issues: GetApiAdminFeedbackBuilderReportsByIdNearest200IssuesItem[];
+};
+
+export type PostApiAdminFeedbackBuilderReportsByIdMoveBody = {
+  /** @maxLength 64 */
+  issueId: string;
+};
+
+export type PostApiAdminFeedbackBuilderReportsByIdMove200 = {
+  issueId: string;
+};
+
+export type PostApiAdminFeedbackBuilderIssuesRebuild200 = {
+  queued: number;
+};
+
+export type GetApiAdminFeedbackBuilderStatsParams = {
+range?: GetApiAdminFeedbackBuilderStatsRange;
+};
+
+export type GetApiAdminFeedbackBuilderStatsRange = typeof GetApiAdminFeedbackBuilderStatsRange[keyof typeof GetApiAdminFeedbackBuilderStatsRange];
+
+
+export const GetApiAdminFeedbackBuilderStatsRange = {
+  '1d': '1d',
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+  '365d': '365d',
+} as const;
+
+export type GetApiAdminFeedbackBuilderStats200SeriesByKindItem = {
+  kind: string;
+  counts: number[];
+};
+
+export type GetApiAdminFeedbackBuilderStats200Series = {
+  byKind: GetApiAdminFeedbackBuilderStats200SeriesByKindItem[];
+};
+
+export type GetApiAdminFeedbackBuilderStats200DistributionItem = {
+  rating: number;
+  count: number;
+};
+
+export type GetApiAdminFeedbackBuilderStats200ByAreaItem = {
+  key: string;
+  label: string | null;
+  value: number;
+};
+
+export type GetApiAdminFeedbackBuilderStats200ByPlanItem = {
+  key: string;
+  label: string | null;
+  value: number;
+};
+
+export type GetApiAdminFeedbackBuilderStats200TopAccountsItem = {
+  key: string;
+  label: string | null;
+  value: number;
+};
+
+export type GetApiAdminFeedbackBuilderStats200 = {
+  range: string;
+  days: string[];
+  total: number;
+  previousTotal: number;
+  bugs: number;
+  previousBugs: number;
+  features: number;
+  previousFeatures: number;
+  accounts: number;
+  previousAccounts: number;
+  average: number | null;
+  previousAverage: number | null;
+  unresolved: number;
+  series: GetApiAdminFeedbackBuilderStats200Series;
+  distribution: GetApiAdminFeedbackBuilderStats200DistributionItem[];
+  byArea: GetApiAdminFeedbackBuilderStats200ByAreaItem[];
+  byPlan: GetApiAdminFeedbackBuilderStats200ByPlanItem[];
+  topAccounts: GetApiAdminFeedbackBuilderStats200TopAccountsItem[];
+};
+
 export type GetApiAdminProductParams = {
 range?: GetApiAdminProductRange;
 };
@@ -1412,6 +1860,148 @@ export type PostPFormsBySlugSessions404 = {
   error: PostPFormsBySlugSessions404Error;
 };
 
+export type PostPSessionsByIdPayments200 = {
+  recordId: string;
+  launch: unknown;
+  expiresAt: number;
+};
+
+export type PostPSessionsByIdPayments402ErrorCode = typeof PostPSessionsByIdPayments402ErrorCode[keyof typeof PostPSessionsByIdPayments402ErrorCode];
+
+
+export const PostPSessionsByIdPayments402ErrorCode = {
+  plan_required: 'plan_required',
+  payment_unavailable: 'payment_unavailable',
+  stale_ref: 'stale_ref',
+  too_many_attempts: 'too_many_attempts',
+  preview_live_account: 'preview_live_account',
+  already_paid: 'already_paid',
+  session_not_found: 'session_not_found',
+  session_closed: 'session_closed',
+  phone_required: 'phone_required',
+  live_account_in_test_mode: 'live_account_in_test_mode',
+} as const;
+
+export type PostPSessionsByIdPayments402Error = {
+  code: PostPSessionsByIdPayments402ErrorCode;
+  message: string;
+  preview?: boolean;
+};
+
+export type PostPSessionsByIdPayments402 = {
+  error: PostPSessionsByIdPayments402Error;
+};
+
+export type PostPSessionsByIdPayments403ErrorCode = typeof PostPSessionsByIdPayments403ErrorCode[keyof typeof PostPSessionsByIdPayments403ErrorCode];
+
+
+export const PostPSessionsByIdPayments403ErrorCode = {
+  plan_required: 'plan_required',
+  payment_unavailable: 'payment_unavailable',
+  stale_ref: 'stale_ref',
+  too_many_attempts: 'too_many_attempts',
+  preview_live_account: 'preview_live_account',
+  already_paid: 'already_paid',
+  session_not_found: 'session_not_found',
+  session_closed: 'session_closed',
+  phone_required: 'phone_required',
+  live_account_in_test_mode: 'live_account_in_test_mode',
+} as const;
+
+export type PostPSessionsByIdPayments403Error = {
+  code: PostPSessionsByIdPayments403ErrorCode;
+  message: string;
+  preview?: boolean;
+};
+
+export type PostPSessionsByIdPayments403 = {
+  error: PostPSessionsByIdPayments403Error;
+};
+
+export type PostPSessionsByIdPayments409ErrorCode = typeof PostPSessionsByIdPayments409ErrorCode[keyof typeof PostPSessionsByIdPayments409ErrorCode];
+
+
+export const PostPSessionsByIdPayments409ErrorCode = {
+  plan_required: 'plan_required',
+  payment_unavailable: 'payment_unavailable',
+  stale_ref: 'stale_ref',
+  too_many_attempts: 'too_many_attempts',
+  preview_live_account: 'preview_live_account',
+  already_paid: 'already_paid',
+  session_not_found: 'session_not_found',
+  session_closed: 'session_closed',
+  phone_required: 'phone_required',
+  live_account_in_test_mode: 'live_account_in_test_mode',
+} as const;
+
+export type PostPSessionsByIdPayments409Error = {
+  code: PostPSessionsByIdPayments409ErrorCode;
+  message: string;
+  preview?: boolean;
+};
+
+export type PostPSessionsByIdPayments409 = {
+  error: PostPSessionsByIdPayments409Error;
+};
+
+export type PostPSessionsByIdPayments422ErrorCode = typeof PostPSessionsByIdPayments422ErrorCode[keyof typeof PostPSessionsByIdPayments422ErrorCode];
+
+
+export const PostPSessionsByIdPayments422ErrorCode = {
+  plan_required: 'plan_required',
+  payment_unavailable: 'payment_unavailable',
+  stale_ref: 'stale_ref',
+  too_many_attempts: 'too_many_attempts',
+  preview_live_account: 'preview_live_account',
+  already_paid: 'already_paid',
+  session_not_found: 'session_not_found',
+  session_closed: 'session_closed',
+  phone_required: 'phone_required',
+  live_account_in_test_mode: 'live_account_in_test_mode',
+} as const;
+
+export type PostPSessionsByIdPayments422Error = {
+  code: PostPSessionsByIdPayments422ErrorCode;
+  message: string;
+  preview?: boolean;
+};
+
+export type PostPSessionsByIdPayments422 = {
+  error: PostPSessionsByIdPayments422Error;
+};
+
+export type PostPSessionsByIdPayments429ErrorCode = typeof PostPSessionsByIdPayments429ErrorCode[keyof typeof PostPSessionsByIdPayments429ErrorCode];
+
+
+export const PostPSessionsByIdPayments429ErrorCode = {
+  plan_required: 'plan_required',
+  payment_unavailable: 'payment_unavailable',
+  stale_ref: 'stale_ref',
+  too_many_attempts: 'too_many_attempts',
+  preview_live_account: 'preview_live_account',
+  already_paid: 'already_paid',
+  session_not_found: 'session_not_found',
+  session_closed: 'session_closed',
+  phone_required: 'phone_required',
+  live_account_in_test_mode: 'live_account_in_test_mode',
+} as const;
+
+export type PostPSessionsByIdPayments429Error = {
+  code: PostPSessionsByIdPayments429ErrorCode;
+  message: string;
+  preview?: boolean;
+};
+
+export type PostPSessionsByIdPayments429 = {
+  error: PostPSessionsByIdPayments429Error;
+};
+
+export type PostPSessionsByIdPaymentsByRecordIdConfirm200 = {
+  recordId: string;
+  status: string;
+  settled: boolean;
+};
+
 export type PostPSessionsByIdAuthGoogle200 = {
   ok: boolean;
   [key: string]: unknown;
@@ -1997,6 +2587,11 @@ export type PatchApiWorkspacesById200 = {
   slug: string;
   formCount: number;
   createdAt: number;
+};
+
+export type PostApiFeedback200 = {
+  ok: boolean;
+  id: string;
 };
 
 export type PostApiAiGenerateFormBodyClarificationsItem = {
@@ -4076,6 +4671,554 @@ export type DeleteV1FormsByIdIntegrationsSpreadsheet404 = {
   error: DeleteV1FormsByIdIntegrationsSpreadsheet404Error;
 };
 
+export type GetV1PaymentAccounts200AccountsItemProvider = typeof GetV1PaymentAccounts200AccountsItemProvider[keyof typeof GetV1PaymentAccounts200AccountsItemProvider];
+
+
+export const GetV1PaymentAccounts200AccountsItemProvider = {
+  cashfree: 'cashfree',
+  razorpay: 'razorpay',
+  stripe: 'stripe',
+} as const;
+
+export type GetV1PaymentAccounts200AccountsItemCredentialKind = typeof GetV1PaymentAccounts200AccountsItemCredentialKind[keyof typeof GetV1PaymentAccounts200AccountsItemCredentialKind];
+
+
+export const GetV1PaymentAccounts200AccountsItemCredentialKind = {
+  oauth: 'oauth',
+  restricted_key: 'restricted_key',
+  connect: 'connect',
+} as const;
+
+export type GetV1PaymentAccounts200AccountsItemEnvironment = typeof GetV1PaymentAccounts200AccountsItemEnvironment[keyof typeof GetV1PaymentAccounts200AccountsItemEnvironment];
+
+
+export const GetV1PaymentAccounts200AccountsItemEnvironment = {
+  test: 'test',
+  live: 'live',
+} as const;
+
+export type GetV1PaymentAccounts200AccountsItemStatus = typeof GetV1PaymentAccounts200AccountsItemStatus[keyof typeof GetV1PaymentAccounts200AccountsItemStatus];
+
+
+export const GetV1PaymentAccounts200AccountsItemStatus = {
+  active: 'active',
+  needs_reconnect: 'needs_reconnect',
+  revoked: 'revoked',
+  disconnected: 'disconnected',
+} as const;
+
+export type GetV1PaymentAccounts200AccountsItemConnectedBy = {
+  name: string | null;
+  email: string | null;
+} | null;
+
+export type GetV1PaymentAccounts200AccountsItem = {
+  id: string;
+  provider: GetV1PaymentAccounts200AccountsItemProvider;
+  credentialKind: GetV1PaymentAccounts200AccountsItemCredentialKind;
+  environment: GetV1PaymentAccounts200AccountsItemEnvironment;
+  label: string;
+  providerAccountId: string | null;
+  status: GetV1PaymentAccounts200AccountsItemStatus;
+  lastError: string | null;
+  currencies: string[];
+  createdAt: number;
+  formsUsing?: number;
+  connectedBy?: GetV1PaymentAccounts200AccountsItemConnectedBy;
+  isDefault?: boolean;
+};
+
+export type GetV1PaymentAccounts200ProvidersCashfree = {
+  configured: boolean;
+};
+
+export type GetV1PaymentAccounts200ProvidersRazorpay = {
+  configured: boolean;
+};
+
+export type GetV1PaymentAccounts200ProvidersStripe = {
+  configured: boolean;
+};
+
+export type GetV1PaymentAccounts200Providers = {
+  cashfree: GetV1PaymentAccounts200ProvidersCashfree;
+  razorpay: GetV1PaymentAccounts200ProvidersRazorpay;
+  stripe: GetV1PaymentAccounts200ProvidersStripe;
+};
+
+export type GetV1PaymentAccounts200 = {
+  accounts: GetV1PaymentAccounts200AccountsItem[];
+  enabled: boolean;
+  providers: GetV1PaymentAccounts200Providers;
+};
+
+export type GetV1PaymentAccounts403ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type GetV1PaymentAccounts403Error = {
+  code: string;
+  message: string;
+  issues?: GetV1PaymentAccounts403ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type GetV1PaymentAccounts403 = {
+  error: GetV1PaymentAccounts403Error;
+};
+
+export type PostV1PaymentAccountsOauthByProviderStartBody = {
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  returnTo: string;
+};
+
+export type PostV1PaymentAccountsOauthByProviderStart200 = {
+  url: string;
+};
+
+export type PostV1PaymentAccountsOauthByProviderStart402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1PaymentAccountsOauthByProviderStart402Error = {
+  code: string;
+  message: string;
+  issues?: PostV1PaymentAccountsOauthByProviderStart402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1PaymentAccountsOauthByProviderStart402 = {
+  error: PostV1PaymentAccountsOauthByProviderStart402Error;
+};
+
+export type PostV1PaymentAccountsOauthByProviderStart403ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1PaymentAccountsOauthByProviderStart403Error = {
+  code: string;
+  message: string;
+  issues?: PostV1PaymentAccountsOauthByProviderStart403ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1PaymentAccountsOauthByProviderStart403 = {
+  error: PostV1PaymentAccountsOauthByProviderStart403Error;
+};
+
+export type PostV1PaymentAccountsOauthByProviderStart422ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1PaymentAccountsOauthByProviderStart422Error = {
+  code: string;
+  message: string;
+  issues?: PostV1PaymentAccountsOauthByProviderStart422ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1PaymentAccountsOauthByProviderStart422 = {
+  error: PostV1PaymentAccountsOauthByProviderStart422Error;
+};
+
+export type PostV1PaymentAccountsStripeBody = {
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  restrictedKey: string;
+};
+
+export type PostV1PaymentAccountsStripe200AccountProvider = typeof PostV1PaymentAccountsStripe200AccountProvider[keyof typeof PostV1PaymentAccountsStripe200AccountProvider];
+
+
+export const PostV1PaymentAccountsStripe200AccountProvider = {
+  cashfree: 'cashfree',
+  razorpay: 'razorpay',
+  stripe: 'stripe',
+} as const;
+
+export type PostV1PaymentAccountsStripe200AccountCredentialKind = typeof PostV1PaymentAccountsStripe200AccountCredentialKind[keyof typeof PostV1PaymentAccountsStripe200AccountCredentialKind];
+
+
+export const PostV1PaymentAccountsStripe200AccountCredentialKind = {
+  oauth: 'oauth',
+  restricted_key: 'restricted_key',
+  connect: 'connect',
+} as const;
+
+export type PostV1PaymentAccountsStripe200AccountEnvironment = typeof PostV1PaymentAccountsStripe200AccountEnvironment[keyof typeof PostV1PaymentAccountsStripe200AccountEnvironment];
+
+
+export const PostV1PaymentAccountsStripe200AccountEnvironment = {
+  test: 'test',
+  live: 'live',
+} as const;
+
+export type PostV1PaymentAccountsStripe200AccountStatus = typeof PostV1PaymentAccountsStripe200AccountStatus[keyof typeof PostV1PaymentAccountsStripe200AccountStatus];
+
+
+export const PostV1PaymentAccountsStripe200AccountStatus = {
+  active: 'active',
+  needs_reconnect: 'needs_reconnect',
+  revoked: 'revoked',
+  disconnected: 'disconnected',
+} as const;
+
+export type PostV1PaymentAccountsStripe200AccountConnectedBy = {
+  name: string | null;
+  email: string | null;
+} | null;
+
+export type PostV1PaymentAccountsStripe200Account = {
+  id: string;
+  provider: PostV1PaymentAccountsStripe200AccountProvider;
+  credentialKind: PostV1PaymentAccountsStripe200AccountCredentialKind;
+  environment: PostV1PaymentAccountsStripe200AccountEnvironment;
+  label: string;
+  providerAccountId: string | null;
+  status: PostV1PaymentAccountsStripe200AccountStatus;
+  lastError: string | null;
+  currencies: string[];
+  createdAt: number;
+  formsUsing?: number;
+  connectedBy?: PostV1PaymentAccountsStripe200AccountConnectedBy;
+  isDefault?: boolean;
+};
+
+export type PostV1PaymentAccountsStripe200 = {
+  account: PostV1PaymentAccountsStripe200Account;
+};
+
+export type PostV1PaymentAccountsStripe402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1PaymentAccountsStripe402Error = {
+  code: string;
+  message: string;
+  issues?: PostV1PaymentAccountsStripe402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1PaymentAccountsStripe402 = {
+  error: PostV1PaymentAccountsStripe402Error;
+};
+
+export type PostV1PaymentAccountsStripe409ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1PaymentAccountsStripe409Error = {
+  code: string;
+  message: string;
+  issues?: PostV1PaymentAccountsStripe409ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1PaymentAccountsStripe409 = {
+  error: PostV1PaymentAccountsStripe409Error;
+};
+
+export type PostV1PaymentAccountsStripe422ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1PaymentAccountsStripe422Error = {
+  code: string;
+  message: string;
+  issues?: PostV1PaymentAccountsStripe422ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1PaymentAccountsStripe422 = {
+  error: PostV1PaymentAccountsStripe422Error;
+};
+
+export type PostV1PaymentAccountsCashfreeOnboardBody = {
+  /**
+     * @maxLength 200
+     * @pattern ^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$
+     */
+  email: string;
+  /**
+     * @minLength 8
+     * @maxLength 20
+     */
+  phone: string;
+  /**
+     * @minLength 2
+     * @maxLength 100
+     */
+  businessName: string;
+  /**
+     * @minLength 2
+     * @maxLength 60
+     */
+  businessType: string;
+  /** @maxLength 250 */
+  website?: string;
+  /**
+     * @minLength 2
+     * @maxLength 100
+     */
+  signatoryName?: string;
+  /** @maxLength 1000 */
+  returnTo?: string;
+};
+
+export type PostV1PaymentAccountsCashfreeOnboard200 = {
+  onboardingUrl: string;
+} | {
+  useOAuth: true;
+};
+
+export type PostV1PaymentAccountsCashfreeOnboard402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1PaymentAccountsCashfreeOnboard402Error = {
+  code: string;
+  message: string;
+  issues?: PostV1PaymentAccountsCashfreeOnboard402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1PaymentAccountsCashfreeOnboard402 = {
+  error: PostV1PaymentAccountsCashfreeOnboard402Error;
+};
+
+export type PatchV1PaymentAccountsByIdBody = {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  label?: string;
+  isDefault?: true;
+};
+
+export type PatchV1PaymentAccountsById200 = {
+  ok: true;
+};
+
+export type PatchV1PaymentAccountsById404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PatchV1PaymentAccountsById404Error = {
+  code: string;
+  message: string;
+  issues?: PatchV1PaymentAccountsById404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PatchV1PaymentAccountsById404 = {
+  error: PatchV1PaymentAccountsById404Error;
+};
+
+export type DeleteV1PaymentAccountsById200 = {
+  ok: true;
+};
+
+export type DeleteV1PaymentAccountsById404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type DeleteV1PaymentAccountsById404Error = {
+  code: string;
+  message: string;
+  issues?: DeleteV1PaymentAccountsById404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type DeleteV1PaymentAccountsById404 = {
+  error: DeleteV1PaymentAccountsById404Error;
+};
+
+export type GetV1FormsByIdPaymentsParams = {
+status?: GetV1FormsByIdPaymentsStatus;
+/**
+ * @maxLength 40
+ */
+response_id?: string;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+cursor?: string;
+};
+
+export type GetV1FormsByIdPaymentsStatus = typeof GetV1FormsByIdPaymentsStatus[keyof typeof GetV1FormsByIdPaymentsStatus];
+
+
+export const GetV1FormsByIdPaymentsStatus = {
+  created: 'created',
+  paid: 'paid',
+  failed: 'failed',
+  expired: 'expired',
+  refunded: 'refunded',
+  superseded: 'superseded',
+  all: 'all',
+} as const;
+
+export type GetV1FormsByIdPayments200DataItemEnvironment = typeof GetV1FormsByIdPayments200DataItemEnvironment[keyof typeof GetV1FormsByIdPayments200DataItemEnvironment];
+
+
+export const GetV1FormsByIdPayments200DataItemEnvironment = {
+  test: 'test',
+  live: 'live',
+} as const;
+
+export type GetV1FormsByIdPayments200DataItemMode = typeof GetV1FormsByIdPayments200DataItemMode[keyof typeof GetV1FormsByIdPayments200DataItemMode];
+
+
+export const GetV1FormsByIdPayments200DataItemMode = {
+  test: 'test',
+  live: 'live',
+} as const;
+
+export type GetV1FormsByIdPayments200DataItemStatus = typeof GetV1FormsByIdPayments200DataItemStatus[keyof typeof GetV1FormsByIdPayments200DataItemStatus];
+
+
+export const GetV1FormsByIdPayments200DataItemStatus = {
+  created: 'created',
+  paid: 'paid',
+  failed: 'failed',
+  expired: 'expired',
+  refunded: 'refunded',
+  superseded: 'superseded',
+} as const;
+
+export type GetV1FormsByIdPayments200DataItem = {
+  id: string;
+  object: 'payment';
+  form_id: string;
+  block_ref: string;
+  response_id: string | null;
+  provider: string;
+  environment: GetV1FormsByIdPayments200DataItemEnvironment;
+  mode: GetV1FormsByIdPayments200DataItemMode;
+  status: GetV1FormsByIdPayments200DataItemStatus;
+  duplicate: boolean;
+  /**
+     * @minimum -9007199254740991
+     * @maximum 9007199254740991
+     */
+  amount_minor: number;
+  amount: number;
+  currency: string;
+  provider_order_id: string | null;
+  provider_payment_id: string | null;
+  dashboard_url: string | null;
+  failure_reason: string | null;
+  settled_to_response: boolean;
+  payment_account_id: string;
+  created_at: number;
+  updated_at: number;
+  paid_at: number | null;
+  expires_at: number | null;
+};
+
+export type GetV1FormsByIdPayments200 = {
+  data: GetV1FormsByIdPayments200DataItem[];
+  has_more: boolean;
+  next_cursor: string | null;
+};
+
+export type GetV1FormsByIdPayments400ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type GetV1FormsByIdPayments400Error = {
+  code: string;
+  message: string;
+  issues?: GetV1FormsByIdPayments400ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type GetV1FormsByIdPayments400 = {
+  error: GetV1FormsByIdPayments400Error;
+};
+
+export type GetV1FormsByIdPayments404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type GetV1FormsByIdPayments404Error = {
+  code: string;
+  message: string;
+  issues?: GetV1FormsByIdPayments404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type GetV1FormsByIdPayments404 = {
+  error: GetV1FormsByIdPayments404Error;
+};
+
 export type GetV1Webhooks200DataItem = {
   id: string;
   url: string;
@@ -4654,6 +5797,9 @@ export const PostV1SessionsBySidActionsBodyAction = {
   resend_code: 'resend_code',
   change_answer: 'change_answer',
   undo_screen_out: 'undo_screen_out',
+  retry_payment: 'retry_payment',
+  cancel_payment: 'cancel_payment',
+  simulate_payment: 'simulate_payment',
 } as const;
 
 export type PostV1SessionsBySidActionsBody = {
@@ -4781,6 +5927,19 @@ export type PostV1SessionsBySidTokenRotate200 = {
   rotatedAt: number;
 };
 
+export type PostV1SessionsBySidPaymentsBody = {
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  ref: string;
+  /**
+     * @minLength 1
+     * @maxLength 32
+     */
+  phone?: string;
+};
+
 export type PostV1SessionsBySidAuthGoogle200 = {
   ok: boolean;
   [key: string]: unknown;
@@ -4882,6 +6041,9 @@ export const PostV1ChatSessionsBySidActionsBodyAction = {
   resend_code: 'resend_code',
   change_answer: 'change_answer',
   undo_screen_out: 'undo_screen_out',
+  retry_payment: 'retry_payment',
+  cancel_payment: 'cancel_payment',
+  simulate_payment: 'simulate_payment',
 } as const;
 
 export type PostV1ChatSessionsBySidActionsBody = {
@@ -5007,6 +6169,19 @@ export type GetV1ChatSessionsBySidEvents200 = {
 export type PostV1ChatSessionsBySidTokenRotate200 = {
   respondentToken: string;
   rotatedAt: number;
+};
+
+export type PostV1ChatSessionsBySidPaymentsBody = {
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  ref: string;
+  /**
+     * @minLength 1
+     * @maxLength 32
+     */
+  phone?: string;
 };
 
 export type PostV1ChatSessionsBySidAuthGoogle200 = {
@@ -5275,6 +6450,491 @@ export type PostApiFormsByIdIntegrationsSpreadsheet200 = {
   createdAt: number;
   feedUrl?: string;
   includePartials?: boolean;
+};
+
+export type GetApiPaymentAccounts200AccountsItemProvider = typeof GetApiPaymentAccounts200AccountsItemProvider[keyof typeof GetApiPaymentAccounts200AccountsItemProvider];
+
+
+export const GetApiPaymentAccounts200AccountsItemProvider = {
+  cashfree: 'cashfree',
+  razorpay: 'razorpay',
+  stripe: 'stripe',
+} as const;
+
+export type GetApiPaymentAccounts200AccountsItemCredentialKind = typeof GetApiPaymentAccounts200AccountsItemCredentialKind[keyof typeof GetApiPaymentAccounts200AccountsItemCredentialKind];
+
+
+export const GetApiPaymentAccounts200AccountsItemCredentialKind = {
+  oauth: 'oauth',
+  restricted_key: 'restricted_key',
+  connect: 'connect',
+} as const;
+
+export type GetApiPaymentAccounts200AccountsItemEnvironment = typeof GetApiPaymentAccounts200AccountsItemEnvironment[keyof typeof GetApiPaymentAccounts200AccountsItemEnvironment];
+
+
+export const GetApiPaymentAccounts200AccountsItemEnvironment = {
+  test: 'test',
+  live: 'live',
+} as const;
+
+export type GetApiPaymentAccounts200AccountsItemStatus = typeof GetApiPaymentAccounts200AccountsItemStatus[keyof typeof GetApiPaymentAccounts200AccountsItemStatus];
+
+
+export const GetApiPaymentAccounts200AccountsItemStatus = {
+  active: 'active',
+  needs_reconnect: 'needs_reconnect',
+  revoked: 'revoked',
+  disconnected: 'disconnected',
+} as const;
+
+export type GetApiPaymentAccounts200AccountsItemConnectedBy = {
+  name: string | null;
+  email: string | null;
+} | null;
+
+export type GetApiPaymentAccounts200AccountsItem = {
+  id: string;
+  provider: GetApiPaymentAccounts200AccountsItemProvider;
+  credentialKind: GetApiPaymentAccounts200AccountsItemCredentialKind;
+  environment: GetApiPaymentAccounts200AccountsItemEnvironment;
+  label: string;
+  providerAccountId: string | null;
+  status: GetApiPaymentAccounts200AccountsItemStatus;
+  lastError: string | null;
+  currencies: string[];
+  createdAt: number;
+  formsUsing?: number;
+  connectedBy?: GetApiPaymentAccounts200AccountsItemConnectedBy;
+  isDefault?: boolean;
+};
+
+export type GetApiPaymentAccounts200ProvidersCashfree = {
+  configured: boolean;
+};
+
+export type GetApiPaymentAccounts200ProvidersRazorpay = {
+  configured: boolean;
+};
+
+export type GetApiPaymentAccounts200ProvidersStripe = {
+  configured: boolean;
+};
+
+export type GetApiPaymentAccounts200Providers = {
+  cashfree: GetApiPaymentAccounts200ProvidersCashfree;
+  razorpay: GetApiPaymentAccounts200ProvidersRazorpay;
+  stripe: GetApiPaymentAccounts200ProvidersStripe;
+};
+
+export type GetApiPaymentAccounts200 = {
+  accounts: GetApiPaymentAccounts200AccountsItem[];
+  enabled: boolean;
+  providers: GetApiPaymentAccounts200Providers;
+};
+
+export type PostApiPaymentAccountsOauthByProviderStartBody = {
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  returnTo: string;
+};
+
+export type PostApiPaymentAccountsOauthByProviderStart200 = {
+  url: string;
+};
+
+export type PostApiPaymentAccountsOauthByProviderStart402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiPaymentAccountsOauthByProviderStart402Error = {
+  code: string;
+  message: string;
+  issues?: PostApiPaymentAccountsOauthByProviderStart402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiPaymentAccountsOauthByProviderStart402 = {
+  error: PostApiPaymentAccountsOauthByProviderStart402Error;
+};
+
+export type PostApiPaymentAccountsOauthByProviderStart403ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiPaymentAccountsOauthByProviderStart403Error = {
+  code: string;
+  message: string;
+  issues?: PostApiPaymentAccountsOauthByProviderStart403ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiPaymentAccountsOauthByProviderStart403 = {
+  error: PostApiPaymentAccountsOauthByProviderStart403Error;
+};
+
+export type PostApiPaymentAccountsOauthByProviderStart422ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiPaymentAccountsOauthByProviderStart422Error = {
+  code: string;
+  message: string;
+  issues?: PostApiPaymentAccountsOauthByProviderStart422ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiPaymentAccountsOauthByProviderStart422 = {
+  error: PostApiPaymentAccountsOauthByProviderStart422Error;
+};
+
+export type PostApiPaymentAccountsStripeBody = {
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  restrictedKey: string;
+};
+
+export type PostApiPaymentAccountsStripe200AccountProvider = typeof PostApiPaymentAccountsStripe200AccountProvider[keyof typeof PostApiPaymentAccountsStripe200AccountProvider];
+
+
+export const PostApiPaymentAccountsStripe200AccountProvider = {
+  cashfree: 'cashfree',
+  razorpay: 'razorpay',
+  stripe: 'stripe',
+} as const;
+
+export type PostApiPaymentAccountsStripe200AccountCredentialKind = typeof PostApiPaymentAccountsStripe200AccountCredentialKind[keyof typeof PostApiPaymentAccountsStripe200AccountCredentialKind];
+
+
+export const PostApiPaymentAccountsStripe200AccountCredentialKind = {
+  oauth: 'oauth',
+  restricted_key: 'restricted_key',
+  connect: 'connect',
+} as const;
+
+export type PostApiPaymentAccountsStripe200AccountEnvironment = typeof PostApiPaymentAccountsStripe200AccountEnvironment[keyof typeof PostApiPaymentAccountsStripe200AccountEnvironment];
+
+
+export const PostApiPaymentAccountsStripe200AccountEnvironment = {
+  test: 'test',
+  live: 'live',
+} as const;
+
+export type PostApiPaymentAccountsStripe200AccountStatus = typeof PostApiPaymentAccountsStripe200AccountStatus[keyof typeof PostApiPaymentAccountsStripe200AccountStatus];
+
+
+export const PostApiPaymentAccountsStripe200AccountStatus = {
+  active: 'active',
+  needs_reconnect: 'needs_reconnect',
+  revoked: 'revoked',
+  disconnected: 'disconnected',
+} as const;
+
+export type PostApiPaymentAccountsStripe200AccountConnectedBy = {
+  name: string | null;
+  email: string | null;
+} | null;
+
+export type PostApiPaymentAccountsStripe200Account = {
+  id: string;
+  provider: PostApiPaymentAccountsStripe200AccountProvider;
+  credentialKind: PostApiPaymentAccountsStripe200AccountCredentialKind;
+  environment: PostApiPaymentAccountsStripe200AccountEnvironment;
+  label: string;
+  providerAccountId: string | null;
+  status: PostApiPaymentAccountsStripe200AccountStatus;
+  lastError: string | null;
+  currencies: string[];
+  createdAt: number;
+  formsUsing?: number;
+  connectedBy?: PostApiPaymentAccountsStripe200AccountConnectedBy;
+  isDefault?: boolean;
+};
+
+export type PostApiPaymentAccountsStripe200 = {
+  account: PostApiPaymentAccountsStripe200Account;
+};
+
+export type PostApiPaymentAccountsStripe402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiPaymentAccountsStripe402Error = {
+  code: string;
+  message: string;
+  issues?: PostApiPaymentAccountsStripe402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiPaymentAccountsStripe402 = {
+  error: PostApiPaymentAccountsStripe402Error;
+};
+
+export type PostApiPaymentAccountsStripe409ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiPaymentAccountsStripe409Error = {
+  code: string;
+  message: string;
+  issues?: PostApiPaymentAccountsStripe409ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiPaymentAccountsStripe409 = {
+  error: PostApiPaymentAccountsStripe409Error;
+};
+
+export type PostApiPaymentAccountsStripe422ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiPaymentAccountsStripe422Error = {
+  code: string;
+  message: string;
+  issues?: PostApiPaymentAccountsStripe422ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiPaymentAccountsStripe422 = {
+  error: PostApiPaymentAccountsStripe422Error;
+};
+
+export type PostApiPaymentAccountsCashfreeOnboardBody = {
+  /**
+     * @maxLength 200
+     * @pattern ^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$
+     */
+  email: string;
+  /**
+     * @minLength 8
+     * @maxLength 20
+     */
+  phone: string;
+  /**
+     * @minLength 2
+     * @maxLength 100
+     */
+  businessName: string;
+  /**
+     * @minLength 2
+     * @maxLength 60
+     */
+  businessType: string;
+  /** @maxLength 250 */
+  website?: string;
+  /**
+     * @minLength 2
+     * @maxLength 100
+     */
+  signatoryName?: string;
+  /** @maxLength 1000 */
+  returnTo?: string;
+};
+
+export type PostApiPaymentAccountsCashfreeOnboard200 = {
+  onboardingUrl: string;
+} | {
+  useOAuth: true;
+};
+
+export type PostApiPaymentAccountsCashfreeOnboard402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiPaymentAccountsCashfreeOnboard402Error = {
+  code: string;
+  message: string;
+  issues?: PostApiPaymentAccountsCashfreeOnboard402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiPaymentAccountsCashfreeOnboard402 = {
+  error: PostApiPaymentAccountsCashfreeOnboard402Error;
+};
+
+export type PatchApiPaymentAccountsByIdBody = {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  label?: string;
+  isDefault?: true;
+};
+
+export type PatchApiPaymentAccountsById200 = {
+  ok: true;
+};
+
+export type PatchApiPaymentAccountsById404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PatchApiPaymentAccountsById404Error = {
+  code: string;
+  message: string;
+  issues?: PatchApiPaymentAccountsById404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PatchApiPaymentAccountsById404 = {
+  error: PatchApiPaymentAccountsById404Error;
+};
+
+export type DeleteApiPaymentAccountsById200 = {
+  ok: true;
+};
+
+export type DeleteApiPaymentAccountsById404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type DeleteApiPaymentAccountsById404Error = {
+  code: string;
+  message: string;
+  issues?: DeleteApiPaymentAccountsById404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type DeleteApiPaymentAccountsById404 = {
+  error: DeleteApiPaymentAccountsById404Error;
+};
+
+export type GetApiFormsByIdPaymentsParams = {
+status?: GetApiFormsByIdPaymentsStatus;
+/**
+ * @maxLength 40
+ */
+submission?: string;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum 0
+ * @maximum 9007199254740991
+ */
+offset?: number;
+};
+
+export type GetApiFormsByIdPaymentsStatus = typeof GetApiFormsByIdPaymentsStatus[keyof typeof GetApiFormsByIdPaymentsStatus];
+
+
+export const GetApiFormsByIdPaymentsStatus = {
+  created: 'created',
+  paid: 'paid',
+  failed: 'failed',
+  expired: 'expired',
+  refunded: 'refunded',
+  superseded: 'superseded',
+  all: 'all',
+} as const;
+
+export type GetApiFormsByIdPayments200PaymentsItemEnvironment = typeof GetApiFormsByIdPayments200PaymentsItemEnvironment[keyof typeof GetApiFormsByIdPayments200PaymentsItemEnvironment];
+
+
+export const GetApiFormsByIdPayments200PaymentsItemEnvironment = {
+  test: 'test',
+  live: 'live',
+} as const;
+
+export type GetApiFormsByIdPayments200PaymentsItemStatus = typeof GetApiFormsByIdPayments200PaymentsItemStatus[keyof typeof GetApiFormsByIdPayments200PaymentsItemStatus];
+
+
+export const GetApiFormsByIdPayments200PaymentsItemStatus = {
+  created: 'created',
+  paid: 'paid',
+  failed: 'failed',
+  expired: 'expired',
+  refunded: 'refunded',
+  superseded: 'superseded',
+} as const;
+
+export type GetApiFormsByIdPayments200PaymentsItem = {
+  id: string;
+  blockRef: string;
+  provider: string;
+  environment: GetApiFormsByIdPayments200PaymentsItemEnvironment;
+  status: GetApiFormsByIdPayments200PaymentsItemStatus;
+  duplicate: boolean;
+  /**
+     * @minimum -9007199254740991
+     * @maximum 9007199254740991
+     */
+  amountMinor: number;
+  amount: number;
+  currency: string;
+  providerOrderId: string | null;
+  providerPaymentId: string | null;
+  dashboardUrl: string | null;
+  submissionId: string | null;
+  sessionId: string;
+  failureReason: string | null;
+  settledToSession: boolean;
+  isTest: boolean;
+  accountId: string;
+  accountLabel: string | null;
+  createdAt: number;
+  updatedAt: number;
+  paidAt: number | null;
+  expiresAt: number | null;
+};
+
+export type GetApiFormsByIdPayments200 = {
+  payments: GetApiFormsByIdPayments200PaymentsItem[];
+  total: number;
+  limit: number;
+  offset: number;
 };
 
 export type GetApiBillingEntitlements200Features = {[key: string]: boolean};

@@ -1217,7 +1217,8 @@ feedbackRouter.post(
     );
     await c.env.DB.batch([
       c.env.DB.prepare(`UPDATE respondent_feedback SET issue_id = NULL, issue_similarity = NULL WHERE issue_id IS NOT NULL`),
-      c.env.DB.prepare(`DELETE FROM feedback_issues`),
+      // Only this pool's: builder issues are rebuilt from their own tab.
+      c.env.DB.prepare(`DELETE FROM feedback_issues WHERE pool = 'respondent'`),
     ]);
     // `sendBatch` takes 100 at a time; the queue keeps their order.
     for (let i = 0; i < reports.length; i += 100) {

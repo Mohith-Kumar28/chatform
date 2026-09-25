@@ -32,6 +32,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--border-radius": "var(--radius)",
         } as React.CSSProperties
       }
+      // Stacked above the "?" feedback button that owns the bottom-right corner
+      // of the dashboard and the builder, rather than under it.
+      offset={{ bottom: "4.5rem" }}
+      mobileOffset={{ bottom: "4.5rem" }}
       {...props}
     />
   )

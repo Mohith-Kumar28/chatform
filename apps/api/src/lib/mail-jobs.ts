@@ -7,6 +7,9 @@ import {
   DEFAULT_CONFIRMATION_SUBJECT,
   feedbackLabel,
   feedbackTopicLabel,
+  BUILDER_FEEDBACK_KINDS,
+  builderAreaLabel,
+  builderSeverityLabel,
   type AnswerMap,
   type Block,
   type FormDoc,
@@ -24,6 +27,7 @@ import {
 } from "./mail.js";
 import {
   autoReplyEmail,
+  builderFeedbackEmail,
   escapeHtml,
   feedbackNotificationEmail,
   followUpEmail,
@@ -38,6 +42,8 @@ import {
 import { webOrigins } from "./origins.js";
 import { platformAdminEmails } from "./platform-admin.js";
 import { tagFeedback } from "./feedback-tags.js";
+import { PLANS, type PlanId } from "@repo/entitlements";
+import { parseAttachments, tagBuilderFeedback } from "./builder-feedback.js";
 import { resolveRespondentAddress } from "./respondent-address.js";
 import { mintEmailToken } from "./signed-url.js";
 import { RESUME_TTL_DAYS, UNSUB_TTL_DAYS } from "./followups.js";
@@ -102,6 +108,9 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOu
 
     case "respondent_feedback":
       return runFeedbackJob(env, job);
+
+    case "builder_feedback":
+      return runBuilderFeedbackJob(env, job);
 
     case "admin_new_user":
       return runNewUserJob(env, job);
@@ -384,6 +393,116 @@ async function runFeedbackJob(
   */
   if (errors.length > 0 && tally.outcome().messages === 0) throw errors[0];
   return tally.outcome();
+}
+
+/**
+ * A builder's bug, request or feedback, to every platform admin.
+ *
+ * Reply-To is the person who sent it: they are a signed-in customer with a real
+ * address, and answering the mail should answer them. Read fresh from D1 like
+ * the respondent report, with every join optional.
+ */
+async function runBuilderFeedbackJob(
+  env: Bindings,
+  job: Extract<MailJob, { kind: "builder_feedback" }>,
+): Promise<MailJobOutcome> {
+  const row = await env.DB.prepare(
+    `SELECT fb.kind, fb.area, fb.topic, fb.severity, fb.rating, fb.title, fb.message, fb.steps, fb.expected, fb.why,
+            fb.user_name, fb.user_email, fb.role, fb.plan_id, fb.url, fb.organization_id, fb.impersonator_email,
+            fb.user_agent, fb.context_json, fb.attachments_json, fb.created_at, fb.issue_id,
+            o.name AS org_name, f.title AS form_title, iss.title AS issue_title,
+            (SELECT COUNT(*) FROM builder_feedback x WHERE x.issue_id = fb.issue_id AND x.status != 'spam') AS issue_reports,
+            (SELECT COUNT(DISTINCT x.organization_id) FROM builder_feedback x
+              WHERE x.issue_id = fb.issue_id AND x.status != 'spam') AS issue_accounts
+       FROM builder_feedback fb
+       LEFT JOIN organizations o ON o.id = fb.organization_id
+       LEFT JOIN forms f ON f.id = fb.form_id
+       LEFT JOIN feedback_issues iss ON iss.id = fb.issue_id
+      WHERE fb.id = ?1`,
+  )
+    .bind(job.feedbackId)
+    .first<{
+      kind: string;
+      area: string | null;
+      topic: string | null;
+      severity: string | null;
+      rating: number | null;
+      title: string | null;
+      message: string;
+      steps: string | null;
+      expected: string | null;
+      why: string | null;
+      user_name: string | null;
+      user_email: string | null;
+      role: string | null;
+      plan_id: string | null;
+      url: string | null;
+      organization_id: string | null;
+      impersonator_email: string | null;
+      user_agent: string | null;
+      context_json: string | null;
+      attachments_json: string | null;
+      created_at: number;
+      issue_id: string | null;
+      org_name: string | null;
+      form_title: string | null;
+      issue_title: string | null;
+      issue_reports: number | null;
+      issue_accounts: number | null;
+    }>();
+  if (!row) return NO_MAIL;
+  if (platformAdminEmails(env).length === 0) return NO_MAIL;
+
+  // The fallback path skips triage; summarise here so the subject still reads well.
+  const title = row.title ?? (await tagBuilderFeedback(env, job.feedbackId))?.title ?? null;
+
+  let errors = 0;
+  try {
+    const ctx = JSON.parse(row.context_json ?? "{}") as { errors?: unknown[] };
+    errors = Array.isArray(ctx.errors) ? ctx.errors.length : 0;
+  } catch {
+    errors = 0;
+  }
+
+  const origin = webOrigins(env)[0]!;
+  const area = row.area && row.area !== "other" ? row.area : (row.topic ?? row.area);
+  const msg = builderFeedbackEmail({
+    kindLabel: BUILDER_FEEDBACK_KINDS[row.kind as keyof typeof BUILDER_FEEDBACK_KINDS] ?? row.kind,
+    severityLabel: builderSeverityLabel(row.severity),
+    rating: row.rating === null ? null : Number(row.rating),
+    ratingLabel: row.rating === null ? null : feedbackLabel(Number(row.rating)),
+    areaLabel: builderAreaLabel(area),
+    title,
+    message: row.message,
+    steps: row.steps,
+    expected: row.expected,
+    why: row.why,
+    userName: row.user_name,
+    userEmail: row.user_email,
+    role: row.role,
+    accountName: row.org_name,
+    planLabel: row.plan_id ? (PLANS[row.plan_id as PlanId]?.name ?? row.plan_id) : null,
+    pageUrl: row.url,
+    formTitle: row.form_title,
+    attachments: parseAttachments(row.attachments_json).length,
+    errors,
+    issue: row.issue_id
+      ? {
+          title: row.issue_title ?? "Untitled issue",
+          reports: Number(row.issue_reports ?? 1),
+          accounts: Number(row.issue_accounts ?? 1),
+        }
+      : null,
+    impersonatorEmail: row.impersonator_email,
+    userAgent: row.user_agent,
+    createdAt: Number(row.created_at),
+    reportUrl: `${origin}/admin/feedback?view=admins&report=${encodeURIComponent(job.feedbackId)}`,
+    consoleUrl: row.organization_id ? `${origin}/admin/accounts/${row.organization_id}` : `${origin}/admin`,
+  });
+
+  // Never reply to the admin who filed it while impersonating: that would answer ourselves.
+  const replyTo = row.impersonator_email ? undefined : (row.user_email ?? undefined);
+  return mailPlatformAdmins(env, { ...msg, ...(replyTo ? { replyTo } : {}) });
 }
 
 /** The single-recipient jobs, which are every job except the two below. */

@@ -28,6 +28,7 @@ import { UnpublishedChangesDialog } from "./unpublished-changes-dialog";
 import { useUnpublishedGuard } from "./use-unpublished-guard";
 import { firstBlockingIssue } from "./attention";
 import { ShortcutsDialog } from "@/components/ui/shortcuts-dialog";
+import { FeedbackLauncher } from "@/components/feedback/feedback-launcher";
 import { useBuilderShortcuts } from "./use-builder-shortcuts";
 
 /**
@@ -346,7 +347,7 @@ export function BuilderShell({
           />
         )}
 
-        <div className="min-h-0 flex-1">
+        <div className="fab-clear min-h-0 flex-1">
           {unavailable ? (
             <div className="mx-auto max-w-md px-6 py-24">
               <EmptyState
@@ -408,6 +409,7 @@ export function BuilderShell({
           actually looking at.
         */}
         <CommandPalette />
+        <FeedbackLauncher />
       </div>
     </AuthGuard>
   );

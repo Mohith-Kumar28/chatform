@@ -201,7 +201,7 @@ export function BlockInspector() {
         )}
       </div>
 
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pt-2 pb-6">
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pt-2 pb-[var(--fab-clearance)]">
         {doc && <AttentionCallout key={block.ref} blockRef={block.ref} doc={doc} />}
         <TextField
           label="Question"

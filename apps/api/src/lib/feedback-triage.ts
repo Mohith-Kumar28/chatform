@@ -21,6 +21,23 @@ export interface FeedbackTriageMessage {
   mail?: boolean;
 }
 
+/** The same, for a report filed from the dashboard or the builder. See `builder-feedback.ts`. */
+export interface BuilderFeedbackTriageMessage {
+  kind: "builder_feedback_triage";
+  feedbackId: string;
+  mail?: boolean;
+}
+
+/** Hand a builder's report to triage, falling back to mailing it straight away. Never throws. */
+export async function enqueueBuilderFeedbackTriage(env: Bindings, feedbackId: string): Promise<void> {
+  try {
+    await env.Q_FEEDBACK.send({ kind: "builder_feedback_triage", feedbackId } satisfies BuilderFeedbackTriageMessage);
+  } catch (err) {
+    console.error("builder_feedback_triage_enqueue_failed", { feedbackId, err: String(err) });
+    await enqueueMail(env, { kind: "builder_feedback", feedbackId });
+  }
+}
+
 /**
  * Hand a new report to triage.
  *

@@ -4,14 +4,18 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BookOpen,
+  Bug,
   ExternalLink,
   FileClock,
   Keyboard,
+  Lightbulb,
+  MessageSquareHeart,
   Moon,
   Plus,
   Sun,
 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { openFeedback } from "@/components/feedback/feedback-launcher";
 import {
   Command,
   CommandEmpty,
@@ -249,6 +253,29 @@ export function CommandPalette() {
               >
                 <s.icon className="size-3.5 opacity-60" />
                 {s.label}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+
+          {/* The "?" button's three actions, for somebody who reaches for ⌘K first. */}
+          <CommandGroup heading="Feedback">
+            {(
+              [
+                { kind: "bug", label: "Report a bug", icon: Bug, keywords: "broken error issue problem support" },
+                { kind: "feature", label: "Request a feature", icon: Lightbulb, keywords: "idea suggestion wish" },
+                { kind: "feedback", label: "Share feedback", icon: MessageSquareHeart, keywords: "rate opinion contact" },
+              ] as const
+            ).map((f) => (
+              <CommandItem
+                key={f.kind}
+                value={`${f.label} ${f.keywords}`}
+                onSelect={() => {
+                  setOpen(false);
+                  openFeedback(f.kind);
+                }}
+              >
+                <f.icon className="size-3.5 opacity-60" />
+                {f.label}
               </CommandItem>
             ))}
           </CommandGroup>

@@ -24,6 +24,8 @@ import type {
   DeleteV1FormsByIdIntegrationsSpreadsheet200,
   DeleteV1FormsByIdIntegrationsSpreadsheet404,
   DeleteV1FormsByIdKnowledgeBySourceId200,
+  DeleteV1PaymentAccountsById200,
+  DeleteV1PaymentAccountsById404,
   DeleteV1ResponsesByIdAnswersByRef200,
   DeleteV1WebhooksById200,
   GetV1Blocks200,
@@ -43,6 +45,10 @@ import type {
   GetV1FormsByIdIntegrations404,
   GetV1FormsByIdKnowledge200,
   GetV1FormsByIdParams,
+  GetV1FormsByIdPayments200,
+  GetV1FormsByIdPayments400,
+  GetV1FormsByIdPayments404,
+  GetV1FormsByIdPaymentsParams,
   GetV1FormsByIdResponses200,
   GetV1FormsByIdResponsesParams,
   GetV1FormsByIdVersions200,
@@ -52,6 +58,8 @@ import type {
   GetV1FormsByIdVersionsByVersionParams,
   GetV1FormsParams,
   GetV1Me200,
+  GetV1PaymentAccounts200,
+  GetV1PaymentAccounts403,
   GetV1ResponsesById200,
   GetV1ResponsesByIdNext200,
   GetV1SessionsBySid200,
@@ -61,6 +69,9 @@ import type {
   GetV1TemplatesBySlug404,
   GetV1Webhooks200,
   GetV1WebhooksByIdDeliveries200,
+  PatchV1PaymentAccountsById200,
+  PatchV1PaymentAccountsById404,
+  PatchV1PaymentAccountsByIdBody,
   PostPSessionsByIdAuthGoogle200,
   PostPSessionsByIdAuthPhoneToken200,
   PostPSessionsByIdVerifyPhoneToken200,
@@ -82,6 +93,7 @@ import type {
   PostV1ChatSessionsBySidAuthPhoneToken200,
   PostV1ChatSessionsBySidMessages200,
   PostV1ChatSessionsBySidMessagesBody,
+  PostV1ChatSessionsBySidPaymentsBody,
   PostV1ChatSessionsBySidTokenRotate200,
   PostV1ChatSessionsBySidVerifyPhoneToken200,
   PostV1Forms201,
@@ -111,6 +123,19 @@ import type {
   PostV1FormsByIdVersionsByVersionRestore200,
   PostV1FormsByIdVersionsByVersionRestore404,
   PostV1FormsByIdVersionsByVersionRestore422,
+  PostV1PaymentAccountsCashfreeOnboard200,
+  PostV1PaymentAccountsCashfreeOnboard402,
+  PostV1PaymentAccountsCashfreeOnboardBody,
+  PostV1PaymentAccountsOauthByProviderStart200,
+  PostV1PaymentAccountsOauthByProviderStart402,
+  PostV1PaymentAccountsOauthByProviderStart403,
+  PostV1PaymentAccountsOauthByProviderStart422,
+  PostV1PaymentAccountsOauthByProviderStartBody,
+  PostV1PaymentAccountsStripe200,
+  PostV1PaymentAccountsStripe402,
+  PostV1PaymentAccountsStripe409,
+  PostV1PaymentAccountsStripe422,
+  PostV1PaymentAccountsStripeBody,
   PostV1ResponsesByIdAbandon200,
   PostV1ResponsesByIdAbandonBody,
   PostV1ResponsesByIdAnswers200,
@@ -123,6 +148,7 @@ import type {
   PostV1SessionsBySidAuthPhoneToken200,
   PostV1SessionsBySidMessages200,
   PostV1SessionsBySidMessagesBody,
+  PostV1SessionsBySidPaymentsBody,
   PostV1SessionsBySidTokenRotate200,
   PostV1SessionsBySidUploadsByFileIdConfirm200,
   PostV1SessionsBySidUploadsIntent200,
@@ -3719,7 +3745,717 @@ export const useDeleteV1FormsByIdIntegrationsSpreadsheet = <TError = DeleteV1For
       > => {
       return useMutation(getDeleteV1FormsByIdIntegrationsSpreadsheetMutationOptions(options));
     }
-    export type getV1WebhooksResponse200 = {
+    export type getV1PaymentAccountsResponse200 = {
+  data: GetV1PaymentAccounts200
+  status: 200
+}
+
+export type getV1PaymentAccountsResponse403 = {
+  data: GetV1PaymentAccounts403
+  status: 403
+}
+
+export type getV1PaymentAccountsResponseSuccess = (getV1PaymentAccountsResponse200) & {
+  headers: Headers;
+};
+export type getV1PaymentAccountsResponseError = (getV1PaymentAccountsResponse403) & {
+  headers: Headers;
+};
+
+export type getV1PaymentAccountsResponse = (getV1PaymentAccountsResponseSuccess | getV1PaymentAccountsResponseError)
+
+export const getGetV1PaymentAccountsUrl = () => {
+
+
+
+
+  return `/v1/payment-accounts`
+}
+
+/**
+ * The Cashfree, Razorpay and Stripe accounts this organization has connected for verified payments. Credentials are never returned. `formsUsing` counts forms whose working document names the account.
+ * @summary List connected payment gateway accounts
+ */
+export const getV1PaymentAccounts = async ( options?: Parameters<typeof customFetch>[1]): Promise<getV1PaymentAccountsResponse> => {
+
+  return customFetch<getV1PaymentAccountsResponse>(getGetV1PaymentAccountsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1PaymentAccountsQueryKey = () => {
+    return [
+    `/v1/payment-accounts`
+    ] as const;
+    }
+
+
+export const getGetV1PaymentAccountsQueryOptions = <TData = Awaited<ReturnType<typeof getV1PaymentAccounts>>, TError = GetV1PaymentAccounts403>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1PaymentAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1PaymentAccountsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1PaymentAccounts>>> = ({ signal }) => getV1PaymentAccounts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1PaymentAccounts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1PaymentAccountsQueryResult = NonNullable<Awaited<ReturnType<typeof getV1PaymentAccounts>>>
+export type GetV1PaymentAccountsQueryError = GetV1PaymentAccounts403
+
+
+/**
+ * @summary List connected payment gateway accounts
+ */
+
+export function useGetV1PaymentAccounts<TData = Awaited<ReturnType<typeof getV1PaymentAccounts>>, TError = GetV1PaymentAccounts403>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1PaymentAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1PaymentAccountsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postV1PaymentAccountsOauthByProviderStartResponse200 = {
+  data: PostV1PaymentAccountsOauthByProviderStart200
+  status: 200
+}
+
+export type postV1PaymentAccountsOauthByProviderStartResponse402 = {
+  data: PostV1PaymentAccountsOauthByProviderStart402
+  status: 402
+}
+
+export type postV1PaymentAccountsOauthByProviderStartResponse403 = {
+  data: PostV1PaymentAccountsOauthByProviderStart403
+  status: 403
+}
+
+export type postV1PaymentAccountsOauthByProviderStartResponse422 = {
+  data: PostV1PaymentAccountsOauthByProviderStart422
+  status: 422
+}
+
+export type postV1PaymentAccountsOauthByProviderStartResponseSuccess = (postV1PaymentAccountsOauthByProviderStartResponse200) & {
+  headers: Headers;
+};
+export type postV1PaymentAccountsOauthByProviderStartResponseError = (postV1PaymentAccountsOauthByProviderStartResponse402 | postV1PaymentAccountsOauthByProviderStartResponse403 | postV1PaymentAccountsOauthByProviderStartResponse422) & {
+  headers: Headers;
+};
+
+export type postV1PaymentAccountsOauthByProviderStartResponse = (postV1PaymentAccountsOauthByProviderStartResponseSuccess | postV1PaymentAccountsOauthByProviderStartResponseError)
+
+export const getPostV1PaymentAccountsOauthByProviderStartUrl = (provider: string,) => {
+
+
+
+
+  return `/v1/payment-accounts/oauth/${provider}/start`
+}
+
+/**
+ * Returns the gateway's consent URL. It must be opened in a browser signed in to chatform as the user who created this key; the state is single-use and expires in ten minutes. `returnTo` must be a page on the chatform app.
+ * @summary Start connecting a Cashfree or Razorpay account
+ */
+export const postV1PaymentAccountsOauthByProviderStart = async (provider: string,
+    postV1PaymentAccountsOauthByProviderStartBody: PostV1PaymentAccountsOauthByProviderStartBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1PaymentAccountsOauthByProviderStartResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1PaymentAccountsOauthByProviderStartResponse>(getPostV1PaymentAccountsOauthByProviderStartUrl(provider),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1PaymentAccountsOauthByProviderStartBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1PaymentAccountsOauthByProviderStartMutationOptions = <TError = PostV1PaymentAccountsOauthByProviderStart402 | PostV1PaymentAccountsOauthByProviderStart403 | PostV1PaymentAccountsOauthByProviderStart422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1PaymentAccountsOauthByProviderStart>>, TError,PostV1PaymentAccountsOauthByProviderStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1PaymentAccountsOauthByProviderStart>>, TError,PostV1PaymentAccountsOauthByProviderStartMutationVariables, TContext> => {
+
+const mutationKey = ['postV1PaymentAccountsOauthByProviderStart'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1PaymentAccountsOauthByProviderStart>>, PostV1PaymentAccountsOauthByProviderStartMutationVariables> = (props) => {
+          const {provider,data} = props ?? {};
+
+          return  postV1PaymentAccountsOauthByProviderStart(provider,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1PaymentAccountsOauthByProviderStartMutationResult = NonNullable<Awaited<ReturnType<typeof postV1PaymentAccountsOauthByProviderStart>>>
+    export type PostV1PaymentAccountsOauthByProviderStartMutationBody = PostV1PaymentAccountsOauthByProviderStartBody
+    export type PostV1PaymentAccountsOauthByProviderStartMutationError = PostV1PaymentAccountsOauthByProviderStart402 | PostV1PaymentAccountsOauthByProviderStart403 | PostV1PaymentAccountsOauthByProviderStart422
+    export type PostV1PaymentAccountsOauthByProviderStartMutationVariables = {provider: string;data: PostV1PaymentAccountsOauthByProviderStartBody}
+
+    /**
+ * @summary Start connecting a Cashfree or Razorpay account
+ */
+export const usePostV1PaymentAccountsOauthByProviderStart = <TError = PostV1PaymentAccountsOauthByProviderStart402 | PostV1PaymentAccountsOauthByProviderStart403 | PostV1PaymentAccountsOauthByProviderStart422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1PaymentAccountsOauthByProviderStart>>, TError,PostV1PaymentAccountsOauthByProviderStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1PaymentAccountsOauthByProviderStart>>,
+        TError,
+        PostV1PaymentAccountsOauthByProviderStartMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1PaymentAccountsOauthByProviderStartMutationOptions(options));
+    }
+    export type postV1PaymentAccountsStripeResponse200 = {
+  data: PostV1PaymentAccountsStripe200
+  status: 200
+}
+
+export type postV1PaymentAccountsStripeResponse402 = {
+  data: PostV1PaymentAccountsStripe402
+  status: 402
+}
+
+export type postV1PaymentAccountsStripeResponse409 = {
+  data: PostV1PaymentAccountsStripe409
+  status: 409
+}
+
+export type postV1PaymentAccountsStripeResponse422 = {
+  data: PostV1PaymentAccountsStripe422
+  status: 422
+}
+
+export type postV1PaymentAccountsStripeResponseSuccess = (postV1PaymentAccountsStripeResponse200) & {
+  headers: Headers;
+};
+export type postV1PaymentAccountsStripeResponseError = (postV1PaymentAccountsStripeResponse402 | postV1PaymentAccountsStripeResponse409 | postV1PaymentAccountsStripeResponse422) & {
+  headers: Headers;
+};
+
+export type postV1PaymentAccountsStripeResponse = (postV1PaymentAccountsStripeResponseSuccess | postV1PaymentAccountsStripeResponseError)
+
+export const getPostV1PaymentAccountsStripeUrl = () => {
+
+
+
+
+  return `/v1/payment-accounts/stripe`
+}
+
+/**
+ * Accepts only a restricted key (`rk_test_…` or `rk_live_…`); a full `sk_` secret key is refused with `full_secret_key`. The key is checked by reading the account, creating and immediately expiring a Checkout Session, and creating a webhook endpoint — a missing permission comes back as `missing_permission` with the permission named.
+ * @summary Connect a Stripe account with a restricted key
+ */
+export const postV1PaymentAccountsStripe = async (postV1PaymentAccountsStripeBody: PostV1PaymentAccountsStripeBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1PaymentAccountsStripeResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1PaymentAccountsStripeResponse>(getPostV1PaymentAccountsStripeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1PaymentAccountsStripeBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1PaymentAccountsStripeMutationOptions = <TError = PostV1PaymentAccountsStripe402 | PostV1PaymentAccountsStripe409 | PostV1PaymentAccountsStripe422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1PaymentAccountsStripe>>, TError,PostV1PaymentAccountsStripeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1PaymentAccountsStripe>>, TError,PostV1PaymentAccountsStripeMutationVariables, TContext> => {
+
+const mutationKey = ['postV1PaymentAccountsStripe'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1PaymentAccountsStripe>>, PostV1PaymentAccountsStripeMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postV1PaymentAccountsStripe(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1PaymentAccountsStripeMutationResult = NonNullable<Awaited<ReturnType<typeof postV1PaymentAccountsStripe>>>
+    export type PostV1PaymentAccountsStripeMutationBody = PostV1PaymentAccountsStripeBody
+    export type PostV1PaymentAccountsStripeMutationError = PostV1PaymentAccountsStripe402 | PostV1PaymentAccountsStripe409 | PostV1PaymentAccountsStripe422
+    export type PostV1PaymentAccountsStripeMutationVariables = {data: PostV1PaymentAccountsStripeBody}
+
+    /**
+ * @summary Connect a Stripe account with a restricted key
+ */
+export const usePostV1PaymentAccountsStripe = <TError = PostV1PaymentAccountsStripe402 | PostV1PaymentAccountsStripe409 | PostV1PaymentAccountsStripe422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1PaymentAccountsStripe>>, TError,PostV1PaymentAccountsStripeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1PaymentAccountsStripe>>,
+        TError,
+        PostV1PaymentAccountsStripeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1PaymentAccountsStripeMutationOptions(options));
+    }
+    export type postV1PaymentAccountsCashfreeOnboardResponse200 = {
+  data: PostV1PaymentAccountsCashfreeOnboard200
+  status: 200
+}
+
+export type postV1PaymentAccountsCashfreeOnboardResponse402 = {
+  data: PostV1PaymentAccountsCashfreeOnboard402
+  status: 402
+}
+
+export type postV1PaymentAccountsCashfreeOnboardResponseSuccess = (postV1PaymentAccountsCashfreeOnboardResponse200) & {
+  headers: Headers;
+};
+export type postV1PaymentAccountsCashfreeOnboardResponseError = (postV1PaymentAccountsCashfreeOnboardResponse402) & {
+  headers: Headers;
+};
+
+export type postV1PaymentAccountsCashfreeOnboardResponse = (postV1PaymentAccountsCashfreeOnboardResponseSuccess | postV1PaymentAccountsCashfreeOnboardResponseError)
+
+export const getPostV1PaymentAccountsCashfreeOnboardUrl = () => {
+
+
+
+
+  return `/v1/payment-accounts/cashfree/onboard`
+}
+
+/**
+ * Returns the Cashfree KYC link, or `{ useOAuth: true }` when the email already has a Cashfree account.
+ * @summary Create a Cashfree account for a business that has none
+ */
+export const postV1PaymentAccountsCashfreeOnboard = async (postV1PaymentAccountsCashfreeOnboardBody: PostV1PaymentAccountsCashfreeOnboardBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1PaymentAccountsCashfreeOnboardResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1PaymentAccountsCashfreeOnboardResponse>(getPostV1PaymentAccountsCashfreeOnboardUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1PaymentAccountsCashfreeOnboardBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1PaymentAccountsCashfreeOnboardMutationOptions = <TError = PostV1PaymentAccountsCashfreeOnboard402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1PaymentAccountsCashfreeOnboard>>, TError,PostV1PaymentAccountsCashfreeOnboardMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1PaymentAccountsCashfreeOnboard>>, TError,PostV1PaymentAccountsCashfreeOnboardMutationVariables, TContext> => {
+
+const mutationKey = ['postV1PaymentAccountsCashfreeOnboard'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1PaymentAccountsCashfreeOnboard>>, PostV1PaymentAccountsCashfreeOnboardMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postV1PaymentAccountsCashfreeOnboard(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1PaymentAccountsCashfreeOnboardMutationResult = NonNullable<Awaited<ReturnType<typeof postV1PaymentAccountsCashfreeOnboard>>>
+    export type PostV1PaymentAccountsCashfreeOnboardMutationBody = PostV1PaymentAccountsCashfreeOnboardBody
+    export type PostV1PaymentAccountsCashfreeOnboardMutationError = PostV1PaymentAccountsCashfreeOnboard402
+    export type PostV1PaymentAccountsCashfreeOnboardMutationVariables = {data: PostV1PaymentAccountsCashfreeOnboardBody}
+
+    /**
+ * @summary Create a Cashfree account for a business that has none
+ */
+export const usePostV1PaymentAccountsCashfreeOnboard = <TError = PostV1PaymentAccountsCashfreeOnboard402,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1PaymentAccountsCashfreeOnboard>>, TError,PostV1PaymentAccountsCashfreeOnboardMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1PaymentAccountsCashfreeOnboard>>,
+        TError,
+        PostV1PaymentAccountsCashfreeOnboardMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1PaymentAccountsCashfreeOnboardMutationOptions(options));
+    }
+    export type patchV1PaymentAccountsByIdResponse200 = {
+  data: PatchV1PaymentAccountsById200
+  status: 200
+}
+
+export type patchV1PaymentAccountsByIdResponse404 = {
+  data: PatchV1PaymentAccountsById404
+  status: 404
+}
+
+export type patchV1PaymentAccountsByIdResponseSuccess = (patchV1PaymentAccountsByIdResponse200) & {
+  headers: Headers;
+};
+export type patchV1PaymentAccountsByIdResponseError = (patchV1PaymentAccountsByIdResponse404) & {
+  headers: Headers;
+};
+
+export type patchV1PaymentAccountsByIdResponse = (patchV1PaymentAccountsByIdResponseSuccess | patchV1PaymentAccountsByIdResponseError)
+
+export const getPatchV1PaymentAccountsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/v1/payment-accounts/${id}`
+}
+
+/**
+ * `label` sets the name the account is shown under in the builder. `isDefault: true` makes it the account new verified-checkout questions start on. Nothing changes at the gateway.
+ * @summary Rename a payment account, or make it the default
+ */
+export const patchV1PaymentAccountsById = async (id: string,
+    patchV1PaymentAccountsByIdBody: PatchV1PaymentAccountsByIdBody, options?: Parameters<typeof customFetch>[1]): Promise<patchV1PaymentAccountsByIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<patchV1PaymentAccountsByIdResponse>(getPatchV1PaymentAccountsByIdUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(patchV1PaymentAccountsByIdBody)
+  }
+);}
+
+
+
+
+
+export const getPatchV1PaymentAccountsByIdMutationOptions = <TError = PatchV1PaymentAccountsById404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchV1PaymentAccountsById>>, TError,PatchV1PaymentAccountsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchV1PaymentAccountsById>>, TError,PatchV1PaymentAccountsByIdMutationVariables, TContext> => {
+
+const mutationKey = ['patchV1PaymentAccountsById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchV1PaymentAccountsById>>, PatchV1PaymentAccountsByIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  patchV1PaymentAccountsById(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchV1PaymentAccountsByIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchV1PaymentAccountsById>>>
+    export type PatchV1PaymentAccountsByIdMutationBody = PatchV1PaymentAccountsByIdBody
+    export type PatchV1PaymentAccountsByIdMutationError = PatchV1PaymentAccountsById404
+    export type PatchV1PaymentAccountsByIdMutationVariables = {id: string;data: PatchV1PaymentAccountsByIdBody}
+
+    /**
+ * @summary Rename a payment account, or make it the default
+ */
+export const usePatchV1PaymentAccountsById = <TError = PatchV1PaymentAccountsById404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchV1PaymentAccountsById>>, TError,PatchV1PaymentAccountsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchV1PaymentAccountsById>>,
+        TError,
+        PatchV1PaymentAccountsByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchV1PaymentAccountsByIdMutationOptions(options));
+    }
+    export type deleteV1PaymentAccountsByIdResponse200 = {
+  data: DeleteV1PaymentAccountsById200
+  status: 200
+}
+
+export type deleteV1PaymentAccountsByIdResponse404 = {
+  data: DeleteV1PaymentAccountsById404
+  status: 404
+}
+
+export type deleteV1PaymentAccountsByIdResponseSuccess = (deleteV1PaymentAccountsByIdResponse200) & {
+  headers: Headers;
+};
+export type deleteV1PaymentAccountsByIdResponseError = (deleteV1PaymentAccountsByIdResponse404) & {
+  headers: Headers;
+};
+
+export type deleteV1PaymentAccountsByIdResponse = (deleteV1PaymentAccountsByIdResponseSuccess | deleteV1PaymentAccountsByIdResponseError)
+
+export const getDeleteV1PaymentAccountsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/v1/payment-accounts/${id}`
+}
+
+/**
+ * Revokes the grant (Cashfree, Razorpay) or deletes the webhook endpoint (Stripe) at the gateway, then wipes the stored credentials. Forms still pointing at the account stop accepting payments until another account is chosen.
+ * @summary Disconnect a payment account
+ */
+export const deleteV1PaymentAccountsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteV1PaymentAccountsByIdResponse> => {
+
+  return customFetch<deleteV1PaymentAccountsByIdResponse>(getDeleteV1PaymentAccountsByIdUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteV1PaymentAccountsByIdMutationOptions = <TError = DeleteV1PaymentAccountsById404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteV1PaymentAccountsById>>, TError,DeleteV1PaymentAccountsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteV1PaymentAccountsById>>, TError,DeleteV1PaymentAccountsByIdMutationVariables, TContext> => {
+
+const mutationKey = ['deleteV1PaymentAccountsById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteV1PaymentAccountsById>>, DeleteV1PaymentAccountsByIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteV1PaymentAccountsById(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteV1PaymentAccountsByIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteV1PaymentAccountsById>>>
+
+    export type DeleteV1PaymentAccountsByIdMutationError = DeleteV1PaymentAccountsById404
+    export type DeleteV1PaymentAccountsByIdMutationVariables = {id: string}
+
+    /**
+ * @summary Disconnect a payment account
+ */
+export const useDeleteV1PaymentAccountsById = <TError = DeleteV1PaymentAccountsById404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteV1PaymentAccountsById>>, TError,DeleteV1PaymentAccountsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteV1PaymentAccountsById>>,
+        TError,
+        DeleteV1PaymentAccountsByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteV1PaymentAccountsByIdMutationOptions(options));
+    }
+    export type getV1FormsByIdPaymentsResponse200 = {
+  data: GetV1FormsByIdPayments200
+  status: 200
+}
+
+export type getV1FormsByIdPaymentsResponse400 = {
+  data: GetV1FormsByIdPayments400
+  status: 400
+}
+
+export type getV1FormsByIdPaymentsResponse404 = {
+  data: GetV1FormsByIdPayments404
+  status: 404
+}
+
+export type getV1FormsByIdPaymentsResponseSuccess = (getV1FormsByIdPaymentsResponse200) & {
+  headers: Headers;
+};
+export type getV1FormsByIdPaymentsResponseError = (getV1FormsByIdPaymentsResponse400 | getV1FormsByIdPaymentsResponse404) & {
+  headers: Headers;
+};
+
+export type getV1FormsByIdPaymentsResponse = (getV1FormsByIdPaymentsResponseSuccess | getV1FormsByIdPaymentsResponseError)
+
+export const getGetV1FormsByIdPaymentsUrl = (id: string,
+    params?: GetV1FormsByIdPaymentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/forms/${id}/payments?${stringifiedParams}` : `/v1/forms/${id}/payments`
+}
+
+/**
+ * Every checkout opened on a verified payment block, including the ones that never became an answer — a payment that arrived after the respondent left, a duplicate from a second tab, a failure. `status` defaults to `all`. Amounts are given both in minor units (`amount_minor`, what the gateway charged) and major units. Pass `next_cursor` back as `cursor` for the next page.
+ * @summary List a form's payment attempts, newest first
+ */
+export const getV1FormsByIdPayments = async (id: string,
+    params?: GetV1FormsByIdPaymentsParams, options?: Parameters<typeof customFetch>[1]): Promise<getV1FormsByIdPaymentsResponse> => {
+
+  return customFetch<getV1FormsByIdPaymentsResponse>(getGetV1FormsByIdPaymentsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1FormsByIdPaymentsQueryKey = (id: string,
+    params?: GetV1FormsByIdPaymentsParams,) => {
+    return [
+    `/v1/forms/${id}/payments`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetV1FormsByIdPaymentsQueryOptions = <TData = Awaited<ReturnType<typeof getV1FormsByIdPayments>>, TError = GetV1FormsByIdPayments400 | GetV1FormsByIdPayments404>(id: string,
+    params?: GetV1FormsByIdPaymentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdPayments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1FormsByIdPaymentsQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1FormsByIdPayments>>> = ({ signal }) => getV1FormsByIdPayments(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdPayments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1FormsByIdPaymentsQueryResult = NonNullable<Awaited<ReturnType<typeof getV1FormsByIdPayments>>>
+export type GetV1FormsByIdPaymentsQueryError = GetV1FormsByIdPayments400 | GetV1FormsByIdPayments404
+
+
+/**
+ * @summary List a form's payment attempts, newest first
+ */
+
+export function useGetV1FormsByIdPayments<TData = Awaited<ReturnType<typeof getV1FormsByIdPayments>>, TError = GetV1FormsByIdPayments400 | GetV1FormsByIdPayments404>(
+ id: string,
+    params?: GetV1FormsByIdPaymentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdPayments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1FormsByIdPaymentsQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getV1WebhooksResponse200 = {
   data: GetV1Webhooks200
   status: 200
 }
@@ -6130,6 +6866,215 @@ export const usePostV1SessionsBySidTokenRotate = <TError = void,
       > => {
       return useMutation(getPostV1SessionsBySidTokenRotateMutationOptions(options));
     }
+    export type postV1SessionsBySidPaymentsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1SessionsBySidPaymentsResponse402 = {
+  data: void
+  status: 402
+}
+
+export type postV1SessionsBySidPaymentsResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postV1SessionsBySidPaymentsResponse422 = {
+  data: void
+  status: 422
+}
+
+export type postV1SessionsBySidPaymentsResponse429 = {
+  data: void
+  status: 429
+}
+
+export type postV1SessionsBySidPaymentsResponseSuccess = (postV1SessionsBySidPaymentsResponse200) & {
+  headers: Headers;
+};
+export type postV1SessionsBySidPaymentsResponseError = (postV1SessionsBySidPaymentsResponse402 | postV1SessionsBySidPaymentsResponse409 | postV1SessionsBySidPaymentsResponse422 | postV1SessionsBySidPaymentsResponse429) & {
+  headers: Headers;
+};
+
+export type postV1SessionsBySidPaymentsResponse = (postV1SessionsBySidPaymentsResponseSuccess | postV1SessionsBySidPaymentsResponseError)
+
+export const getPostV1SessionsBySidPaymentsUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}/payments`
+}
+
+/**
+ * @summary Open a verified checkout for the current payment question
+ */
+export const postV1SessionsBySidPayments = async (sid: string,
+    postV1SessionsBySidPaymentsBody: PostV1SessionsBySidPaymentsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidPaymentsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1SessionsBySidPaymentsResponse>(getPostV1SessionsBySidPaymentsUrl(sid),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1SessionsBySidPaymentsBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1SessionsBySidPaymentsMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidPayments>>, TError,PostV1SessionsBySidPaymentsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidPayments>>, TError,PostV1SessionsBySidPaymentsMutationVariables, TContext> => {
+
+const mutationKey = ['postV1SessionsBySidPayments'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1SessionsBySidPayments>>, PostV1SessionsBySidPaymentsMutationVariables> = (props) => {
+          const {sid,data} = props ?? {};
+
+          return  postV1SessionsBySidPayments(sid,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1SessionsBySidPaymentsMutationResult = NonNullable<Awaited<ReturnType<typeof postV1SessionsBySidPayments>>>
+    export type PostV1SessionsBySidPaymentsMutationBody = PostV1SessionsBySidPaymentsBody
+    export type PostV1SessionsBySidPaymentsMutationError = void
+    export type PostV1SessionsBySidPaymentsMutationVariables = {sid: string;data: PostV1SessionsBySidPaymentsBody}
+
+    /**
+ * @summary Open a verified checkout for the current payment question
+ */
+export const usePostV1SessionsBySidPayments = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidPayments>>, TError,PostV1SessionsBySidPaymentsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1SessionsBySidPayments>>,
+        TError,
+        PostV1SessionsBySidPaymentsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1SessionsBySidPaymentsMutationOptions(options));
+    }
+    export type postV1SessionsBySidPaymentsByRecordIdConfirmResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1SessionsBySidPaymentsByRecordIdConfirmResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1SessionsBySidPaymentsByRecordIdConfirmResponse502 = {
+  data: void
+  status: 502
+}
+
+export type postV1SessionsBySidPaymentsByRecordIdConfirmResponseSuccess = (postV1SessionsBySidPaymentsByRecordIdConfirmResponse200) & {
+  headers: Headers;
+};
+export type postV1SessionsBySidPaymentsByRecordIdConfirmResponseError = (postV1SessionsBySidPaymentsByRecordIdConfirmResponse404 | postV1SessionsBySidPaymentsByRecordIdConfirmResponse502) & {
+  headers: Headers;
+};
+
+export type postV1SessionsBySidPaymentsByRecordIdConfirmResponse = (postV1SessionsBySidPaymentsByRecordIdConfirmResponseSuccess | postV1SessionsBySidPaymentsByRecordIdConfirmResponseError)
+
+export const getPostV1SessionsBySidPaymentsByRecordIdConfirmUrl = (sid: string,
+    recordId: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}/payments/${recordId}/confirm`
+}
+
+/**
+ * @summary Re-check a checkout with the gateway, and settle it if it was paid
+ */
+export const postV1SessionsBySidPaymentsByRecordIdConfirm = async (sid: string,
+    recordId: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidPaymentsByRecordIdConfirmResponse> => {
+
+  return customFetch<postV1SessionsBySidPaymentsByRecordIdConfirmResponse>(getPostV1SessionsBySidPaymentsByRecordIdConfirmUrl(sid,recordId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1SessionsBySidPaymentsByRecordIdConfirmMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidPaymentsByRecordIdConfirm>>, TError,PostV1SessionsBySidPaymentsByRecordIdConfirmMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidPaymentsByRecordIdConfirm>>, TError,PostV1SessionsBySidPaymentsByRecordIdConfirmMutationVariables, TContext> => {
+
+const mutationKey = ['postV1SessionsBySidPaymentsByRecordIdConfirm'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1SessionsBySidPaymentsByRecordIdConfirm>>, PostV1SessionsBySidPaymentsByRecordIdConfirmMutationVariables> = (props) => {
+          const {sid,recordId} = props ?? {};
+
+          return  postV1SessionsBySidPaymentsByRecordIdConfirm(sid,recordId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1SessionsBySidPaymentsByRecordIdConfirmMutationResult = NonNullable<Awaited<ReturnType<typeof postV1SessionsBySidPaymentsByRecordIdConfirm>>>
+
+    export type PostV1SessionsBySidPaymentsByRecordIdConfirmMutationError = void
+    export type PostV1SessionsBySidPaymentsByRecordIdConfirmMutationVariables = {sid: string;recordId: string}
+
+    /**
+ * @summary Re-check a checkout with the gateway, and settle it if it was paid
+ */
+export const usePostV1SessionsBySidPaymentsByRecordIdConfirm = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidPaymentsByRecordIdConfirm>>, TError,PostV1SessionsBySidPaymentsByRecordIdConfirmMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1SessionsBySidPaymentsByRecordIdConfirm>>,
+        TError,
+        PostV1SessionsBySidPaymentsByRecordIdConfirmMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1SessionsBySidPaymentsByRecordIdConfirmMutationOptions(options));
+    }
     export type postV1SessionsBySidAuthGoogleResponse200 = {
   data: PostV1SessionsBySidAuthGoogle200
   status: 200
@@ -6886,6 +7831,215 @@ export const usePostV1ChatSessionsBySidTokenRotate = <TError = void,
         TContext
       > => {
       return useMutation(getPostV1ChatSessionsBySidTokenRotateMutationOptions(options));
+    }
+    export type postV1ChatSessionsBySidPaymentsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1ChatSessionsBySidPaymentsResponse402 = {
+  data: void
+  status: 402
+}
+
+export type postV1ChatSessionsBySidPaymentsResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postV1ChatSessionsBySidPaymentsResponse422 = {
+  data: void
+  status: 422
+}
+
+export type postV1ChatSessionsBySidPaymentsResponse429 = {
+  data: void
+  status: 429
+}
+
+export type postV1ChatSessionsBySidPaymentsResponseSuccess = (postV1ChatSessionsBySidPaymentsResponse200) & {
+  headers: Headers;
+};
+export type postV1ChatSessionsBySidPaymentsResponseError = (postV1ChatSessionsBySidPaymentsResponse402 | postV1ChatSessionsBySidPaymentsResponse409 | postV1ChatSessionsBySidPaymentsResponse422 | postV1ChatSessionsBySidPaymentsResponse429) & {
+  headers: Headers;
+};
+
+export type postV1ChatSessionsBySidPaymentsResponse = (postV1ChatSessionsBySidPaymentsResponseSuccess | postV1ChatSessionsBySidPaymentsResponseError)
+
+export const getPostV1ChatSessionsBySidPaymentsUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/chat/sessions/${sid}/payments`
+}
+
+/**
+ * @summary Open a verified checkout for the current payment question
+ */
+export const postV1ChatSessionsBySidPayments = async (sid: string,
+    postV1ChatSessionsBySidPaymentsBody: PostV1ChatSessionsBySidPaymentsBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatSessionsBySidPaymentsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1ChatSessionsBySidPaymentsResponse>(getPostV1ChatSessionsBySidPaymentsUrl(sid),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1ChatSessionsBySidPaymentsBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1ChatSessionsBySidPaymentsMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidPayments>>, TError,PostV1ChatSessionsBySidPaymentsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidPayments>>, TError,PostV1ChatSessionsBySidPaymentsMutationVariables, TContext> => {
+
+const mutationKey = ['postV1ChatSessionsBySidPayments'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ChatSessionsBySidPayments>>, PostV1ChatSessionsBySidPaymentsMutationVariables> = (props) => {
+          const {sid,data} = props ?? {};
+
+          return  postV1ChatSessionsBySidPayments(sid,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ChatSessionsBySidPaymentsMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ChatSessionsBySidPayments>>>
+    export type PostV1ChatSessionsBySidPaymentsMutationBody = PostV1ChatSessionsBySidPaymentsBody
+    export type PostV1ChatSessionsBySidPaymentsMutationError = void
+    export type PostV1ChatSessionsBySidPaymentsMutationVariables = {sid: string;data: PostV1ChatSessionsBySidPaymentsBody}
+
+    /**
+ * @summary Open a verified checkout for the current payment question
+ */
+export const usePostV1ChatSessionsBySidPayments = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidPayments>>, TError,PostV1ChatSessionsBySidPaymentsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1ChatSessionsBySidPayments>>,
+        TError,
+        PostV1ChatSessionsBySidPaymentsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ChatSessionsBySidPaymentsMutationOptions(options));
+    }
+    export type postV1ChatSessionsBySidPaymentsByRecordIdConfirmResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postV1ChatSessionsBySidPaymentsByRecordIdConfirmResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1ChatSessionsBySidPaymentsByRecordIdConfirmResponse502 = {
+  data: void
+  status: 502
+}
+
+export type postV1ChatSessionsBySidPaymentsByRecordIdConfirmResponseSuccess = (postV1ChatSessionsBySidPaymentsByRecordIdConfirmResponse200) & {
+  headers: Headers;
+};
+export type postV1ChatSessionsBySidPaymentsByRecordIdConfirmResponseError = (postV1ChatSessionsBySidPaymentsByRecordIdConfirmResponse404 | postV1ChatSessionsBySidPaymentsByRecordIdConfirmResponse502) & {
+  headers: Headers;
+};
+
+export type postV1ChatSessionsBySidPaymentsByRecordIdConfirmResponse = (postV1ChatSessionsBySidPaymentsByRecordIdConfirmResponseSuccess | postV1ChatSessionsBySidPaymentsByRecordIdConfirmResponseError)
+
+export const getPostV1ChatSessionsBySidPaymentsByRecordIdConfirmUrl = (sid: string,
+    recordId: string,) => {
+
+
+
+
+  return `/v1/chat/sessions/${sid}/payments/${recordId}/confirm`
+}
+
+/**
+ * @summary Re-check a checkout with the gateway, and settle it if it was paid
+ */
+export const postV1ChatSessionsBySidPaymentsByRecordIdConfirm = async (sid: string,
+    recordId: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatSessionsBySidPaymentsByRecordIdConfirmResponse> => {
+
+  return customFetch<postV1ChatSessionsBySidPaymentsByRecordIdConfirmResponse>(getPostV1ChatSessionsBySidPaymentsByRecordIdConfirmUrl(sid,recordId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1ChatSessionsBySidPaymentsByRecordIdConfirmMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidPaymentsByRecordIdConfirm>>, TError,PostV1ChatSessionsBySidPaymentsByRecordIdConfirmMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidPaymentsByRecordIdConfirm>>, TError,PostV1ChatSessionsBySidPaymentsByRecordIdConfirmMutationVariables, TContext> => {
+
+const mutationKey = ['postV1ChatSessionsBySidPaymentsByRecordIdConfirm'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ChatSessionsBySidPaymentsByRecordIdConfirm>>, PostV1ChatSessionsBySidPaymentsByRecordIdConfirmMutationVariables> = (props) => {
+          const {sid,recordId} = props ?? {};
+
+          return  postV1ChatSessionsBySidPaymentsByRecordIdConfirm(sid,recordId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ChatSessionsBySidPaymentsByRecordIdConfirmMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ChatSessionsBySidPaymentsByRecordIdConfirm>>>
+
+    export type PostV1ChatSessionsBySidPaymentsByRecordIdConfirmMutationError = void
+    export type PostV1ChatSessionsBySidPaymentsByRecordIdConfirmMutationVariables = {sid: string;recordId: string}
+
+    /**
+ * @summary Re-check a checkout with the gateway, and settle it if it was paid
+ */
+export const usePostV1ChatSessionsBySidPaymentsByRecordIdConfirm = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidPaymentsByRecordIdConfirm>>, TError,PostV1ChatSessionsBySidPaymentsByRecordIdConfirmMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1ChatSessionsBySidPaymentsByRecordIdConfirm>>,
+        TError,
+        PostV1ChatSessionsBySidPaymentsByRecordIdConfirmMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ChatSessionsBySidPaymentsByRecordIdConfirmMutationOptions(options));
     }
     export type postV1ChatSessionsBySidAuthGoogleResponse200 = {
   data: PostV1ChatSessionsBySidAuthGoogle200

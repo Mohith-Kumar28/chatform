@@ -934,3 +934,118 @@ function trimTo(s: string, max: number): string {
   const space = cut.lastIndexOf(" ");
   return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
+
+// ──────────────── a builder's feedback, to the founders ────────────────
+
+/**
+ * A bug, feature request or feedback from somebody who builds forms.
+ *
+ * Shaped like the respondent report above: recognisable in a list first, then
+ * enough to act on without opening anything. The difference is who sent it. This
+ * is a paying customer, signed in, so the account and plan sit in the subject,
+ * and Reply goes straight to them (set by the job, not here).
+ */
+export function builderFeedbackEmail(a: {
+  kindLabel: string;
+  /** Severity for a bug, importance for a request. Null for feedback. */
+  severityLabel: string | null;
+  rating: number | null;
+  ratingLabel: string | null;
+  areaLabel: string | null;
+  /** The tagger's summary, when it ran. */
+  title: string | null;
+  message: string;
+  steps: string | null;
+  expected: string | null;
+  why: string | null;
+  userName: string | null;
+  userEmail: string | null;
+  role: string | null;
+  accountName: string | null;
+  planLabel: string | null;
+  pageUrl: string | null;
+  formTitle: string | null;
+  attachments: number;
+  errors: number;
+  issue: { title: string; reports: number; accounts: number } | null;
+  impersonatorEmail: string | null;
+  userAgent: string | null;
+  createdAt: number;
+  reportUrl: string;
+  consoleUrl: string;
+}): Omit<MailMessage, "to"> {
+  const facts: [string, string][] = [];
+  if (a.severityLabel) facts.push([a.kindLabel === "Bug" ? "Severity" : "Importance", a.severityLabel]);
+  if (a.rating) facts.push(["Rating", `${a.ratingLabel ?? ""} (${a.rating}/5)`.trim()]);
+  if (a.areaLabel) facts.push(["Area", a.areaLabel]);
+  if (a.issue) {
+    facts.push([
+      "Issue",
+      `${a.issue.title} · ${a.issue.reports === 1 ? "first report" : `${a.issue.reports} reports from ${a.issue.accounts} account${a.issue.accounts === 1 ? "" : "s"}`}`,
+    ]);
+  }
+  facts.push(["Account", [a.accountName ?? "unknown", a.planLabel].filter(Boolean).join(" · ")]);
+  if (a.role) facts.push(["Role", a.role]);
+  if (a.formTitle) facts.push(["Form", a.formTitle]);
+  if (a.pageUrl) facts.push(["Page", a.pageUrl]);
+  facts.push(["Attached", `${a.attachments} image${a.attachments === 1 ? "" : "s"}${a.errors ? `, ${a.errors} console error${a.errors === 1 ? "" : "s"}` : ""}`]);
+  if (a.impersonatorEmail) facts.push(["Filed by", `${a.impersonatorEmail}, acting as this user`]);
+  facts.push(["When", stamp(a.createdAt)]);
+  facts.push(["Browser", a.userAgent ?? "not reported"]);
+
+  const block = (label: string, text: string | null) =>
+    text
+      ? `<p style="margin:0 0 6px 0;font-size:12px;line-height:1.5;color:${MUTED};">${escapeHtml(label)}</p>
+<div style="margin:0 0 14px 0;padding:12px 14px;border-radius:10px;background-color:${GROUND};border:1px solid ${BORDER};font-size:14px;line-height:1.6;color:${INK};white-space:pre-wrap;">${escapeHtml(text)}</div>`
+      : "";
+
+  const who = [a.userName, a.userEmail].filter(Boolean).join(" · ") || "unknown user";
+  const heading = a.title ?? trimTo(a.message.split(/\r?\n/).find((l) => l.trim()) ?? a.message, 80);
+
+  const body = [
+    h1(`${a.kindLabel}: ${heading}`),
+    p(`From <strong>${escapeHtml(who)}</strong>${a.accountName ? ` at ${escapeHtml(a.accountName)}` : ""}. Reply to this email to answer them.`),
+    block(a.kindLabel === "Feature request" ? "What they want" : a.kindLabel === "Bug" ? "What went wrong" : "What they said", a.message),
+    block("Steps to reproduce", a.steps),
+    block("What they expected", a.expected),
+    block("Why they need it", a.why),
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 4px 0;">${facts
+      .map(
+        ([label, value]) => `<tr>
+  <td style="padding:8px 12px 8px 0;font-size:12px;line-height:1.5;color:${MUTED};border-top:1px solid ${BORDER};white-space:nowrap;vertical-align:top;">${escapeHtml(label)}</td>
+  <td style="padding:8px 0;font-size:13px;line-height:1.5;color:${INK};border-top:1px solid ${BORDER};word-break:break-word;">${escapeHtml(value)}</td>
+</tr>`,
+      )
+      .join("\n")}</table>`,
+    button(a.reportUrl, a.attachments ? "Open the report and screenshots" : "Open the report"),
+    `<p style="margin:-8px 0 0 0;font-size:12px;line-height:1.6;color:${MUTED};"><a href="${escapeHtml(a.consoleUrl)}" style="color:${MUTED};">the account</a></p>`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const subjectBits = [a.kindLabel, a.severityLabel ?? a.ratingLabel].filter(Boolean).join(" · ");
+  const account = [a.accountName, a.planLabel].filter(Boolean).join(", ");
+  return {
+    subject: `chatform feedback: ${subjectBits}: ${trimTo(heading, 70)}${account ? ` (${account})` : ""}`,
+    html: layout({
+      preheader: `${who} · ${trimTo(a.message.replace(/\s+/g, " "), 100)}`,
+      body,
+      brand: false,
+      footer: "",
+    }),
+    text: [
+      `chatform feedback: ${subjectBits}`,
+      `From: ${who}${a.accountName ? ` at ${a.accountName}` : ""}`,
+      ``,
+      a.message,
+      ...(a.steps ? [``, `Steps to reproduce:`, a.steps] : []),
+      ...(a.expected ? [``, `Expected:`, a.expected] : []),
+      ...(a.why ? [``, `Why they need it:`, a.why] : []),
+      ``,
+      ...facts.map(([label, value]) => `${label}: ${value}`),
+      ``,
+      `Report: ${a.reportUrl}`,
+      `Account: ${a.consoleUrl}`,
+    ].join("\n"),
+  };
+}

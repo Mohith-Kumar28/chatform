@@ -1,12 +1,12 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Inbox } from "lucide-react";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { EmptyState } from "@/components/ui/empty-state";
 import { RangePicker } from "./range-picker";
 import { FeedbackStats } from "./feedback-stats";
 import { FeedbackInbox } from "./feedback-inbox";
+import { BUILDER_PARAMS, BuilderFeedbackInbox } from "./builder-feedback-inbox";
+import { BuilderFeedbackStats } from "./builder-feedback-stats";
 
 /**
  * Feedback — what the people using the product say about it.
@@ -68,18 +68,15 @@ export function FeedbackClient() {
               const q = new URLSearchParams(params.toString());
               if (next === "respondents") q.delete("view");
               else q.set("view", next);
-              for (const key of RESPONDENT_PARAMS) q.delete(key);
+              for (const key of [...RESPONDENT_PARAMS, ...BUILDER_PARAMS]) q.delete(key);
               router.replace(`${pathname}${q.size ? `?${q.toString()}` : ""}`, { scroll: false });
             }}
             options={FEEDBACK_TABS.map((t) => ({ value: t.value, label: t.label }))}
             ariaLabel="Whose feedback"
           />
         </div>
-        {/*
-          Only where it governs something. An empty tab under a live date filter
-          invites the reader to conclude that the filter is why it is empty.
-        */}
-        {tab === "respondents" && <RangePicker />}
+        {/* It narrows the charts on both tabs; the inboxes ignore it. */}
+        <RangePicker />
       </div>
 
       {tab === "respondents" ? (
@@ -89,27 +86,11 @@ export function FeedbackClient() {
           <FeedbackStats />
         </>
       ) : (
-        <AdminFeedbackEmpty />
+        <>
+          <BuilderFeedbackInbox />
+          <BuilderFeedbackStats />
+        </>
       )}
     </div>
-  );
-}
-
-/**
- * A tab that exists before its data does, and says so.
- *
- * The route and the nav are here now so that the first account-owner report has
- * somewhere to land without moving anything. Until then this is not "no results"
- * — nothing collects it yet — and the copy has to say that rather than look like
- * a quiet week.
- */
-function AdminFeedbackEmpty() {
-  return (
-    <EmptyState
-      icon={Inbox}
-      title="Nothing from account owners yet"
-      description="Feedback and feature requests from the people who build forms will land here — filed from inside the dashboard, and carrying their plan and account, so a request from a paying Business account reads differently from one on a free trial."
-      hint="No collection surface ships yet. This tab is here so the page already has the right shape when the first one arrives."
-    />
   );
 }

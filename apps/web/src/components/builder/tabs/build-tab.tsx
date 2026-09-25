@@ -49,7 +49,7 @@ export function BuildTab() {
     the canvas layout covers the whole view — see `SmallScreenGate`.
   */
   return (
-    <div className="flex h-[calc(100svh-var(--app-header-h))] min-h-0">
+    <div data-fill-viewport="" className="flex h-[calc(100svh-var(--app-header-h))] min-h-0">
       <aside className="bg-sidebar w-60 shrink-0 xl:w-72">
         <BlockList />
       </aside>

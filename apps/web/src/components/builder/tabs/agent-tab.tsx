@@ -52,7 +52,10 @@ export function AgentTab() {
     });
 
   return (
-    <div className="mx-auto h-[calc(100svh-var(--app-header-h))] w-full max-w-3xl overflow-y-auto p-6">
+    <div
+      data-fill-viewport=""
+      className="mx-auto h-[calc(100svh-var(--app-header-h))] w-full max-w-3xl overflow-y-auto p-6 pb-[var(--fab-clearance)]"
+    >
       <div className="min-w-0 space-y-6">
         {/*
           No page heading. The tab you are on already says "Agent", and the

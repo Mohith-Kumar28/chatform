@@ -380,6 +380,11 @@
      painted behind the dialog that owned them. */
   --z-popover: 70;
   --z-toast: 80;
+  /* The "?" feedback button: above the page and its sticky header, under any
+     dialog, menu or toast. */
+  --z-fab: 45;
+  /* Room a page leaves under its last row so that button never sits on it. */
+  --fab-clearance: 4.5rem;
 }
 
 .dark {
@@ -1768,4 +1773,16 @@ html.cf-keyboard-open [data-chat-header-row] {
    ═════════════════════════════════════════════════════════════════════════ */
 .grecaptcha-badge {
   visibility: hidden;
+}
+
+/*
+  The "?" feedback button (components/feedback/feedback-launcher.tsx) floats in
+  the bottom-right corner of every dashboard and builder page. A page that
+  scrolls with the window gets room under its last row here; the full-height
+  layouts (the canvas, the agent tab, settings) mark themselves
+  `data-fill-viewport` and pad their own scrolling panes instead, because padding
+  them from outside would make the whole window scroll by that much.
+*/
+.fab-clear:not(:has([data-fill-viewport])) {
+  padding-bottom: var(--fab-clearance);
 }

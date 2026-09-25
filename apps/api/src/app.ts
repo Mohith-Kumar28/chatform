@@ -15,6 +15,7 @@ import { dashboardRouter } from "./routes/dashboard.js";
 import { formsRouter } from "./routes/forms.js";
 import { knowledgeRouter } from "./routes/knowledge.js";
 import { workspacesRouter } from "./routes/workspaces.js";
+import { builderFeedbackRouter } from "./routes/builder-feedback.js";
 import { aiRouter } from "./routes/ai.js";
 import { resultsRouter } from "./routes/results.js";
 import { v1Router } from "./routes/v1.js";
@@ -63,6 +64,8 @@ const SELF_BOUNDED_BODY = [
   /^\/api\/assets$/,
   /^\/(?:api|v1)\/forms\/[^/]+\/knowledge\/upload$/,
   /^\/p\/sessions\/[^/]+\/feedback\/[^/]+\/snapshot$/,
+  // A builder's report and its screenshots; each image is capped at 5 MB in the handler.
+  /^\/api\/feedback$/,
   /^\/mcp$/,
 ];
 
@@ -343,6 +346,7 @@ export function createApp() {
   app.route("/api", formsRouter);
   app.route("/api", knowledgeRouter);
   app.route("/api", workspacesRouter);
+  app.route("/api", builderFeedbackRouter);
   app.route("/api", aiRouter);
   app.route("/api", resultsRouter);
   app.route("/v1", v1Router);
