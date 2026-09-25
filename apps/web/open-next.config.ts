@@ -18,22 +18,15 @@ import cache from "@opennextjs/cloudflare/overrides/incremental-cache/static-ass
 export default defineCloudflareConfig({
   incrementalCache: cache,
   /**
-   * Serve a cached page without starting Next's router.
+   * Off. Do not turn `enableCacheInterception` back on.
    *
-   * Measured on the live site before this: 20 back-to-back requests to `/`
-   * came back with a median TTFB of 334ms but a p90 of 1.80s, and 35% of them
-   * over 1.2s — every one of them on `x-nextjs-cache: HIT`. The prerendered
-   * HTML was never the problem; assembling the Next server around it on a cold
-   * isolate was, and a third of visitors paid for it. On a throttled phone
-   * that was about a quarter of the page's LCP.
-   *
-   * Interception answers those requests from the incremental cache directly,
-   * so the routing layer is only built when something actually needs it.
-   *
-   * Safe here specifically because nothing in this app uses PPR — the adapter
-   * says to leave this off if that changes, since a partial shell has to go
-   * through the router to be completed. There is no `experimental.ppr` in
-   * `next.config.ts` and no `experimental_ppr` on any route.
+   * It answered cached pages without starting Next's router, which cut TTFB
+   * on `/`. But it also answered Next 16's segment prefetches
+   * (`Next-Router-Segment-Prefetch: /_tree`) with the whole route's RSC
+   * payload. The client router cannot use that, so it prefetched again, about
+   * eight times a second for as long as a page with a `<Link>` stayed open.
+   * On `/signin` that was `/` and `/forgot-password` looping forever, and
+   * client navigation after Google sign-in broke with it.
    */
-  enableCacheInterception: true,
+  enableCacheInterception: false,
 });
