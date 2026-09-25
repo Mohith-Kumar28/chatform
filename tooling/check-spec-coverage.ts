@@ -170,6 +170,7 @@ if (published.length > 0 || scopeProblems.length > 0) {
  * operation shares its distinctive segment.
  */
 const DASHBOARD_ONLY: Record<string, string> = {
+  "/api/forms/{id}/embed": "the builder's embed studio remembering its own UI choices; a key writes the snippet itself",
   "/api/keys": "minting and revoking keys needs a signed-in person — no key may widen its own authority",
   "/api/keys/scopes": "vocabulary for the key-creation dialog",
   "/api/keys/{id}": "see /api/keys",

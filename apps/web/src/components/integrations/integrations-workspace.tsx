@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/sheet";
 import { customFetch } from "@/lib/api/mutator";
 import { EmbedStudio } from "./embed-studio";
+import type { EmbedConfig } from "@/lib/embed-snippet";
 import { PAYMENT_SHEET_COPY, PaymentAccountPanel } from "./payment-account-sheet";
 import { ProviderLogo } from "./provider-logo";
 import { usePaymentAccounts, type PaymentAccountsPayload } from "./payment-accounts";
@@ -66,6 +67,7 @@ export function IntegrationsWorkspace({
   appOrigin,
   theme,
   blocks,
+  embedConfig,
 }: {
   formId: string;
   slug: string;
@@ -76,6 +78,8 @@ export function IntegrationsWorkspace({
   theme: ThemeDoc;
   /** The form's own questions, for the same reason. */
   blocks: Block[];
+  /** The embed studio's saved choices, from the form row. */
+  embedConfig?: Partial<EmbedConfig> | null;
 }) {
   const [panel, setPanel] = useState<PanelKey | null>(null);
   const payments = usePaymentAccounts();
@@ -108,6 +112,8 @@ export function IntegrationsWorkspace({
           </p>
         </div>
         <EmbedStudio
+          formId={formId}
+          saved={embedConfig}
           slug={slug}
           formTitle={formTitle}
           appOrigin={appOrigin}

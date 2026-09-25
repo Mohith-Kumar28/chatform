@@ -4,6 +4,7 @@ import { IntegrationsWorkspace } from "@/components/integrations/integrations-wo
 import { useBuilderStore } from "@/stores/builder-store";
 import { useGetApiFormsById } from "@/lib/api/dashboard/dashboard";
 import { useClientValue } from "@/hooks/use-client-value";
+import type { EmbedConfig } from "@/lib/embed-snippet";
 
 /**
  * The builder's Integrate tab — the embed, and where the answers go.
@@ -21,7 +22,9 @@ export function IntegrateTab() {
   // The embed snippet addresses a form by slug, not by id — the same way the
   // Share tab does, from the same source.
   const { data } = useGetApiFormsById(formId as never);
-  const row = data as { slug: string; title: string; status: string } | undefined;
+  const row = data as
+    | { slug: string; title: string; status: string; embedConfig?: Partial<EmbedConfig> | null }
+    | undefined;
 
   // window.location is not available during SSR; "" is what the server renders.
   const origin = useClientValue(() => window.location.origin, "");
@@ -37,6 +40,7 @@ export function IntegrateTab() {
         appOrigin={origin}
         theme={doc.theme}
         blocks={doc.blocks}
+        embedConfig={row.embedConfig}
       />
     </div>
   );

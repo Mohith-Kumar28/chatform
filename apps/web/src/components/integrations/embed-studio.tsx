@@ -1,6 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { customFetch } from "@/lib/api/mutator";
 import {
   Code2,
   Mail,
@@ -65,14 +68,13 @@ type Target = "html" | "react" | "email" | "ai";
 // The brand pair leads, in the mark's order, then four hues far enough apart
 // to be told apart at 20px. `#8b5cf6` is gone: it sat one swatch away from the
 // brand violet and close enough to it that the two read as a rendering bug.
-const SWATCHES = ["#FD6F29", "#9D6EE4", "#0ea5e9", "#10b981", "#ef4444", "#111827"];
 
 /**
  * What the studio starts from. The loader's own default is click-only, but a
  * popup nobody notices collects nothing, so the studio suggests opening it
  * halfway down the page. The snippet spells that out as data-open-on.
  */
-const STUDIO_DEFAULTS: EmbedConfig = { ...EMBED_DEFAULTS, openOn: "scroll:50" };
+const STUDIO_DEFAULTS: EmbedConfig = { ...EMBED_DEFAULTS, openOn: "scroll:50", icon: false };
 
 const TRIGGERS: { value: EmbedConfig["openOn"]; label: string; hint: string }[] = [
   {
@@ -94,21 +96,59 @@ const TRIGGERS: { value: EmbedConfig["openOn"]; label: string; hint: string }[] 
 ];
 
 export function EmbedStudio({
+  formId,
   slug,
   formTitle,
   appOrigin,
   status,
   theme,
   blocks,
+  saved,
 }: {
+  formId: string;
   slug: string;
   formTitle: string;
   appOrigin: string;
   status?: string;
   theme: ThemeDoc;
   blocks: Block[];
+  /** What was chosen here last time, from the form row. Null means the defaults. */
+  saved?: Partial<EmbedConfig> | null;
 }) {
-  const [config, setConfig] = useState<EmbedConfig>(STUDIO_DEFAULTS);
+  const queryClient = useQueryClient();
+  /**
+   * The launcher wears the form's own accent. There used to be a separate
+   * picker for it, which only ever produced a button that did not match the
+   * form it opened.
+   */
+  const [chosen, setChosen] = useState<EmbedConfig>(() => ({ ...STUDIO_DEFAULTS, ...saved }));
+  const config = useMemo(() => ({ ...chosen, color: theme.accent }), [chosen, theme.accent]);
+  const setConfig = setChosen;
+
+  /**
+   * Saved to the form, a moment after the last change. It used to live only
+   * in this component, so a reload put every choice back to the defaults.
+   */
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      // The colour follows the theme, so it is never stored.
+      const rest: Partial<EmbedConfig> = { ...chosen };
+      delete rest.color;
+      void customFetch(`/api/forms/${formId}/embed`, { method: "PUT", body: JSON.stringify(rest) })
+        .then(() =>
+          queryClient.invalidateQueries({
+            predicate: (q) => JSON.stringify(q.queryKey).includes(`/api/forms/${formId}`),
+          }),
+        )
+        .catch(() => toast.error("Couldn't save the embed settings."));
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [chosen, formId, queryClient]);
   const [target, setTarget] = useState<Target>("ai");
   const [previewOpen, setPreviewOpen] = useState(true);
   const [device, setDevice] = useState<PreviewDevice>("desktop");
@@ -305,44 +345,6 @@ export function EmbedStudio({
                           onCheckedChange={(v) => set("icon", v)}
                         />
                       </div>
-                      <Field label="Button colour" hint="The form itself uses its own theme.">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {SWATCHES.map((hex) => (
-                            <button
-                              key={hex}
-                              type="button"
-                              aria-label={hex}
-                              onClick={() => set("color", hex)}
-                              style={{ background: hex }}
-                              className={cn(
-                                "size-6 rounded-full transition-transform duration-[var(--duration-micro)]",
-                                config.color.toLowerCase() === hex.toLowerCase()
-                                  ? "ring-foreground ring-2 ring-offset-2 ring-offset-[var(--card)]"
-                                  : "hover:scale-110",
-                              )}
-                            />
-                          ))}
-                        </div>
-                        {/*
-                          A colour well next to the hex, because "#FD6F29" is not a
-                          colour anybody can pick. It is one you can only paste.
-                        */}
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="color"
-                            aria-label="Pick a button colour"
-                            value={/^#[0-9a-f]{6}$/i.test(config.color) ? config.color : "#000000"}
-                            onChange={(e) => set("color", e.target.value.toUpperCase())}
-                            className="border-border size-8 shrink-0 cursor-pointer rounded-lg border bg-transparent p-0.5"
-                          />
-                          <Input
-                            value={config.color}
-                            onChange={(e) => set("color", e.target.value)}
-                            className="h-8 font-mono text-xs"
-                            aria-label="Button colour, as hex"
-                          />
-                        </div>
-                      </Field>
                     </>
                   ) : (
                     <p className="text-muted-foreground text-caption">

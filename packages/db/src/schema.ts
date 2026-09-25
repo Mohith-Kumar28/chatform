@@ -221,6 +221,8 @@ export const forms = sqliteTable(
     status: text("status").notNull().default("draft"),
     activeVersionId: text("active_version_id"),
     workingSchema: text("working_schema").notNull(),
+    /** The embed studio's saved choices, JSON. Null means the studio defaults. */
+    embedConfig: text("embed_config"),
     /**
      * Bumped on every accepted save, and compared before each one.
      *
