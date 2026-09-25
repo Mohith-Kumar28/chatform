@@ -24,7 +24,7 @@ import { AuthCard } from "./auth-card";
 import { warmGoogleSignIn } from "./google-signin";
 import { asEmail } from "./respondent-hint";
 import { VerifyCard } from "./verify-card";
-import { embedShowsClose, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
+import { announceAnswered, embedShowsClose, requestEmbedClose, subscribeEmbedBridge } from "./embed-bridge";
 import { useChat, type ChatMessage } from "./use-chat";
 import { DictateButton, KeyHint, SendRow, TextInput, DICTATE_KEY, isDictateShortcut, keepFocus, modKeyLabel } from "./composers/primitives";
 import { useDictation } from "@/hooks/use-dictation";
@@ -202,6 +202,12 @@ export function ChatSurface({
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, [chat.resolving, chat.submitted]);
+
+  // A return visit to a form already answered: the host page should stop
+  // opening it by itself. See `announceAnswered`.
+  useEffect(() => {
+    if (chat.submitted && !previewMode) announceAnswered();
+  }, [chat.submitted, previewMode]);
 
   /**
    * Follow a new turn arriving.

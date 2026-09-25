@@ -17,7 +17,7 @@ import { useEffect } from "react";
 export interface ToParent {
   source: "chatform";
   v: 1;
-  type: "ready" | "resize" | "question" | "answer" | "complete" | "close" | "error";
+  type: "ready" | "resize" | "question" | "answer" | "complete" | "answered" | "close" | "error";
   [key: string]: unknown;
 }
 
@@ -47,6 +47,22 @@ export function emitEmbedEvent(message: Omit<ToParent, "source" | "v">): void {
  * whether to render a control at all. Untrusted parent, no frame, standalone
  * page — all three are `false`, and all three mean "do not offer a close".
  */
+/**
+ * Tell the host page this device has already answered the form.
+ *
+ * `complete` only fires while someone finishes it inside that page, so anyone
+ * who answered before the host started listening, or answered somewhere else,
+ * was never recorded there and got the popup again on every scroll. The form
+ * does know, one network check after it loads, so it says so. Remembered here
+ * because that check can land before the handshake does.
+ */
+let answered = false;
+export function announceAnswered(): void {
+  if (answered) return;
+  answered = true;
+  post?.({ type: "answered" });
+}
+
 export function requestEmbedClose(): boolean {
   if (!post) return false;
   post({ type: "close" });
@@ -145,6 +161,7 @@ export function EmbedBridge({
     setHostCloses(new URLSearchParams(window.location.search).get("hostClose") === "1");
     setPost(send);
     send({ type: "ready" });
+    if (answered) send({ type: "answered" });
 
     /**
      * Height, coalesced.

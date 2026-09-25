@@ -619,6 +619,7 @@
 
     switch (message.type) {
       case "ready":
+        if (checking) checking(false);
         // The frame draws its own close from here on, so retire ours.
         frameReady = true;
         hideFallbackClose();
@@ -640,6 +641,12 @@
       case "complete":
         markSubmitted();
         emit("complete", message);
+        break;
+      case "answered":
+        // A return visit to a form this device already answered.
+        markSubmitted();
+        if (launcher) launcher.classList.remove("cf-attn");
+        if (checking) checking(true);
         break;
       case "close":
         close();
@@ -724,7 +731,52 @@
       if (launcher) attention();
       return;
     }
-    open();
+    askFirst(open);
+  }
+
+  /**
+   * Load the form out of sight and let it say whether this visitor already
+   * answered before showing it.
+   *
+   * This page only learns about a submission that happens inside it, so
+   * someone who answered before it started listening, or on another page of
+   * a different site, looked new here and got the popup on every visit. The
+   * form knows, from its own storage and the server, and sends `answered`.
+   * The popup was about to load the form anyway, so this costs nothing but a
+   * moment's wait. It opens after the form has been up briefly with nothing
+   * said, or after 4s whatever happens.
+   */
+  var checking = null;
+  function askFirst(then) {
+    if (frameReady && !checking) {
+      if (!hasSubmitted()) then();
+      return;
+    }
+    if (checking) return;
+    var decided = false;
+    var quiet = 0;
+    var cap = 0;
+    function decide(answeredAlready) {
+      if (decided) return;
+      decided = true;
+      checking = null;
+      clearTimeout(quiet);
+      clearTimeout(cap);
+      if (!answeredAlready && !hasSubmitted()) then();
+    }
+    // `ready` starts a short quiet window: "already answered" is known one
+    // network check after the form is up.
+    checking = function (answeredAlready) {
+      if (answeredAlready) return decide(true);
+      clearTimeout(quiet);
+      quiet = setTimeout(function () {
+        decide(false);
+      }, 1500);
+    };
+    cap = setTimeout(function () {
+      decide(false);
+    }, 4000);
+    if (!frame && panel) panel.appendChild(buildFrame());
   }
 
   var attended = false;
