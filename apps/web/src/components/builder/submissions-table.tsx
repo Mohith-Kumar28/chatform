@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  countryFlag,
+  RESPONDENT_COLUMNS,
+  respondentCells,
+  respondentTimeZone,
+  type RespondentColumn,
+} from "@repo/form-schema";
 import { csvCell } from "@repo/guard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -20,13 +27,17 @@ import {
   Clock,
   Download,
   Fingerprint,
+  Globe,
   Hourglass,
+  Info,
+  Languages,
   Link2,
   ListChecks,
   MapPin,
   Maximize2,
   MessageSquare,
   Minimize2,
+  Monitor,
   MailCheck,
   MailX,
   MousePointerClick,
@@ -35,6 +46,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Trash2,
+  Wifi,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -62,7 +74,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TooltipHint } from "@/components/ui/kbd";
-import { formatDateTime, formatDuration, formatRelative, formatShortDateTime, isPast } from "@/lib/format";
+import {
+  formatDateTime,
+  formatDuration,
+  formatRelative,
+  formatShortDateTime,
+  formatTheirTime,
+  isPast,
+} from "@/lib/format";
 import { useClientValue } from "@/hooks/use-client-value";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { blockMeta, TONE_CLASSES } from "./block-library";
@@ -682,7 +701,7 @@ function followUpSteps(f: NonNullable<SubmissionRecord["followUp"]>): FollowUpSt
  * The rail stops at the last dot rather than running past it, because a line
  * leaving the final step implies a step after it.
  */
-function FollowUpTimeline({ steps }: { steps: FollowUpStepModel[] }) {
+function FollowUpTimeline({ steps, zone }: { steps: FollowUpStepModel[]; zone: string | null }) {
   return (
     <ol className="space-y-0">
       {steps.map((s, i) => (
@@ -741,6 +760,8 @@ function FollowUpTimeline({ steps }: { steps: FollowUpStepModel[] }) {
                   : "scheduled")}
               {s.state === "later" && "after that"}
             </span>
+            {/* Reminders land on their clock, not ours: 03:00 there is a bad time to send. */}
+            {s.at && (s.state === "sent" || s.state === "next") && <TheirTime at={s.at} zone={zone} block className="text-right" />}
           </div>
         </li>
       ))}
@@ -842,7 +863,7 @@ function FollowUpDetail({ row, className }: { row: SubmissionRecord; className?:
 
   return (
     <FollowUpBlock count={total > 0 ? `${f.sent} of ${total} sent` : undefined} className={className}>
-      {steps.length > 0 && <FollowUpTimeline steps={steps} />}
+      {steps.length > 0 && <FollowUpTimeline steps={steps} zone={respondentTimeZone(row.metadata)} />}
       {/*
         The things that are about the sequence as a whole rather than about any
         one step in it, so they sit under the ladder with a rule above them
@@ -1182,6 +1203,14 @@ export function SubmissionsTable({
     resolves one, so in practice this is on.
   */
   const hasRespondentIds = rows.some((r) => r.respondentId);
+  /*
+    Where and on what, appended after everything else. Same rule as the id: a
+    column nobody on this page has a value for (UTM term, usually) is left out
+    rather than drawn as dashes. The downloads keep all of them.
+  */
+  const metaColumns = RESPONDENT_COLUMNS.filter((c) =>
+    rows.some((r) => r.metadata && c.cell(r.metadata, submittedAt(r))),
+  );
   const openIndex = openId ? rows.findIndex((r) => r.id === openId) : -1;
   const open = openIndex >= 0 ? rows[openIndex]! : null;
 
@@ -1589,6 +1618,11 @@ export function SubmissionsTable({
                   "last column" meant.
                 */}
                 {hasRespondentIds && <HeadCell icon={Fingerprint}>Respondent ID</HeadCell>}
+                {metaColumns.map((c) => (
+                  <HeadCell key={c.key} icon={META_ICONS[c.key] ?? Info}>
+                    {c.title}
+                  </HeadCell>
+                ))}
                 {/*
                   Pinned beside Submitted rather than left to scroll, because
                   "when is the next reminder" is read against "when did they
@@ -1691,6 +1725,11 @@ export function SubmissionsTable({
                         <RespondentId id={row.respondentId} />
                       </td>
                     )}
+                    {metaColumns.map((c) => (
+                      <td key={c.key} className="px-3 py-2.5">
+                        <MetaCell column={c} row={row} />
+                      </td>
+                    ))}
                     {showFollowUp && (
                       <td
                         className={cn(
@@ -1710,6 +1749,7 @@ export function SubmissionsTable({
                       )}
                     >
                       {formatWhen(row)}
+                      <TheirTime at={submittedAt(row)} zone={respondentTimeZone(row.metadata)} block />
                     </td>
                   </tr>
                 );
@@ -2207,7 +2247,7 @@ function SubmissionDialog({
             <AnswerList key={row.id} formId={formId} submissionId={row.id} columns={columns} byRef={byRef} />
           )}
 
-          {view === "details" && <ResponseDetails metadata={row.metadata} />}
+          {view === "details" && <ResponseDetails metadata={row.metadata} at={submittedAt(row)} />}
 
           {view === "chat" &&
             (row.transcript.length > 0 ? (
@@ -2298,8 +2338,72 @@ function SubmissionDialog({
   );
 }
 
+function submittedAt(row: SubmissionRecord): number {
+  return row.completedAt ?? row.startedAt;
+}
+
 function formatWhen(row: SubmissionRecord): string {
-  return formatShortDateTime(row.completedAt ?? row.startedAt);
+  return formatShortDateTime(submittedAt(row));
+}
+
+/**
+ * The same moment on the respondent's clock, only when it differs from the
+ * viewer's: "7 Sept, 03:11 · New York" under a time that read 12:41 here.
+ */
+function TheirTime({
+  at,
+  zone,
+  block,
+  className,
+}: {
+  at: number;
+  zone: string | null;
+  block?: boolean;
+  className?: string;
+}) {
+  const text = formatTheirTime(at, zone);
+  if (!text) return null;
+  return (
+    <span
+      title={`Their local time (${zone})`}
+      className={cn("text-muted-foreground/80 text-micro tabular whitespace-nowrap", block && "block w-full", className)}
+    >
+      {text}
+    </span>
+  );
+}
+
+const META_ICONS: Partial<Record<string, React.ComponentType<{ className?: string }>>> = {
+  channel: Link2,
+  page: Globe,
+  referrer: Globe,
+  country: MapPin,
+  region: MapPin,
+  city: MapPin,
+  postal_code: MapPin,
+  latitude: MapPin,
+  longitude: MapPin,
+  timezone: Clock,
+  local_time: Clock,
+  device: Monitor,
+  browser: Monitor,
+  os: Monitor,
+  screen: Monitor,
+  language: Languages,
+  network: Wifi,
+};
+
+/** One respondent-context cell. Country gets its flag, so a column of them is scannable. */
+function MetaCell({ column, row }: { column: RespondentColumn; row: SubmissionRecord }) {
+  const value = row.metadata ? column.cell(row.metadata, submittedAt(row)) : "";
+  if (!value) return <span className="text-muted-foreground/60">—</span>;
+  const flag = column.key === "country" ? countryFlag(row.metadata?.geo.country) : "";
+  return (
+    <span className="block max-w-[16rem] truncate whitespace-nowrap" title={value}>
+      {flag && <span className="mr-1.5">{flag}</span>}
+      {value}
+    </span>
+  );
 }
 
 /**
@@ -2460,6 +2564,8 @@ function downloadCsv(rows: SubmissionRecord[], columns: ResultColumn[], withResp
     // Last, like its column: the thing you sort by after opening the file, not
     // the thing you read first.
     ...(withRespondentId ? ["Respondent ID"] : []),
+    // All of them, blank or not, so every download has the same columns.
+    ...RESPONDENT_COLUMNS.map((c) => c.title),
   ];
   const lines = [header.map(esc).join(",")];
   for (const row of rows) {
@@ -2471,6 +2577,7 @@ function downloadCsv(rows: SubmissionRecord[], columns: ResultColumn[], withResp
         ...(withRespondent ? [row.respondent?.label ?? ""] : []),
         ...columns.flatMap((b) => csvCellsFor(b, byRef.get(b.ref))),
         ...(withRespondentId ? [row.respondentId ?? ""] : []),
+        ...respondentCells(row.metadata, submittedAt(row)),
       ]
         .map((v) => esc(String(v)))
         .join(","),

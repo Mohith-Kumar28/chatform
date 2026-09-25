@@ -72,3 +72,31 @@ export function formatRelative(at: number | string | Date): string {
   }
   return fmt.format(0, "minute");
 }
+
+/**
+ * The same moment on the respondent's clock, or null when it reads the same as
+ * the viewer's (or their zone is unknown). Compared as formatted text rather
+ * than by offset name, so two zones that agree at that instant count as one.
+ *
+ * "8 Sept, 03:11 · New York": the zone's city, not "GMT-4", which nobody reads
+ * as a place.
+ */
+export function formatTheirTime(
+  ts: number | string | Date,
+  zone: string | null | undefined,
+): string | null {
+  if (!zone) return null;
+  const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", ...TIME };
+  try {
+    const theirs = new Date(ts).toLocaleString(undefined, { ...opts, timeZone: zone });
+    if (theirs === new Date(ts).toLocaleString(undefined, opts)) return null;
+    return `${theirs} · ${zoneCity(zone)}`;
+  } catch {
+    return null;
+  }
+}
+
+/** "America/New_York" as "New York". */
+export function zoneCity(zone: string): string {
+  return (zone.split("/").pop() ?? zone).replaceAll("_", " ");
+}

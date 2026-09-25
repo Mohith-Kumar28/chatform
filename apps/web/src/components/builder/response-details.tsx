@@ -1,33 +1,15 @@
+import {
+  CHANNEL_LABELS,
+  countryFlag,
+  countryName,
+  DEVICE_LABELS,
+  respondentTimeZone,
+  wallClockIn,
+} from "@repo/form-schema";
 import type { GetApiFormsByIdSubmissions200SubmissionsItemMetadata } from "@/lib/api/generated.schemas";
+import { zoneCity } from "@/lib/format";
 
 export type ResponseMetadata = NonNullable<GetApiFormsByIdSubmissions200SubmissionsItemMetadata>;
-
-const CHANNEL_LABELS: Record<string, string> = {
-  link: "Direct link",
-  inline: "Embedded on a page",
-  popup: "Popup on a page",
-  side_tab: "Side tab on a page",
-  fullpage: "Full-page embed",
-  embed: "Embedded on a page",
-  api: "API",
-};
-
-const DEVICE_LABELS: Record<string, string> = {
-  mobile: "Phone",
-  tablet: "Tablet",
-  desktop: "Computer",
-  bot: "Bot or script",
-};
-
-export function countryName(code: string | null | undefined): string | null {
-  if (!code) return null;
-  if (code.length !== 2) return code;
-  try {
-    return new Intl.DisplayNames(undefined, { type: "region" }).of(code.toUpperCase()) ?? code;
-  } catch {
-    return code;
-  }
-}
 
 function join(...parts: Array<string | null | undefined>): string | null {
   const kept = parts.filter((p): p is string => Boolean(p));
@@ -41,7 +23,14 @@ function join(...parts: Array<string | null | undefined>): string | null {
  * row with nothing recorded is left out rather than printed as "Unknown", and
  * a section with no rows is left out with it.
  */
-export function ResponseDetails({ metadata }: { metadata: ResponseMetadata | null | undefined }) {
+export function ResponseDetails({
+  metadata,
+  at,
+}: {
+  metadata: ResponseMetadata | null | undefined;
+  /** When it was submitted (or started), for the "their local time" row. */
+  at: number;
+}) {
   if (!metadata) {
     return (
       <p className="text-muted-foreground text-sm">
@@ -53,6 +42,9 @@ export function ResponseDetails({ metadata }: { metadata: ResponseMetadata | nul
 
   const { geo, device } = metadata;
   const utm = Object.entries(metadata.utm ?? {});
+  const zone = respondentTimeZone(metadata);
+  const flag = countryFlag(geo.country);
+  const country = countryName(geo.country);
 
   const sections: Array<{ title: string; rows: Array<[string, string | null]> }> = [
     {
@@ -67,14 +59,15 @@ export function ResponseDetails({ metadata }: { metadata: ResponseMetadata | nul
     {
       title: "Location",
       rows: [
-        ["Country", countryName(geo.country)],
+        ["Country", country && flag ? `${flag} ${country}` : country],
         ["Region", geo.region],
         ["City", join(geo.city, geo.postalCode)],
         [
           "Coordinates",
           geo.latitude !== null && geo.longitude !== null ? `${geo.latitude}, ${geo.longitude}` : null,
         ],
-        ["Time zone", metadata.timezone ?? geo.timezone],
+        ["Time zone", zone],
+        ["Their local time", zone ? `${wallClockIn(at, zone)} (${zoneCity(zone)})` : null],
       ],
     },
     {

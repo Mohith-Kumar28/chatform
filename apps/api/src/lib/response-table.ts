@@ -1,7 +1,16 @@
-import { displayAnswer, paymentCells, paymentColumnTitles, readFormDoc, type Block } from "@repo/form-schema";
+import {
+  displayAnswer,
+  paymentCells,
+  paymentColumnTitles,
+  readFormDoc,
+  RESPONDENT_COLUMNS,
+  respondentCells,
+  type Block,
+} from "@repo/form-schema";
 import { csvCell, csvRow } from "@repo/guard";
 import type { Bindings } from "../env.js";
 import { resolveRetiredBlocks } from "./retired-columns.js";
+import { parseMeta, readRespondentContext } from "./respondent-context.js";
 
 /**
  * Responses, flattened to a table.
@@ -68,7 +77,11 @@ export async function buildResponseTable(
      */
     env.DB
       .prepare(
-        `SELECT id, status, started_at, completed_at FROM submissions
+        `SELECT id, status, started_at, completed_at, source,
+                json_extract(meta, '$.context') AS context_json,
+                json_extract(meta, '$.country') AS meta_country,
+                json_extract(meta, '$.userAgent') AS meta_user_agent
+           FROM submissions
           WHERE form_id = ?1 AND status != 'spam' AND (?2 = 1 OR status = 'completed')
           ORDER BY COALESCE(completed_at, started_at) DESC, id DESC LIMIT ?3`,
       )
@@ -96,7 +109,16 @@ export async function buildResponseTable(
       .bind(formId, includePartials ? 1 : 0, limit),
   ])) as [
     D1Result<{ working_schema: string }>,
-    D1Result<{ id: string; status: string; started_at: number; completed_at: number | null }>,
+    D1Result<{
+      id: string;
+      status: string;
+      started_at: number;
+      completed_at: number | null;
+      source: string | null;
+      context_json: string | null;
+      meta_country: string | null;
+      meta_user_agent: string | null;
+    }>,
     D1Result<{ submission_id: string; block_ref: string; block_type: string; value_json: string }>,
   ];
 
@@ -148,6 +170,8 @@ export async function buildResponseTable(
       const title = `${b.title} (${b.ref})${retiredRefs.has(b.ref) ? " [archived]" : ""}`;
       return b.type === "payment" ? [title, ...paymentColumnTitles(title)] : [title];
     }),
+    // Where and on what, after every answer: see `respondent-columns.ts`.
+    ...RESPONDENT_COLUMNS.map((c) => c.title),
   ];
 
   const rows = kept.map((s) => {
@@ -188,6 +212,18 @@ export async function buildResponseTable(
         const currency = (b as Extract<Block, { type: "payment" }>).currency;
         return [cell, ...paymentCells(parsed, currency).map(deFang)];
       }),
+      // Page URLs, referrers and UTMs are the respondent's own strings.
+      ...respondentCells(
+        readRespondentContext(
+          {
+            context: s.context_json ? parseMeta(s.context_json) : undefined,
+            country: s.meta_country,
+            userAgent: s.meta_user_agent,
+          },
+          s.source,
+        ),
+        s.completed_at ?? s.started_at,
+      ).map(deFang),
     ];
   });
 

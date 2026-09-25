@@ -13,6 +13,7 @@ export * from "./answers";
 export * from "./answer-catalog";
 export * from "./payment-link";
 export * from "./payment-columns";
+export * from "./respondent-columns";
 export * from "./display";
 export * from "./rich-text";
 export * from "./form-doc";
