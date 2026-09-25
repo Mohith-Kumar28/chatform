@@ -43,17 +43,16 @@ const LAUNCHER_CLEARANCE = 68;
 
 /** `embed.js`'s attention rules, verbatim, so the preview shakes the way a phone will. */
 const ATTENTION_CSS = [
-  ".cf-attn{overflow:hidden;animation:cf-shake 4s ease-in-out infinite,cf-ring 2s ease-out infinite}",
-  ".cf-attn::after{content:'';position:absolute;top:0;bottom:0;left:0;width:60%;pointer-events:none;",
-  "background:linear-gradient(105deg,transparent 0%,rgba(255,255,255,.65) 50%,transparent 100%);",
-  "transform:translateX(-120%) skewX(-12deg);animation:cf-shine 2.6s ease-in-out .4s infinite}",
-  "@keyframes cf-shake{0%,22%,100%{transform:none}2%{transform:rotate(-7deg) scale(1.06)}",
-  "5%{transform:rotate(6deg) scale(1.06)}8%{transform:rotate(-5deg) scale(1.05)}11%{transform:rotate(4deg) scale(1.04)}",
-  "14%{transform:rotate(-2deg) scale(1.02)}17%{transform:rotate(1deg)}}",
-  "@keyframes cf-shine{0%{transform:translateX(-120%) skewX(-12deg)}45%,100%{transform:translateX(260%) skewX(-12deg)}}",
+  ".cf-attn{overflow:hidden;animation:cf-shake .8s ease-in-out .2s 2,cf-ring 1.6s ease-out .2s 2}",
+  ".cf-attn::after{content:'';position:absolute;top:0;bottom:0;left:0;width:50%;pointer-events:none;",
+  "background:linear-gradient(105deg,transparent 0%,rgba(255,255,255,.3) 50%,transparent 100%);",
+  "transform:translateX(-120%) skewX(-12deg);animation:cf-shine 2.5s ease-in-out .6s 4 both}",
+  "@keyframes cf-shake{0%,100%{transform:none}15%{transform:rotate(-5deg)}35%{transform:rotate(4deg)}",
+  "55%{transform:rotate(-3deg)}75%{transform:rotate(2deg)}}",
+  "@keyframes cf-shine{0%{transform:translateX(-120%) skewX(-12deg)}50%,100%{transform:translateX(280%) skewX(-12deg)}}",
   "@keyframes cf-ring{0%{box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 0 var(--cf-c)}",
-  "100%{box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 16px transparent}}",
-  "@media (prefers-reduced-motion:reduce){.cf-attn{animation:cf-ring 2s ease-out infinite}.cf-attn::after{display:none}}",
+  "100%{box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 12px transparent}}",
+  "@media (prefers-reduced-motion:reduce){.cf-attn{animation:cf-ring 1.6s ease-out .2s 2}.cf-attn::after{display:none}}",
 ].join("");
 
 export function EmbedPreview({

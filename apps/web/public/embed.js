@@ -314,22 +314,22 @@
         ".cf-close:hover{background:rgba(15,15,15,.75)}",
         ".cf-close svg{width:16px;height:16px;display:block}",
         /*
-         * Attention, for the phone that was not opened on (see `autoOpen`): a
-         * shake every few seconds, a shine sweeping across, and a ring pulsing
-         * out in the button's own colour. Until the visitor opens it.
+         * Attention, for the phone that was not opened on (see `autoOpen`): two
+         * small shakes and two rings in the button's own colour, then a faint
+         * shine for about ten seconds, then nothing. Once, not forever: a
+         * button that never stops moving reads as a nag.
          */
-        ".cf-launcher.cf-attn{overflow:hidden;animation:cf-shake 4s ease-in-out infinite,cf-ring 2s ease-out infinite}",
-        ".cf-launcher.cf-attn::after{content:'';position:absolute;top:0;bottom:0;left:0;width:60%;pointer-events:none;",
-        "background:linear-gradient(105deg,transparent 0%,rgba(255,255,255,.65) 50%,transparent 100%);",
-        "transform:translateX(-120%) skewX(-12deg);animation:cf-shine 2.6s ease-in-out .4s infinite}",
-        "@keyframes cf-shake{0%,22%,100%{transform:none}2%{transform:rotate(-7deg) scale(1.06)}",
-        "5%{transform:rotate(6deg) scale(1.06)}8%{transform:rotate(-5deg) scale(1.05)}11%{transform:rotate(4deg) scale(1.04)}",
-        "14%{transform:rotate(-2deg) scale(1.02)}17%{transform:rotate(1deg)}}",
-        "@keyframes cf-shine{0%{transform:translateX(-120%) skewX(-12deg)}45%,100%{transform:translateX(260%) skewX(-12deg)}}",
+        ".cf-launcher.cf-attn{overflow:hidden;animation:cf-shake .8s ease-in-out .2s 2,cf-ring 1.6s ease-out .2s 2}",
+        ".cf-launcher.cf-attn::after{content:'';position:absolute;top:0;bottom:0;left:0;width:50%;pointer-events:none;",
+        "background:linear-gradient(105deg,transparent 0%,rgba(255,255,255,.3) 50%,transparent 100%);",
+        "transform:translateX(-120%) skewX(-12deg);animation:cf-shine 2.5s ease-in-out .6s 4 both}",
+        "@keyframes cf-shake{0%,100%{transform:none}15%{transform:rotate(-5deg)}35%{transform:rotate(4deg)}",
+        "55%{transform:rotate(-3deg)}75%{transform:rotate(2deg)}}",
+        "@keyframes cf-shine{0%{transform:translateX(-120%) skewX(-12deg)}50%,100%{transform:translateX(280%) skewX(-12deg)}}",
         "@keyframes cf-ring{0%{box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 0 var(--cf-c)}",
-        "100%{box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 16px transparent}}",
+        "100%{box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 12px transparent}}",
         "@media (prefers-reduced-motion:reduce){.cf-launcher{transition:none}",
-        ".cf-launcher.cf-attn{animation:cf-ring 2s ease-out infinite}.cf-launcher.cf-attn::after{display:none}",
+        ".cf-launcher.cf-attn{animation:cf-ring 1.6s ease-out .2s 2}.cf-launcher.cf-attn::after{display:none}",
         ".cf-panel,.cf-panel.cf-open{transform:none}.cf-skel i,.cf-x-icon{animation:none!important}}",
       ].join(""),
     );
@@ -714,9 +714,16 @@
     open();
   }
 
+  var attended = false;
   function attention() {
-    if (!launcher || launcher.classList.contains("cf-attn")) return;
+    // Once per page view.
+    if (!launcher || attended) return;
+    attended = true;
     launcher.classList.add("cf-attn");
+    // Past the last shine: take the class off so nothing lingers.
+    setTimeout(function () {
+      if (launcher) launcher.classList.remove("cf-attn");
+    }, 11000);
     emit("attention", {});
   }
 
