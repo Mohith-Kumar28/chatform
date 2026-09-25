@@ -30,6 +30,8 @@
  *                    your own element instead (see below)
  *   data-theme       light | dark | auto                         default auto
  *   data-open-on     click | load | exit-intent | scroll:<pct>   default click
+ *                    (the automatic ones never fire again once this
+ *                    visitor has submitted the form on this site)
  *   data-lazy        "false" to build the frame immediately      default lazy
  *   data-nonce       CSP nonce, copied onto injected styles
  *   data-hidden-*    prefilled hidden fields (data-hidden-plan="pro")
@@ -533,6 +535,7 @@
         emit("answer", message);
         break;
       case "complete":
+        markSubmitted();
         emit("complete", message);
         break;
       case "close":
@@ -582,7 +585,32 @@
   document.addEventListener("pointerover", onPageWarm);
   document.addEventListener("pointerdown", onPageWarm);
 
+  /**
+   * Whether this visitor has already submitted this form, on this site.
+   *
+   * Remembered in the host page's own storage, so it holds across every page
+   * of the site that carries the form. Only the automatic opens read it: a
+   * form that pops up on scroll again after someone answered it is nagging
+   * them, while a click on a button is them asking.
+   */
+  var submittedKey = "chatform:submitted:" + slug;
+  function markSubmitted() {
+    try {
+      window.localStorage.setItem(submittedKey, String(Date.now()));
+    } catch (e) {
+      /* storage blocked: the form just auto-opens as before */
+    }
+  }
+  function hasSubmitted() {
+    try {
+      return !!window.localStorage.getItem(submittedKey);
+    } catch (e) {
+      return false;
+    }
+  }
+
   function setupTriggers() {
+    if (hasSubmitted()) return;
     if (openOn === "load") {
       open();
       return;
@@ -591,7 +619,7 @@
       document.addEventListener("mouseout", function onOut(e) {
         if (e.clientY <= 0) {
           document.removeEventListener("mouseout", onOut);
-          open();
+          if (!hasSubmitted()) open();
         }
       });
       return;
@@ -605,6 +633,8 @@
         var scrolled = room > 0 ? (window.scrollY / room) * 100 : 100;
         if (scrolled >= pct) {
           window.removeEventListener("scroll", check);
+          // They may have opened it from a button and answered on this visit.
+          if (hasSubmitted()) return true;
           open();
           return true;
         }

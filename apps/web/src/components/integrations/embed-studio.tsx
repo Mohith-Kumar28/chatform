@@ -78,13 +78,13 @@ const TRIGGERS: { value: EmbedConfig["openOn"]; label: string; hint: string }[] 
   {
     value: "scroll:50",
     label: "After scrolling halfway down the page",
-    hint: "Opens once the visitor has scrolled past the middle of the page they are on, measured from the top to the bottom of that page. Once per visit to the page.",
+    hint: "Opens once the visitor has scrolled past the middle of the page they are on, measured from the top to the bottom of that page. Once per visit to the page, and never again after they submit.",
   },
-  { value: "load", label: "As soon as the page loads", hint: "Opens by itself when the page loads." },
+  { value: "load", label: "As soon as the page loads", hint: "Opens by itself when the page loads. Not again after the visitor submits." },
   {
     value: "exit-intent",
     label: "When the visitor is about to leave",
-    hint: "Opens when the mouse moves up out of the page, toward the tabs or the close button. Desktop only.",
+    hint: "Opens when the mouse moves up out of the page, toward the tabs or the close button. Desktop only. Not again after the visitor submits.",
   },
   {
     value: "click",
