@@ -1,4 +1,5 @@
 import type { Bindings } from "../env.js";
+import type { RespondentContext } from "./respondent-context.js";
 import { mintRespondent, resolveRespondent } from "./respondents.js";
 import { findOpenResponseId } from "./respondent-history.js";
 import type { AnswerMap, RespondentIdentity } from "@repo/form-schema";
@@ -55,6 +56,8 @@ export interface OpenResponseArgs {
   variables: Record<string, string | number>;
   userAgent: string | null;
   country: string | null;
+  /** Geo, device, channel and referrer, from `lib/respondent-context.ts`. Stored as `meta.context`. */
+  context?: RespondentContext | null;
   startedAt: number;
   /** Null means "no deadline": the chat path's DO alarm owns abandonment. */
   expiresAt?: number | null;
@@ -133,7 +136,12 @@ export async function openResponse(o: ResponseOwner, a: OpenResponseArgs): Promi
       o.source,
       o.isTest ? 1 : 0,
       JSON.stringify(a.hiddenFields),
-      JSON.stringify({ userAgent: a.userAgent, country: a.country, variables: a.variables }),
+      JSON.stringify({
+        userAgent: a.userAgent,
+        country: a.country,
+        variables: a.variables,
+        ...(a.context ? { context: a.context } : {}),
+      }),
       a.startedAt,
       // Seeded at creation so the recency cursor and `updated_since` have a value
       // for a response that has not been answered yet.

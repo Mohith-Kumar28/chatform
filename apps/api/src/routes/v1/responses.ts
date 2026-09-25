@@ -3,6 +3,7 @@ import { NextQuestionView, Paged, ResponseView } from "../../lib/v1-schemas.js";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../../lib/validator.js";
 import { HiddenFieldsInput } from "../../lib/inputs.js";
+import { readRespondentContext } from "../../lib/respondent-context.js";
 import { z } from "zod";
 import {
   readFormDoc,
@@ -175,6 +176,7 @@ function projectResponse(row: ResponseRow, doc: FormDoc, answers: AnswerMap, inc
     duration_ms: row.duration_ms,
     ending_ref: (meta.endingRef as string | null) ?? null,
     abandon_reason: (meta.abandonReason as string | null) ?? null,
+    metadata: readRespondentContext(meta, row.source),
     progress: progressOf(doc, answers, hidden),
     variables: state.variables,
     hidden_fields: hidden,

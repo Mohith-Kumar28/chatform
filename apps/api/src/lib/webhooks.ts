@@ -1,6 +1,7 @@
 import { displayAnswer, readFormDoc, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { deliverableUrl } from "./webhook-url.js";
+import { parseMeta, readRespondentContext } from "./respondent-context.js";
 import { sign as signStandard } from "./dodo-webhook.js";
 
 /**
@@ -147,7 +148,7 @@ export async function deliverWebhookEvent(env: Bindings, evt: WebhookEvent): Pro
       ? [
           env.DB
             .prepare(
-              `SELECT id, status, started_at, completed_at, duration_ms, hidden_fields, meta FROM submissions WHERE id = ?`,
+              `SELECT id, status, source, started_at, completed_at, duration_ms, hidden_fields, meta FROM submissions WHERE id = ?`,
             )
             .bind(evt.submissionId),
           env.DB
@@ -175,7 +176,16 @@ export async function deliverWebhookEvent(env: Bindings, evt: WebhookEvent): Pro
   ];
 
   if (evt.submissionId) {
-    payload.submission = (subRes?.results ?? [])[0] ?? null;
+    const submission = (subRes?.results ?? [])[0] ?? null;
+    payload.submission = submission;
+    /*
+      Who filled it in and from where, as a parsed object. `submission.meta`
+      stays the raw string it has always been, because endpoints in the wild
+      parse it; this is the readable twin.
+    */
+    payload.metadata = submission
+      ? readRespondentContext(parseMeta(submission.meta), submission.source as string | null)
+      : null;
     const blocks = formBlocks(docRes?.results?.[0]?.schema_json);
     payload.answers = (answersRes?.results ?? []).map((a) => describeAnswer(a, blocks.get(a.block_ref)));
   }

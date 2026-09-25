@@ -24,6 +24,7 @@ import { sessionStartLimit, respondentAuthLimit, respondentPaymentLimit } from "
 import { getEntitlements, meter, checkQuota } from "../lib/entitlements.js";
 import { brandingHiddenFor, clampForRuntime } from "../lib/doc-entitlements.js";
 import { verifyEmailToken } from "../lib/signed-url.js";
+import { buildRespondentContext, ClientContextInput, type EdgeInfo } from "../lib/respondent-context.js";
 import { cancelFollowUps, cancelFollowUpsForAddress, recordFollowUpClick, suppress } from "../lib/followups.js";
 import type { RespondentIdentity } from "@repo/form-schema";
 import { confirmPaymentForSession, providersForAccounts, startPaymentForSession } from "../lib/payments/service.js";
@@ -105,6 +106,12 @@ const createSessionSchema = z.object({
    * this existed, and links somebody retyped by hand, must still resume.
    */
   followUpId: z.string().max(60).optional(),
+  /**
+   * Where the respondent is filling this from: channel, host page, referrer,
+   * UTMs, language, screen. Self-reported, bounded, and only ever recorded;
+   * see `lib/respondent-context.ts`.
+   */
+  client: ClientContextInput.optional(),
 });
 
 /**
@@ -488,6 +495,21 @@ sessionsRouter.post(
       }).catch((err: unknown) => console.error("resume_webhook_failed", resume.submissionId, err));
     }
 
+    /*
+      Recorded, never trusted: the channel says which snippet opened this, and
+      is kept apart from `source` above because that one drives the embed
+      allowlist gate, which must stay keyed on the real Origin header.
+    */
+    const context = buildRespondentContext({
+      client: body.client,
+      edge: (c.req.raw as { cf?: EdgeInfo }).cf ?? null,
+      userAgent: c.req.header("user-agent") ?? null,
+      timezone,
+      countryHeader: c.req.header("cf-ipcountry") ?? null,
+      fallbackChannel: body.embed?.origin ? "embed" : "link",
+    });
+    const embedded = context.channel !== "link" && context.channel !== "api";
+
     const result = await stub(c.env, opened.sessionId).init({
       sessionId: opened.sessionId,
       formId: formRow.id,
@@ -518,7 +540,8 @@ sessionsRouter.post(
       startedOver: body.fresh === true,
       country: c.req.header("cf-ipcountry") ?? null,
       userAgent: c.req.header("user-agent") ?? null,
-      source: body.embed?.origin ? "embed" : "chat",
+      source: body.embed?.origin || embedded ? "embed" : "chat",
+      context,
       ...(resume
         ? { resume: { submissionId: resume.submissionId, answers: resume.answers, identity: resume.identity } }
         : {}),

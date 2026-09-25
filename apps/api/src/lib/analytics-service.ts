@@ -81,6 +81,18 @@ export interface AnalyticsAggregate {
   bySource: { source: string; count: number }[];
   byCountry: { country: string; count: number }[];
   byDevice: { mobile: number; desktop: number };
+  /**
+   * One point per city, for the map. From `meta.context.geo`, which only
+   * responses recorded after it shipped carry, so it can be empty on a form
+   * whose `byCountry` is not.
+   */
+  places: { country: string | null; region: string | null; city: string | null; lat: number; lon: number; count: number }[];
+  byBrowser: { label: string; count: number }[];
+  byOs: { label: string; count: number }[];
+  /** Direct link, popup, inline, side tab, full page or API. */
+  byChannel: { label: string; count: number }[];
+  /** The referring site's host, `google.com` rather than a full URL. */
+  byReferrer: { label: string; count: number }[];
   /** How long finishing took, in buckets everyone reads the same way. */
   durationBuckets: { label: string; count: number }[];
 }
@@ -143,7 +155,7 @@ export async function computeAnalytics(
   const nonTextTypes = [...groupedTypes, ...NUMERIC_TYPES, ...PASSIVE_TYPES];
   const holes = (n: number) => Array.from({ length: n }, () => "?").join(",");
 
-  const [formRes, countsRes, answeredRes, groupedRes, numericRes, textsRes, dailyRes, viewRes, sourceRes, countryRes, deviceRes, bucketRes, medianRes, viewsRes] =
+  const [formRes, countsRes, answeredRes, groupedRes, numericRes, textsRes, dailyRes, viewRes, sourceRes, countryRes, deviceRes, bucketRes, medianRes, viewsRes, placesRes, browserRes, osRes, channelRes, referrerRes] =
     (await env.DB.batch([
       /**
        * The published document, falling back to the draft only when nothing has
@@ -250,6 +262,29 @@ export async function computeAnalytics(
                            WHERE ${where} AND status = 'completed' AND duration_ms IS NOT NULL)`,
       ).bind(...binds, ...binds),
       env.DB.prepare(`SELECT SUM(views) AS v FROM analytics_rollup_daily WHERE form_id = ?`).bind(formId),
+      /*
+        Rounded to one decimal (~11km) before grouping, so a city whose edge
+        coordinates wobble between requests is still one dot. Capped: a map of
+        more than a few hundred dots is a smear, not a picture.
+      */
+      env.DB.prepare(
+        `SELECT json_extract(meta, '$.context.geo.country') AS country,
+                json_extract(meta, '$.context.geo.region') AS region,
+                json_extract(meta, '$.context.geo.city') AS city,
+                ROUND(json_extract(meta, '$.context.geo.latitude'), 1) AS lat,
+                ROUND(json_extract(meta, '$.context.geo.longitude'), 1) AS lon,
+                COUNT(*) AS n
+           FROM submissions
+          WHERE ${where} AND json_extract(meta, '$.context.geo.latitude') IS NOT NULL
+          GROUP BY lat, lon ORDER BY n DESC LIMIT 400`,
+      ).bind(...binds),
+      ...(["device.browser", "device.os", "channel", "referrerHost"] as const).map((path) =>
+        env.DB.prepare(
+          `SELECT json_extract(meta, '$.context.${path}') AS label, COUNT(*) AS n
+             FROM submissions WHERE ${where} AND json_extract(meta, '$.context.${path}') IS NOT NULL
+            GROUP BY label ORDER BY n DESC LIMIT 8`,
+        ).bind(...binds),
+      ),
       // Typed as a tuple because `batch()` returns a positional array: the names
       // above are the only thing keeping a statement matched to its shape.
     ])) as [
@@ -267,6 +302,11 @@ export async function computeAnalytics(
       D1Result<{ b1: number | null; b2: number | null; b3: number | null; b4: number | null; b5: number | null }>,
       D1Result<{ duration_ms: number }>,
       D1Result<{ v: number | null }>,
+      D1Result<{ country: string | null; region: string | null; city: string | null; lat: number; lon: number; n: number }>,
+      D1Result<{ label: string; n: number }>,
+      D1Result<{ label: string; n: number }>,
+      D1Result<{ label: string; n: number }>,
+      D1Result<{ label: string; n: number }>,
     ];
 
   const form = (formRes.results ?? [])[0];
@@ -530,6 +570,18 @@ export async function computeAnalytics(
       mobile: deviceRow?.mobile ?? 0,
       desktop: Math.max(0, (deviceRow?.total ?? 0) - (deviceRow?.mobile ?? 0)),
     },
+    places: (placesRes.results ?? []).map((r) => ({
+      country: r.country,
+      region: r.region,
+      city: r.city,
+      lat: r.lat,
+      lon: r.lon,
+      count: r.n,
+    })),
+    byBrowser: (browserRes.results ?? []).map((r) => ({ label: r.label, count: r.n })),
+    byOs: (osRes.results ?? []).map((r) => ({ label: r.label, count: r.n })),
+    byChannel: (channelRes.results ?? []).map((r) => ({ label: r.label, count: r.n })),
+    byReferrer: (referrerRes.results ?? []).map((r) => ({ label: r.label, count: r.n })),
     durationBuckets: [
       { label: "Under 30s", count: bucketRow?.b1 ?? 0 },
       { label: "30s–1m", count: bucketRow?.b2 ?? 0 },

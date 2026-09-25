@@ -141,7 +141,8 @@ export function embedSnippet(options: SnippetOptions): string {
    * survives a Content Security Policy that forbids third-party scripts.
    */
   if (config.mode === "inline" && config.autoHeight === false) {
-    const params = new URLSearchParams({ embed: "1", ...(hidden ?? {}) });
+    // `cf_mode` names the channel on the response; a static tag cannot know its own page.
+    const params = new URLSearchParams({ embed: "1", cf_mode: "inline", ...(hidden ?? {}) });
     if (config.theme !== "auto") params.set("theme", config.theme);
     return [
       `<iframe`,

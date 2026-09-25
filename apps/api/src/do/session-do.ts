@@ -41,6 +41,7 @@ import {
   type ValidateOptions,
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
+import type { RespondentContext } from "../lib/respondent-context.js";
 import { gatewayEnabled } from "../lib/payments/flag.js";
 import { loadAccountForOrg } from "../lib/payments/accounts.js";
 import {
@@ -163,6 +164,8 @@ interface DoSessionMeta {
   startedOver?: boolean;
   country: string | null;
   userAgent: string | null;
+  /** Geo, device, channel, referrer and UTMs from session open. See `lib/respondent-context.ts`. */
+  context?: RespondentContext | null;
   /** Set when the respondent submits, for the already-submitted screen. */
   completedAt?: number | null;
   /** Set once the sign-in gate is satisfied. Null while it still blocks. */
@@ -615,6 +618,7 @@ export class SessionDO extends DurableObject<Bindings> {
     userAgent: string | null;
     /** Which surface opened this. Defaults to a conversation. */
     source?: "chat" | "embed" | "api";
+    context?: RespondentContext | null;
     /** Opened with a test-mode key: real rows, excluded from every count. */
     isTest?: boolean;
     /**
@@ -658,6 +662,7 @@ export class SessionDO extends DurableObject<Bindings> {
       startedOver: params.startedOver === true,
       country: params.country,
       userAgent: params.userAgent,
+      context: params.context ?? null,
       source: params.source ?? "chat",
       isTest: params.isTest === true,
     };
@@ -5759,6 +5764,7 @@ export class SessionDO extends DurableObject<Bindings> {
         variables: this.state.variables,
         userAgent: this.meta!.userAgent,
         country: this.meta!.country,
+        context: this.meta!.context ?? null,
         startedAt: this.meta!.startedAt,
         fingerprint: this.meta!.fingerprint ?? null,
         respondentId: this.meta!.respondentId ?? null,

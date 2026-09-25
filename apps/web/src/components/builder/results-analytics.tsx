@@ -13,6 +13,7 @@ import {
 import { CheckCircle2, Clock, Eye, Gauge, TrendingDown, Users } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
 import { BarList, ChartCard, ColumnChart, Donut, Legend } from "@/components/charts/chart-kit";
+import { WorldMap } from "@/components/charts/world-map";
 import { formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -41,8 +42,24 @@ export interface AnalyticsPayload {
   bySource: { source: string; count: number }[];
   byCountry: { country: string; count: number }[];
   byDevice: { mobile: number; desktop: number } | null;
+  /** From the respondent details recorded at session open; empty on older responses. */
+  places?: { country: string | null; region: string | null; city: string | null; lat: number; lon: number; count: number }[];
+  byBrowser?: { label: string; count: number }[];
+  byOs?: { label: string; count: number }[];
+  byChannel?: { label: string; count: number }[];
+  byReferrer?: { label: string; count: number }[];
   durationBuckets: { label: string; count: number }[];
 }
+
+const CHANNEL_LABELS: Record<string, string> = {
+  link: "Direct link",
+  inline: "Inline embed",
+  popup: "Popup",
+  side_tab: "Side tab",
+  fullpage: "Full-page embed",
+  embed: "Embedded",
+  api: "API",
+};
 
 const SOURCE_LABELS: Record<string, string> = {
   chat: "Direct link",
@@ -67,6 +84,12 @@ export function ResultsAnalytics({ analytics }: { analytics: AnalyticsPayload })
     (acc, b) => (b.dropOff > (acc?.drop ?? 0) ? { ref: b.blockRef, drop: b.dropOff } : acc),
     null,
   );
+
+  const places = analytics.places ?? [];
+  const channels = analytics.byChannel ?? [];
+  const referrers = analytics.byReferrer ?? [];
+  const browsers = analytics.byBrowser ?? [];
+  const systems = analytics.byOs ?? [];
 
   const device = analytics.byDevice;
   const deviceTotal = (device?.mobile ?? 0) + (device?.desktop ?? 0);
@@ -202,15 +225,28 @@ export function ResultsAnalytics({ analytics }: { analytics: AnalyticsPayload })
 
         <ChartCard title="Where they came from" subtitle="How the form was opened, and from where.">
           <div className="space-y-5">
+            {/* The finer channel once responses carry one; the coarse source until then. */}
             <BarList
-              items={analytics.bySource.map((s) => ({
-                label: SOURCE_LABELS[s.source] ?? s.source,
-                value: s.count,
-              }))}
+              items={
+                channels.length > 0
+                  ? channels.map((c) => ({ label: CHANNEL_LABELS[c.label] ?? c.label, value: c.count }))
+                  : analytics.bySource.map((s) => ({
+                      label: SOURCE_LABELS[s.source] ?? s.source,
+                      value: s.count,
+                    }))
+              }
               total={analytics.starts}
               colorBy="series"
               emptyLabel="No responses yet"
             />
+            {referrers.length > 0 && (
+              <div>
+                <p className="text-muted-foreground text-micro mb-2 font-medium tracking-wide uppercase">
+                  Referring sites
+                </p>
+                <BarList items={referrers.map((r) => ({ label: r.label, value: r.count }))} total={analytics.starts} />
+              </div>
+            )}
             {analytics.byCountry.length > 0 && (
               <div>
                 <p className="text-muted-foreground text-micro mb-2 font-medium tracking-wide uppercase">
@@ -225,6 +261,50 @@ export function ResultsAnalytics({ analytics }: { analytics: AnalyticsPayload })
           </div>
         </ChartCard>
       </div>
+
+      {places.length > 0 && (
+        <ChartCard
+          title="Where people are"
+          subtitle="One dot per city, from each respondent's internet connection. Accurate to the city, not the street."
+        >
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_16rem]">
+            <WorldMap
+              points={places.map((p) => ({
+                lat: p.lat,
+                lon: p.lon,
+                count: p.count,
+                label: placeLabel(p),
+              }))}
+            />
+            <div>
+              <p className="text-muted-foreground text-micro mb-2 font-medium tracking-wide uppercase">
+                Top cities
+              </p>
+              <BarList
+                items={places.slice(0, 8).map((p) => ({ label: placeLabel(p), value: p.count }))}
+                total={places.reduce((sum, p) => sum + p.count, 0)}
+              />
+            </div>
+          </div>
+        </ChartCard>
+      )}
+
+      {(browsers.length > 0 || systems.length > 0) && (
+        <ChartCard title="Browsers and systems" subtitle="Taken from the browser that opened the form.">
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div>
+              <p className="text-muted-foreground text-micro mb-2 font-medium tracking-wide uppercase">Browser</p>
+              <BarList items={browsers.map((b) => ({ label: b.label, value: b.count }))} total={analytics.starts} />
+            </div>
+            <div>
+              <p className="text-muted-foreground text-micro mb-2 font-medium tracking-wide uppercase">
+                Operating system
+              </p>
+              <BarList items={systems.map((o) => ({ label: o.label, value: o.count }))} total={analytics.starts} />
+            </div>
+          </div>
+        </ChartCard>
+      )}
 
       {deviceTotal > 0 && (
         <ChartCard title="Phone or laptop" subtitle="Taken from the browser that opened the form.">
@@ -258,6 +338,12 @@ export function shortDate(iso: string): string {
 export function longDate(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { dateStyle: "medium" });
+}
+
+/** "Brooklyn, New York, United States", with whatever parts were recorded. */
+function placeLabel(p: { country: string | null; region: string | null; city: string | null }): string {
+  const parts = [p.city, p.region !== p.city ? p.region : null, p.country ? countryName(p.country) : null];
+  return parts.filter(Boolean).join(", ") || "Unknown place";
 }
 
 /** ISO-3166 alpha-2 from the edge, spelled out where the browser can. */

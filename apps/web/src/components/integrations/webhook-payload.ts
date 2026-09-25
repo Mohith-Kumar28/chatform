@@ -4,7 +4,7 @@ import { ANSWER_CATALOG, displayAnswer, type Block } from "@repo/form-schema";
  * What a delivery looks like, built from this form's own questions.
  *
  * Mirrors `deliverWebhookEvent` in `apps/api/src/lib/webhooks.ts`: the body is
- * `{ event, formId, timestamp, submission, answers }`, with `submission` being
+ * `{ event, formId, timestamp, submission, metadata, answers }`, with `submission` being
  * the raw D1 row (so `hidden_fields` and `meta` arrive as JSON text) and each
  * answer's value the canonical shape from `ANSWER_CATALOG`. Change one, change
  * the other.
@@ -67,6 +67,29 @@ export function samplePayload(formId: string, blocks: Block[], event = "response
       hidden_fields: '{"utm_source":"newsletter"}',
       meta: null,
     },
+    metadata: {
+      channel: "popup",
+      pageUrl: "https://example.com/pricing?utm_source=newsletter",
+      referrer: "https://www.google.com/",
+      referrerHost: "google.com",
+      utm: { source: "newsletter" },
+      language: "en-US",
+      screen: "1440x900",
+      timezone: "America/New_York",
+      device: { type: "desktop", browser: "Chrome", browserVersion: "129", os: "macOS", osVersion: "10.15" },
+      geo: {
+        country: "US",
+        region: "New York",
+        regionCode: "NY",
+        city: "Brooklyn",
+        postalCode: "11201",
+        latitude: 40.6943,
+        longitude: -73.9903,
+        continent: "NA",
+        timezone: "America/New_York",
+      },
+      network: { asn: 7922, organization: "Comcast Cable" },
+    },
     answers,
   };
 }
@@ -116,6 +139,7 @@ ${JSON.stringify(samplePayload(formId, blocks, events[0]), null, 2)}
 Notes on the body:
 - \`timestamp\`, \`submission.started_at\` and \`submission.completed_at\` are Unix epoch milliseconds.
 - \`submission.hidden_fields\` and \`submission.meta\` are JSON-encoded strings or null. Parse them with JSON.parse.
+- \`metadata\` says who filled the form and from where, already parsed: \`channel\` (\`link\`, \`inline\`, \`popup\`, \`side_tab\`, \`fullpage\`, \`embed\` or \`api\`), \`pageUrl\` (the page the form sat on), \`referrer\`, \`utm\`, \`language\`, \`screen\`, \`device\` (type, browser, OS), \`geo\` (country, region, city, postal code, latitude/longitude from the IP) and \`network\`. Any field can be null, and older responses carry only country and device.
 - \`answers\` is an array. Look answers up by \`ref\`, never by position. A question the respondent skipped is missing from the array.
 - Each answer carries \`question\` (the question text), \`type\`, \`options\` (\`[{ id, label }]\` for choice questions, otherwise null), \`value\` (the raw stored answer; choice answers are option ids) and \`display\` (the answer as readable text, e.g. the chosen option's label). \`question\` and \`options\` are null if the question was later deleted from the form.
 - Store \`value\` for logic and \`display\` for humans (emails, CRM notes, Slack).

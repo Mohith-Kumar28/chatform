@@ -14,6 +14,8 @@ import {
   toCsv,
 } from "../lib/response-table.js";
 import { resolveRetiredBlocks } from "../lib/retired-columns.js";
+import { parseMeta, readRespondentContext } from "../lib/respondent-context.js";
+import { MetadataView } from "../lib/v1-schemas.js";
 import { computeAnalytics } from "../lib/analytics-service.js";
 import { computeFollowUpStats } from "../lib/followup-analytics.js";
 import { buildXlsx } from "../lib/xlsx.js";
@@ -72,6 +74,8 @@ const SubmissionRow = z.object({
    * volunteered nothing to recognise anybody by.
    */
   respondentId: z.string().nullable(),
+  /** Channel, host page, referrer, UTMs, device and IP geo. See `MetadataView`. */
+  metadata: MetadataView,
   answers: z.array(
     z.object({
       blockRef: z.string(),
@@ -221,6 +225,21 @@ const Summary = z.object({
   bySource: z.array(z.object({ source: z.string(), count: z.number() })),
   byCountry: z.array(z.object({ country: z.string(), count: z.number() })),
   byDevice: z.object({ mobile: z.number(), desktop: z.number() }).nullable(),
+  /** One dot per city for the map, from IP geo recorded at session open. */
+  places: z.array(
+    z.object({
+      country: z.string().nullable(),
+      region: z.string().nullable(),
+      city: z.string().nullable(),
+      lat: z.number(),
+      lon: z.number(),
+      count: z.number(),
+    }),
+  ),
+  byBrowser: z.array(z.object({ label: z.string(), count: z.number() })),
+  byOs: z.array(z.object({ label: z.string(), count: z.number() })),
+  byChannel: z.array(z.object({ label: z.string(), count: z.number() })),
+  byReferrer: z.array(z.object({ label: z.string(), count: z.number() })),
   durationBuckets: z.array(z.object({ label: z.string(), count: z.number() })),
   /** Field names withheld because the plan or the role does not include them. */
   locked: z.array(z.string()),
@@ -357,6 +376,10 @@ resultsRouter.get(
       respondent_phone: string | null;
       respondent_name: string | null;
       followup_skip: string | null;
+      source: string | null;
+      context_json: string | null;
+      meta_country: string | null;
+      meta_user_agent: string | null;
     };
     type AnswerRow = { submission_id: string; block_ref: string; block_type: string; value_json: string };
     type MessageRow = { submission_id: string; role: string; content: string; created_at: number };
@@ -437,7 +460,10 @@ resultsRouter.get(
                 s.respondent_provider, s.respondent_email, s.respondent_phone, s.respondent_name,
                 -- Why no reminder was ever scheduled for this response. Written by
                 -- \`scheduleFollowUps\`, which otherwise makes that decision in silence.
-                json_extract(s.meta, '$.followUpSkip') AS followup_skip
+                json_extract(s.meta, '$.followUpSkip') AS followup_skip,
+                s.source, json_extract(s.meta, '$.context') AS context_json,
+                json_extract(s.meta, '$.country') AS meta_country,
+                json_extract(s.meta, '$.userAgent') AS meta_user_agent
            FROM submissions s WHERE s.form_id = ?1 AND ${MATCHES}
           ${NEWEST_FIRST} LIMIT ?3 OFFSET ?4`,
       ).bind(id, effectiveStatus, limit, offset),
@@ -622,6 +648,14 @@ resultsRouter.get(
         completedAt: s.completed_at,
         durationMs: s.duration_ms,
         respondentId: s.respondent_id,
+        metadata: readRespondentContext(
+          {
+            context: s.context_json ? parseMeta(s.context_json) : undefined,
+            country: s.meta_country,
+            userAgent: s.meta_user_agent,
+          },
+          s.source,
+        ),
         // Present only for forms that required sign-in.
         respondent: s.respondent_provider
           ? {
@@ -1023,10 +1057,15 @@ resultsRouter.get(
       bySource: showDetail ? agg.bySource : [],
       byCountry: showDetail ? agg.byCountry : [],
       byDevice: showDetail ? agg.byDevice : null,
+      places: showDetail ? agg.places : [],
+      byBrowser: showDetail ? agg.byBrowser : [],
+      byOs: showDetail ? agg.byOs : [],
+      byChannel: showDetail ? agg.byChannel : [],
+      byReferrer: showDetail ? agg.byReferrer : [],
       durationBuckets: showDetail ? agg.durationBuckets : [],
       locked: showDetail
         ? []
-        : ["perBlock", "distributions", "avgDurationMs", "medianDurationMs", "daily", "bySource", "byCountry", "byDevice", "durationBuckets"],
+        : ["perBlock", "distributions", "avgDurationMs", "medianDurationMs", "daily", "bySource", "byCountry", "byDevice", "places", "byBrowser", "byOs", "byChannel", "byReferrer", "durationBuckets"],
       lockedContext: showDetail
         ? null
         : {

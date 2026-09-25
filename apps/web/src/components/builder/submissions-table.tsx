@@ -23,6 +23,7 @@ import {
   Hourglass,
   Link2,
   ListChecks,
+  MapPin,
   Maximize2,
   MessageSquare,
   Minimize2,
@@ -47,6 +48,7 @@ import {
   type ResultColumn,
 } from "./response-answers";
 import { PaymentAnswerDetails, PaymentCell, usePaymentAttempts } from "./payment-answer";
+import { ResponseDetails, type ResponseMetadata } from "./response-details";
 import {
   getGetApiFormsByIdAnalyticsQueryKey,
   getGetApiFormsByIdSubmissionsQueryKey,
@@ -157,6 +159,8 @@ export interface SubmissionRecord {
    * to recognise anybody by.
    */
   respondentId?: string | null;
+  /** Channel, host page, referrer, device and IP location. Null on old responses that recorded none. */
+  metadata?: ResponseMetadata | null;
   /** Null when this response was never in a follow-up sequence. */
   followUp?: {
     sent: number;
@@ -1895,7 +1899,7 @@ function SubmissionDialog({
     () => new Map((row?.answers ?? []).map((a) => [a.blockRef, a.value])),
     [row],
   );
-  const [view, setView] = useState<"answers" | "chat">("answers");
+  const [view, setView] = useState<"answers" | "chat" | "details">("answers");
 
   /**
    * Left and right step through the responses, matching the chevrons.
@@ -2108,6 +2112,7 @@ function SubmissionDialog({
                 icon: MessageSquare,
                 ...(row.transcript.length > 0 ? { badge: row.transcript.length } : {}),
               },
+              { value: "details", label: "Details", icon: MapPin },
             ]}
           />
         </div>
@@ -2201,6 +2206,8 @@ function SubmissionDialog({
           {view === "answers" && (
             <AnswerList key={row.id} formId={formId} submissionId={row.id} columns={columns} byRef={byRef} />
           )}
+
+          {view === "details" && <ResponseDetails metadata={row.metadata} />}
 
           {view === "chat" &&
             (row.transcript.length > 0 ? (

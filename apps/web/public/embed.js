@@ -235,6 +235,15 @@
     // The first answer rides in the URL so the header X never flashes; later
     // changes (a window resized across 520px) arrive as a "host" message.
     if (hostCloses()) url.searchParams.set("hostClose", "1");
+    // Where the form sits, recorded on the response. Inside the frame the
+    // referrer is only this origin, so the page and its own referrer ride here.
+    url.searchParams.set("cf_mode", mode);
+    try {
+      url.searchParams.set("cf_page", window.location.href.split("#")[0].slice(0, 1000));
+      if (document.referrer) url.searchParams.set("cf_ref", document.referrer.slice(0, 1000));
+    } catch (err) {
+      /* An unreadable location is not worth a form that will not open. */
+    }
     for (var key in hidden) {
       if (Object.prototype.hasOwnProperty.call(hidden, key)) url.searchParams.set(key, hidden[key]);
     }

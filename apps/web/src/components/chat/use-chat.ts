@@ -24,6 +24,7 @@ import {
   type RespondentHint,
 } from "./respondent-hint";
 import { rememberEmbedQuery, storageKey, submittedKey } from "./session-store";
+import { respondentContext } from "./respondent-context";
 
 export interface ChatMessage {
   /**
@@ -1548,6 +1549,12 @@ export function useChat({
              * zone would be an absurd trade.
              */
             ...respondentTimezone(),
+            /**
+             * Where they are filling it from: channel, host page, referrer,
+             * UTMs, language, screen. Recorded on the response and never used
+             * to decide anything.
+             */
+            ...respondentContext(),
             ...(freshRef.current ? { fresh: true } : {}),
           }),
         });

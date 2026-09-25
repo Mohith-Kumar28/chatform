@@ -70,6 +70,45 @@ export const NextView = z
 
 const MissingRequired = z.object({ ref: z.string(), title: z.string() });
 
+/**
+ * Who filled a response in and from where: channel, host page, referrer, UTMs,
+ * device, and IP geo. Built by `lib/respondent-context.ts` when the session
+ * opened; the same object is the webhook payload's `metadata`. Every leaf can
+ * be null, and a response from before this was recorded carries only country
+ * and device.
+ */
+export const MetadataView = z
+  .object({
+    channel: z.enum(["link", "inline", "popup", "side_tab", "fullpage", "embed", "api"]),
+    pageUrl: z.string().nullable(),
+    referrer: z.string().nullable(),
+    referrerHost: z.string().nullable(),
+    utm: z.record(z.string(), z.string()),
+    language: z.string().nullable(),
+    screen: z.string().nullable(),
+    timezone: z.string().nullable(),
+    device: z.object({
+      type: z.enum(["mobile", "tablet", "desktop", "bot"]).nullable(),
+      browser: z.string().nullable(),
+      browserVersion: z.string().nullable(),
+      os: z.string().nullable(),
+      osVersion: z.string().nullable(),
+    }),
+    geo: z.object({
+      country: z.string().nullable(),
+      region: z.string().nullable(),
+      regionCode: z.string().nullable(),
+      city: z.string().nullable(),
+      postalCode: z.string().nullable(),
+      latitude: z.number().nullable(),
+      longitude: z.number().nullable(),
+      continent: z.string().nullable(),
+      timezone: z.string().nullable(),
+    }),
+    network: z.object({ asn: z.number().nullable(), organization: z.string().nullable() }),
+  })
+  .nullable();
+
 /** One response, as every lifecycle endpoint returns it. */
 export const ResponseView = z
   .object({
@@ -86,6 +125,7 @@ export const ResponseView = z
     duration_ms: z.number().nullable(),
     ending_ref: z.string().nullable(),
     abandon_reason: z.string().nullable(),
+    metadata: MetadataView,
     progress: ProgressView,
     /** Keyed by the variable and hidden-field names the author chose. */
     variables: z.record(z.string(), z.unknown()),
@@ -272,6 +312,12 @@ export const AnalyticsView = z
     bySource: z.array(z.unknown()),
     byCountry: z.array(z.unknown()),
     byDevice: z.record(z.string(), z.number()),
+    /** One point per city: `{ country, region, city, lat, lon, count }`. */
+    places: z.array(z.unknown()).optional(),
+    byBrowser: z.array(z.object({ label: z.string(), count: z.number() })).optional(),
+    byOs: z.array(z.object({ label: z.string(), count: z.number() })).optional(),
+    byChannel: z.array(z.object({ label: z.string(), count: z.number() })).optional(),
+    byReferrer: z.array(z.object({ label: z.string(), count: z.number() })).optional(),
     durationBuckets: z.array(z.object({ label: z.string(), count: z.number() })),
     /** Names what a plan withheld, rather than omitting it silently. */
     locked: z.array(z.string()).optional(),

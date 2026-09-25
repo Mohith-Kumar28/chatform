@@ -1796,6 +1796,34 @@ export type PostPFormsBySlugSessionsBodyEmbed = {
   origin?: string;
 };
 
+export type PostPFormsBySlugSessionsBodyClientChannel = typeof PostPFormsBySlugSessionsBodyClientChannel[keyof typeof PostPFormsBySlugSessionsBodyClientChannel];
+
+
+export const PostPFormsBySlugSessionsBodyClientChannel = {
+  link: 'link',
+  inline: 'inline',
+  popup: 'popup',
+  side_tab: 'side_tab',
+  fullpage: 'fullpage',
+  embed: 'embed',
+  api: 'api',
+} as const;
+
+export type PostPFormsBySlugSessionsBodyClientUtm = {[key: string]: string};
+
+export type PostPFormsBySlugSessionsBodyClient = {
+  channel?: PostPFormsBySlugSessionsBodyClientChannel;
+  /** @maxLength 2000 */
+  pageUrl?: string;
+  /** @maxLength 2000 */
+  referrer?: string;
+  utm?: PostPFormsBySlugSessionsBodyClientUtm;
+  /** @maxLength 35 */
+  language?: string;
+  /** @maxLength 20 */
+  screen?: string;
+};
+
 export type PostPFormsBySlugSessionsBody = {
   /** @maxLength 4096 */
   turnstileToken?: string;
@@ -1812,6 +1840,7 @@ export type PostPFormsBySlugSessionsBody = {
   fresh?: boolean;
   /** @maxLength 60 */
   followUpId?: string;
+  client?: PostPFormsBySlugSessionsBodyClient;
 };
 
 export type PostPFormsBySlugSessions200 = {
@@ -2817,6 +2846,70 @@ export type GetApiFormsByIdSubmissions200SubmissionsItemRespondent = {
   name: string | null;
 } | null;
 
+export type GetApiFormsByIdSubmissions200SubmissionsItemMetadataChannel = typeof GetApiFormsByIdSubmissions200SubmissionsItemMetadataChannel[keyof typeof GetApiFormsByIdSubmissions200SubmissionsItemMetadataChannel];
+
+
+export const GetApiFormsByIdSubmissions200SubmissionsItemMetadataChannel = {
+  link: 'link',
+  inline: 'inline',
+  popup: 'popup',
+  side_tab: 'side_tab',
+  fullpage: 'fullpage',
+  embed: 'embed',
+  api: 'api',
+} as const;
+
+export type GetApiFormsByIdSubmissions200SubmissionsItemMetadataUtm = {[key: string]: string};
+
+export type GetApiFormsByIdSubmissions200SubmissionsItemMetadataDeviceType = typeof GetApiFormsByIdSubmissions200SubmissionsItemMetadataDeviceType[keyof typeof GetApiFormsByIdSubmissions200SubmissionsItemMetadataDeviceType];
+
+
+export const GetApiFormsByIdSubmissions200SubmissionsItemMetadataDeviceType = {
+  mobile: 'mobile',
+  tablet: 'tablet',
+  desktop: 'desktop',
+  bot: 'bot',
+} as const;
+
+export type GetApiFormsByIdSubmissions200SubmissionsItemMetadataDevice = {
+  type: GetApiFormsByIdSubmissions200SubmissionsItemMetadataDeviceType;
+  browser: string | null;
+  browserVersion: string | null;
+  os: string | null;
+  osVersion: string | null;
+};
+
+export type GetApiFormsByIdSubmissions200SubmissionsItemMetadataGeo = {
+  country: string | null;
+  region: string | null;
+  regionCode: string | null;
+  city: string | null;
+  postalCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  continent: string | null;
+  timezone: string | null;
+};
+
+export type GetApiFormsByIdSubmissions200SubmissionsItemMetadataNetwork = {
+  asn: number | null;
+  organization: string | null;
+};
+
+export type GetApiFormsByIdSubmissions200SubmissionsItemMetadata = {
+  channel: GetApiFormsByIdSubmissions200SubmissionsItemMetadataChannel;
+  pageUrl: string | null;
+  referrer: string | null;
+  referrerHost: string | null;
+  utm: GetApiFormsByIdSubmissions200SubmissionsItemMetadataUtm;
+  language: string | null;
+  screen: string | null;
+  timezone: string | null;
+  device: GetApiFormsByIdSubmissions200SubmissionsItemMetadataDevice;
+  geo: GetApiFormsByIdSubmissions200SubmissionsItemMetadataGeo;
+  network: GetApiFormsByIdSubmissions200SubmissionsItemMetadataNetwork;
+} | null;
+
 export type GetApiFormsByIdSubmissions200SubmissionsItemAnswersItem = {
   blockRef: string;
   blockType: string;
@@ -2855,6 +2948,7 @@ export type GetApiFormsByIdSubmissions200SubmissionsItem = {
   durationMs: number | null;
   respondent: GetApiFormsByIdSubmissions200SubmissionsItemRespondent;
   respondentId: string | null;
+  metadata: GetApiFormsByIdSubmissions200SubmissionsItemMetadata;
   answers: GetApiFormsByIdSubmissions200SubmissionsItemAnswersItem[];
   transcript: GetApiFormsByIdSubmissions200SubmissionsItemTranscriptItem[];
   followUp: GetApiFormsByIdSubmissions200SubmissionsItemFollowUp;
@@ -2974,6 +3068,35 @@ export type GetApiFormsByIdAnalytics200ByDevice = {
   desktop: number;
 } | null;
 
+export type GetApiFormsByIdAnalytics200PlacesItem = {
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  lat: number;
+  lon: number;
+  count: number;
+};
+
+export type GetApiFormsByIdAnalytics200ByBrowserItem = {
+  label: string;
+  count: number;
+};
+
+export type GetApiFormsByIdAnalytics200ByOsItem = {
+  label: string;
+  count: number;
+};
+
+export type GetApiFormsByIdAnalytics200ByChannelItem = {
+  label: string;
+  count: number;
+};
+
+export type GetApiFormsByIdAnalytics200ByReferrerItem = {
+  label: string;
+  count: number;
+};
+
 export type GetApiFormsByIdAnalytics200DurationBucketsItem = {
   label: string;
   count: number;
@@ -3001,6 +3124,11 @@ export type GetApiFormsByIdAnalytics200 = {
   bySource: GetApiFormsByIdAnalytics200BySourceItem[];
   byCountry: GetApiFormsByIdAnalytics200ByCountryItem[];
   byDevice: GetApiFormsByIdAnalytics200ByDevice;
+  places: GetApiFormsByIdAnalytics200PlacesItem[];
+  byBrowser: GetApiFormsByIdAnalytics200ByBrowserItem[];
+  byOs: GetApiFormsByIdAnalytics200ByOsItem[];
+  byChannel: GetApiFormsByIdAnalytics200ByChannelItem[];
+  byReferrer: GetApiFormsByIdAnalytics200ByReferrerItem[];
   durationBuckets: GetApiFormsByIdAnalytics200DurationBucketsItem[];
   locked: string[];
   lockedContext: GetApiFormsByIdAnalytics200LockedContext;
@@ -3083,6 +3211,70 @@ export const PostV1FormsByIdResponses201Status = {
   disqualified: 'disqualified',
 } as const;
 
+export type PostV1FormsByIdResponses201MetadataChannel = typeof PostV1FormsByIdResponses201MetadataChannel[keyof typeof PostV1FormsByIdResponses201MetadataChannel];
+
+
+export const PostV1FormsByIdResponses201MetadataChannel = {
+  link: 'link',
+  inline: 'inline',
+  popup: 'popup',
+  side_tab: 'side_tab',
+  fullpage: 'fullpage',
+  embed: 'embed',
+  api: 'api',
+} as const;
+
+export type PostV1FormsByIdResponses201MetadataUtm = {[key: string]: string};
+
+export type PostV1FormsByIdResponses201MetadataDeviceType = typeof PostV1FormsByIdResponses201MetadataDeviceType[keyof typeof PostV1FormsByIdResponses201MetadataDeviceType];
+
+
+export const PostV1FormsByIdResponses201MetadataDeviceType = {
+  mobile: 'mobile',
+  tablet: 'tablet',
+  desktop: 'desktop',
+  bot: 'bot',
+} as const;
+
+export type PostV1FormsByIdResponses201MetadataDevice = {
+  type: PostV1FormsByIdResponses201MetadataDeviceType;
+  browser: string | null;
+  browserVersion: string | null;
+  os: string | null;
+  osVersion: string | null;
+};
+
+export type PostV1FormsByIdResponses201MetadataGeo = {
+  country: string | null;
+  region: string | null;
+  regionCode: string | null;
+  city: string | null;
+  postalCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  continent: string | null;
+  timezone: string | null;
+};
+
+export type PostV1FormsByIdResponses201MetadataNetwork = {
+  asn: number | null;
+  organization: string | null;
+};
+
+export type PostV1FormsByIdResponses201Metadata = {
+  channel: PostV1FormsByIdResponses201MetadataChannel;
+  pageUrl: string | null;
+  referrer: string | null;
+  referrerHost: string | null;
+  utm: PostV1FormsByIdResponses201MetadataUtm;
+  language: string | null;
+  screen: string | null;
+  timezone: string | null;
+  device: PostV1FormsByIdResponses201MetadataDevice;
+  geo: PostV1FormsByIdResponses201MetadataGeo;
+  network: PostV1FormsByIdResponses201MetadataNetwork;
+} | null;
+
 export type PostV1FormsByIdResponses201Progress = {
   answered: number;
   totalEstimate: number;
@@ -3158,6 +3350,7 @@ export type PostV1FormsByIdResponses201 = {
   duration_ms: number | null;
   ending_ref: string | null;
   abandon_reason: string | null;
+  metadata: PostV1FormsByIdResponses201Metadata;
   progress: PostV1FormsByIdResponses201Progress;
   variables: PostV1FormsByIdResponses201Variables;
   hidden_fields: PostV1FormsByIdResponses201HiddenFields;
@@ -3218,6 +3411,70 @@ export const GetV1FormsByIdResponses200DataItemStatus = {
   abandoned: 'abandoned',
   disqualified: 'disqualified',
 } as const;
+
+export type GetV1FormsByIdResponses200DataItemMetadataChannel = typeof GetV1FormsByIdResponses200DataItemMetadataChannel[keyof typeof GetV1FormsByIdResponses200DataItemMetadataChannel];
+
+
+export const GetV1FormsByIdResponses200DataItemMetadataChannel = {
+  link: 'link',
+  inline: 'inline',
+  popup: 'popup',
+  side_tab: 'side_tab',
+  fullpage: 'fullpage',
+  embed: 'embed',
+  api: 'api',
+} as const;
+
+export type GetV1FormsByIdResponses200DataItemMetadataUtm = {[key: string]: string};
+
+export type GetV1FormsByIdResponses200DataItemMetadataDeviceType = typeof GetV1FormsByIdResponses200DataItemMetadataDeviceType[keyof typeof GetV1FormsByIdResponses200DataItemMetadataDeviceType];
+
+
+export const GetV1FormsByIdResponses200DataItemMetadataDeviceType = {
+  mobile: 'mobile',
+  tablet: 'tablet',
+  desktop: 'desktop',
+  bot: 'bot',
+} as const;
+
+export type GetV1FormsByIdResponses200DataItemMetadataDevice = {
+  type: GetV1FormsByIdResponses200DataItemMetadataDeviceType;
+  browser: string | null;
+  browserVersion: string | null;
+  os: string | null;
+  osVersion: string | null;
+};
+
+export type GetV1FormsByIdResponses200DataItemMetadataGeo = {
+  country: string | null;
+  region: string | null;
+  regionCode: string | null;
+  city: string | null;
+  postalCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  continent: string | null;
+  timezone: string | null;
+};
+
+export type GetV1FormsByIdResponses200DataItemMetadataNetwork = {
+  asn: number | null;
+  organization: string | null;
+};
+
+export type GetV1FormsByIdResponses200DataItemMetadata = {
+  channel: GetV1FormsByIdResponses200DataItemMetadataChannel;
+  pageUrl: string | null;
+  referrer: string | null;
+  referrerHost: string | null;
+  utm: GetV1FormsByIdResponses200DataItemMetadataUtm;
+  language: string | null;
+  screen: string | null;
+  timezone: string | null;
+  device: GetV1FormsByIdResponses200DataItemMetadataDevice;
+  geo: GetV1FormsByIdResponses200DataItemMetadataGeo;
+  network: GetV1FormsByIdResponses200DataItemMetadataNetwork;
+} | null;
 
 export type GetV1FormsByIdResponses200DataItemProgress = {
   answered: number;
@@ -3294,6 +3551,7 @@ export type GetV1FormsByIdResponses200DataItem = {
   duration_ms: number | null;
   ending_ref: string | null;
   abandon_reason: string | null;
+  metadata: GetV1FormsByIdResponses200DataItemMetadata;
   progress: GetV1FormsByIdResponses200DataItemProgress;
   variables: GetV1FormsByIdResponses200DataItemVariables;
   hidden_fields: GetV1FormsByIdResponses200DataItemHiddenFields;
@@ -3335,6 +3593,70 @@ export const PostV1ResponsesByIdAnswers200Status = {
   abandoned: 'abandoned',
   disqualified: 'disqualified',
 } as const;
+
+export type PostV1ResponsesByIdAnswers200MetadataChannel = typeof PostV1ResponsesByIdAnswers200MetadataChannel[keyof typeof PostV1ResponsesByIdAnswers200MetadataChannel];
+
+
+export const PostV1ResponsesByIdAnswers200MetadataChannel = {
+  link: 'link',
+  inline: 'inline',
+  popup: 'popup',
+  side_tab: 'side_tab',
+  fullpage: 'fullpage',
+  embed: 'embed',
+  api: 'api',
+} as const;
+
+export type PostV1ResponsesByIdAnswers200MetadataUtm = {[key: string]: string};
+
+export type PostV1ResponsesByIdAnswers200MetadataDeviceType = typeof PostV1ResponsesByIdAnswers200MetadataDeviceType[keyof typeof PostV1ResponsesByIdAnswers200MetadataDeviceType];
+
+
+export const PostV1ResponsesByIdAnswers200MetadataDeviceType = {
+  mobile: 'mobile',
+  tablet: 'tablet',
+  desktop: 'desktop',
+  bot: 'bot',
+} as const;
+
+export type PostV1ResponsesByIdAnswers200MetadataDevice = {
+  type: PostV1ResponsesByIdAnswers200MetadataDeviceType;
+  browser: string | null;
+  browserVersion: string | null;
+  os: string | null;
+  osVersion: string | null;
+};
+
+export type PostV1ResponsesByIdAnswers200MetadataGeo = {
+  country: string | null;
+  region: string | null;
+  regionCode: string | null;
+  city: string | null;
+  postalCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  continent: string | null;
+  timezone: string | null;
+};
+
+export type PostV1ResponsesByIdAnswers200MetadataNetwork = {
+  asn: number | null;
+  organization: string | null;
+};
+
+export type PostV1ResponsesByIdAnswers200Metadata = {
+  channel: PostV1ResponsesByIdAnswers200MetadataChannel;
+  pageUrl: string | null;
+  referrer: string | null;
+  referrerHost: string | null;
+  utm: PostV1ResponsesByIdAnswers200MetadataUtm;
+  language: string | null;
+  screen: string | null;
+  timezone: string | null;
+  device: PostV1ResponsesByIdAnswers200MetadataDevice;
+  geo: PostV1ResponsesByIdAnswers200MetadataGeo;
+  network: PostV1ResponsesByIdAnswers200MetadataNetwork;
+} | null;
 
 export type PostV1ResponsesByIdAnswers200Progress = {
   answered: number;
@@ -3411,6 +3733,7 @@ export type PostV1ResponsesByIdAnswers200 = {
   duration_ms: number | null;
   ending_ref: string | null;
   abandon_reason: string | null;
+  metadata: PostV1ResponsesByIdAnswers200Metadata;
   progress: PostV1ResponsesByIdAnswers200Progress;
   variables: PostV1ResponsesByIdAnswers200Variables;
   hidden_fields: PostV1ResponsesByIdAnswers200HiddenFields;
@@ -3432,6 +3755,70 @@ export const DeleteV1ResponsesByIdAnswersByRef200Status = {
   abandoned: 'abandoned',
   disqualified: 'disqualified',
 } as const;
+
+export type DeleteV1ResponsesByIdAnswersByRef200MetadataChannel = typeof DeleteV1ResponsesByIdAnswersByRef200MetadataChannel[keyof typeof DeleteV1ResponsesByIdAnswersByRef200MetadataChannel];
+
+
+export const DeleteV1ResponsesByIdAnswersByRef200MetadataChannel = {
+  link: 'link',
+  inline: 'inline',
+  popup: 'popup',
+  side_tab: 'side_tab',
+  fullpage: 'fullpage',
+  embed: 'embed',
+  api: 'api',
+} as const;
+
+export type DeleteV1ResponsesByIdAnswersByRef200MetadataUtm = {[key: string]: string};
+
+export type DeleteV1ResponsesByIdAnswersByRef200MetadataDeviceType = typeof DeleteV1ResponsesByIdAnswersByRef200MetadataDeviceType[keyof typeof DeleteV1ResponsesByIdAnswersByRef200MetadataDeviceType];
+
+
+export const DeleteV1ResponsesByIdAnswersByRef200MetadataDeviceType = {
+  mobile: 'mobile',
+  tablet: 'tablet',
+  desktop: 'desktop',
+  bot: 'bot',
+} as const;
+
+export type DeleteV1ResponsesByIdAnswersByRef200MetadataDevice = {
+  type: DeleteV1ResponsesByIdAnswersByRef200MetadataDeviceType;
+  browser: string | null;
+  browserVersion: string | null;
+  os: string | null;
+  osVersion: string | null;
+};
+
+export type DeleteV1ResponsesByIdAnswersByRef200MetadataGeo = {
+  country: string | null;
+  region: string | null;
+  regionCode: string | null;
+  city: string | null;
+  postalCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  continent: string | null;
+  timezone: string | null;
+};
+
+export type DeleteV1ResponsesByIdAnswersByRef200MetadataNetwork = {
+  asn: number | null;
+  organization: string | null;
+};
+
+export type DeleteV1ResponsesByIdAnswersByRef200Metadata = {
+  channel: DeleteV1ResponsesByIdAnswersByRef200MetadataChannel;
+  pageUrl: string | null;
+  referrer: string | null;
+  referrerHost: string | null;
+  utm: DeleteV1ResponsesByIdAnswersByRef200MetadataUtm;
+  language: string | null;
+  screen: string | null;
+  timezone: string | null;
+  device: DeleteV1ResponsesByIdAnswersByRef200MetadataDevice;
+  geo: DeleteV1ResponsesByIdAnswersByRef200MetadataGeo;
+  network: DeleteV1ResponsesByIdAnswersByRef200MetadataNetwork;
+} | null;
 
 export type DeleteV1ResponsesByIdAnswersByRef200Progress = {
   answered: number;
@@ -3508,6 +3895,7 @@ export type DeleteV1ResponsesByIdAnswersByRef200 = {
   duration_ms: number | null;
   ending_ref: string | null;
   abandon_reason: string | null;
+  metadata: DeleteV1ResponsesByIdAnswersByRef200Metadata;
   progress: DeleteV1ResponsesByIdAnswersByRef200Progress;
   variables: DeleteV1ResponsesByIdAnswersByRef200Variables;
   hidden_fields: DeleteV1ResponsesByIdAnswersByRef200HiddenFields;
@@ -3533,6 +3921,70 @@ export const PostV1ResponsesByIdComplete200Status = {
   abandoned: 'abandoned',
   disqualified: 'disqualified',
 } as const;
+
+export type PostV1ResponsesByIdComplete200MetadataChannel = typeof PostV1ResponsesByIdComplete200MetadataChannel[keyof typeof PostV1ResponsesByIdComplete200MetadataChannel];
+
+
+export const PostV1ResponsesByIdComplete200MetadataChannel = {
+  link: 'link',
+  inline: 'inline',
+  popup: 'popup',
+  side_tab: 'side_tab',
+  fullpage: 'fullpage',
+  embed: 'embed',
+  api: 'api',
+} as const;
+
+export type PostV1ResponsesByIdComplete200MetadataUtm = {[key: string]: string};
+
+export type PostV1ResponsesByIdComplete200MetadataDeviceType = typeof PostV1ResponsesByIdComplete200MetadataDeviceType[keyof typeof PostV1ResponsesByIdComplete200MetadataDeviceType];
+
+
+export const PostV1ResponsesByIdComplete200MetadataDeviceType = {
+  mobile: 'mobile',
+  tablet: 'tablet',
+  desktop: 'desktop',
+  bot: 'bot',
+} as const;
+
+export type PostV1ResponsesByIdComplete200MetadataDevice = {
+  type: PostV1ResponsesByIdComplete200MetadataDeviceType;
+  browser: string | null;
+  browserVersion: string | null;
+  os: string | null;
+  osVersion: string | null;
+};
+
+export type PostV1ResponsesByIdComplete200MetadataGeo = {
+  country: string | null;
+  region: string | null;
+  regionCode: string | null;
+  city: string | null;
+  postalCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  continent: string | null;
+  timezone: string | null;
+};
+
+export type PostV1ResponsesByIdComplete200MetadataNetwork = {
+  asn: number | null;
+  organization: string | null;
+};
+
+export type PostV1ResponsesByIdComplete200Metadata = {
+  channel: PostV1ResponsesByIdComplete200MetadataChannel;
+  pageUrl: string | null;
+  referrer: string | null;
+  referrerHost: string | null;
+  utm: PostV1ResponsesByIdComplete200MetadataUtm;
+  language: string | null;
+  screen: string | null;
+  timezone: string | null;
+  device: PostV1ResponsesByIdComplete200MetadataDevice;
+  geo: PostV1ResponsesByIdComplete200MetadataGeo;
+  network: PostV1ResponsesByIdComplete200MetadataNetwork;
+} | null;
 
 export type PostV1ResponsesByIdComplete200Progress = {
   answered: number;
@@ -3609,6 +4061,7 @@ export type PostV1ResponsesByIdComplete200 = {
   duration_ms: number | null;
   ending_ref: string | null;
   abandon_reason: string | null;
+  metadata: PostV1ResponsesByIdComplete200Metadata;
   progress: PostV1ResponsesByIdComplete200Progress;
   variables: PostV1ResponsesByIdComplete200Variables;
   hidden_fields: PostV1ResponsesByIdComplete200HiddenFields;
@@ -3635,6 +4088,70 @@ export const PostV1ResponsesByIdAbandon200Status = {
   abandoned: 'abandoned',
   disqualified: 'disqualified',
 } as const;
+
+export type PostV1ResponsesByIdAbandon200MetadataChannel = typeof PostV1ResponsesByIdAbandon200MetadataChannel[keyof typeof PostV1ResponsesByIdAbandon200MetadataChannel];
+
+
+export const PostV1ResponsesByIdAbandon200MetadataChannel = {
+  link: 'link',
+  inline: 'inline',
+  popup: 'popup',
+  side_tab: 'side_tab',
+  fullpage: 'fullpage',
+  embed: 'embed',
+  api: 'api',
+} as const;
+
+export type PostV1ResponsesByIdAbandon200MetadataUtm = {[key: string]: string};
+
+export type PostV1ResponsesByIdAbandon200MetadataDeviceType = typeof PostV1ResponsesByIdAbandon200MetadataDeviceType[keyof typeof PostV1ResponsesByIdAbandon200MetadataDeviceType];
+
+
+export const PostV1ResponsesByIdAbandon200MetadataDeviceType = {
+  mobile: 'mobile',
+  tablet: 'tablet',
+  desktop: 'desktop',
+  bot: 'bot',
+} as const;
+
+export type PostV1ResponsesByIdAbandon200MetadataDevice = {
+  type: PostV1ResponsesByIdAbandon200MetadataDeviceType;
+  browser: string | null;
+  browserVersion: string | null;
+  os: string | null;
+  osVersion: string | null;
+};
+
+export type PostV1ResponsesByIdAbandon200MetadataGeo = {
+  country: string | null;
+  region: string | null;
+  regionCode: string | null;
+  city: string | null;
+  postalCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  continent: string | null;
+  timezone: string | null;
+};
+
+export type PostV1ResponsesByIdAbandon200MetadataNetwork = {
+  asn: number | null;
+  organization: string | null;
+};
+
+export type PostV1ResponsesByIdAbandon200Metadata = {
+  channel: PostV1ResponsesByIdAbandon200MetadataChannel;
+  pageUrl: string | null;
+  referrer: string | null;
+  referrerHost: string | null;
+  utm: PostV1ResponsesByIdAbandon200MetadataUtm;
+  language: string | null;
+  screen: string | null;
+  timezone: string | null;
+  device: PostV1ResponsesByIdAbandon200MetadataDevice;
+  geo: PostV1ResponsesByIdAbandon200MetadataGeo;
+  network: PostV1ResponsesByIdAbandon200MetadataNetwork;
+} | null;
 
 export type PostV1ResponsesByIdAbandon200Progress = {
   answered: number;
@@ -3711,6 +4228,7 @@ export type PostV1ResponsesByIdAbandon200 = {
   duration_ms: number | null;
   ending_ref: string | null;
   abandon_reason: string | null;
+  metadata: PostV1ResponsesByIdAbandon200Metadata;
   progress: PostV1ResponsesByIdAbandon200Progress;
   variables: PostV1ResponsesByIdAbandon200Variables;
   hidden_fields: PostV1ResponsesByIdAbandon200HiddenFields;
@@ -3732,6 +4250,70 @@ export const GetV1ResponsesById200Status = {
   abandoned: 'abandoned',
   disqualified: 'disqualified',
 } as const;
+
+export type GetV1ResponsesById200MetadataChannel = typeof GetV1ResponsesById200MetadataChannel[keyof typeof GetV1ResponsesById200MetadataChannel];
+
+
+export const GetV1ResponsesById200MetadataChannel = {
+  link: 'link',
+  inline: 'inline',
+  popup: 'popup',
+  side_tab: 'side_tab',
+  fullpage: 'fullpage',
+  embed: 'embed',
+  api: 'api',
+} as const;
+
+export type GetV1ResponsesById200MetadataUtm = {[key: string]: string};
+
+export type GetV1ResponsesById200MetadataDeviceType = typeof GetV1ResponsesById200MetadataDeviceType[keyof typeof GetV1ResponsesById200MetadataDeviceType];
+
+
+export const GetV1ResponsesById200MetadataDeviceType = {
+  mobile: 'mobile',
+  tablet: 'tablet',
+  desktop: 'desktop',
+  bot: 'bot',
+} as const;
+
+export type GetV1ResponsesById200MetadataDevice = {
+  type: GetV1ResponsesById200MetadataDeviceType;
+  browser: string | null;
+  browserVersion: string | null;
+  os: string | null;
+  osVersion: string | null;
+};
+
+export type GetV1ResponsesById200MetadataGeo = {
+  country: string | null;
+  region: string | null;
+  regionCode: string | null;
+  city: string | null;
+  postalCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  continent: string | null;
+  timezone: string | null;
+};
+
+export type GetV1ResponsesById200MetadataNetwork = {
+  asn: number | null;
+  organization: string | null;
+};
+
+export type GetV1ResponsesById200Metadata = {
+  channel: GetV1ResponsesById200MetadataChannel;
+  pageUrl: string | null;
+  referrer: string | null;
+  referrerHost: string | null;
+  utm: GetV1ResponsesById200MetadataUtm;
+  language: string | null;
+  screen: string | null;
+  timezone: string | null;
+  device: GetV1ResponsesById200MetadataDevice;
+  geo: GetV1ResponsesById200MetadataGeo;
+  network: GetV1ResponsesById200MetadataNetwork;
+} | null;
 
 export type GetV1ResponsesById200Progress = {
   answered: number;
@@ -3808,6 +4390,7 @@ export type GetV1ResponsesById200 = {
   duration_ms: number | null;
   ending_ref: string | null;
   abandon_reason: string | null;
+  metadata: GetV1ResponsesById200Metadata;
   progress: GetV1ResponsesById200Progress;
   variables: GetV1ResponsesById200Variables;
   hidden_fields: GetV1ResponsesById200HiddenFields;
@@ -4098,6 +4681,26 @@ export type GetV1FormsByIdAnalytics200DailyItem = {
 
 export type GetV1FormsByIdAnalytics200ByDevice = {[key: string]: number};
 
+export type GetV1FormsByIdAnalytics200ByBrowserItem = {
+  label: string;
+  count: number;
+};
+
+export type GetV1FormsByIdAnalytics200ByOsItem = {
+  label: string;
+  count: number;
+};
+
+export type GetV1FormsByIdAnalytics200ByChannelItem = {
+  label: string;
+  count: number;
+};
+
+export type GetV1FormsByIdAnalytics200ByReferrerItem = {
+  label: string;
+  count: number;
+};
+
 export type GetV1FormsByIdAnalytics200DurationBucketsItem = {
   label: string;
   count: number;
@@ -4117,6 +4720,11 @@ export type GetV1FormsByIdAnalytics200 = {
   bySource: unknown[];
   byCountry: unknown[];
   byDevice: GetV1FormsByIdAnalytics200ByDevice;
+  places?: unknown[];
+  byBrowser?: GetV1FormsByIdAnalytics200ByBrowserItem[];
+  byOs?: GetV1FormsByIdAnalytics200ByOsItem[];
+  byChannel?: GetV1FormsByIdAnalytics200ByChannelItem[];
+  byReferrer?: GetV1FormsByIdAnalytics200ByReferrerItem[];
   durationBuckets: GetV1FormsByIdAnalytics200DurationBucketsItem[];
   locked?: string[];
   [key: string]: unknown;
