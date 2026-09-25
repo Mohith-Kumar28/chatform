@@ -200,6 +200,39 @@ function stub(env: Bindings, sessionId: string): DurableObjectStub<SessionDO> {
   return env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
 }
 
+/**
+ * What `embed.js` needs before it draws anything: the published embed choices
+ * and the colour the launcher wears.
+ *
+ * Its own route rather than `/config`, which counts submissions and resolves
+ * entitlements; this runs on every page view of every site carrying the script,
+ * before the visitor has shown any interest, so it is one indexed read and is
+ * cached for a minute. That minute is how long a Publish takes to reach a site.
+ * An unpublished or missing form answers `{}` with 200, so the loader falls back
+ * to its attributes rather than logging an error on someone else's page.
+ */
+sessionsRouter.get(
+  "/forms/:slug/embed",
+  describeRoute({
+    tags: ["public"],
+    summary: "Published embed settings for a form",
+    responses: { 200: { description: "Embed settings" } },
+  }),
+  async (c) => {
+    const row = await c.env.DB.prepare(
+      `SELECT f.status, fv.schema_json
+         FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
+        WHERE f.slug = ? AND f.deleted_at IS NULL LIMIT 1`,
+    )
+      .bind(c.req.param("slug"))
+      .first<{ status: string; schema_json: string }>();
+    c.header("cache-control", "public, max-age=60");
+    if (!row || row.status !== "published") return c.json({});
+    const doc = readFormDoc(JSON.parse(row.schema_json));
+    return c.json({ ...(doc.embed ?? {}), color: doc.theme.accent });
+  },
+);
+
 sessionsRouter.get(
   "/forms/:slug/config",
   describeRoute({

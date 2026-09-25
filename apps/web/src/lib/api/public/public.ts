@@ -456,6 +456,94 @@ export function useGetPFeedByToken<TData = Awaited<ReturnType<typeof getPFeedByT
 
 
 
+export type getPFormsBySlugEmbedResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getPFormsBySlugEmbedResponseSuccess = (getPFormsBySlugEmbedResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getPFormsBySlugEmbedResponse = (getPFormsBySlugEmbedResponseSuccess)
+
+export const getGetPFormsBySlugEmbedUrl = (slug: string,) => {
+
+
+
+
+  return `/p/forms/${slug}/embed`
+}
+
+/**
+ * @summary Published embed settings for a form
+ */
+export const getPFormsBySlugEmbed = async (slug: string, options?: Parameters<typeof customFetch>[1]): Promise<getPFormsBySlugEmbedResponse> => {
+
+  return customFetch<getPFormsBySlugEmbedResponse>(getGetPFormsBySlugEmbedUrl(slug),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPFormsBySlugEmbedQueryKey = (slug: string,) => {
+    return [
+    `/p/forms/${slug}/embed`
+    ] as const;
+    }
+
+
+export const getGetPFormsBySlugEmbedQueryOptions = <TData = Awaited<ReturnType<typeof getPFormsBySlugEmbed>>, TError = unknown>(slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPFormsBySlugEmbed>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPFormsBySlugEmbedQueryKey(slug);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPFormsBySlugEmbed>>> = ({ signal }) => getPFormsBySlugEmbed(slug, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: slug !== null && slug !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPFormsBySlugEmbed>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPFormsBySlugEmbedQueryResult = NonNullable<Awaited<ReturnType<typeof getPFormsBySlugEmbed>>>
+export type GetPFormsBySlugEmbedQueryError = unknown
+
+
+/**
+ * @summary Published embed settings for a form
+ */
+
+export function useGetPFormsBySlugEmbed<TData = Awaited<ReturnType<typeof getPFormsBySlugEmbed>>, TError = unknown>(
+ slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPFormsBySlugEmbed>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPFormsBySlugEmbedQueryOptions(slug,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type getPFormsBySlugConfigResponse200 = {
   data: void
   status: 200

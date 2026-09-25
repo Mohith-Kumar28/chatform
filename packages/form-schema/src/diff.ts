@@ -37,6 +37,7 @@ export type DocChangeOp =
   | "hiddenField.removed"
   | "settings.changed"
   | "theme.changed"
+  | "embed.changed"
   | "title.changed"
   | "description.changed";
 
@@ -343,6 +344,9 @@ export function diffFormDoc(before: FormDoc | null, after: FormDoc): DocChange[]
    */
   if (stable(before.theme) !== stable(after.theme)) {
     changes.push({ op: "theme.changed", target: "doc.theme", label: "Design" });
+  }
+  if (stable(before.embed ?? {}) !== stable(after.embed ?? {})) {
+    changes.push({ op: "embed.changed", target: "doc.embed", label: "Website embed" });
   }
 
   return changes;

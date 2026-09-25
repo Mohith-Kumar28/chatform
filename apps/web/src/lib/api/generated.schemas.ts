@@ -2119,8 +2119,6 @@ export type PostApiFormsBody = {
   doc?: unknown;
 };
 
-export type PostApiForms200EmbedConfig = {[key: string]: unknown} | null;
-
 export type PostApiForms200 = {
   id: string;
   title: string;
@@ -2131,7 +2129,6 @@ export type PostApiForms200 = {
   workingSchema: unknown;
   activeVersion: number | null;
   workingRevision: number;
-  embedConfig?: PostApiForms200EmbedConfig;
   publishedAt: number | null;
   hasUnpublishedChanges: boolean;
 };
@@ -2160,8 +2157,6 @@ export type DeleteApiFormsById200 = {
   ok: boolean;
 };
 
-export type GetApiFormsById200EmbedConfig = {[key: string]: unknown} | null;
-
 export type GetApiFormsById200 = {
   id: string;
   title: string;
@@ -2172,7 +2167,6 @@ export type GetApiFormsById200 = {
   workingSchema: unknown;
   activeVersion: number | null;
   workingRevision: number;
-  embedConfig?: GetApiFormsById200EmbedConfig;
   publishedAt: number | null;
   hasUnpublishedChanges: boolean;
 };
@@ -2223,32 +2217,6 @@ export type PatchApiFormsByIdWorkspace404Error = {
 
 export type PatchApiFormsByIdWorkspace404 = {
   error: PatchApiFormsByIdWorkspace404Error;
-};
-
-export type PutApiFormsByIdEmbedBody = {[key: string]: unknown};
-
-export type PutApiFormsByIdEmbed200 = {
-  ok: boolean;
-};
-
-export type PutApiFormsByIdEmbed413ErrorIssuesItem = {
-  ref?: string;
-  path?: string;
-  code: string;
-  message: string;
-};
-
-export type PutApiFormsByIdEmbed413Error = {
-  code: string;
-  message: string;
-  issues?: PutApiFormsByIdEmbed413ErrorIssuesItem[];
-  request_id?: string;
-  doc_url?: string;
-  [key: string]: unknown;
-};
-
-export type PutApiFormsByIdEmbed413 = {
-  error: PutApiFormsByIdEmbed413Error;
 };
 
 export type PutApiFormsByIdDocBody = {

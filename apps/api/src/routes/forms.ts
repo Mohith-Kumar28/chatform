@@ -52,7 +52,6 @@ formsRouter.post("/forms/:id/publish", requirePermission("form", "publish"));
 formsRouter.post("/forms/:id/unpublish", requirePermission("form", "publish"));
 formsRouter.delete("/forms/:id", requirePermission("form", "delete"));
 formsRouter.patch("/forms/:id/workspace", requirePermission("form", "update"));
-formsRouter.put("/forms/:id/embed", requirePermission("form", "update"));
 
 const FormSummary = z.object({
   id: z.string(),
@@ -68,7 +67,6 @@ const FormFull = FormSummary.extend({
   activeVersion: z.number().nullable(),
   /** The draft revision this document is at. Stated back on save to detect a clash. */
   workingRevision: z.number(),
-  embedConfig: z.record(z.string(), z.unknown()).nullable().optional(),
   /** When the live version went live. Null until the form is published once. */
   publishedAt: z.number().nullable(),
   /** True when the draft differs from what respondents are currently answering. */
@@ -417,44 +415,13 @@ formsRouter.patch(
   },
 );
 
-/**
- * Save the embed studio's choices.
- *
- * They used to live in component state, so every reload put the corner, the
- * trigger and the launcher text back to the defaults. Opaque to the API: the
- * shape is the web app's `EmbedConfig`, read back through its defaults.
- */
-formsRouter.put(
-  "/forms/:id/embed",
-  validator("json", z.record(z.string(), z.unknown())),
-  describeRoute({
-    tags: ["dashboard"],
-    summary: "Save a form's embed settings",
-    responses: {
-      200: { description: "Saved", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } },
-      413: { description: "Too large", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
-    },
-  }),
-  async (c) => {
-    const form = c.get("form")!;
-    const json = JSON.stringify(c.req.valid("json"));
-    if (json.length > 8_000) {
-      return c.json({ error: { code: "too_large", message: "Embed settings are too large" } }, 413);
-    }
-    await c.env.DB.prepare(`UPDATE forms SET embed_config = ? WHERE id = ? AND organization_id = ?`)
-      .bind(json, form.id, form.organization_id)
-      .run();
-    return c.json({ ok: true });
-  },
-);
-
 formsRouter.get(
   "/forms/:id",
   describeRoute({ tags: ["dashboard"], summary: "Get a form with its working document", responses: { 200: { description: "Form", content: { "application/json": { schema: resolver(FormFull) } } }, 404: { description: "Not found", content: { "application/json": { schema: resolver(ErrorEnvelope) } } } } }),
   async (c) => {
     const id = c.get("form")!.id;
     const row = await c.env.DB.prepare(
-      `SELECT f.id, f.title, f.slug, f.status, f.working_schema, f.updated_at, f.working_revision, f.embed_config,
+      `SELECT f.id, f.title, f.slug, f.status, f.working_schema, f.updated_at, f.working_revision,
               fv.version, fv.published_at, fv.checksum
        FROM forms f LEFT JOIN form_versions fv ON fv.id = f.active_version_id
        WHERE f.id = ? AND f.deleted_at IS NULL`,
@@ -468,7 +435,6 @@ formsRouter.get(
         working_schema: string;
         updated_at: number;
         working_revision: number;
-        embed_config: string | null;
         version: number | null;
         published_at: number | null;
         checksum: string | null;
@@ -496,8 +462,6 @@ formsRouter.get(
         another tab. The builder store's `baseVersion` was being fed from it.
       */
       workingRevision: row.working_revision,
-      /** The embed studio's saved choices, or null for its defaults. */
-      embedConfig: row.embed_config ? (JSON.parse(row.embed_config) as unknown) : null,
       /*
         The publish clock, which is not the save clock. Autosave answers "is my work
         safe"; these answer "is my work live", and the builder header needs both because

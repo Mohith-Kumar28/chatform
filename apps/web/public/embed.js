@@ -6,7 +6,12 @@
  * adds no inline script and evaluates nothing, so it works under a strict
  * Content Security Policy.
  *
- *   <script src="https://chatform.in/embed.js" data-form="my-form" data-mode="popup" defer></script>
+ *   <script src="https://chatform.in/embed.js" data-form="my-form" defer></script>
+ *
+ * How it looks and when it opens are published with the form and fetched from
+ * `/p/forms/:slug/embed` before anything is drawn, so a change made in the
+ * builder reaches this page on Publish. Every attribute below still works and
+ * overrides the published value on this page.
  *
  * There is no API key here and there never will be. A published form is public
  * — the loader points a frame at its URL, and the frame talks to the API on its
@@ -30,6 +35,8 @@
  *                    your own element instead (see below)
  *   data-theme       light | dark | auto                         default auto
  *   data-open-on     click | load | exit-intent | scroll:<pct>   default click
+ *                    (on a phone, the automatic ones shake the launcher
+ *                    instead of covering the page)
  *                    (the automatic ones never fire again once this
  *                    visitor has submitted the form on this site)
  *   data-lazy        "false" to build the frame immediately      default lazy
@@ -61,44 +68,108 @@
 
   var scriptOrigin = new URL(script.src, window.location.href).origin;
   var app = script.getAttribute("data-app") || scriptOrigin;
-  var mode = script.getAttribute("data-mode") || "popup";
-  var color = script.getAttribute("data-button-color") || script.getAttribute("data-color") || "#FD6F29";
-  var labelAttr = script.getAttribute("data-label");
-  var label = labelAttr === null ? "Fill this form" : labelAttr;
-  var showIcon = script.getAttribute("data-icon") !== "none";
-  var showLauncher = script.getAttribute("data-launcher") !== "none";
-  var theme = script.getAttribute("data-theme") || "auto";
-  var openOn = script.getAttribute("data-open-on") || "click";
   var lazy = script.getAttribute("data-lazy") !== "false";
   var nonce = script.getAttribute("data-nonce");
   var target = script.getAttribute("data-target");
-  var heightAttr = script.getAttribute("data-height") || "auto";
 
   /**
-   * Which corner the launcher lives in.
+   * The settings, decided once the published ones have arrived.
    *
-   * It was hardcoded to the bottom right, which is the right default and the
-   * wrong only option: plenty of sites already have a support widget, a cookie
-   * banner or a back-to-top button parked there, and two overlapping bubbles is
-   * a worse first impression than no bubble at all.
+   * They are published with the form: the builder's embed studio edits the
+   * draft and `/p/forms/:slug/embed` serves the live version, so a site that
+   * carries this script picks up a change on Publish with nobody re-pasting
+   * anything. An attribute on the tag still wins over the published value.
+   * That is what keeps every snippet pasted before this existed, each of which
+   * spelled its settings out as attributes, behaving exactly as it did.
    */
+  var mode, color, label, showIcon, showLauncher, theme, openOn, heightAttr;
+  var position, vertical, horizontal, offset, panelWidth, panelHeight;
   var POSITIONS = ["bottom-right", "bottom-left", "top-right", "top-left"];
-  var position = script.getAttribute("data-position") || "bottom-right";
-  if (POSITIONS.indexOf(position) === -1) {
-    console.warn('[chatform] Unknown data-position "' + position + '" — using bottom-right.');
-    position = "bottom-right";
+
+  function configure(published) {
+    var r = published || {};
+    function pick(name, key) {
+      if (script.hasAttribute(name)) return script.getAttribute(name);
+      return r[key] === undefined || r[key] === null ? null : String(r[key]);
+    }
+    function flag(name, key) {
+      if (script.hasAttribute(name)) return script.getAttribute(name) !== "none";
+      return r[key] !== false;
+    }
+
+    mode = pick("data-mode", "mode") || "popup";
+    color = script.getAttribute("data-button-color") || script.getAttribute("data-color") || r.color || "#FD6F29";
+    var labelValue = pick("data-label", "label");
+    label = labelValue === null ? "Fill this form" : labelValue;
+    showIcon = flag("data-icon", "icon");
+    showLauncher = flag("data-launcher", "launcher");
+    theme = pick("data-theme", "theme") || "auto";
+    openOn = pick("data-open-on", "openOn") || "click";
+    if (script.hasAttribute("data-height")) heightAttr = script.getAttribute("data-height");
+    else if (mode === "inline") heightAttr = r.autoHeight === false && r.height ? String(r.height) : "auto";
+    else heightAttr = r.height ? String(r.height) : "auto";
+
+    /**
+     * Which corner the launcher lives in.
+     *
+     * It was hardcoded to the bottom right, which is the right default and the
+     * wrong only option: plenty of sites already have a support widget, a cookie
+     * banner or a back-to-top button parked there, and two overlapping bubbles is
+     * a worse first impression than no bubble at all.
+     */
+    position = pick("data-position", "position") || "bottom-right";
+    if (POSITIONS.indexOf(position) === -1) {
+      console.warn('[chatform] Unknown data-position "' + position + '" — using bottom-right.');
+      position = "bottom-right";
+    }
+    vertical = position.indexOf("top") === 0 ? "top" : "bottom";
+    horizontal = position.indexOf("left") > -1 ? "left" : "right";
+
+    offset = parseInt(pick("data-offset", "offset"), 10);
+    if (isNaN(offset) || offset < 0) offset = 20;
+
+    panelWidth = parseInt(pick("data-width", "width"), 10);
+    if (isNaN(panelWidth) || panelWidth < 240) panelWidth = mode === "side-tab" ? 440 : 400;
+
+    panelHeight = parseInt(heightAttr, 10);
+    if (isNaN(panelHeight) || panelHeight < 240) panelHeight = 600;
   }
-  var vertical = position.indexOf("top") === 0 ? "top" : "bottom";
-  var horizontal = position.indexOf("left") > -1 ? "left" : "right";
 
-  var offset = parseInt(script.getAttribute("data-offset"), 10);
-  if (isNaN(offset) || offset < 0) offset = 20;
+  /**
+   * Where the public API lives. The script is served by the app, and the API
+   * sits on its own host beside it.
+   */
+  function apiOrigin() {
+    var explicit = script.getAttribute("data-api");
+    if (explicit) return explicit.replace(/\/$/, "");
+    if (/^https:\/\/(www\.)?chatform\.in$/.test(app)) return "https://api.chatform.in";
+    if (/^http:\/\/localhost:\d+$/.test(app)) return "http://localhost:8787";
+    return app;
+  }
 
-  var panelWidth = parseInt(script.getAttribute("data-width"), 10);
-  if (isNaN(panelWidth) || panelWidth < 240) panelWidth = mode === "side-tab" ? 440 : 400;
-
-  var panelHeight = parseInt(heightAttr, 10);
-  if (isNaN(panelHeight) || panelHeight < 240) panelHeight = 600;
+  /** The published settings, or `{}` after 2.5s or any failure: the attributes and defaults take over. */
+  function loadPublished(done) {
+    var settled = false;
+    function finish(value) {
+      if (settled) return;
+      settled = true;
+      done(value && typeof value === "object" ? value : {});
+    }
+    setTimeout(function () {
+      finish({});
+    }, 2500);
+    try {
+      fetch(apiOrigin() + "/p/forms/" + encodeURIComponent(slug) + "/embed", { credentials: "omit" })
+        .then(function (res) {
+          return res.ok ? res.json() : {};
+        })
+        .then(finish, function () {
+          finish({});
+        });
+    } catch (e) {
+      finish({});
+    }
+  }
 
   /** Scopes this instance's placement rules, so two forms can sit in two corners. */
   var uid = "cf" + Math.random().toString(36).slice(2, 8);
@@ -242,7 +313,23 @@
         "display:grid;place-items:center}",
         ".cf-close:hover{background:rgba(15,15,15,.75)}",
         ".cf-close svg{width:16px;height:16px;display:block}",
+        /*
+         * Attention, for the phone that was not opened on (see `autoOpen`): a
+         * shake every few seconds, a shine sweeping across, and a ring pulsing
+         * out in the button's own colour. Until the visitor opens it.
+         */
+        ".cf-launcher.cf-attn{overflow:hidden;animation:cf-shake 4s ease-in-out infinite,cf-ring 2s ease-out infinite}",
+        ".cf-launcher.cf-attn::after{content:'';position:absolute;top:0;bottom:0;left:0;width:60%;pointer-events:none;",
+        "background:linear-gradient(105deg,transparent 0%,rgba(255,255,255,.65) 50%,transparent 100%);",
+        "transform:translateX(-120%) skewX(-12deg);animation:cf-shine 2.6s ease-in-out .4s infinite}",
+        "@keyframes cf-shake{0%,22%,100%{transform:none}2%{transform:rotate(-7deg) scale(1.06)}",
+        "5%{transform:rotate(6deg) scale(1.06)}8%{transform:rotate(-5deg) scale(1.05)}11%{transform:rotate(4deg) scale(1.04)}",
+        "14%{transform:rotate(-2deg) scale(1.02)}17%{transform:rotate(1deg)}}",
+        "@keyframes cf-shine{0%{transform:translateX(-120%) skewX(-12deg)}45%,100%{transform:translateX(260%) skewX(-12deg)}}",
+        "@keyframes cf-ring{0%{box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 0 var(--cf-c)}",
+        "100%{box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 16px transparent}}",
         "@media (prefers-reduced-motion:reduce){.cf-launcher{transition:none}",
+        ".cf-launcher.cf-attn{animation:cf-ring 2s ease-out infinite}.cf-launcher.cf-attn::after{display:none}",
         ".cf-panel,.cf-panel.cf-open{transform:none}.cf-skel i,.cf-x-icon{animation:none!important}}",
       ].join(""),
     );
@@ -398,6 +485,8 @@
       launcher.type = "button";
       launcher.className = "cf-launcher cf-l-" + uid + (label ? "" : " cf-bare");
       launcher.style.background = color;
+      // The attention ring pulses in the button's own colour.
+      launcher.style.setProperty("--cf-c", color);
       if (showIcon) launcher.appendChild(chatIcon());
       if (label) {
         // In a span so `.cf-x` can hide it while the launcher is the close.
@@ -460,6 +549,7 @@
 
   function open() {
     if (destroyed || isOpen) return;
+    if (launcher) launcher.classList.remove("cf-attn");
     if (!frame && panel) panel.appendChild(buildFrame());
     if (panel) panel.classList.add("cf-open");
     if (launcher) {
@@ -548,10 +638,6 @@
   function onNarrowChange() {
     if (frameReady) post({ type: "host", closes: hostCloses() });
   }
-  if (narrow && mode === "popup") {
-    if (narrow.addEventListener) narrow.addEventListener("change", onNarrowChange);
-    else if (narrow.addListener) narrow.addListener(onNarrowChange);
-  }
 
   /**
    * `data-chatform-open` on any element of the page opens this form.
@@ -561,7 +647,7 @@
    * the first form on the page; one with a slug belongs to that form.
    */
   function onPageClick(event) {
-    if (destroyed || !event.target || !event.target.closest) return;
+    if (destroyed || !mounted || !event.target || !event.target.closest) return;
     var el = event.target.closest("[data-chatform-open]");
     if (!el) return;
     var which = el.getAttribute("data-chatform-open");
@@ -575,7 +661,7 @@
 
   // Hovering or touching your own button starts the frame early, as on the launcher.
   function onPageWarm(event) {
-    if (frame || destroyed || mode === "inline" || !panel || !event.target || !event.target.closest) return;
+    if (frame || destroyed || !mounted || mode === "inline" || !panel || !event.target || !event.target.closest) return;
     var el = event.target.closest("[data-chatform-open]");
     if (!el) return;
     var which = el.getAttribute("data-chatform-open");
@@ -609,17 +695,42 @@
     }
   }
 
+  /**
+   * An open the visitor did not ask for: on load, on exit intent, on scroll.
+   *
+   * On a phone the panel is the whole screen, and a sheet that covers the
+   * article someone is halfway through reading is a sheet they close without
+   * looking at. So under 520px it does not open; the launcher shakes and a
+   * shine runs across it instead, and the visitor opens it when they choose.
+   * With no launcher there is nothing to draw attention to, so nothing happens.
+   */
+  function autoOpen() {
+    // They may have opened it from a button and answered on this visit.
+    if (hasSubmitted() || isOpen) return;
+    if (narrow && narrow.matches && mode !== "fullpage") {
+      if (launcher) attention();
+      return;
+    }
+    open();
+  }
+
+  function attention() {
+    if (!launcher || launcher.classList.contains("cf-attn")) return;
+    launcher.classList.add("cf-attn");
+    emit("attention", {});
+  }
+
   function setupTriggers() {
     if (hasSubmitted()) return;
     if (openOn === "load") {
-      open();
+      autoOpen();
       return;
     }
     if (openOn === "exit-intent") {
       document.addEventListener("mouseout", function onOut(e) {
         if (e.clientY <= 0) {
           document.removeEventListener("mouseout", onOut);
-          if (!hasSubmitted()) open();
+          autoOpen();
         }
       });
       return;
@@ -633,9 +744,7 @@
         var scrolled = room > 0 ? (window.scrollY / room) * 100 : 100;
         if (scrolled >= pct) {
           window.removeEventListener("scroll", check);
-          // They may have opened it from a button and answered on this visit.
-          if (hasSubmitted()) return true;
-          open();
+          autoOpen();
           return true;
         }
         return false;
@@ -657,11 +766,31 @@
     launcher = null;
   }
 
+  var mounted = false;
+  /** Calls to open/close/toggle made before the settings arrived, replayed on mount. */
+  var pending = [];
+
   function mount() {
+    // Warm the connections while the settings are fetched. The frame's API
+    // calls run in this page's connection partition, so a preconnect from
+    // here is one the frame gets to use too.
     preconnect(app);
-    // The frame's API calls run in this page's connection partition, so a
-    // preconnect from here is one the frame gets to use.
-    if (/^https:\/\/(www\.)?chatform\.in$/.test(app)) preconnect("https://api.chatform.in");
+    preconnect(apiOrigin());
+    loadPublished(function (published) {
+      if (destroyed) return;
+      configure(published);
+      build();
+      mounted = true;
+      for (var p = 0; p < pending.length; p++) pending[p]();
+      pending = [];
+    });
+  }
+
+  function build() {
+    if (narrow && mode === "popup") {
+      if (narrow.addEventListener) narrow.addEventListener("change", onNarrowChange);
+      else if (narrow.addListener) narrow.addListener(onNarrowChange);
+    }
     if (mode === "inline") mountInline();
     else {
       mountOverlay();
@@ -676,11 +805,19 @@
     mount();
   }
 
+  /** Runs now if mounted, or once the settings have arrived. */
+  function whenMounted(fn) {
+    return function () {
+      if (mounted) fn();
+      else pending.push(fn);
+    };
+  }
+
   var api = {
     slug: slug,
-    open: open,
-    close: close,
-    toggle: toggle,
+    open: whenMounted(open),
+    close: whenMounted(close),
+    toggle: whenMounted(toggle),
     prefill: prefill,
     destroy: destroy,
     on: function (name, fn) {

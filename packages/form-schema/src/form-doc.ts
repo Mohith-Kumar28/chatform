@@ -11,6 +11,35 @@ import { buildUpiUri, type PaymentProviderName } from "./payment-link";
 
 export const SCHEMA_VERSION = 9;
 
+/**
+ * How the form sits on someone else's site: the embed studio's choices.
+ *
+ * Part of the document so it is published like everything else: the studio
+ * edits the draft, and `embed.js` reads the live version, so a change reaches
+ * a site already carrying the script on Publish with no re-pasting. Attributes
+ * written on the script tag still win, which is what keeps every snippet
+ * pasted before this existed behaving exactly as it did.
+ *
+ * Every field catches rather than rejects: a form doc re-parses on every read,
+ * and one bad value here must not take the whole form down with it. Optional
+ * with no default, so documents that never opened the studio are unchanged.
+ * The launcher's colour is not here; it is the theme's accent.
+ */
+export const EmbedDoc = z.object({
+  mode: z.enum(["popup", "inline", "side-tab", "fullpage"]).optional().catch(undefined),
+  position: z.enum(["bottom-right", "bottom-left", "top-right", "top-left"]).optional().catch(undefined),
+  offset: z.number().int().min(0).max(200).optional().catch(undefined),
+  label: z.string().max(60).optional().catch(undefined),
+  icon: z.boolean().optional().catch(undefined),
+  launcher: z.boolean().optional().catch(undefined),
+  theme: z.enum(["auto", "light", "dark"]).optional().catch(undefined),
+  openOn: z.enum(["click", "load", "exit-intent", "scroll:50"]).optional().catch(undefined),
+  width: z.number().int().min(240).max(1200).optional().catch(undefined),
+  height: z.number().int().min(240).max(2000).optional().catch(undefined),
+  autoHeight: z.boolean().optional().catch(undefined),
+});
+export type EmbedDoc = z.output<typeof EmbedDoc>;
+
 export const FormDoc = z.object({
   schemaVersion: z.number().int().positive().default(SCHEMA_VERSION),
   title: boundedString(200).min(1),
@@ -27,6 +56,7 @@ export const FormDoc = z.object({
   hiddenFields: z.array(HiddenField).default([]),
   settings: SettingsDoc.prefault({}),
   theme: ThemeDoc.prefault({}),
+  embed: EmbedDoc.optional().catch(undefined),
 });
 
 export type FormDoc = z.output<typeof FormDoc>;

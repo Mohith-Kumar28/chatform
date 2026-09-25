@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { customFetch } from "@/lib/api/mutator";
+import { useMemo, useState } from "react";
+import type { EmbedDoc } from "@repo/form-schema";
+import { useBuilderStore } from "@/stores/builder-store";
 import {
   Code2,
   Mail,
@@ -76,13 +75,34 @@ type Target = "html" | "react" | "email" | "ai";
  */
 const STUDIO_DEFAULTS: EmbedConfig = { ...EMBED_DEFAULTS, openOn: "scroll:50", icon: false };
 
+function stripUndefined<T extends object>(o: T): Partial<T> {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
+
+/** What the document keeps: everything but the colour (the theme's) and hidden fields (per page). */
+function toEmbedDoc(c: EmbedConfig): EmbedDoc {
+  return {
+    mode: c.mode,
+    position: c.position,
+    offset: c.offset,
+    label: c.label,
+    icon: c.icon,
+    launcher: c.launcher,
+    theme: c.theme,
+    openOn: c.openOn,
+    width: c.width,
+    height: c.height,
+    autoHeight: c.autoHeight,
+  };
+}
+
 const TRIGGERS: { value: EmbedConfig["openOn"]; label: string; hint: string }[] = [
   {
     value: "scroll:50",
     label: "After scrolling halfway down the page",
-    hint: "Opens once the visitor has scrolled past the middle of the page they are on, measured from the top to the bottom of that page. Once per visit to the page, and never again after they submit.",
+    hint: "Opens once the visitor has scrolled past the middle of the page they are on, measured from the top to the bottom of that page. Once per visit to the page, and never again after they submit. On a phone the button shakes instead of the form covering the screen.",
   },
-  { value: "load", label: "As soon as the page loads", hint: "Opens by itself when the page loads. Not again after the visitor submits." },
+  { value: "load", label: "As soon as the page loads", hint: "Opens by itself when the page loads. Not again after the visitor submits. On a phone the button shakes instead." },
   {
     value: "exit-intent",
     label: "When the visitor is about to leave",
@@ -96,59 +116,50 @@ const TRIGGERS: { value: EmbedConfig["openOn"]; label: string; hint: string }[] 
 ];
 
 export function EmbedStudio({
-  formId,
   slug,
   formTitle,
   appOrigin,
   status,
   theme,
   blocks,
-  saved,
 }: {
-  formId: string;
   slug: string;
   formTitle: string;
   appOrigin: string;
   status?: string;
   theme: ThemeDoc;
   blocks: Block[];
-  /** What was chosen here last time, from the form row. Null means the defaults. */
-  saved?: Partial<EmbedConfig> | null;
 }) {
-  const queryClient = useQueryClient();
+  /**
+   * The choices live on the form document, so they autosave with the draft and
+   * go live on Publish like any other edit: `embed.js` reads the published
+   * version, and a site already carrying the script picks the change up
+   * without anyone re-pasting it. They used to be component state, so a reload
+   * put every choice back to the defaults.
+   */
+  const saved = useBuilderStore((s) => s.doc?.embed);
+  const edit = useBuilderStore((s) => s.edit);
+  const chosen = useMemo<EmbedConfig>(
+    () => ({ ...STUDIO_DEFAULTS, ...stripUndefined(saved ?? {}) }),
+    [saved],
+  );
   /**
    * The launcher wears the form's own accent. There used to be a separate
    * picker for it, which only ever produced a button that did not match the
    * form it opened.
    */
-  const [chosen, setChosen] = useState<EmbedConfig>(() => ({ ...STUDIO_DEFAULTS, ...saved }));
   const config = useMemo(() => ({ ...chosen, color: theme.accent }), [chosen, theme.accent]);
-  const setConfig = setChosen;
-
-  /**
-   * Saved to the form, a moment after the last change. It used to live only
-   * in this component, so a reload put every choice back to the defaults.
-   */
-  const firstRender = useRef(true);
-  useEffect(() => {
-    if (firstRender.current) {
-      firstRender.current = false;
-      return;
-    }
-    const timer = setTimeout(() => {
-      // The colour follows the theme, so it is never stored.
-      const rest: Partial<EmbedConfig> = { ...chosen };
-      delete rest.color;
-      void customFetch(`/api/forms/${formId}/embed`, { method: "PUT", body: JSON.stringify(rest) })
-        .then(() =>
-          queryClient.invalidateQueries({
-            predicate: (q) => JSON.stringify(q.queryKey).includes(`/api/forms/${formId}`),
-          }),
-        )
-        .catch(() => toast.error("Couldn't save the embed settings."));
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [chosen, formId, queryClient]);
+  const setConfig = (next: EmbedConfig | ((prev: EmbedConfig) => EmbedConfig)) => {
+    // From the store, not the render: two changes in one tick must both land.
+    const current = {
+      ...STUDIO_DEFAULTS,
+      ...stripUndefined(useBuilderStore.getState().doc?.embed ?? {}),
+    };
+    const value = typeof next === "function" ? next(current) : next;
+    edit((draft) => {
+      draft.embed = toEmbedDoc(value);
+    }, "embed");
+  };
   const [target, setTarget] = useState<Target>("ai");
   const [previewOpen, setPreviewOpen] = useState(true);
   const [device, setDevice] = useState<PreviewDevice>("desktop");
@@ -195,7 +206,14 @@ export function EmbedStudio({
                 { value: "mobile", label: "Phone", icon: Smartphone },
               ]}
               value={device}
-              onChange={setDevice}
+              onChange={(next) => {
+                setDevice(next);
+                // `embed.js` never auto-opens on a phone, so the phone preview
+                // starts closed: what a visitor sees is the button calling out.
+                if (next === "mobile" && config.openOn !== "click" && isOverlay(config.mode)) {
+                  setPreviewOpen(false);
+                }
+              }}
               ariaLabel="Preview size"
             />
             <p className="text-muted-foreground text-micro ml-auto hidden truncate sm:block">

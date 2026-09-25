@@ -113,28 +113,17 @@ function attributes(config: EmbedConfig, hidden: Record<string, string> | undefi
   const add = (name: string, value: string | number) =>
     out.push(`${name}="${escapeAttr(String(value))}"`);
 
-  if (config.mode !== EMBED_DEFAULTS.mode) add("data-mode", config.mode);
-  if (isOverlay(config.mode)) {
-    if (config.position !== EMBED_DEFAULTS.position) add("data-position", config.position);
-    if (config.offset !== EMBED_DEFAULTS.offset) add("data-offset", config.offset);
-    if (config.width !== EMBED_DEFAULTS.width) add("data-width", config.width);
-    if (config.mode === "popup" && config.height !== EMBED_DEFAULTS.height) {
-      add("data-height", config.height);
-    }
-    if (config.launcher) {
-      // Always written: the one value almost everybody changes, and a snippet
-      // without it gives no hint that it can be.
-      add("data-button-color", config.color);
-      if (config.label !== EMBED_DEFAULTS.label) add("data-label", config.label);
-      if (!config.icon) add("data-icon", "none");
-    } else {
-      add("data-launcher", "none");
-    }
-    if (config.openOn !== EMBED_DEFAULTS.openOn) add("data-open-on", config.openOn);
-  }
-  if (config.mode === "inline" && !config.autoHeight) add("data-height", config.height);
-  if (config.theme !== EMBED_DEFAULTS.theme) add("data-theme", config.theme);
-
+  /**
+   * Nothing about how the form looks or behaves is written here any more.
+   *
+   * Those choices are on the form and published with it: `embed.js` fetches
+   * the live version, so a change made in the studio reaches every site
+   * carrying the script on Publish. An attribute written here would pin that
+   * setting on this one site forever, which is exactly what used to make every
+   * studio change need a re-paste. Only what differs per page stays: the
+   * hidden values.
+   */
+  void config;
   for (const [key, value] of Object.entries(hidden ?? {})) {
     if (key) add(`data-hidden-${key}`, value);
   }
@@ -272,9 +261,9 @@ const OPEN_WORDS: Record<EmbedConfig["openOn"], string> = {
 /**
  * A prompt for an AI coding tool that adds the embed to someone's site.
  *
- * It carries every option the loader reads, so the agent never has to guess
- * an attribute, and it tells the agent to ask before it builds, with the
- * choices made in the studio as the suggested answers. Written without em
+ * The look and behaviour are published with the form, so the agent only has
+ * to place the tag; it is told not to pin settings with attributes, and to
+ * ask about placement before it builds. Written without em
  * dashes on purpose: the agent copies the prompt's voice into the site.
  */
 export function aiPrompt(options: SnippetOptions): string {
@@ -290,25 +279,13 @@ Script: ${origin}/embed.js
 
 ## Step 1: ask me first
 
-Before you write any code, ask me these questions. Ask them one or two at a time, show the suggested answer for each (these are the settings I already picked in Chatform), and wait for my reply. Skip any question that does not apply to the answers I have already given.
+How the form looks and when it opens (popup or inline, corner, button text, auto open, size, colours) is set in Chatform and loaded by the script, so do not ask about those or add attributes for them. Currently: ${MODE_WORDS[config.mode]}${overlay ? `, ${config.launcher ? `corner button "${config.label || "icon only"}" at ${config.position}` : "no corner button, opened from my own button"}, opens ${OPEN_WORDS[config.openOn]}` : ""}.
 
-1. How should the form appear? ${suggested(MODE_WORDS[config.mode])}
-   - popup: a button in a corner of the page opens the form in a small panel
-   - side tab: the form slides in from the edge of the screen, full height
-   - inline: the form sits inside a section of the page, like any other content
-   - full page: the form takes over the whole window
-2. Which page or pages should it be on? For inline, which section of the page should it go in?
-3. (popup and side tab) Should it open from the round corner button, from a button that is already on my site, or both? If from my own button, which button is it? ${suggested(config.launcher ? "the corner button" : "my own button only")}
-4. (popup and side tab) Which corner? bottom-right, bottom-left, top-right or top-left. ${suggested(config.position)}
-5. (corner button) What should the button say, should it show a chat icon, and what colour should it be? ${suggested(`"${config.label || "icon only"}", ${config.icon ? "with the icon" : "no icon"}, ${config.color}`)}
-6. (popup and side tab) When should it open? ${suggested(OPEN_WORDS[config.openOn])}
-   - when a button is clicked
-   - as soon as the page loads
-   - when the visitor is about to leave (the mouse moves up out of the page, desktop only)
-   - after scrolling a percentage of the page, for example halfway
-7. Size. Popup: width and height in pixels. Side tab: width. Inline: grow to fit the conversation, or a fixed height. ${suggested(overlay ? `${config.width} wide${config.mode === "popup" ? `, ${config.height} tall` : ""}` : config.autoHeight ? "grow to fit" : `${config.height} tall`)}
-8. Light, dark, or follow the visitor's system setting? ${suggested(config.theme)}
-9. Should any hidden values be passed in, like the plan a visitor is on or where they came from? These are saved with each response.
+Before you write any code, ask me these questions one at a time and wait for my reply:
+
+1. Which page or pages should it be on?${config.mode === "inline" ? " Which section of the page should it go in?" : ""}
+2. ${overlay ? `Should it also open from a button that is already on my site? If so, which one? ${suggested(config.launcher ? "no, the corner button is enough" : "yes, my own button")}` : "Anything that should sit above or below it?"}
+3. Should any hidden values be passed in, like the plan a visitor is on or where they came from? These are saved with each response.
 
 ## Step 2: add it
 
@@ -320,28 +297,19 @@ Use the approach that fits my project. Look at the code to work out the stack; a
 
 Do not install any npm package for this. The script is all it needs.
 
-## Every setting on the script tag
+## Settings
 
-All settings are data attributes on the script tag. Leave one out to get its default.
+The form's look and behaviour come from Chatform and update when I press Publish there, with no code change. Do not add data-mode, data-position, data-label, data-open-on or similar attributes: an attribute on the tag overrides the Chatform setting on this site for good.
 
-| Attribute | What it does | Values | Default |
-| --- | --- | --- | --- |
-| data-form | Which form to show. Required. | the form slug | none |
-| data-mode | How it appears | popup, side-tab, inline, fullpage | popup |
-| data-position | Which corner (popup, side tab) | bottom-right, bottom-left, top-right, top-left | bottom-right |
-| data-offset | Gap from the edges of the window, in px | 0 to 80 | 20 |
-| data-width | Panel width in px (popup, side tab) | 280 to 720 | 400 popup, 440 side tab |
-| data-height | Panel height in px (popup), or inline height | 320 to 900, or auto for inline | 600 popup, auto inline |
-| data-button-color | Corner button colour | any CSS colour, like #FD6F29 | #FD6F29 |
-| data-label | Corner button text | any text; empty for an icon-only circle | Fill this form |
-| data-icon | Chat icon on the corner button | chat, none | chat |
-| data-launcher | Hide the corner button | none | shown |
-| data-open-on | When it opens | click, load, exit-intent, scroll:<percent> such as scroll:50 | click |
-| data-theme | Colour scheme | light, dark, auto | auto |
-| data-target | Inline only: CSS selector of the element to put the form in | a selector, like #signup | right where the script tag is |
-| data-hidden-<name> | A hidden value saved with each response | data-hidden-plan="pro" | none |
+The only attributes to use:
 
-On screens narrower than 520px the popup and side tab always fill the whole screen.
+| Attribute | What it does |
+| --- | --- |
+| data-form | Which form to show. Required. |
+| data-target | Inline only: CSS selector of the element to put the form in |
+| data-hidden-<name> | A hidden value saved with each response, e.g. data-hidden-plan="pro" |
+
+On screens narrower than 520px the popup and side tab fill the whole screen, and an automatic open only draws attention to the corner button instead of covering the page.
 
 ## Opening it from my own button
 
@@ -349,7 +317,7 @@ Add the attribute data-chatform-open to any button or link. Clicking it opens th
 
 <button type="button" data-chatform-open>Join the waitlist</button>
 
-To hide the round corner button and use only my own button, add data-launcher="none" to the script tag. If one page has two forms, name the form: data-chatform-open="${slug}".
+Whether the round corner button shows is set in Chatform. If one page has two forms, name the form: data-chatform-open="${slug}".
 
 ## Controlling it from JavaScript
 
@@ -361,9 +329,9 @@ window.Chatform.on("complete", (event) => { /* the visitor finished the form */ 
 
 Other events: open, close, ready, question, answer. Calls made before the script has loaded are queued if you push them to window.ChatformQueue, for example window.ChatformQueue = [["open"]].
 
-## The snippet with my current settings
+## The snippet
 
-Start from this and change it to match my answers:
+Start from this:
 
 ${embedSnippet(options)}
 

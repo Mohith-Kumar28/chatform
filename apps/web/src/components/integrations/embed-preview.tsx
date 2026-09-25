@@ -41,6 +41,21 @@ const MOBILE_TAKEOVER = 520;
 /** `embed.js`: the launcher is ~48px tall plus its own gap. */
 const LAUNCHER_CLEARANCE = 68;
 
+/** `embed.js`'s attention rules, verbatim, so the preview shakes the way a phone will. */
+const ATTENTION_CSS = [
+  ".cf-attn{overflow:hidden;animation:cf-shake 4s ease-in-out infinite,cf-ring 2s ease-out infinite}",
+  ".cf-attn::after{content:'';position:absolute;top:0;bottom:0;left:0;width:60%;pointer-events:none;",
+  "background:linear-gradient(105deg,transparent 0%,rgba(255,255,255,.65) 50%,transparent 100%);",
+  "transform:translateX(-120%) skewX(-12deg);animation:cf-shine 2.6s ease-in-out .4s infinite}",
+  "@keyframes cf-shake{0%,22%,100%{transform:none}2%{transform:rotate(-7deg) scale(1.06)}",
+  "5%{transform:rotate(6deg) scale(1.06)}8%{transform:rotate(-5deg) scale(1.05)}11%{transform:rotate(4deg) scale(1.04)}",
+  "14%{transform:rotate(-2deg) scale(1.02)}17%{transform:rotate(1deg)}}",
+  "@keyframes cf-shine{0%{transform:translateX(-120%) skewX(-12deg)}45%,100%{transform:translateX(260%) skewX(-12deg)}}",
+  "@keyframes cf-ring{0%{box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 0 var(--cf-c)}",
+  "100%{box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 16px transparent}}",
+  "@media (prefers-reduced-motion:reduce){.cf-attn{animation:cf-ring 2s ease-out infinite}.cf-attn::after{display:none}}",
+].join("");
+
 export function EmbedPreview({
   config,
   formTitle,
@@ -117,6 +132,7 @@ export function EmbedPreview({
         }}
       >
         <Chrome device={device} title={formTitle}>
+          <style>{ATTENTION_CSS}</style>
           {/* The page scrolls inside the viewport, the way a page does — so a
               1200px inline embed is tall, not clipped. */}
           <div className="h-full w-full overflow-y-auto">
@@ -209,6 +225,8 @@ export function EmbedPreview({
                   aria-label="Open the panel"
                   className={cn(
                     "absolute inline-flex cursor-pointer items-center gap-2 border-0 text-white",
+                    // `embed.js`'s `.cf-attn`: an automatic open on a phone calls out instead.
+                    device === "mobile" && config.openOn !== "click" && "cf-attn",
                     config.label
                       ? "rounded-full px-[18px] py-3"
                       : "size-14 justify-center rounded-full",
@@ -218,6 +236,7 @@ export function EmbedPreview({
                     [horizontal]: config.offset,
                     background: config.color,
                     boxShadow: "0 6px 24px rgba(0,0,0,.18)",
+                    ["--cf-c" as string]: config.color,
                     fontSize: 15,
                     fontWeight: 500,
                     lineHeight: 1,

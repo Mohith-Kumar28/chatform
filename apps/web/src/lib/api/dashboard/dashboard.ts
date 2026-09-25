@@ -132,10 +132,7 @@ import type {
   PutApiFormsByIdDoc200,
   PutApiFormsByIdDoc409,
   PutApiFormsByIdDoc429,
-  PutApiFormsByIdDocBody,
-  PutApiFormsByIdEmbed200,
-  PutApiFormsByIdEmbed413,
-  PutApiFormsByIdEmbedBody
+  PutApiFormsByIdDocBody
 } from '../generated.schemas';
 
 import { customFetch } from '.././mutator';
@@ -978,103 +975,6 @@ export const usePatchApiFormsByIdWorkspace = <TError = PatchApiFormsByIdWorkspac
         TContext
       > => {
       return useMutation(getPatchApiFormsByIdWorkspaceMutationOptions(options));
-    }
-    export type putApiFormsByIdEmbedResponse200 = {
-  data: PutApiFormsByIdEmbed200
-  status: 200
-}
-
-export type putApiFormsByIdEmbedResponse413 = {
-  data: PutApiFormsByIdEmbed413
-  status: 413
-}
-
-export type putApiFormsByIdEmbedResponseSuccess = (putApiFormsByIdEmbedResponse200) & {
-  headers: Headers;
-};
-export type putApiFormsByIdEmbedResponseError = (putApiFormsByIdEmbedResponse413) & {
-  headers: Headers;
-};
-
-export type putApiFormsByIdEmbedResponse = (putApiFormsByIdEmbedResponseSuccess | putApiFormsByIdEmbedResponseError)
-
-export const getPutApiFormsByIdEmbedUrl = (id: string,) => {
-
-
-
-
-  return `/api/forms/${id}/embed`
-}
-
-/**
- * @summary Save a form's embed settings
- */
-export const putApiFormsByIdEmbed = async (id: string,
-    putApiFormsByIdEmbedBody: PutApiFormsByIdEmbedBody, options?: Parameters<typeof customFetch>[1]): Promise<putApiFormsByIdEmbedResponse> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
-  };
-return customFetch<putApiFormsByIdEmbedResponse>(getPutApiFormsByIdEmbedUrl(id),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(putApiFormsByIdEmbedBody)
-  }
-);}
-
-
-
-
-
-export const getPutApiFormsByIdEmbedMutationOptions = <TError = PutApiFormsByIdEmbed413,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdEmbed>>, TError,PutApiFormsByIdEmbedMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdEmbed>>, TError,PutApiFormsByIdEmbedMutationVariables, TContext> => {
-
-const mutationKey = ['putApiFormsByIdEmbed'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiFormsByIdEmbed>>, PutApiFormsByIdEmbedMutationVariables> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  putApiFormsByIdEmbed(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PutApiFormsByIdEmbedMutationResult = NonNullable<Awaited<ReturnType<typeof putApiFormsByIdEmbed>>>
-    export type PutApiFormsByIdEmbedMutationBody = PutApiFormsByIdEmbedBody
-    export type PutApiFormsByIdEmbedMutationError = PutApiFormsByIdEmbed413
-    export type PutApiFormsByIdEmbedMutationVariables = {id: string;data: PutApiFormsByIdEmbedBody}
-
-    /**
- * @summary Save a form's embed settings
- */
-export const usePutApiFormsByIdEmbed = <TError = PutApiFormsByIdEmbed413,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdEmbed>>, TError,PutApiFormsByIdEmbedMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof putApiFormsByIdEmbed>>,
-        TError,
-        PutApiFormsByIdEmbedMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPutApiFormsByIdEmbedMutationOptions(options));
     }
     export type putApiFormsByIdDocResponse200 = {
   data: PutApiFormsByIdDoc200
