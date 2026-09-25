@@ -99,6 +99,8 @@
 
     mode = pick("data-mode", "mode") || "popup";
     color = script.getAttribute("data-button-color") || script.getAttribute("data-color") || r.color || "#FD6F29";
+    // Only a plain colour; anything else keeps the default light background.
+    skinBackground = typeof r.background === "string" && /^#[0-9a-f]{3,8}$/i.test(r.background) ? r.background : null;
     var labelValue = pick("data-label", "label");
     label = labelValue === null ? "Fill this form" : labelValue;
     showIcon = flag("data-icon", "icon");
@@ -272,20 +274,22 @@
         ".cf-panel.cf-open{visibility:visible;opacity:1;transform:none;pointer-events:auto;",
         "transition:opacity .16s ease,transform .22s cubic-bezier(.2,.8,.2,1),visibility 0s}",
         /*
-         * Until the form says it is ready: the panel's own colour and a typing
-         * indicator, so a click gets an answer at once instead of a white box
-         * for the second the form takes to arrive. The frame fades in over it.
+         * Until the form says it is ready: the form's own background and a
+         * typing indicator, so a click gets an answer at once instead of a white
+         * box for the second the form takes to arrive. Always light, whatever
+         * the host page's scheme, because the form is: a dark placeholder
+         * followed by a light form was a flash, not a loading state. The exact
+         * colour comes from the published theme (see `skin`), so the frame
+         * fades in over its own colour and the swap has no seam.
          */
-        ".cf-host{--cf-skel-bg:#faf8f5;--cf-skel-dot:rgba(0,0,0,.28)}",
-        ".cf-host.cf-dark{--cf-skel-bg:#1c1b19;--cf-skel-dot:rgba(255,255,255,.35)}",
-        "@media (prefers-color-scheme:dark){.cf-host.cf-auto{--cf-skel-bg:#1c1b19;--cf-skel-dot:rgba(255,255,255,.35)}}",
+        ".cf-host{--cf-skel-bg:#faf7f2;--cf-skel-dot:rgba(0,0,0,.26)}",
         ".cf-inline{position:relative;overflow:hidden;border-radius:16px;background:var(--cf-skel-bg)}",
         ".cf-skel{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:6px;",
-        "transition:opacity .2s ease}",
+        "transition:opacity .3s ease .1s}",
         ".cf-skel i{width:7px;height:7px;border-radius:50%;background:var(--cf-skel-dot);animation:cf-dot 1s ease-in-out infinite}",
         ".cf-skel i:nth-child(2){animation-delay:.15s}.cf-skel i:nth-child(3){animation-delay:.3s}",
         "@keyframes cf-dot{0%,80%,100%{opacity:.35;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}",
-        ".cf-frame{position:relative;opacity:0;transition:opacity .22s ease}",
+        ".cf-frame{position:relative;opacity:0;transition:opacity .45s cubic-bezier(.2,.8,.2,1)}",
         ".cf-ready .cf-frame{opacity:1}",
         ".cf-ready .cf-skel{opacity:0}",
         ".cf-fullpage{inset:0;width:100vw;height:100vh;border-radius:0}",
@@ -417,7 +421,14 @@
   }
 
   function hostClass() {
-    return " cf-host " + (theme === "dark" ? "cf-dark" : theme === "light" ? "" : "cf-auto");
+    return " cf-host";
+  }
+
+  /** The published background, on the placeholder, so loading and loaded are one colour. */
+  var skinBackground = null;
+  function skin(el) {
+    if (skinBackground) el.style.setProperty("--cf-skel-bg", skinBackground);
+    return el;
   }
 
   /**
@@ -461,6 +472,7 @@
     var host = target ? document.querySelector(target) : null;
     var container = document.createElement("div");
     container.className = "cf-inline" + hostClass();
+    skin(container);
     container.style.width = "100%";
     container.style.height = heightAttr === "auto" ? "620px" : panelHeight + "px";
     container.appendChild(skeleton());
@@ -476,6 +488,7 @@
     injectPlacement();
     panel = document.createElement("div");
     panel.className = "cf-panel cf-p-" + uid + hostClass() + (mode === "fullpage" ? " cf-fullpage" : "");
+    skin(panel);
     panel.appendChild(skeleton());
     if (!lazy) panel.appendChild(buildFrame());
     document.body.appendChild(panel);

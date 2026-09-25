@@ -201,8 +201,9 @@ function stub(env: Bindings, sessionId: string): DurableObjectStub<SessionDO> {
 }
 
 /**
- * What `embed.js` needs before it draws anything: the published embed choices
- * and the colour the launcher wears.
+ * What `embed.js` needs before it draws anything: the published embed choices,
+ * the colour the launcher wears, and the background its loading state paints so
+ * the form fades in over its own colour.
  *
  * Its own route rather than `/config`, which counts submissions and resolves
  * entitlements; this runs on every page view of every site carrying the script,
@@ -229,7 +230,7 @@ sessionsRouter.get(
     c.header("cache-control", "public, max-age=60");
     if (!row || row.status !== "published") return c.json({});
     const doc = readFormDoc(JSON.parse(row.schema_json));
-    return c.json({ ...(doc.embed ?? {}), color: doc.theme.accent });
+    return c.json({ ...(doc.embed ?? {}), color: doc.theme.accent, background: doc.theme.background });
   },
 );
 
