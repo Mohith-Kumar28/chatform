@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Send, Trash2, Webhook } from "lucide-react";
+import type { Block } from "@repo/form-schema";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { customFetch } from "@/lib/api/mutator";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/format";
+import { aiSetupPrompt, samplePayload } from "./webhook-payload";
 
 /**
  * Webhook endpoints for one form.
@@ -58,7 +60,15 @@ interface Delivery {
   created_at: number;
 }
 
-export function WebhooksPanel({ formId }: { formId: string }) {
+export function WebhooksPanel({
+  formId,
+  formTitle,
+  blocks,
+}: {
+  formId: string;
+  formTitle: string;
+  blocks: Block[];
+}) {
   const queryClient = useQueryClient();
   // Keyed by form: every webhook created here carries this form's id, so
   // listing every endpoint in the organization showed people other forms'
@@ -254,6 +264,73 @@ export function WebhooksPanel({ formId }: { formId: string }) {
           ))}
         </div>
       )}
+
+      <PayloadPreview
+        formId={formId}
+        formTitle={formTitle}
+        blocks={blocks}
+        events={selected.length > 0 ? selected : ["response.completed"]}
+      />
+    </div>
+  );
+}
+
+/**
+ * What the endpoint will receive, and a prompt that has an AI agent build it.
+ *
+ * Without this the panel asked for a URL and never said what would arrive at
+ * it, so nobody could write the receiving side.
+ */
+function PayloadPreview({
+  formId,
+  formTitle,
+  blocks,
+  events,
+}: {
+  formId: string;
+  formTitle: string;
+  blocks: Block[];
+  events: string[];
+}) {
+  const payload = JSON.stringify(samplePayload(formId, blocks, events[0]), null, 2);
+  const prompt = aiSetupPrompt({ formId, formTitle, blocks, events });
+
+  return (
+    <div className="space-y-4 border-t pt-5">
+      <div className="space-y-2">
+        <p className="text-h3">Set it up with AI</p>
+        <p className="text-muted-foreground text-caption">
+          Paste this into Claude Code, Cursor or any AI coding tool inside your project. It
+          covers the payload, signature check, retries and a test.
+        </p>
+        <CopyButton
+          value={prompt}
+          label="Copy AI prompt"
+          toastMessage="AI prompt copied"
+          variant="default"
+          size="sm"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <p className="text-h3 flex-1">Response payload</p>
+          <CopyButton value={payload} label="Copy" toastMessage="Payload copied" />
+        </div>
+        <p className="text-muted-foreground text-caption">
+          A <code className="bg-muted rounded px-1">POST</code> with this JSON body, for{" "}
+          <code className="bg-muted rounded px-1">{events[0]}</code>. Answers use this
+          form&apos;s own question refs; values are samples.
+        </p>
+        <pre className="bg-muted/50 max-h-96 overflow-auto rounded-xl p-3 font-mono text-xs leading-relaxed">
+          {payload}
+        </pre>
+        <p className="text-muted-foreground text-caption">
+          Headers: <code className="bg-muted rounded px-1">x-chatform-event</code>,{" "}
+          <code className="bg-muted rounded px-1">x-chatform-delivery</code>,{" "}
+          <code className="bg-muted rounded px-1">x-chatform-signature: t=…, v1=…</code>
+        </p>
+      </div>
     </div>
   );
 }

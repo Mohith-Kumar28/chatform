@@ -204,7 +204,9 @@ export function IntegrationsWorkspace({
           </SheetHeader>
           <div className="px-4 pb-8">
             {panel === "spreadsheet" && <SpreadsheetPanel formId={formId} />}
-            {panel === "webhooks" && <WebhooksPanel formId={formId} />}
+            {panel === "webhooks" && (
+              <WebhooksPanel formId={formId} formTitle={formTitle} blocks={blocks} />
+            )}
             {paymentProvider && (
               <PaymentAccountPanel provider={paymentProvider} formId={formId} data={payments.data} />
             )}
