@@ -381,7 +381,7 @@ function EndpointDetail({
           </div>
         </div>
 
-        <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-3 text-sm">
+        <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-3 text-sm">
           <dt className="text-muted-foreground">Status</dt>
           <dd className="flex items-center gap-2">
             <StatusDot active={hook.active} />
@@ -400,7 +400,7 @@ function EndpointDetail({
         </dl>
 
         <div className="space-y-2">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button size="sm" disabled={test.isPending} onClick={() => test.mutate()}>
               <Send className="size-3.5" />
               {test.isPending ? "Testing…" : "Test connection"}
@@ -485,7 +485,7 @@ function Deliveries({ webhookId, queryKey }: { webhookId: string; queryKey: stri
                 <button
                   type="button"
                   onClick={() => setExpanded(isOpen ? null : row.id)}
-                  className="hover:bg-muted/50 flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm"
+                  className="hover:bg-muted/50 flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 px-3 py-2.5 text-left text-sm"
                 >
                   <span
                     className={cn(
@@ -497,7 +497,7 @@ function Deliveries({ webhookId, queryKey }: { webhookId: string; queryKey: stri
                           : "bg-destructive",
                     )}
                   />
-                  <span className="min-w-0 flex-1 truncate">
+                  <span className="min-w-[8rem] flex-1">
                     {row.event_type === "test" ? "Test" : eventLabel(row.event_type)}
                   </span>
                   <span
@@ -550,7 +550,7 @@ function prettyJson(raw: string) {
 function JsonBlock({ json }: { json: string }) {
   return (
     <div className="relative">
-      <pre className="bg-muted/50 max-h-96 overflow-auto rounded-xl p-3 pr-10 font-mono text-xs leading-relaxed">
+      <pre className="bg-muted/50 max-h-96 overflow-y-auto rounded-xl p-3 pr-10 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
         {json}
       </pre>
       <CopyButton value={json} className="absolute top-2 right-2" toastMessage="Copied" />
@@ -581,8 +581,8 @@ function DeveloperSection({
 
   return (
     <section className="space-y-3 border-t pt-6">
-      <div className="flex items-center gap-2">
-        <h3 className="text-h3 flex-1">Build the receiving side</h3>
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-h3 flex-1 whitespace-nowrap">Build the receiving side</h3>
         <SegmentedControl
           options={[
             { value: "prompt", label: "AI prompt" },
@@ -605,7 +605,7 @@ function DeveloperSection({
             readOnly
             value={prompt}
             rows={12}
-            className="font-mono text-xs leading-relaxed"
+            className="h-80 resize-none overflow-y-auto font-mono text-xs leading-relaxed [field-sizing:fixed]"
             onFocus={(e) => e.currentTarget.select()}
           />
           <CopyButton
@@ -623,7 +623,7 @@ function DeveloperSection({
             options, the raw value and a readable version. Values here are samples.
           </p>
           <JsonBlock json={payload} />
-          <dl className="text-caption grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+          <dl className="text-caption grid grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-[auto_1fr]">
             <dt className="font-mono">x-chatform-event</dt>
             <dd className="text-muted-foreground">The event name</dd>
             <dt className="font-mono">x-chatform-delivery</dt>
