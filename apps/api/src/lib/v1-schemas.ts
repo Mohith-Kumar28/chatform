@@ -318,6 +318,12 @@ export const AnalyticsView = z
     byOs: z.array(z.object({ label: z.string(), count: z.number() })).optional(),
     byChannel: z.array(z.object({ label: z.string(), count: z.number() })).optional(),
     byReferrer: z.array(z.object({ label: z.string(), count: z.number() })).optional(),
+    /** Each segment also carries `completed`: how many of `count` finished. */
+    byCampaign: z.array(z.object({ label: z.string(), count: z.number(), completed: z.number() })).optional(),
+    byDeviceType: z.array(z.object({ label: z.string(), count: z.number(), completed: z.number() })).optional(),
+    byLanguage: z.array(z.object({ label: z.string(), count: z.number(), completed: z.number() })).optional(),
+    /** Seven rows (Monday first) of 24 hours, on each respondent's own clock. */
+    byWeekHour: z.array(z.array(z.number())).optional(),
     durationBuckets: z.array(z.object({ label: z.string(), count: z.number() })),
     /** Names what a plan withheld, rather than omitting it silently. */
     locked: z.array(z.string()).optional(),

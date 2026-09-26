@@ -180,6 +180,8 @@ const SubmissionList = z.object({
   }),
 });
 
+const SegmentSchema = z.object({ label: z.string(), count: z.number(), completed: z.number() });
+
 const Summary = z.object({
   views: z.number(),
   starts: z.number(),
@@ -234,12 +236,18 @@ const Summary = z.object({
       lat: z.number(),
       lon: z.number(),
       count: z.number(),
+      completed: z.number(),
     }),
   ),
-  byBrowser: z.array(z.object({ label: z.string(), count: z.number() })),
-  byOs: z.array(z.object({ label: z.string(), count: z.number() })),
-  byChannel: z.array(z.object({ label: z.string(), count: z.number() })),
-  byReferrer: z.array(z.object({ label: z.string(), count: z.number() })),
+  byBrowser: z.array(SegmentSchema),
+  byOs: z.array(SegmentSchema),
+  byChannel: z.array(SegmentSchema),
+  byReferrer: z.array(SegmentSchema),
+  byCampaign: z.array(SegmentSchema),
+  byDeviceType: z.array(SegmentSchema),
+  byLanguage: z.array(SegmentSchema),
+  /** Seven rows, Monday first, of 24 hours on the respondent's own clock. */
+  byWeekHour: z.array(z.array(z.number())),
   durationBuckets: z.array(z.object({ label: z.string(), count: z.number() })),
   /** Field names withheld because the plan or the role does not include them. */
   locked: z.array(z.string()),
@@ -1018,7 +1026,9 @@ resultsRouter.get(
   }),
   async (c) => {
     const id = c.get("form")!.id;
-    const agg = await computeAnalytics(c.env, id);
+    // Ninety days, the most the series goes back: the page trims it to start at
+    // the first activity, so a young form is not drawn across a month of nothing.
+    const agg = await computeAnalytics(c.env, id, { days: 90 });
 
     /**
      * Basic analytics are free; advanced analytics are Pro.
@@ -1062,10 +1072,14 @@ resultsRouter.get(
       byOs: showDetail ? agg.byOs : [],
       byChannel: showDetail ? agg.byChannel : [],
       byReferrer: showDetail ? agg.byReferrer : [],
+      byCampaign: showDetail ? agg.byCampaign : [],
+      byDeviceType: showDetail ? agg.byDeviceType : [],
+      byLanguage: showDetail ? agg.byLanguage : [],
+      byWeekHour: showDetail ? agg.byWeekHour : [],
       durationBuckets: showDetail ? agg.durationBuckets : [],
       locked: showDetail
         ? []
-        : ["perBlock", "distributions", "avgDurationMs", "medianDurationMs", "daily", "bySource", "byCountry", "byDevice", "places", "byBrowser", "byOs", "byChannel", "byReferrer", "durationBuckets"],
+        : ["perBlock", "distributions", "avgDurationMs", "medianDurationMs", "daily", "bySource", "byCountry", "byDevice", "places", "byBrowser", "byOs", "byChannel", "byReferrer", "byCampaign", "byDeviceType", "byLanguage", "byWeekHour", "durationBuckets"],
       lockedContext: showDetail
         ? null
         : {

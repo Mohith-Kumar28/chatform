@@ -86,15 +86,85 @@ export interface AnalyticsAggregate {
    * responses recorded after it shipped carry, so it can be empty on a form
    * whose `byCountry` is not.
    */
-  places: { country: string | null; region: string | null; city: string | null; lat: number; lon: number; count: number }[];
-  byBrowser: { label: string; count: number }[];
-  byOs: { label: string; count: number }[];
+  places: { country: string | null; region: string | null; city: string | null; lat: number; lon: number; count: number; completed: number }[];
+  /**
+   * Every breakdown below carries `completed` beside `count`, so a segment can
+   * be read as "how many came" and "how many of them finished" at once. The
+   * second is the one an author acts on: phones finishing at half the rate of
+   * laptops is a form problem, not an audience fact.
+   */
+  byBrowser: Segment[];
+  byOs: Segment[];
   /** Direct link, popup, inline, side tab, full page or API. */
-  byChannel: { label: string; count: number }[];
+  byChannel: Segment[];
   /** The referring site's host, `google.com` rather than a full URL. */
-  byReferrer: { label: string; count: number }[];
+  byReferrer: Segment[];
+  /** `utm_source` off the link they opened. */
+  byCampaign: Segment[];
+  /** `mobile`, `tablet` or `desktop`, from the user agent at session open. */
+  byDeviceType: Segment[];
+  /** The browser's language, primary subtag only: `en`, not `en-GB`. */
+  byLanguage: Segment[];
+  /**
+   * When people start, on their own clock: seven rows (Monday first) of 24
+   * hours. Converted with each zone's current offset, so a response from the
+   * other side of a DST change can land an hour out.
+   */
+  byWeekHour: number[][];
   /** How long finishing took, in buckets everyone reads the same way. */
   durationBuckets: { label: string; count: number }[];
+}
+
+export interface Segment {
+  label: string;
+  count: number;
+  completed: number;
+}
+
+/** Minutes a zone is ahead of UTC right now, or null for a zone this runtime does not know. */
+function zoneOffsetMinutes(zone: string, at: Date): number | null {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+    }).formatToParts(at);
+    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? NaN);
+    const local = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"));
+    const diff = Math.round((local - Math.floor(at.getTime() / 60_000) * 60_000) / 60_000);
+    return Number.isFinite(diff) ? diff : null;
+  } catch {
+    return null;
+  }
+}
+
+type SegmentRow = { label: string; n: number; done: number | null };
+
+function segments(res: D1Result<SegmentRow>): Segment[] {
+  return (res.results ?? []).map((r) => ({ label: String(r.label), count: r.n, completed: r.done ?? 0 }));
+}
+
+/** UTC weekday × hour per zone, folded onto each zone's local clock. Monday is row 0. */
+function weekHour(rows: { tz: string; dow: number; hour: number; n: number }[]): number[][] {
+  const grid = Array.from({ length: 7 }, () => Array<number>(24).fill(0));
+  const now = new Date();
+  const offsets = new Map<string, number | null>();
+  for (const r of rows) {
+    if (!offsets.has(r.tz)) offsets.set(r.tz, zoneOffsetMinutes(r.tz, now));
+    const offset = offsets.get(r.tz);
+    if (offset == null) continue;
+    // Minutes into the week, Sunday 00:00 UTC being zero, then shifted and wrapped.
+    const week = 7 * 24 * 60;
+    const local = (((r.dow * 24 + r.hour) * 60 + offset) % week + week) % week;
+    const dow = Math.floor(local / (24 * 60));
+    const hour = Math.floor((local % (24 * 60)) / 60);
+    grid[(dow + 6) % 7]![hour]! += r.n;
+  }
+  return grid;
 }
 
 const NUMERIC_TYPES = new Set(["rating", "nps", "opinion_scale", "number"]);
@@ -155,7 +225,7 @@ export async function computeAnalytics(
   const nonTextTypes = [...groupedTypes, ...NUMERIC_TYPES, ...PASSIVE_TYPES];
   const holes = (n: number) => Array.from({ length: n }, () => "?").join(",");
 
-  const [formRes, countsRes, answeredRes, groupedRes, numericRes, textsRes, dailyRes, viewRes, sourceRes, countryRes, deviceRes, bucketRes, medianRes, viewsRes, placesRes, browserRes, osRes, channelRes, referrerRes] =
+  const [formRes, countsRes, answeredRes, groupedRes, numericRes, textsRes, dailyRes, viewRes, sourceRes, countryRes, deviceRes, bucketRes, medianRes, viewsRes, placesRes, browserRes, osRes, channelRes, referrerRes, campaignRes, deviceTypeRes, languageRes, weekHourRes] =
     (await env.DB.batch([
       /**
        * The published document, falling back to the draft only when nothing has
@@ -273,18 +343,43 @@ export async function computeAnalytics(
                 json_extract(meta, '$.context.geo.city') AS city,
                 ROUND(json_extract(meta, '$.context.geo.latitude'), 1) AS lat,
                 ROUND(json_extract(meta, '$.context.geo.longitude'), 1) AS lon,
-                COUNT(*) AS n
+                COUNT(*) AS n,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS done
            FROM submissions
           WHERE ${where} AND json_extract(meta, '$.context.geo.latitude') IS NOT NULL
           GROUP BY lat, lon ORDER BY n DESC LIMIT 400`,
       ).bind(...binds),
-      ...(["device.browser", "device.os", "channel", "referrerHost"] as const).map((path) =>
+      ...(["device.browser", "device.os", "channel", "referrerHost", "utm.source", "device.type"] as const).map((path) =>
         env.DB.prepare(
-          `SELECT json_extract(meta, '$.context.${path}') AS label, COUNT(*) AS n
+          `SELECT json_extract(meta, '$.context.${path}') AS label, COUNT(*) AS n,
+                  SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS done
              FROM submissions WHERE ${where} AND json_extract(meta, '$.context.${path}') IS NOT NULL
             GROUP BY label ORDER BY n DESC LIMIT 8`,
         ).bind(...binds),
       ),
+      // `en-GB` and `en-US` are one language to an author deciding what to translate into.
+      env.DB.prepare(
+        `SELECT lower(CASE WHEN instr(l, '-') > 0 THEN substr(l, 1, instr(l, '-') - 1) ELSE l END) AS label,
+                COUNT(*) AS n,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS done
+           FROM (SELECT json_extract(meta, '$.context.language') AS l, status
+                   FROM submissions WHERE ${where} AND json_extract(meta, '$.context.language') IS NOT NULL)
+          GROUP BY label ORDER BY n DESC LIMIT 8`,
+      ).bind(...binds),
+      /*
+        When they start, bucketed in UTC per zone and shifted to local time in
+        JS: SQLite has no zone database, and one row per zone × weekday × hour
+        is at most a few thousand rows however many responses there are.
+      */
+      env.DB.prepare(
+        `SELECT COALESCE(json_extract(meta, '$.context.timezone'), json_extract(meta, '$.context.geo.timezone')) AS tz,
+                CAST(strftime('%w', started_at / 1000, 'unixepoch') AS INTEGER) AS dow,
+                CAST(strftime('%H', started_at / 1000, 'unixepoch') AS INTEGER) AS hour,
+                COUNT(*) AS n
+           FROM submissions
+          WHERE ${where} AND COALESCE(json_extract(meta, '$.context.timezone'), json_extract(meta, '$.context.geo.timezone')) IS NOT NULL
+          GROUP BY tz, dow, hour`,
+      ).bind(...binds),
       // Typed as a tuple because `batch()` returns a positional array: the names
       // above are the only thing keeping a statement matched to its shape.
     ])) as [
@@ -302,11 +397,15 @@ export async function computeAnalytics(
       D1Result<{ b1: number | null; b2: number | null; b3: number | null; b4: number | null; b5: number | null }>,
       D1Result<{ duration_ms: number }>,
       D1Result<{ v: number | null }>,
-      D1Result<{ country: string | null; region: string | null; city: string | null; lat: number; lon: number; n: number }>,
-      D1Result<{ label: string; n: number }>,
-      D1Result<{ label: string; n: number }>,
-      D1Result<{ label: string; n: number }>,
-      D1Result<{ label: string; n: number }>,
+      D1Result<{ country: string | null; region: string | null; city: string | null; lat: number; lon: number; n: number; done: number | null }>,
+      D1Result<SegmentRow>,
+      D1Result<SegmentRow>,
+      D1Result<SegmentRow>,
+      D1Result<SegmentRow>,
+      D1Result<SegmentRow>,
+      D1Result<SegmentRow>,
+      D1Result<SegmentRow>,
+      D1Result<{ tz: string; dow: number; hour: number; n: number }>,
     ];
 
   const form = (formRes.results ?? [])[0];
@@ -577,11 +676,16 @@ export async function computeAnalytics(
       lat: r.lat,
       lon: r.lon,
       count: r.n,
+      completed: r.done ?? 0,
     })),
-    byBrowser: (browserRes.results ?? []).map((r) => ({ label: r.label, count: r.n })),
-    byOs: (osRes.results ?? []).map((r) => ({ label: r.label, count: r.n })),
-    byChannel: (channelRes.results ?? []).map((r) => ({ label: r.label, count: r.n })),
-    byReferrer: (referrerRes.results ?? []).map((r) => ({ label: r.label, count: r.n })),
+    byBrowser: segments(browserRes),
+    byOs: segments(osRes),
+    byChannel: segments(channelRes),
+    byReferrer: segments(referrerRes),
+    byCampaign: segments(campaignRes),
+    byDeviceType: segments(deviceTypeRes),
+    byLanguage: segments(languageRes),
+    byWeekHour: weekHour(weekHourRes.results ?? []),
     durationBuckets: [
       { label: "Under 30s", count: bucketRow?.b1 ?? 0 },
       { label: "30s–1m", count: bucketRow?.b2 ?? 0 },

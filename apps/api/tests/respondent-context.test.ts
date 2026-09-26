@@ -128,8 +128,8 @@ describe("the dashboard sees it", () => {
     await invalidateEntitlements(DB(), org.orgId);
 
     const london = buildRespondentContext({
-      client: { channel: "popup", referrer: "https://www.linkedin.com/feed/" },
-      edge: { country: "GB", region: "England", city: "London", latitude: 51.5, longitude: -0.12 },
+      client: { channel: "popup", referrer: "https://www.linkedin.com/feed/", language: "en-GB" },
+      edge: { country: "GB", region: "England", city: "London", latitude: 51.5, longitude: -0.12, timezone: "Europe/London" },
       userAgent: MAC_CHROME,
       fallbackChannel: "link",
     });
@@ -171,11 +171,27 @@ describe("the dashboard sees it", () => {
       byBrowser: Array<{ label: string; count: number }>;
     }>();
     expect(body.places).toEqual([
-      { country: "GB", region: "England", city: "London", lat: 51.5, lon: -0.1, count: 2 },
+      { country: "GB", region: "England", city: "London", lat: 51.5, lon: -0.1, count: 2, completed: 2 },
     ]);
-    expect(body.byChannel).toEqual([{ label: "popup", count: 2 }]);
-    expect(body.byReferrer).toEqual([{ label: "linkedin.com", count: 2 }]);
-    expect(body.byBrowser).toEqual([{ label: "Chrome", count: 2 }]);
+    expect(body.byChannel).toEqual([{ label: "popup", count: 2, completed: 2 }]);
+    expect(body.byReferrer).toEqual([{ label: "linkedin.com", count: 2, completed: 2 }]);
+    expect(body.byBrowser).toEqual([{ label: "Chrome", count: 2, completed: 2 }]);
+  });
+
+  it("breaks responses down by device, language and the hour they started", async () => {
+    const res = await fetchApi(`/api/forms/${org.formId}/analytics`, { headers: auth(org) });
+    const body = await res.json<{
+      byDeviceType: Array<{ label: string; count: number; completed: number }>;
+      byLanguage: Array<{ label: string; count: number; completed: number }>;
+      byWeekHour: number[][];
+    }>();
+    expect(body.byDeviceType).toEqual([{ label: "desktop", count: 2, completed: 2 }]);
+    // en-GB folds into en: one language to translate into, not two.
+    expect(body.byLanguage).toEqual([{ label: "en", count: 2, completed: 2 }]);
+    expect(body.byWeekHour).toHaveLength(7);
+    expect(body.byWeekHour.every((row) => row.length === 24)).toBe(true);
+    // The response with no context has no zone, so only the two London ones land.
+    expect(body.byWeekHour.flat().reduce((a, b) => a + b, 0)).toBe(2);
   });
 });
 

@@ -98,8 +98,9 @@ export function ChartCard({
   return (
     <section className={cn("bg-card shadow-xs flex flex-col rounded-xl border p-4 sm:p-5", !dense && "h-full", className)}>
       {(title || aside) && (
-        <header className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
+        // Wraps, so on a phone a legend drops under the title instead of squeezing it to one word a line.
+        <header className="mb-4 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+          <div className="min-w-0 flex-[1_1_14rem]">
             {title && (
               <h3 className="text-h3 flex items-center gap-1 leading-snug">
                 {title}
@@ -146,6 +147,8 @@ export interface BarItem {
   /** Overrides the count shown on the right. */
   display?: string;
   color?: string;
+  /** A second fact about the row, after the share: "67% finish". Donut legends only. */
+  note?: React.ReactNode;
 }
 
 /**
@@ -391,6 +394,7 @@ export function Donut({
               {item.display ?? item.value}
               <span className="ml-1.5 opacity-70">{Math.round((item.value / denom) * 100)}%</span>
             </span>
+            {item.note && <span className="shrink-0 self-center">{item.note}</span>}
           </li>
         ))}
       </ul>
@@ -521,6 +525,36 @@ export function Heatmap({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * What share of a segment finished, as a small filled ring beside its number.
+ *
+ * A ring rather than another bar, because it sits at the end of a row that is
+ * already a label and a count, and a second bar there reads as a second ranking.
+ * Green from 70%, amber from 40%, red below, always with the number printed.
+ */
+export function FinishRing({ completed, total, label = "finish" }: { completed: number; total: number; label?: string }) {
+  if (total <= 0) return null;
+  const pct = Math.round((completed / total) * 100);
+  const tone = pct >= 70 ? "var(--success)" : pct >= 40 ? "var(--warning)" : "var(--destructive)";
+  return (
+    <span
+      className="text-muted-foreground inline-flex items-center gap-1.5 text-xs whitespace-nowrap"
+      title={`${completed} of ${total} finished`}
+    >
+      <span
+        aria-hidden
+        className="relative size-3.5 shrink-0 rounded-full"
+        style={{ background: `conic-gradient(${tone} ${pct * 3.6}deg, var(--muted) 0deg)` }}
+      >
+        <span className="bg-card absolute inset-[3px] rounded-full" />
+      </span>
+      <span className="tabular">
+        {pct}%{label ? ` ${label}` : ""}
+      </span>
+    </span>
   );
 }
 
