@@ -290,8 +290,8 @@ describe("extractUrls", () => {
     expect(extractUrls("http://192.168.1.1/admin")).toEqual([]);
   });
 
-  it("reads at most two pages", () => {
-    expect(extractUrls("a.com b.com c.com d.com")).toHaveLength(2);
+  it("reads at most four pages", () => {
+    expect(extractUrls("a.com b.com c.com d.com e.com f.com")).toHaveLength(4);
   });
 });
 
