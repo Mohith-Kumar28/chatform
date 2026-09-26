@@ -3,6 +3,7 @@ import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import type { Bindings } from "../../env.js";
 import type { PlatformAdminVars } from "../../lib/platform-admin.js";
+import { parseUserAgent } from "../../lib/respondent-context.js";
 import { FORM_ROLLUP_COMPLETED_KEY, utcDay } from "../../lib/platform-rollup.js";
 import {
   DAY_MS,
@@ -855,15 +856,31 @@ coreRouter.get(
       .bind(orgId)
       .first<{ id: string; name: string; limits_json: string }>();
 
-    const [members, subscription, forms, usage, overrides, audit, denials] = await Promise.all([
+    const [members, signIns, subscription, forms, usage, overrides, audit, denials] = await Promise.all([
       c.env.DB.prepare(
         `SELECT u.id, u.email, u.name, u.email_verified, u.created_at, m.role, m.created_at AS joined_at,
-                (SELECT MAX(s.created_at) FROM sessions s WHERE s.user_id = u.id) AS last_session_at
+                (SELECT MAX(s.created_at) FROM sessions s WHERE s.user_id = u.id) AS last_session_at,
+                (SELECT COUNT(*) FROM user_sign_ins si WHERE si.user_id = u.id AND si.kind = 'sign_in') AS sign_in_count,
+                (SELECT s.user_agent FROM sessions s WHERE s.user_id = u.id ORDER BY s.created_at DESC LIMIT 1) AS last_user_agent
            FROM members m JOIN users u ON u.id = m.user_id
           WHERE m.organization_id = ? ORDER BY m.created_at ASC`,
       )
         .bind(orgId)
-        .all(),
+        .all<Record<string, unknown>>(),
+      /**
+       * Each member's sign-up and their twenty latest sign-ins, with the geo,
+       * network and device each one came from. See `lib/user-context.ts`.
+       */
+      c.env.DB.prepare(
+        `SELECT user_id, kind, method, context_json, created_at FROM (
+           SELECT si.*, ROW_NUMBER() OVER (PARTITION BY si.user_id, si.kind ORDER BY si.created_at DESC) AS rn
+             FROM user_sign_ins si JOIN members m ON m.user_id = si.user_id
+            WHERE m.organization_id = ?
+         ) WHERE kind = 'sign_up' OR rn <= 20
+         ORDER BY created_at DESC`,
+      )
+        .bind(orgId)
+        .all<{ user_id: string; kind: string; method: string | null; context_json: string; created_at: number }>(),
       c.env.DB.prepare(
         `SELECT s.*, p.name AS plan_name, p.price_monthly_cents, p.price_yearly_cents, p.limits_json
            FROM subscriptions s JOIN plans p ON p.id = s.plan_id
@@ -916,11 +933,33 @@ coreRouter.get(
       // A malformed catalogue row costs the meters their ceilings, not the page.
     }
 
+    const events = (signIns.results ?? []).flatMap((r) => {
+      try {
+        return [{ user_id: r.user_id, kind: r.kind, method: r.method, at: r.created_at, context: JSON.parse(r.context_json) as unknown }];
+      } catch {
+        return [];
+      }
+    });
+
     return c.json({
       org,
       plan: planRow ? { id: planRow.id, name: planRow.name } : null,
       limits,
-      members: members.results ?? [],
+      members: (members.results ?? []).map(({ last_user_agent, ...m }) => {
+        const mine = events.filter((e) => e.user_id === m.id).map(({ user_id: _, ...e }) => e);
+        return {
+          ...m,
+          signup: mine.find((e) => e.kind === "sign_up") ?? null,
+          sign_ins: mine.filter((e) => e.kind === "sign_in"),
+          /**
+           * Accounts from before any of this was recorded still have the user
+           * agent Better Auth keeps on their latest session: the device, at
+           * least, without a location.
+           */
+          session_device:
+            typeof last_user_agent === "string" && last_user_agent ? parseUserAgent(last_user_agent) : null,
+        };
+      }),
       subscription: subscription ?? null,
       forms: forms.results ?? [],
       usage: usage.results ?? [],

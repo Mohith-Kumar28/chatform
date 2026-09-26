@@ -22,6 +22,10 @@ import { APIError } from "better-auth/api";
 import { webOrigins, returnOrigin, needsCrossSiteCookies, isSecureOrigin } from "./origins.js";
 import { enqueueMail } from "./mail.js";
 import { purgeUserData } from "./delete-account.js";
+import { recordUserContext } from "./user-context.js";
+
+/** Requests that created a user, so the session they open is not also counted as a sign-in. */
+const signedUpBy = new WeakSet<Request>();
 
 /**
  * Give a brand-new user an organization to land in.
@@ -295,15 +299,25 @@ export function createAuth(env: Bindings) {
     databaseHooks: {
       user: {
         create: {
-          after: async (user) => {
+          after: async (user, ctx) => {
             await createDefaultOrg(env, user as { id: string; name?: string | null; email: string });
             // After the org exists, so the mail can link straight to it.
             await enqueueMail(env, { kind: "admin_new_user", userId: user.id });
+            if (ctx?.request) signedUpBy.add(ctx.request);
+            await recordUserContext(env, user.id, "sign_up", ctx);
           },
         },
       },
       session: {
         create: {
+          /*
+            Every sign-in, from wherever it came. The session a sign-up opens
+            in the same request is that sign-up, not a second event.
+          */
+          after: async (session, ctx) => {
+            if (ctx?.request && signedUpBy.has(ctx.request)) return;
+            await recordUserContext(env, session.userId, "sign_in", ctx);
+          },
           before: async (session) => {
             // Never worth failing a sign-in over: a session with no active org
             // is the state we already handle, and the web client repairs it on

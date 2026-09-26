@@ -24,7 +24,7 @@ import { sessionStartLimit, respondentAuthLimit, respondentPaymentLimit } from "
 import { getEntitlements, meter, checkQuota } from "../lib/entitlements.js";
 import { brandingHiddenFor, clampForRuntime } from "../lib/doc-entitlements.js";
 import { verifyEmailToken } from "../lib/signed-url.js";
-import { buildRespondentContext, ClientContextInput, type EdgeInfo } from "../lib/respondent-context.js";
+import { captureRequestContext, ClientContextInput } from "../lib/respondent-context.js";
 import { cancelFollowUps, cancelFollowUpsForAddress, recordFollowUpClick, suppress } from "../lib/followups.js";
 import type { RespondentIdentity } from "@repo/form-schema";
 import { confirmPaymentForSession, providersForAccounts, startPaymentForSession } from "../lib/payments/service.js";
@@ -500,12 +500,9 @@ sessionsRouter.post(
       is kept apart from `source` above because that one drives the embed
       allowlist gate, which must stay keyed on the real Origin header.
     */
-    const context = buildRespondentContext({
+    const context = captureRequestContext(c.req.raw, {
       client: body.client,
-      edge: (c.req.raw as { cf?: EdgeInfo }).cf ?? null,
-      userAgent: c.req.header("user-agent") ?? null,
       timezone,
-      countryHeader: c.req.header("cf-ipcountry") ?? null,
       fallbackChannel: body.embed?.origin ? "embed" : "link",
     });
     const embedded = context.channel !== "link" && context.channel !== "api";

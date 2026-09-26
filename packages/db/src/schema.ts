@@ -39,6 +39,25 @@ export const sessions = sqliteTable(
   (t) => [index("idx_sessions_user").on(t.userId), index("idx_sessions_expires").on(t.expiresAt)],
 );
 
+/**
+ * Where and on what a customer signed up, and each sign-in after. One row per
+ * event, the context JSON shaped like a response's `meta.context`. See
+ * `apps/api/src/lib/user-context.ts`.
+ */
+export const userSignIns = sqliteTable(
+  "user_sign_ins",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["sign_up", "sign_in"] }).notNull(),
+    /** "email", "email-otp", "google": how they proved who they are. */
+    method: text("method"),
+    contextJson: text("context_json").notNull(),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [index("idx_user_sign_ins_user").on(t.userId, t.createdAt)],
+);
+
 export const accounts = sqliteTable(
   "accounts",
   {

@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme/theme-provider";
 import { JsonLd } from "@/components/seo/json-ld";
 import { Clarity } from "@/components/analytics/clarity";
 import { GoogleTagManager } from "@/components/analytics/google-tag-manager";
+import { FirstTouch } from "@/components/analytics/first-touch";
 import { SITE_ORIGIN, organizationLd, webSiteLd } from "@/lib/seo";
 import "./globals.css";
 
@@ -175,6 +176,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           does not buy anything on a client-rendered tree.
         */}
         <GoogleTagManager />
+        {/* Where this browser first landed, sent with its sign-up. See lib/auth/client-context.ts. */}
+        <FirstTouch />
         {/*
           Theme and toasts are the only two things the whole site shares.
 

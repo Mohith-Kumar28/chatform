@@ -26,11 +26,19 @@ function join(...parts: Array<string | null | undefined>): string | null {
 export function ResponseDetails({
   metadata,
   at,
+  subject = "respondent",
 }: {
   metadata: ResponseMetadata | null | undefined;
   /** When it was submitted (or started), for the "their local time" row. */
   at: number;
+  /**
+   * `user`: a customer's sign-up or sign-in in the admin console. Same record,
+   * built by the same function; it has no channel, and its page is where the
+   * browser first landed.
+   */
+  subject?: "respondent" | "user";
 }) {
+  const user = subject === "user";
   if (!metadata) {
     return (
       <p className="text-muted-foreground text-sm">
@@ -48,10 +56,10 @@ export function ResponseDetails({
 
   const sections: Array<{ title: string; rows: Array<[string, string | null]> }> = [
     {
-      title: "Where they filled it",
+      title: user ? "Where they came from" : "Where they filled it",
       rows: [
-        ["Channel", CHANNEL_LABELS[metadata.channel] ?? metadata.channel],
-        ["Page", metadata.pageUrl],
+        ["Channel", user ? null : (CHANNEL_LABELS[metadata.channel] ?? metadata.channel)],
+        [user ? "First page" : "Page", metadata.pageUrl],
         ["Came from", metadata.referrer],
         ...utm.map(([key, value]): [string, string] => [`utm_${key}`, value]),
       ],
@@ -105,7 +113,7 @@ export function ResponseDetails({
         );
       })}
       <p className="text-muted-foreground text-caption">
-        Location comes from the respondent&apos;s internet connection, so it is accurate to the city, not
+        Location comes from {user ? "their" : "the respondent\u2019s"} internet connection, so it is accurate to the city, not
         the street, and a VPN shows the VPN&apos;s location.
       </p>
     </div>

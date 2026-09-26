@@ -200,9 +200,11 @@ export function createApp() {
        * the `OPTIONS` succeeds, the real request is simply never made, and the
        * page renders an empty state as though the account had no data. It works
        * perfectly from curl, which has no preflight, so this is the one class of
-       * bug that cannot be found without driving a real browser.
+       * bug that cannot be found without driving a real browser. The same
+       * goes for `x-chatform-client`, the sign-in device details
+       * (`lib/user-context.ts`).
        */
-      allowHeaders: ["content-type", "authorization", "x-chatform-impersonate"],
+      allowHeaders: ["content-type", "authorization", "x-chatform-impersonate", "x-chatform-client"],
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       exposeHeaders: ["retry-after"],
       credentials: true,

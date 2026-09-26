@@ -257,6 +257,42 @@ export function buildRespondentContext(input: {
   };
 }
 
+/** The first tag of an `Accept-Language` header, "en-IN,en;q=0.9" as "en-IN". */
+function headerLanguage(value: string | null | undefined): string | null {
+  const first = value?.split(",")[0]?.split(";")[0]?.trim();
+  return first && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(first) ? first : null;
+}
+
+/**
+ * Everything one incoming request says about who sent it: the edge's geo and
+ * network, the user agent's device, and whatever the browser volunteered.
+ *
+ * The one entry point for both people this product meets: a respondent opening
+ * a form (`routes/public.ts`) and a customer signing up or in
+ * (`lib/user-context.ts`). The browser's language wins over the header's,
+ * because it is the one the person actually chose.
+ */
+export function captureRequestContext(
+  request: Request,
+  opts: {
+    client?: ClientContextInput | null;
+    /** The browser's IANA zone, already canonicalised by the caller. */
+    timezone?: string | null;
+    fallbackChannel: Channel;
+  },
+): RespondentContext {
+  const context = buildRespondentContext({
+    client: opts.client,
+    edge: (request as { cf?: EdgeInfo }).cf ?? null,
+    userAgent: request.headers.get("user-agent"),
+    timezone: opts.timezone,
+    countryHeader: request.headers.get("cf-ipcountry"),
+    fallbackChannel: opts.fallbackChannel,
+  });
+  context.language ??= headerLanguage(request.headers.get("accept-language"));
+  return context;
+}
+
 /**
  * The stored context, read back defensively.
  *

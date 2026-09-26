@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { getGetApiAdminAccountsByOrgIdQueryKey, useGetApiAdminAccountsByOrgId } from "@/lib/api/admin/admin";
@@ -13,6 +14,7 @@ import { apiData } from "@/lib/api/payload";
 import { AccountActions, RevokeCompedPlan, RevokeOverride, entitlementLabel } from "./account-actions";
 import { DataTable } from "./data-table";
 import { compact, money, relativeDay } from "./format";
+import { MemberRow, MemberSheet, signupPlace } from "./member-sheet";
 
 /**
  * One account, in the order the questions get asked.
@@ -36,6 +38,7 @@ export function AccountDetail({ orgId }: { orgId: string }) {
   const { data, isPending, isError, refetch } = useGetApiAdminAccountsByOrgId(orgId, {
     query: { queryKey: getGetApiAdminAccountsByOrgIdQueryKey(orgId), retry: false },
   });
+  const [openMember, setOpenMember] = useState<string | null>(null);
 
   const d = apiData<Partial<Record<string, unknown>>>(data);
   if (isPending) return <Skeleton className="h-96 rounded-xl" />;
@@ -54,6 +57,9 @@ export function AccountDetail({ orgId }: { orgId: string }) {
   const denials = (d.denials ?? []) as Row[];
 
   const plan = sub ? str(sub, "plan_id") : "free";
+  // The owner if there is one, otherwise whoever joined first.
+  const owner = members.find((m) => str(m, "role").includes("owner")) ?? members[0];
+  const ownerPlace = owner ? signupPlace(owner) : null;
   const mrr = sub
     ? str(sub, "cycle") === "yearly"
       ? num(sub, "price_yearly_cents") / 12
@@ -80,7 +86,8 @@ export function AccountDetail({ orgId }: { orgId: string }) {
           )}
         </div>
         <p className="text-muted-foreground text-caption mt-1">
-          {str(org, "slug")} · joined {relativeDay(num(org, "created_at"))} · {members.length}{" "}
+          {str(org, "slug")} · joined {relativeDay(num(org, "created_at"))}
+          {ownerPlace && ` from ${ownerPlace}`} · {members.length}{" "}
           {members.length === 1 ? "member" : "members"}
         </p>
 
@@ -91,15 +98,8 @@ export function AccountDetail({ orgId }: { orgId: string }) {
             plan={isPlanId(plan) ? plan : "free"}
             limits={limits}
             owner={
-              /* The owner if there is one, otherwise whoever joined first —
-                 an account with no owner row still needs to be reproducible. */
-              (() => {
-                const pick =
-                  members.find((m) => str(m, "role").includes("owner")) ?? members[0];
-                return pick
-                  ? { id: str(pick, "id"), name: str(pick, "name"), email: str(pick, "email") }
-                  : null;
-              })()
+              /* An account with no owner row still needs to be reproducible. */
+              owner ? { id: str(owner, "id"), name: str(owner, "name"), email: str(owner, "email") } : null
             }
             onChanged={() => void refetch()}
           />
@@ -274,19 +274,15 @@ export function AccountDetail({ orgId }: { orgId: string }) {
 
       <div className="grid gap-3 lg:grid-cols-2">
         <ChartCard title="People">
-          <ul className="space-y-2">
-            {members.map((m, i) => (
-              <li key={i} className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="min-w-0">
-                  <span className="block truncate">{str(m, "name") || str(m, "email")}</span>
-                  <span className="text-muted-foreground text-micro truncate">{str(m, "email")}</span>
-                </span>
-                <span className="text-muted-foreground shrink-0 text-xs">
-                  {str(m, "role")} · seen {relativeDay(num(m, "last_session_at"))}
-                </span>
-              </li>
+          <ul className="space-y-0.5">
+            {members.map((m) => (
+              <MemberRow key={str(m, "id")} member={m} onOpen={() => setOpenMember(str(m, "id"))} />
             ))}
           </ul>
+          <MemberSheet
+            member={members.find((m) => str(m, "id") === openMember) ?? null}
+            onClose={() => setOpenMember(null)}
+          />
         </ChartCard>
 
         <ChartCard title="Recent activity" aside="from this account's audit log">
