@@ -35,7 +35,7 @@ export default defineComparison({
     {
       title: "Respondents can ask what a question means",
       body:
-        "On Pro, give it up to 50 knowledge sources and it answers mid-survey, then carries on from the same question. Letting people clarify a question is one of the oldest findings in survey research for reducing error.",
+        "Give it up to 50 knowledge sources on Pro (3 on Free) and it answers mid-survey, then carries on from the same question. Letting people clarify a question is one of the oldest findings in survey research for reducing error.",
     },
     {
       title: "Reminders for anyone who leaves, not just email lists",

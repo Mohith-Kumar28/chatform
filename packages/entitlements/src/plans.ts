@@ -51,7 +51,10 @@ const FREE: Plan = {
   priceYearlyCents: 0,
   seatPriceCents: 0,
   currency: "USD",
-  features: [],
+  // Knowledge is how a form answers "what does this cost?" mid-conversation,
+  // which is the conversational part of a conversational form, so Free gets a
+  // small one rather than none.
+  features: ["agent_knowledge"],
   limits: {
     responses_per_month: null,
     responses_ceiling_per_month: 10_000,
@@ -70,8 +73,8 @@ const FREE: Plan = {
     max_upload_mb_per_file: 5,
     blocks_per_form: 100,
     webhooks_per_form: 2,
-    knowledge_sources_count: 0,
-    knowledge_bytes: 0,
+    knowledge_sources_count: 3,
+    knowledge_bytes: 2 * 1024 * 1024,
 
     agent_max_turns: 50,
     agent_token_budget: 60_000,

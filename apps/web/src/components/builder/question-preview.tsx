@@ -62,14 +62,13 @@ export function QuestionPreview({
   }, [block, gatewayAccountId, paymentAccounts]);
   const agentName = doc.settings.agent.displayName || doc.title;
 
-  // Brand logo/name are a Pro feature (`brand_logo`) — publish strips them for
+  // The brand logo is a Pro feature (`brand_logo`) — publish strips them for
   // a plan that doesn't include it, so a free-plan preview must show the same
   // chatform-branded chrome a respondent will actually get, not the logo that
   // is sitting in the draft waiting for an upgrade.
   const { can } = useEntitlements();
   const branded = can("brand_logo");
   const logoUrl = branded ? doc.theme.logoUrl : null;
-  const brandName = branded ? doc.theme.brandName : undefined;
 
   return (
     <div
@@ -93,9 +92,6 @@ export function QuestionPreview({
         )}
         <p className="min-w-0 truncate text-sm font-medium">
           {agentName}
-          {brandName && (
-            <span className="ml-1.5 font-normal opacity-50">· {brandName}</span>
-          )}
         </p>
       </header>
 

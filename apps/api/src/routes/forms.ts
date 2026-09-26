@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../lib/validator.js";
+import { withOwnerNotification } from "../lib/owner-notification.js";
 import { z } from "zod";
 import { DEFAULT_REDIRECT_DELAY_SEC, FormDoc, ThemeDoc, lintFormDoc, hasErrors, migrateFormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
@@ -357,6 +358,10 @@ formsRouter.post(
       // materialize defaults (settings/theme nested objects) by parsing through the schema
       const defaulted = FormDoc.safeParse(JSON.parse(defaultDoc(body.title)));
       workingSchema = JSON.stringify(defaulted.success ? defaulted.data : JSON.parse(defaultDoc(body.title)));
+    }
+    {
+      const parsed = FormDoc.safeParse(JSON.parse(workingSchema));
+      if (parsed.success) workingSchema = JSON.stringify(await withOwnerNotification(c.env.DB, userId, parsed.data));
     }
     const id = `frm_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
     const slug = formSlug(body.title);

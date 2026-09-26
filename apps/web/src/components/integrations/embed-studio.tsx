@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { RadioGroup as RadioGroupPrimitive } from "radix-ui";
 import type { EmbedDoc } from "@repo/form-schema";
 import { useBuilderStore } from "@/stores/builder-store";
 import {
@@ -42,6 +43,7 @@ import {
   type EmbedConfig,
   type EmbedPosition,
 } from "@/lib/embed-snippet";
+import { InfoHint } from "@/components/ui/info-hint";
 import { cn } from "@/lib/utils";
 
 /**
@@ -100,13 +102,13 @@ const TRIGGERS: { value: EmbedConfig["openOn"]; label: string; hint: string }[] 
   {
     value: "scroll:50",
     label: "After scrolling halfway down the page",
-    hint: "Opens once the visitor has scrolled past the middle of the page they are on, measured from the top to the bottom of that page. Once per visit to the page, and never again after they submit. On a phone the button shakes instead of the form covering the screen.",
+    hint: "Opens once the visitor has scrolled past the middle of the page they are on, measured from the top to the bottom of that page. On a phone the button shakes instead of the form covering the screen.",
   },
-  { value: "load", label: "As soon as the page loads", hint: "Opens by itself when the page loads. Not again after the visitor submits. On a phone the button shakes instead." },
+  { value: "load", label: "As soon as the page loads", hint: "Opens by itself when the page loads. On a phone the button shakes instead." },
   {
     value: "exit-intent",
     label: "When the visitor is about to leave",
-    hint: "Opens when the mouse moves up out of the page, toward the tabs or the close button. Desktop only. Not again after the visitor submits.",
+    hint: "Opens when the mouse moves up out of the page, toward the tabs or the close button. Desktop only.",
   },
   {
     value: "click",
@@ -297,7 +299,17 @@ export function EmbedStudio({
 
             {overlay && (
               <>
-                <Section title="Auto open" hint="Open the form by itself. Clicking a button always opens it too.">
+                <Section
+                  title="Auto open"
+                  hint="Open the form by itself. Clicking a button always opens it too."
+                  action={
+                    <InfoHint label="How often it opens">
+                      It opens by itself only once per visitor. If they close it, it will not open again on
+                      any page of your site, and on a phone the button shakes only once. After they submit,
+                      it never opens by itself again. Clicking a button always opens it.
+                    </InfoHint>
+                  }
+                >
                   <Select
                     value={config.openOn}
                     onValueChange={(v) => set("openOn", v as EmbedConfig["openOn"])}
@@ -319,9 +331,22 @@ export function EmbedStudio({
                   </p>
                 </Section>
 
-                <Section title="Position">
-                  <Field label="Corner">
-                    <CornerPicker value={config.position} onChange={(p) => set("position", p)} />
+                <Section
+                  title="Position"
+                  hint={
+                    config.mode === "side-tab"
+                      ? "Which side the panel slides in from, and where its button sits."
+                      : "Which corner of the screen the button sits in. The form opens from there."
+                  }
+                >
+                  <Field label="Screen corner">
+                    <PositionPicker
+                      value={config.position}
+                      color={config.color}
+                      launcher={config.launcher}
+                      label={config.label}
+                      onChange={(p) => set("position", p)}
+                    />
                   </Field>
                   <Field label="Gap from the edge" hint="In pixels. 20 is the usual.">
                     <NumberInput
@@ -593,48 +618,87 @@ function ModeButton({
   );
 }
 
+/** Laid out the way a screen is: top row on top, left column on the left. */
+const POSITION_GRID: EmbedPosition[] = ["top-left", "top-right", "bottom-left", "bottom-right"];
+
 /**
- * The corner, as a corner.
+ * The corner, as a tiny screen.
  *
- * Four rows in a select would say the same thing and mean less — this is the
- * one control on the panel where the shape of the answer is the answer.
+ * It used to be four boxes with a dot in one corner of each, which nobody read
+ * as "a web page with the button here". Each option now draws a miniature page
+ * with the button in the form's colour sitting in that corner, and names the
+ * corner underneath, so the choice reads the same way the preview does.
  */
-function CornerPicker({
+function PositionPicker({
   value,
+  color,
+  launcher,
+  label,
   onChange,
 }: {
   value: EmbedPosition;
+  color: string;
+  /** Off: there is no button, so the thumbnail shows the panel in that corner. */
+  launcher: boolean;
+  /** The button's text. Empty draws a round icon button. */
+  label: string;
   onChange: (position: EmbedPosition) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-1.5">
-      {EMBED_POSITIONS.map(({ position, label }) => {
+    <RadioGroupPrimitive.Root
+      value={value}
+      onValueChange={(v) => onChange(v as EmbedPosition)}
+      aria-label="Screen corner"
+      className="grid grid-cols-2 gap-2"
+    >
+      {POSITION_GRID.map((position) => {
         const active = value === position;
-        const vertical = position.startsWith("top") ? "items-start" : "items-end";
-        const horizontal = position.endsWith("left") ? "justify-start" : "justify-end";
+        const name = EMBED_POSITIONS.find((p) => p.position === position)?.label ?? position;
+        const top = position.startsWith("top");
+        const left = position.endsWith("left");
         return (
-          <button
+          <RadioGroupPrimitive.Item
             key={position}
-            type="button"
-            onClick={() => onChange(position)}
-            aria-pressed={active}
-            aria-label={label}
-            title={label}
+            value={position}
             className={cn(
-              "flex h-11 rounded-xl border p-2",
-              vertical,
-              horizontal,
+              "group rounded-xl border p-1.5 text-left outline-none",
+              "focus-visible:ring-ring/50 focus-visible:ring-[3px]",
               "transition-colors duration-[var(--duration-micro)]",
               active ? "border-primary bg-primary-soft" : "border-border hover:border-primary/40",
             )}
           >
+            <span className="bg-background border-border/70 relative block aspect-[16/10] overflow-hidden rounded-lg border">
+              {/* The page: a nav line and two lines of text, quiet on purpose. */}
+              <span className="bg-muted absolute inset-x-0 top-0 block h-2" />
+              <span className="bg-muted absolute top-[38%] left-1/4 block h-1 w-1/2 rounded-full" />
+              <span className="bg-muted absolute top-[52%] left-1/3 block h-1 w-1/3 rounded-full" />
+              <span
+                className={cn(
+                  "absolute block shadow-sm transition-colors duration-[var(--duration-micro)]",
+                  top ? "top-3.5" : "bottom-1.5",
+                  left ? "left-1.5" : "right-1.5",
+                  !launcher
+                    ? "h-5 w-7 rounded-[3px]"
+                    : label
+                      ? "h-2.5 w-7 rounded-full"
+                      : "size-3 rounded-full",
+                  !active && "bg-muted-foreground/35",
+                )}
+                style={active ? { background: color } : undefined}
+              />
+            </span>
             <span
-              className={cn("size-3 rounded-full", active ? "bg-primary" : "bg-muted-foreground/30")}
-            />
-          </button>
+              className={cn(
+                "text-caption mt-1.5 block px-0.5",
+                active ? "text-primary font-medium" : "text-muted-foreground group-hover:text-foreground",
+              )}
+            >
+              {name}
+            </span>
+          </RadioGroupPrimitive.Item>
         );
       })}
-    </div>
+    </RadioGroupPrimitive.Root>
   );
 }
 

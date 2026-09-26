@@ -49,7 +49,7 @@ export const FEATURE_MIN_PLAN = {
 
   // ── the agent ───────────────────────────────────────────────────────────
   agent_persona: "pro",
-  agent_knowledge: "pro",
+  agent_knowledge: "free",
   agent_guardrails: "pro",
   agent_model_picker: "business",
 
@@ -130,7 +130,7 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
   api_access: { label: "API access", blurb: "Drive forms headlessly with an API key." },
 
   agent_persona: { label: "Custom persona", blurb: "Give the interviewer a name, a goal and a voice." },
-  agent_knowledge: { label: "Knowledge base", blurb: "Let the interviewer answer questions about you." },
+  agent_knowledge: { label: "Knowledge base", blurb: "Give it your docs so it can answer people's questions." },
   agent_guardrails: { label: "Guardrails", blurb: "Forbid topics and control how it declines." },
   agent_model_picker: { label: "Model picker", blurb: "Choose which model runs the interview." },
 
@@ -139,6 +139,6 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
 };
 
 /** The cheapest plan that includes `feature`. Drives every "requiredPlan" in a 402. */
-export function minPlanFor(feature: FeatureKey): "pro" | "business" {
+export function minPlanFor(feature: FeatureKey): "free" | "pro" | "business" {
   return FEATURE_MIN_PLAN[feature];
 }

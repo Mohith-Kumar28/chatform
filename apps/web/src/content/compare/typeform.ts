@@ -32,7 +32,7 @@ export default defineComparison({
     {
       title: "It answers questions back",
       body:
-        "On Pro, give it your documents, pages or notes — up to 50 knowledge sources — and it quotes you, mid-form, without losing its place in the flow. Typeform's own conversational product, Formless, does this — but Formless is sold separately, and starts at $59 a month for 250 AI conversations. chatform Pro is $16 a month billed yearly and includes 2,000.",
+        "Give it your documents, pages or notes (3 knowledge sources on Free, up to 50 on Pro) and it quotes you, mid-form, without losing its place in the flow. Typeform's own conversational product, Formless, does this — but Formless is sold separately, and starts at $59 a month for 250 AI conversations. chatform Pro is $16 a month billed yearly and includes 2,000.",
     },
     {
       title: "Unlimited responses on the free plan",

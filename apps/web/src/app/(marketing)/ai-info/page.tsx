@@ -94,9 +94,9 @@ export default function AiInfoPage() {
               {[
                 {
                   plan: free,
-                  line: "Unlimited responses under a fair-use ceiling of 10,000 a month, up to 100 forms, and 200 AI-run conversations a month. No card.",
+                  line: "Unlimited responses under a fair-use ceiling of 10,000 a month, up to 100 forms, 200 AI-run conversations a month, and a knowledge base with 3 sources. No card.",
                 },
-                { plan: pro, line: "Brand control, partial responses and their export, reminders to people who left, respondent verification by Google or SMS, a knowledge base the AI answers from (50 sources), the REST API and 2,000 AI conversations a month." },
+                { plan: pro, line: "Brand control, partial responses and their export, reminders to people who left, respondent verification by Google or SMS, a bigger knowledge base (50 sources), the REST API and 2,000 AI conversations a month." },
                 { plan: business, line: "One response per verified person, verified answers, AI insights, an activity log, 500 knowledge sources and 10,000 AI conversations a month." },
               ].map(({ plan, line }) => (
                 <div key={plan.id}>

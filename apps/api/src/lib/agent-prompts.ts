@@ -666,7 +666,8 @@ For each question:
 - "question": what you need to know, in their words, as one plain sentence.
 - "why": one short clause on what it changes, such as "so I know whether to branch". "" if it is obvious.
 - "kind": "choice" when you can offer the realistic answers, "text" when you cannot.
-- "options": 2 to 5 answers for a choice, as the author would say them. Include the escape hatch the set needs ("Both", "Not sure yet") when one honestly exists. Empty for a text question.`;
+- "options": 2 to 5 answers for a choice, as the author would say them. Include the escape hatch the set needs ("Both", "Not sure yet") when one honestly exists. Empty for a text question.
+- "multiple": true when the author could reasonably pick more than one option ("which plans get their own branch?"), false when the options exclude each other ("who fills it in?"). Always false for a text question.`;
 
 /**
  * The author's answers, folded back into their request.

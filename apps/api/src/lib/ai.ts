@@ -910,6 +910,8 @@ export const ClarifyQuestions = z.object({
         kind: z.enum(["choice", "text"]),
         /** For `choice`: 2-5 labels. Empty for `text`. */
         options: z.array(z.string()),
+        /** For `choice`: true when more than one option can honestly apply. */
+        multiple: z.boolean(),
       }),
     )
     .max(3),
@@ -949,6 +951,7 @@ export async function clarifyRequest(opts: {
       .map((q) => ({
         ...q,
         options: q.kind === "choice" ? q.options.filter((o) => o.trim()).slice(0, 5) : [],
+        multiple: q.kind === "choice" && q.multiple === true,
       }))
       .map((q) => (q.kind === "choice" && q.options.length < 2 ? { ...q, kind: "text" as const } : q))
       .slice(0, 3);

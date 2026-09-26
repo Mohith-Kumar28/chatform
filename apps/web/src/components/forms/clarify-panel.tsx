@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Sparkles } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,6 +33,8 @@ export interface ClarifyQuestion {
   why: string;
   kind: "choice" | "text";
   options: string[];
+  /** A choice where several options can apply. Absent on older responses. */
+  multiple?: boolean;
 }
 
 export interface ClarifyAnswer {
@@ -55,6 +57,8 @@ export function ClarifyPanel({
   busy: boolean;
 }) {
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  // Picks for a multi-select choice, kept as a list and joined on submit.
+  const [picks, setPicks] = useState<Record<number, string[]>>({});
   const firstBox = useRef<HTMLTextAreaElement>(null);
 
   // The first text answer takes focus, so a keyboard-first author can answer
@@ -65,10 +69,16 @@ export function ClarifyPanel({
   }, [questions]);
 
   const set = (i: number, v: string) => setAnswers((prev) => ({ ...prev, [i]: v }));
-  const answered = Object.values(answers).filter((v) => v.trim()).length;
+  const toggle = (i: number, option: string) =>
+    setPicks((prev) => {
+      const had = prev[i] ?? [];
+      return { ...prev, [i]: had.includes(option) ? had.filter((o) => o !== option) : [...had, option] };
+    });
+  const answerFor = (q: ClarifyQuestion, i: number) =>
+    q.kind === "choice" && q.multiple ? (picks[i] ?? []).join(", ") : (answers[i] ?? "");
+  const answered = questions.filter((q, i) => answerFor(q, i).trim()).length;
 
-  const submit = () =>
-    onSubmit(questions.map((q, i) => ({ question: q.question, answer: answers[i] ?? "" })));
+  const submit = () => onSubmit(questions.map((q, i) => ({ question: q.question, answer: answerFor(q, i) })));
 
   // Enter builds, Shift+Enter skips — the two things this screen is for, on the
   // keys an author already has a finger on. Anywhere a key means something else
@@ -131,6 +141,9 @@ export function ClarifyPanel({
           >
             <div>
               <p className="text-foreground text-sm font-medium">{q.question}</p>
+              {q.kind === "choice" && q.multiple ? (
+                <p className="text-muted-foreground mt-0.5 text-xs">Pick any that apply.</p>
+              ) : null}
               {q.why.trim() ? (
                 <p className="text-muted-foreground mt-0.5 text-xs">{q.why}</p>
               ) : null}
@@ -139,21 +152,25 @@ export function ClarifyPanel({
             {q.kind === "choice" ? (
               <div className="flex flex-wrap gap-2">
                 {q.options.map((option) => {
-                  const picked = answers[i] === option;
+                  const picked = q.multiple ? (picks[i] ?? []).includes(option) : answers[i] === option;
                   return (
                     <button
                       key={option}
                       type="button"
-                      onClick={() => set(i, picked ? "" : option)}
+                      onClick={() => (q.multiple ? toggle(i, option) : set(i, picked ? "" : option))}
                       aria-pressed={picked}
                       className={cn(
-                        "rounded-full border px-3 py-1.5 text-sm transition-colors",
+                        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
                         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
+                        // Picked is an outline and a tint, not a fill: a filled
+                        // chip read as a button that had been pressed to act,
+                        // right beside "Build it", which is one.
                         picked
-                          ? "border-primary bg-primary text-primary-foreground"
+                          ? "border-primary bg-primary/10 text-foreground"
                           : "border-border hover:border-foreground/30 hover:bg-muted text-foreground",
                       )}
                     >
+                      {picked && <Check className="text-primary size-3.5" strokeWidth={2.5} />}
                       {option}
                     </button>
                   );

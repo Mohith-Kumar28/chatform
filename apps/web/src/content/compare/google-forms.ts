@@ -30,7 +30,7 @@ export default defineComparison({
     {
       title: "It answers questions back",
       body:
-        "On Pro, up to 50 knowledge sources it can quote mid-form without losing its place. A Google Form that raises a question in the respondent's mind has nowhere to put it except abandonment.",
+        "Up to 50 knowledge sources on Pro (3 on Free) it can quote mid-form without losing its place. A Google Form that raises a question in the respondent's mind has nowhere to put it except abandonment.",
     },
     {
       title: "Branching that is checked before publish",

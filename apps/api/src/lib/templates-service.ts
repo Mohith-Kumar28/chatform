@@ -10,6 +10,7 @@
 import { FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { enqueueMail } from "./mail.js";
+import { withOwnerNotification } from "./owner-notification.js";
 
 export interface TemplateRow {
   slug: string;
@@ -113,6 +114,7 @@ export async function createFormFromTemplate(
 
   const parsed = FormDoc.safeParse(JSON.parse(row.schema_json));
   if (!parsed.success) return "stale";
+  const doc = await withOwnerNotification(env.DB, opts.userId, parsed.data);
 
   const id = `frm_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const outSlug = opts.formSlug(row.title);
@@ -129,7 +131,7 @@ export async function createFormFromTemplate(
       opts.userId,
       row.title,
       outSlug,
-      JSON.stringify(parsed.data),
+      JSON.stringify(doc),
       crypto.randomUUID().slice(0, 16),
       now,
       now,

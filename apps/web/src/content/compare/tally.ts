@@ -30,7 +30,7 @@ export default defineComparison({
     {
       title: "It answers the respondent's questions",
       body:
-        "On Pro, give it up to 50 knowledge sources — documents, pages or notes — and it quotes you, mid-form, then carries on exactly where it was. The state machine still owns the flow, so nothing gets skipped or reordered while it is answering.",
+        "Give it up to 50 knowledge sources on Pro (3 on Free) — documents, pages or notes — and it quotes you, mid-form, then carries on exactly where it was. The state machine still owns the flow, so nothing gets skipped or reordered while it is answering.",
     },
     {
       title: "Deeper logic, checked before you publish",

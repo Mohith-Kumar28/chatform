@@ -13,6 +13,7 @@ import { LockedControl } from "@/components/billing/gate";
 import { useClientValue } from "@/hooks/use-client-value";
 import { assetUrl, uploadAsset } from "@/lib/assets";
 import { cn } from "@/lib/utils";
+import { useBuilderStore } from "@/stores/builder-store";
 import { useBufferedValue } from "@/hooks/use-buffered-value";
 
 /**
@@ -49,6 +50,10 @@ export function LinkSettings({
   onChange: (next: FormDoc["settings"]) => void;
 }) {
   const meta = settings.meta;
+  // The brand logo stands in for the favicon until one is uploaded, the same
+  // fallback `/f/[slug]` uses, so the tab wears the form's brand by default.
+  const logoUrl = useBuilderStore((s) => s.doc?.theme.logoUrl ?? null);
+  const defaultFavicon = logoUrl ?? "/icon.svg";
   const patchMeta = (p: Partial<FormDoc["settings"]["meta"]>) =>
     onChange({ ...settings, meta: { ...meta, ...p } });
 
@@ -123,7 +128,7 @@ export function LinkSettings({
             label="Favicon"
             hint="Square, 60×60"
             assetKey={meta.faviconKey}
-            fallbackUrl="/icon.svg"
+            fallbackUrl={defaultFavicon}
             aspect="size-14"
             accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/webp"
             onChange={(key) => patchMeta({ faviconKey: key })}
@@ -147,7 +152,7 @@ export function LinkSettings({
         title={title}
         description={description}
         imageUrl={assetUrl(meta.ogImageKey) ?? defaultImageUrl}
-        faviconUrl={assetUrl(meta.faviconKey) ?? "/icon.svg"}
+        faviconUrl={assetUrl(meta.faviconKey) ?? defaultFavicon}
         branded={!meta.ogImageKey}
       />
     </div>

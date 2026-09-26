@@ -160,7 +160,7 @@ export default function AiFormBuilderPage() {
             },
             {
               term: "Answers the respondent's questions (Pro)",
-              def: `Give it your documents, pages or notes — up to ${pro.knowledge_sources_count} knowledge sources on Pro — and it answers mid-form, quoting you, then returns to the question it was on.`,
+              def: `Give it your documents, pages or notes — 3 knowledge sources on Free, up to ${pro.knowledge_sources_count} on Pro — and it answers mid-form, quoting you, then returns to the question it was on.`,
             },
             {
               term: "Accepts answers however they are typed",

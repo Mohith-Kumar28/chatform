@@ -6,8 +6,6 @@ import { toast } from "sonner";
 import type { ThemeDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Label } from "@/components/ui/label";
-import { BufferedInput } from "@/components/ui/buffered-input";
 import { uploadAsset } from "@/lib/assets";
 import {
   hueDistance,
@@ -33,11 +31,12 @@ const PALETTE_KEYS = [
 ] as const satisfies readonly (keyof ThemeDoc)[];
 
 /**
- * Optional brand logo and name.
+ * Optional brand logo.
  *
- * Both are opt-in — a form with neither still looks finished, falling back to
- * the form's initial and title. The logo replaces the letter avatar in the chat
- * header and appears on the completion screen; the name sits under the agent's.
+ * Opt-in: a form without one still looks finished, falling back to the
+ * chatform mark. The logo replaces that mark in the chat header and appears on
+ * the completion screen. The name beside it is the form's own title, edited in
+ * `ThemePanel`.
  *
  * Uploading a logo also dresses the form in it: the logo's colours are read
  * from the file in the browser, the brand colour becomes the accent, and the
@@ -104,13 +103,18 @@ export function BrandField({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3">
+      {/*
+        The whole row is the upload target, drawn as a drop zone, because a
+        bare 48px tile beside a text field read as decoration: nobody could
+        tell a logo went there.
+      */}
+      <div className="flex items-center gap-3 rounded-xl border border-dashed p-3">
         <button
           type="button"
           disabled={busy}
           onClick={() => inputRef.current?.click()}
           aria-label={theme.logoUrl ? "Replace logo" : "Upload logo"}
-          className="bg-muted/60 hover:bg-muted grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl transition-colors disabled:opacity-50"
+          className="bg-muted/60 hover:bg-muted grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg transition-colors disabled:opacity-50"
         >
           {busy ? (
             <Loader2 className="size-4 animate-spin opacity-60" />
@@ -118,32 +122,33 @@ export function BrandField({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={theme.logoUrl} alt="" className="size-full object-contain" />
           ) : (
-            <ImagePlus className="size-4 opacity-50" />
+            <ImagePlus className="size-5 opacity-60" />
           )}
         </button>
 
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <Label htmlFor="brand-name">Name</Label>
-          <BufferedInput
-            id="brand-name"
-            value={theme.brandName ?? ""}
-            maxLength={60}
-            placeholder="Optional"
-            onCommit={(v) => onChange({ brandName: v || undefined })}
-          />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">{theme.logoUrl ? "Your logo" : "Upload your logo"}</p>
+          <p className="text-muted-foreground text-xs">
+            {theme.logoUrl ? "Shown at the top of your form." : "PNG, JPG or WebP. We match the colours to it."}
+          </p>
         </div>
 
-        {theme.logoUrl && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Remove logo"
-            className="hover:text-destructive mt-5 shrink-0"
-            onClick={() => onChange({ logoUrl: null, logoKey: null })}
-          >
-            <Trash2 className="size-3.5" />
+        <div className="flex shrink-0 items-center gap-1">
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => inputRef.current?.click()}>
+            {theme.logoUrl ? "Replace" : "Upload"}
           </Button>
-        )}
+          {theme.logoUrl && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Remove logo"
+              className="hover:text-destructive"
+              onClick={() => onChange({ logoUrl: null, logoKey: null })}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {theme.logoUrl && swatches && swatches.length > 0 && (

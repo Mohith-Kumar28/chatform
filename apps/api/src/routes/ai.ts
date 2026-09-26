@@ -36,6 +36,7 @@ import { buildEditContext, buildEditTools, type EditOutcome } from "../lib/edit-
 import { extractUrls, readSites } from "../lib/research.js";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
 import { enqueueMail } from "../lib/mail.js";
+import { withOwnerNotification } from "../lib/owner-notification.js";
 
 export const aiRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
@@ -399,6 +400,7 @@ aiRouter.post(
                     why: z.string(),
                     kind: z.enum(["choice", "text"]),
                     options: z.array(z.string()),
+                    multiple: z.boolean(),
                   }),
                 ),
               }),
@@ -612,7 +614,7 @@ aiRouter.post(
           `INSERT INTO forms (id, organization_id, workspace_id, created_by, title, slug, status, working_schema, fingerprint_salt, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
         )
-          .bind(id, ws.orgId, ws.wsId, userId, title, formSlug(title), JSON.stringify(doc), crypto.randomUUID().slice(0, 16), now, now)
+          .bind(id, ws.orgId, ws.wsId, userId, title, formSlug(title), JSON.stringify(await withOwnerNotification(c.env.DB, userId, doc)), crypto.randomUUID().slice(0, 16), now, now)
           .run();
         await enqueueMail(c.env, { kind: "admin_new_form", formId: id, source: "ai" });
         await stage("saving", "done");

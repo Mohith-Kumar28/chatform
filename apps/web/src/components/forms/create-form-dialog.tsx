@@ -37,6 +37,7 @@ import {
   flushStagedKnowledge,
   type StagedItem,
 } from "@/components/knowledge/staged-knowledge";
+import { useEntitlements } from "@/hooks/use-entitlements";
 
 /**
  * Every way into a new form, on one screen — but not three equal ways.
@@ -63,11 +64,15 @@ const PROMPT_MAX = 2000;
  * difference between "acme.com" in the brief and "https://acme.com/" typed
  * into the link field.
  */
-function withBriefLinks(staged: StagedItem[], urls: string[]): StagedItem[] {
+function withBriefLinks(staged: StagedItem[], urls: string[], cap: number | null): StagedItem[] {
   const key = (u: string) => u.trim().replace(/\/+$/, "").toLowerCase();
   const have = new Set(staged.flatMap((i) => (i.kind === "link" ? [key(i.url)] : [])));
+  // Links nobody asked for must never be the thing that opens a paywall, so
+  // they only fill the room the plan has left after what the author staged.
+  const room = cap === null ? Infinity : Math.max(0, cap - staged.length);
   const added = urls
     .filter((u) => !have.has(key(u)))
+    .slice(0, room)
     .map((url) => ({ kind: "link" as const, id: crypto.randomUUID().slice(0, 8), url }));
   return [...staged, ...added];
 }
@@ -83,6 +88,7 @@ export function CreateFormDialog({
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const generation = useFormGeneration();
+  const { limit } = useEntitlements();
 
   const [prompt, setPrompt] = useState("");
   /**
@@ -196,7 +202,7 @@ export function CreateFormDialog({
         //
         // Any site named in the brief goes in too, so the agent can already
         // answer questions about it by the time the author opens the builder.
-        const knowledge = withBriefLinks(staged, result.urls ?? []);
+        const knowledge = withBriefLinks(staged, result.urls ?? [], limit("knowledge_sources_count"));
         if (knowledge.length > 0) {
           void flushStagedKnowledge(result.formId, knowledge);
           setStaged([]);

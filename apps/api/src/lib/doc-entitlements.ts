@@ -46,7 +46,7 @@ export interface StrippedSetting {
   feature: FeatureKey;
   /** What the user called it, for the notice the builder renders. */
   label: string;
-  requiredPlan: "pro" | "business";
+  requiredPlan: "free" | "pro" | "business";
 }
 
 export interface StripResult {

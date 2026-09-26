@@ -2,7 +2,9 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { FormDoc, ThemeDoc } from "@repo/form-schema";
+import { Check } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { BrandField } from "./brand-field";
@@ -27,7 +29,7 @@ type Theme = FormDoc["theme"];
  * other four.
  */
 const COLOR_FIELDS: { key: keyof Theme; label: string }[] = [
-  { key: "accent", label: "Accent" },
+  { key: "accent", label: "Primary colour" },
   { key: "background", label: "Background" },
   { key: "text", label: "Text" },
   { key: "botBubble", label: "Agent bubble" },
@@ -53,16 +55,13 @@ const COLOR_FIELDS: { key: keyof Theme; label: string }[] = [
  */
 const PRESETS: { name: string; theme: Partial<Theme> }[] = [
   {
+    // The schema's defaults, so a new form opens with this one selected.
     name: "Chatform",
-    theme: { background: "#faf7f2", accent: "#FD6F29", botBubble: "#ffffff", userBubble: "#C9AEEE", text: "#1c1917" },
+    theme: { background: "#faf7f2", accent: "#FD6F29", botBubble: "#ffffff", userBubble: "#FFCBAA", text: "#1c1917" },
   },
   {
     name: "Violet",
     theme: { background: "#f8f5fd", accent: "#6D3FC7", botBubble: "#ffffff", userBubble: "#C9AEEE", text: "#1e1b26" },
-  },
-  {
-    name: "Warm",
-    theme: { background: "#faf7f2", accent: "#FD6F29", botBubble: "#ffffff", userBubble: "#FFCBAA", text: "#1c1917" },
   },
   {
     name: "Ocean",
@@ -89,10 +88,18 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function ThemePanel({
   theme,
+  title,
+  onTitleChange,
   seed,
   onChange,
 }: {
   theme: Theme;
+  /**
+   * The form's title, shown and edited here as its name. It is the same
+   * `doc.title` as the top bar's, not a separate brand name.
+   */
+  title?: string;
+  onTitleChange?: (title: string) => void;
   /**
    * The form's public slug. It seeds the `Auto` background pattern, so the
    * picker can show the tile this particular form would land on rather than a
@@ -130,6 +137,21 @@ export function ThemePanel({
   return (
     <div className="w-full space-y-6">
       <Section title="Brand">
+        {onTitleChange && (
+          <div className="space-y-1.5">
+            <Label htmlFor="brand-name">Form name</Label>
+            <BufferedInput
+              id="brand-name"
+              value={title ?? ""}
+              maxLength={200}
+              onCommit={(v) => {
+                // Same rule as the name in the top bar: trimmed, never empty.
+                const next = v.trim().slice(0, 200);
+                if (next && next !== title) onTitleChange(next);
+              }}
+            />
+          </div>
+        )}
         <LockedControl feature="brand_logo">
           <BrandField theme={theme} onChange={patch} />
         </LockedControl>
@@ -137,12 +159,22 @@ export function ThemePanel({
 
       <Section title="Presets">
         <div className="grid grid-cols-2 gap-2">
-          {PRESETS.map((p) => (
+          {PRESETS.map((p) => {
+            // Selected while every colour it sets still matches, so a preset
+            // tweaked by hand stops claiming to be the one in use.
+            const active = (Object.keys(p.theme) as (keyof Theme)[]).every(
+              (k) => String(theme[k]).toLowerCase() === String(p.theme[k]).toLowerCase(),
+            );
+            return (
             <button
               key={p.name}
               type="button"
+              aria-pressed={active}
               onClick={() => patch(p.theme)}
-              className="hover:bg-muted/60 flex items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors"
+              className={cn(
+                "flex items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-colors",
+                active ? "border-primary bg-primary/5" : "hover:bg-muted/60 border-transparent",
+              )}
             >
               <span className="flex gap-1">
                 <span className="size-4 rounded-full" style={{ background: p.theme.background, boxShadow: "inset 0 0 0 1px var(--border)" }} />
@@ -150,15 +182,17 @@ export function ThemePanel({
                 <span className="size-4 rounded-full" style={{ background: p.theme.userBubble }} />
               </span>
               <span className="text-xs font-medium">{p.name}</span>
+              {active && <Check className="text-primary ml-auto size-3.5" />}
             </button>
-          ))}
+            );
+          })}
         </div>
       </Section>
 
       <Section title="Colours">
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor="theme-linked" className="text-xs font-normal">
-            Match the other colours to the accent
+            Match the other colours to the primary colour
           </Label>
           <Switch id="theme-linked" size="sm" checked={linked} onCheckedChange={setLinked} />
         </div>

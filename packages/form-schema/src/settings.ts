@@ -510,10 +510,11 @@ export type SettingsInput = z.input<typeof SettingsDoc>;
  * to the product's to look like a mistake rather than a choice. `#FD6F29` is
  * the logo, exactly.
  *
- * The respondent's bubble is the violet plate, so a default form carries both
- * halves of the mark in the one place a respondent actually looks. Every value
- * is still a `.default()`, so this changes new forms only; a saved theme has
- * its own hexes and does not move.
+ * The respondent's bubble is a warm peach tint of that orange: the "Chatform"
+ * preset in the Design panel. The violet plate below was the default until
+ * authors read it as a colour nobody had chosen next to an orange button.
+ * Every value is still a `.default()`, so this changes new forms only; a saved
+ * theme has its own hexes and does not move.
  *
  * That violet used to be a mid-tone `#9D6EE4`. Mid-tone is the one lightness a
  * fill behind body copy cannot be: no ink clears 7:1 on it, dark or light, so
@@ -526,8 +527,8 @@ export type SettingsInput = z.input<typeof SettingsDoc>;
  * lightening the one thing you press only makes it easier to miss.
  */
 const BRAND_ORANGE = "#FD6F29";
-/** The lifted violet plate — a tint to read on, not the logo's `#9769DC` fill. */
-const BRAND_VIOLET = "#C9AEEE";
+/** The peach tint the respondent's bubble defaults to, dark ink at well over 7:1. */
+const BRAND_PEACH = "#FFCBAA";
 
 /**
  * The ink `accentText` and `userBubbleText` default to.
@@ -567,7 +568,7 @@ export const ThemeDoc = z.object({
   accent: themeColor(BRAND_ORANGE).default(BRAND_ORANGE),
   accentText: themeColor(BRAND_INK).default(BRAND_INK),
   botBubble: themeColor("#ffffff").default("#ffffff"),
-  userBubble: themeColor(BRAND_VIOLET).default(BRAND_VIOLET),
+  userBubble: themeColor(BRAND_PEACH).default(BRAND_PEACH),
   userBubbleText: themeColor(BRAND_INK).default(BRAND_INK),
   radius: z.enum(["none", "sm", "md", "lg", "full"]).default("lg"),
   fontHeading: boundedString(100).default("Bricolage Grotesque"),

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { withOwnerNotification } from "../../lib/owner-notification.js";
 import { AnalyticsView, DeletedView, DocSavedView, FollowUpStatsView, FormReadView, FormSummaryView, OkView, Paged, PublishedView } from "../../lib/v1-schemas.js";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../../lib/validator.js";
@@ -262,7 +263,7 @@ formsV1Router.post(
       `INSERT INTO forms (id, organization_id, workspace_id, created_by, title, slug, status, working_schema, fingerprint_salt, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
     )
-      .bind(id, orgId, workspace.id, userId, body.title, slug, JSON.stringify(doc), crypto.randomUUID().slice(0, 12), now, now)
+      .bind(id, orgId, workspace.id, userId, body.title, slug, JSON.stringify(await withOwnerNotification(c.env.DB, userId, doc)), crypto.randomUUID().slice(0, 12), now, now)
       .run();
 
     // A form built by a script still has a history, and "created over the API" is the

@@ -337,7 +337,7 @@ export default function ConversationalFormsPage() {
             <li>
               <strong>Give it something to answer questions from.</strong> Prices, opening hours,
               what happens next. Without it, the respondent&rsquo;s question is a dead end. (In
-              chatform, the knowledge base starts on the Pro plan.)
+              chatform, Free includes 3 knowledge sources and Pro 50.)
             </li>
             <li>
               <strong>Share it and read the drop-off.</strong> Per-question drop-off tells you

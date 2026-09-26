@@ -42,7 +42,17 @@ const MOBILE_TAKEOVER = 520;
 /** `embed.js`: the launcher is ~48px tall plus its own gap. */
 const LAUNCHER_CLEARANCE = 68;
 
-/** `embed.js`'s attention rules, verbatim, so the preview shakes the way a phone will. */
+/** The browser bar and the phone's status bar are both 44px (`top-11`). */
+const CHROME_BAR = 44;
+
+/**
+ * `embed.js`'s attention rules, verbatim, so the preview shakes the way a phone will.
+ *
+ * Then the studio's own two: `.cf-move` carries the launcher and the panel to a
+ * new corner instead of teleporting them, and `.cf-flash` rings the launcher
+ * once after any change to it, so the eye lands on what just moved. Under
+ * reduced motion nothing slides and the ring fades in place.
+ */
 const ATTENTION_CSS = [
   ".cf-attn{overflow:hidden;animation:cf-shake .8s ease-in-out .2s 2,cf-ring 1.6s ease-out .2s 2}",
   ".cf-attn::after{content:'';position:absolute;top:0;bottom:0;left:0;width:50%;pointer-events:none;",
@@ -54,6 +64,16 @@ const ATTENTION_CSS = [
   "@keyframes cf-ring{0%{box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 0 var(--cf-c)}",
   "100%{box-shadow:0 6px 24px rgba(0,0,0,.18),0 0 0 12px transparent}}",
   "@media (prefers-reduced-motion:reduce){.cf-attn{animation:cf-ring 1.6s ease-out .2s 2}.cf-attn::after{display:none}}",
+  ".cf-move{transition:left .5s cubic-bezier(.22,1,.36,1),top .5s cubic-bezier(.22,1,.36,1),",
+  "width .5s cubic-bezier(.22,1,.36,1),height .5s cubic-bezier(.22,1,.36,1)}",
+  ".cf-flash{position:absolute;inset:0;border-radius:9999px;pointer-events:none;",
+  "animation:cf-flash 1s cubic-bezier(.22,1,.36,1) .35s 2 both}",
+  "@keyframes cf-flash{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--cf-c) 60%,transparent)}",
+  "100%{box-shadow:0 0 0 40px color-mix(in srgb,var(--cf-c) 0%,transparent)}}",
+  "@keyframes cf-flash-still{0%,60%{opacity:1}100%{opacity:0}}",
+  "@media (prefers-reduced-motion:reduce){.cf-move{transition:none}",
+  ".cf-flash{box-shadow:0 0 0 8px color-mix(in srgb,var(--cf-c) 45%,transparent);",
+  "animation:cf-flash-still 1.6s ease-out both}}",
 ].join("");
 
 export function EmbedPreview({
@@ -100,6 +120,8 @@ export function EmbedPreview({
     fit.height > 0 ? fit.height / stage.height : 0.5,
   );
 
+  /** The page area under the browser bar or the status bar. */
+  const viewport = { width: stage.width, height: stage.height - CHROME_BAR };
   const vertical = config.position.startsWith("top") ? "top" : "bottom";
   const horizontal = config.position.endsWith("left") ? "left" : "right";
   const hasLauncher = config.launcher;
@@ -107,17 +129,68 @@ export function EmbedPreview({
   const takeover = stage.width <= MOBILE_TAKEOVER;
   // `embed.js`'s `hostCloses()`: a desktop popup closes from the launcher.
   const launcherCloses = config.mode === "popup" && hasLauncher && !takeover;
+  const showLauncher = isOverlay(config.mode) && hasLauncher && (!open || launcherCloses);
 
+  /**
+   * The launcher is placed by `top`/`left` in numbers rather than by
+   * `bottom: 20px; right: 20px`, because a browser cannot animate from `top` to
+   * `bottom`. Switching corners has to visibly travel, or the picture changes
+   * somewhere the eye was not looking. That needs the launcher's own size,
+   * which depends on its text, so it is measured.
+   */
+  const launcherRef = useRef<HTMLDivElement>(null);
+  const [launcherSize, setLauncherSize] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const el = launcherRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      // Layout size, which a CSS `scale` on an ancestor does not touch.
+      const rect = entries[0]?.contentRect;
+      if (rect) setLauncherSize({ width: rect.width, height: rect.height });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [showLauncher]);
+
+  const launcherBox: React.CSSProperties = launcherSize
+    ? {
+        left:
+          horizontal === "left"
+            ? config.offset
+            : viewport.width - config.offset - launcherSize.width,
+        top:
+          vertical === "top"
+            ? config.offset
+            : viewport.height - config.offset - launcherSize.height,
+      }
+    : { [vertical]: config.offset, [horizontal]: config.offset };
+
+  /**
+   * A ring around the launcher after anything about it changes: its corner,
+   * its gap, its text, its icon. Derived during render (React's "adjusting
+   * state when a prop changes"), and the ring is keyed by the count so each
+   * change restarts it.
+   */
+  const signature = [config.position, config.offset, config.label, config.icon, config.launcher].join("|");
+  const [flash, setFlash] = useState({ signature, count: 0 });
+  if (flash.signature !== signature) setFlash({ signature, count: flash.count + 1 });
+
+  const panelWidth = Math.min(config.width, viewport.width - config.offset * 2);
+  const panelHeight = Math.min(config.height, viewport.height - clearance - config.offset);
   const panelBox: React.CSSProperties = takeover
-    ? { inset: 0, borderRadius: 0 }
+    ? { left: 0, top: 0, width: viewport.width, height: viewport.height, borderRadius: 0 }
     : config.mode === "side-tab"
-      ? { top: 0, bottom: 0, [horizontal]: 0, width: Math.min(config.width, stage.width) }
+      ? {
+          top: 0,
+          height: viewport.height,
+          width: Math.min(config.width, viewport.width),
+          left: horizontal === "left" ? 0 : viewport.width - Math.min(config.width, viewport.width),
+        }
       : {
-          [vertical]: clearance,
-          [horizontal]: config.offset,
-          width: Math.min(config.width, stage.width - config.offset * 2),
-          height: config.height,
-          maxHeight: stage.height - clearance - config.offset,
+          left: horizontal === "left" ? config.offset : viewport.width - config.offset - panelWidth,
+          top: vertical === "top" ? clearance : viewport.height - clearance - panelHeight,
+          width: panelWidth,
+          height: panelHeight,
           borderRadius: 16,
         };
 
@@ -141,7 +214,7 @@ export function EmbedPreview({
               inline={
                 config.mode === "inline" ? (
                   <div
-                    className="w-full overflow-hidden rounded-2xl border border-black/10 shadow-sm"
+                    className="w-full overflow-hidden rounded-2xl shadow-[0_12px_48px_rgba(0,0,0,.14)] ring-1 ring-black/10"
                     style={{ height: config.autoHeight ? 620 : config.height }}
                   >
                     <MockConversation
@@ -173,7 +246,7 @@ export function EmbedPreview({
             <>
               {open && (
                 <div
-                  className="absolute overflow-hidden"
+                  className="cf-move absolute overflow-hidden"
                   style={{ ...panelBox, boxShadow: "0 12px 48px rgba(0,0,0,.22)" }}
                 >
                   <MockConversation
@@ -197,53 +270,58 @@ export function EmbedPreview({
                 a phone hides it (`.cf-away`), because there the panel covers
                 that corner and closes from its own header instead.
               */}
-              {launcherCloses && open ? (
-                <button
-                  type="button"
-                  onClick={onToggle}
-                  aria-label="Close the panel"
-                  className={cn(
-                    "absolute grid cursor-pointer place-items-center rounded-full border-0 text-white",
-                    config.label ? "size-12" : "size-14",
-                  )}
-                  style={{
-                    [vertical]: config.offset,
-                    [horizontal]: config.offset,
-                    background: config.color,
-                    boxShadow: "0 6px 24px rgba(0,0,0,.18)",
-                  }}
+              {showLauncher && (
+                <div
+                  ref={launcherRef}
+                  className={cn("absolute", launcherSize && "cf-move")}
+                  style={{ ...launcherBox, ["--cf-c" as string]: config.color }}
                 >
-                  <X className="size-5" strokeWidth={2.5} />
-                </button>
-              ) : !open && hasLauncher && (
-                <button
-                  type="button"
-                  onClick={onToggle}
-                  aria-label="Open the panel"
-                  className={cn(
-                    "absolute inline-flex cursor-pointer items-center gap-2 border-0 text-white",
-                    // `embed.js`'s `.cf-attn`: an automatic open on a phone calls out instead.
-                    device === "mobile" && config.openOn !== "click" && "cf-attn",
-                    config.label
-                      ? "rounded-full px-[18px] py-3"
-                      : "size-14 justify-center rounded-full",
+                  {flash.count > 0 && <span key={flash.count} aria-hidden className="cf-flash" />}
+                  {launcherCloses && open ? (
+                    <button
+                      type="button"
+                      onClick={onToggle}
+                      aria-label="Close the panel"
+                      className={cn(
+                        "relative grid cursor-pointer place-items-center rounded-full border-0 text-white",
+                        config.label ? "size-12" : "size-14",
+                      )}
+                      style={{
+                        background: config.color,
+                        boxShadow: "0 6px 24px rgba(0,0,0,.18)",
+                      }}
+                    >
+                      <X className="size-5" strokeWidth={2.5} />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={onToggle}
+                      aria-label="Open the panel"
+                      className={cn(
+                        "relative inline-flex cursor-pointer items-center gap-2 border-0 whitespace-nowrap text-white",
+                        // `embed.js`'s `.cf-attn`: an automatic open on a phone calls out instead.
+                        device === "mobile" && config.openOn !== "click" && "cf-attn",
+                        config.label
+                          ? "rounded-full px-[18px] py-3"
+                          : "size-14 justify-center rounded-full",
+                      )}
+                      style={{
+                        background: config.color,
+                        boxShadow: "0 6px 24px rgba(0,0,0,.18)",
+                        ["--cf-c" as string]: config.color,
+                        fontSize: 15,
+                        fontWeight: 500,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {config.icon && (
+                        <MessageCircle className="size-[18px] shrink-0" strokeWidth={2} />
+                      )}
+                      {config.label}
+                    </button>
                   )}
-                  style={{
-                    [vertical]: config.offset,
-                    [horizontal]: config.offset,
-                    background: config.color,
-                    boxShadow: "0 6px 24px rgba(0,0,0,.18)",
-                    ["--cf-c" as string]: config.color,
-                    fontSize: 15,
-                    fontWeight: 500,
-                    lineHeight: 1,
-                  }}
-                >
-                  {config.icon && (
-                    <MessageCircle className="size-[18px] shrink-0" strokeWidth={2} />
-                  )}
-                  {config.label}
-                </button>
+                </div>
               )}
             </>
           )}
@@ -258,7 +336,8 @@ export function EmbedPreview({
  *
  * Drawn inside the scaled stage rather than around it, so the whole thing —
  * frame and page — shrinks as one object and the widget keeps its true
- * proportion against the window it is sitting in.
+ * proportion against the window it is sitting in. Kept quiet on purpose: no
+ * traffic-light colours, nothing saturated but the form.
  */
 function Chrome({
   device,
@@ -271,13 +350,11 @@ function Chrome({
 }) {
   if (device === "mobile") {
     return (
-      <div className="relative h-full w-full overflow-hidden rounded-[44px] bg-white ring-[10px] ring-neutral-900">
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex h-11 items-center justify-between px-7 text-[13px] font-semibold text-neutral-800">
+      <div className="bg-background relative h-full w-full overflow-hidden rounded-[44px] ring-[10px] ring-neutral-900">
+        <div className="text-muted-foreground pointer-events-none absolute inset-x-0 top-0 z-20 flex h-11 items-center justify-between px-7 text-[13px] font-semibold">
           <span>9:41</span>
           <span className="absolute left-1/2 h-6 w-28 -translate-x-1/2 rounded-full bg-neutral-900" />
-          <span className="flex items-center gap-1">
-            <span className="h-2.5 w-4 rounded-[3px] border border-neutral-800" />
-          </span>
+          <span className="h-2.5 w-4 rounded-[3px] border border-current" />
         </div>
         <div className="absolute inset-0 top-11">{children}</div>
       </div>
@@ -285,14 +362,14 @@ function Chrome({
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-2xl bg-white ring-1 ring-black/10">
-      <div className="absolute inset-x-0 top-0 z-20 flex h-11 items-center gap-3 border-b border-neutral-200 bg-neutral-100 px-4">
-        <div className="flex gap-1.5">
-          {["#ff5f57", "#febc2e", "#28c840"].map((hex) => (
-            <span key={hex} className="size-3 rounded-full" style={{ background: hex }} />
+    <div className="bg-background ring-border relative h-full w-full overflow-hidden rounded-2xl ring-1">
+      <div className="bg-muted/60 border-border/70 absolute inset-x-0 top-0 z-20 flex h-11 items-center gap-3 border-b px-4">
+        <div className="flex gap-1.5" aria-hidden>
+          {[0, 1, 2].map((i) => (
+            <span key={i} className="bg-muted-foreground/20 size-3 rounded-full" />
           ))}
         </div>
-        <div className="mx-auto flex h-6 w-[380px] items-center justify-center gap-1.5 rounded-md bg-white text-[12px] text-neutral-500 ring-1 ring-black/5">
+        <div className="bg-background text-muted-foreground ring-border/60 mx-auto flex h-6 w-[380px] items-center justify-center gap-1.5 rounded-md text-[12px] ring-1">
           <Lock className="size-3" strokeWidth={2.25} />
           yoursite.com
         </div>
@@ -306,86 +383,59 @@ function Chrome({
 }
 
 /**
- * The page the form is going onto.
+ * The page the form is going onto, as a skeleton.
  *
- * Real type at real sizes rather than grey bars: a wireframe of skeleton blocks
- * reads as a page that has not finished loading, which is the wrong thing to
- * judge a widget's contrast and placement against.
+ * It used to be a made-up marketing site with real headlines, and people read
+ * it: the page competed with the form for attention, and it was not obvious
+ * which part was theirs. Now it is flat, low-contrast blocks in the muted
+ * token, so the form and its button are the only saturated things on screen.
+ * Inline mode drops the form into the page flow where the cards would be.
  */
 function MockPage({ narrow, inline }: { narrow: boolean; inline: React.ReactNode | null }) {
+  const bar = "bg-muted block rounded-full";
   return (
-    <div className="min-h-full w-full bg-white text-neutral-900">
+    <div className="bg-background min-h-full w-full" aria-hidden={inline ? undefined : true}>
       <header
         className={cn(
-          "flex items-center border-b border-neutral-200/80",
-          narrow ? "h-14 gap-3 px-5" : "h-16 gap-8 px-12",
+          "border-border/50 flex items-center border-b",
+          narrow ? "h-14 gap-3 px-5" : "h-16 gap-10 px-12",
         )}
       >
-        <div className="flex items-center gap-2">
-          <span className="grid size-7 place-items-center rounded-lg bg-neutral-900 text-[13px] font-bold text-white">
-            N
-          </span>
-          <span className="text-[15px] font-semibold tracking-tight">Northwind</span>
-        </div>
+        <span className="bg-muted block size-7 rounded-lg" />
         {!narrow && (
-          <>
-            <nav className="flex gap-6 text-[14px] text-neutral-500">
-              <span>Product</span>
-              <span>Customers</span>
-              <span>Pricing</span>
-              <span>Docs</span>
-            </nav>
-            <span className="ml-auto rounded-lg bg-neutral-900 px-3.5 py-2 text-[13px] font-medium text-white">
-              Get started
-            </span>
-          </>
+          <div className="flex gap-6">
+            {[64, 80, 56, 48].map((w) => (
+              <span key={w} className={cn(bar, "h-2.5")} style={{ width: w }} />
+            ))}
+          </div>
         )}
+        <span className={cn("bg-muted ml-auto block rounded-lg", narrow ? "size-7" : "h-9 w-28")} />
       </header>
 
       <div className={cn("mx-auto w-full", narrow ? "max-w-none px-5 py-8" : "max-w-[1040px] px-12 py-14")}>
-        <p className="text-[13px] font-medium tracking-wide text-neutral-400 uppercase">
-          Customer research
-        </p>
-        <h1
-          className={cn(
-            "mt-3 font-semibold tracking-[-0.02em] text-neutral-900",
-            narrow ? "text-[30px] leading-[1.15]" : "text-[46px] leading-[1.08]",
-          )}
-        >
-          Everything your team ships,
-          <br />
-          in one place.
-        </h1>
-        <p
-          className={cn(
-            "mt-4 max-w-[54ch] text-neutral-500",
-            narrow ? "text-[15px] leading-relaxed" : "text-[17px] leading-[1.6]",
-          )}
-        >
-          Plans, docs and decisions, together — so the answer to “why did we do it this way?” is
-          never somebody&apos;s memory.
-        </p>
+        <span className={cn(bar, "h-3 w-28")} />
+        <span className={cn(bar, "mt-5", narrow ? "h-7 w-[85%]" : "h-10 w-[62%]")} />
+        <span className={cn(bar, "mt-3", narrow ? "h-7 w-[60%]" : "h-10 w-[40%]")} />
+        <span className={cn(bar, "mt-6 h-3", narrow ? "w-full" : "w-[52%]")} />
+        <span className={cn(bar, "mt-2.5 h-3", narrow ? "w-[80%]" : "w-[44%]")} />
 
         {inline ? (
           <div className="mt-10">{inline}</div>
         ) : (
           <div className={cn("mt-12 grid gap-5", narrow ? "grid-cols-1" : "grid-cols-3")}>
-            {[
-              ["Roadmaps", "Plan the quarter where the work already lives."],
-              ["Docs", "Write it down once and link it everywhere."],
-              ["Insights", "See what changed, and who it changed for."],
-            ].map(([title, blurb]) => (
-              <div key={title} className="rounded-2xl border border-neutral-200/80 p-5">
-                <span className="block size-8 rounded-lg bg-neutral-100" />
-                <p className="mt-4 text-[15px] font-semibold">{title}</p>
-                <p className="mt-1.5 text-[13.5px] leading-relaxed text-neutral-500">{blurb}</p>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="border-border/50 rounded-2xl border p-5">
+                <span className="bg-muted block size-8 rounded-lg" />
+                <span className={cn(bar, "mt-5 h-3.5 w-1/2")} />
+                <span className={cn(bar, "mt-3 h-2.5 w-[90%]")} />
+                <span className={cn(bar, "mt-2 h-2.5 w-[70%]")} />
               </div>
             ))}
           </div>
         )}
 
-        <div className="mt-14 border-t border-neutral-200/80 pt-6 text-[13px] text-neutral-400">
-          © Northwind, Inc.
+        <div className="border-border/50 mt-14 border-t pt-6">
+          <span className={cn(bar, "h-2.5 w-32")} />
         </div>
       </div>
     </div>
@@ -448,12 +498,7 @@ function MockConversation({
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">
-              {title}
-              {theme.brandName && (
-                <span className="ml-1.5 font-normal opacity-50">· {theme.brandName}</span>
-              )}
-            </p>
+            <p className="truncate text-sm font-semibold">{title}</p>
             {/* The runtime's second line: progress, then "Start over", so the
                 title keeps the whole first line. */}
             <div className="flex items-center gap-1.5 text-xs">

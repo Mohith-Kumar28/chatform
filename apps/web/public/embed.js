@@ -570,6 +570,8 @@
   }
 
   function open() {
+    // Opened by hand counts too: they have seen it, so nothing opens it for them again.
+    markPrompted();
     if (destroyed || isOpen) return;
     if (launcher) launcher.classList.remove("cf-attn");
     if (!frame && panel) panel.appendChild(buildFrame());
@@ -725,6 +727,33 @@
   }
 
   /**
+   * Whether the form has already opened itself (or shaken the launcher) for
+   * this visitor, on this site.
+   *
+   * An automatic open is a one-time invitation. Without this it fired again on
+   * every page of the site and every visit, so a reader who closed it once got
+   * it back on the next scroll. Kept in the host page's storage, like
+   * `submittedKey`, because this script runs on the host page, not in the
+   * frame: one key covers every page of the site with no network call. A
+   * click on the launcher still always opens it.
+   */
+  var promptedKey = "chatform:prompted:" + slug;
+  function markPrompted() {
+    try {
+      window.localStorage.setItem(promptedKey, String(Date.now()));
+    } catch (e) {
+      /* storage blocked: it prompts once per page view, as before */
+    }
+  }
+  function hasPrompted() {
+    try {
+      return !!window.localStorage.getItem(promptedKey);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
    * An open the visitor did not ask for: on load, on exit intent, on scroll.
    *
    * On a phone the panel is the whole screen, and a sheet that covers the
@@ -735,12 +764,15 @@
    */
   function autoOpen() {
     // They may have opened it from a button and answered on this visit.
-    if (hasSubmitted() || isOpen) return;
+    if (hasSubmitted() || hasPrompted() || isOpen) return;
     if (narrow && narrow.matches && mode !== "fullpage") {
       if (launcher) attention();
       return;
     }
-    askFirst(open);
+    askFirst(function () {
+      markPrompted();
+      open();
+    });
   }
 
   /**
@@ -790,9 +822,10 @@
 
   var attended = false;
   function attention() {
-    // Once per page view.
+    // Once per visitor on this site; see `promptedKey`.
     if (!launcher || attended) return;
     attended = true;
+    markPrompted();
     launcher.classList.add("cf-attn");
     // Past the last shine: take the class off so nothing lingers.
     setTimeout(function () {
@@ -802,7 +835,7 @@
   }
 
   function setupTriggers() {
-    if (hasSubmitted()) return;
+    if (hasSubmitted() || hasPrompted()) return;
     if (openOn === "load") {
       autoOpen();
       return;

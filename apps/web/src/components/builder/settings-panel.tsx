@@ -466,7 +466,7 @@ export function SettingsPanel({
           <SettingGroup>
           <SettingRow
             label="Notification emails"
-            description="Get an email for every response."
+            description="We email you each new response. Leave it empty to stop."
             issuePath="settings.onComplete.notificationEmails"
           >
             <BufferedInput
@@ -525,8 +525,8 @@ export function SettingsPanel({
       {section === "followup" && (
         <SettingSection title="Follow-ups">
           <p className="text-muted-foreground -mt-1 text-sm">
-            Email people who started your form and left, with a link back to where they
-            stopped.
+            Remind people who didn&apos;t finish. They get an email with a button to pick up
+            where they left off.
           </p>
           <LockedControl feature="followup_email">
             <FollowUpPanel

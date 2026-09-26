@@ -52,15 +52,16 @@ export async function generateMetadata({ params }: PageProps<"/f/[slug]">): Prom
   if (config.meta?.ogDescription) ogParams.set("description", config.meta.ogDescription);
   if (config.closeAt) ogParams.set("closeAt", config.closeAt);
   const ogImage = config.meta?.ogImageUrl ?? `${SITE_ORIGIN}/og/form?${ogParams}`;
+  const favicon = config.meta?.faviconUrl ?? config.theme.logoUrl ?? undefined;
 
   return {
     title,
     description,
     robots: config.meta?.noIndex ? { index: false, follow: false } : undefined,
     // A form's own favicon when it has one, so a hosted form in a tab is the
-    // sender's brand rather than ours. Absent, Next falls back to the app's own
-    // icon, which is the chatform mark.
-    icons: config.meta?.faviconUrl ? { icon: config.meta.faviconUrl } : undefined,
+    // sender's brand rather than ours; failing that, its brand logo. With
+    // neither, Next falls back to the app's own icon, the chatform mark.
+    icons: favicon ? { icon: favicon } : undefined,
     openGraph: {
       title,
       description,

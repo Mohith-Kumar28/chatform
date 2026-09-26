@@ -223,8 +223,27 @@ export function ChatSurface({
    * the observer already owns it; this owns the arrival of a new bubble.
    */
   const turnCount = chat.messages.length;
+  /**
+   * Before the first answer the thread is read from the top.
+   *
+   * The opening is the welcome, often several paragraphs, with the first
+   * question under it. Following the bottom there cropped the start of the
+   * welcome on a phone or in a popup, so the first thing anyone saw was the
+   * middle of a sentence. Until they answer, the thread stays at its top; the
+   * first answer hands the scroll back to the bottom-following below.
+   */
+  const opening = !chat.messages.some((m) => m.role === "user");
+  const openingRef = useRef(opening);
   useEffect(() => {
-    if (!pinned) return;
+    const was = openingRef.current;
+    openingRef.current = opening;
+    const el = scrollRef.current;
+    if (!was || opening || !el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    setPinned(true);
+  }, [opening]);
+  useEffect(() => {
+    if (!pinned || openingRef.current) return;
     const el = scrollRef.current;
     if (!el) return;
     // Drive the container directly. scrollIntoView targeted the window and put
@@ -247,7 +266,7 @@ export function ChatSurface({
     const content = contentRef.current;
     if (!el || !content || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(() => {
-      if (!pinnedRef.current) return;
+      if (!pinnedRef.current || openingRef.current) return;
       // Instant, not smooth. A control growing under the cursor is the same
       // content reflowing rather than a new turn arriving, and a smooth scroll
       // that is restarted by the next resize tick lands short — which left the
@@ -267,7 +286,7 @@ export function ChatSurface({
    * one frame.
    */
   const onViewportChange = useCallback(() => {
-    if (!pinnedRef.current) return;
+    if (!pinnedRef.current || openingRef.current) return;
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, []);
@@ -1047,7 +1066,6 @@ function ChatHeader({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">
             {title}
-            {brandName && <span className="ml-1.5 font-normal opacity-50">· {brandName}</span>}
           </p>
           <div className="flex min-w-0 items-center gap-1.5 text-xs">
             {status === "reconnecting" ? (

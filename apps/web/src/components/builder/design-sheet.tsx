@@ -40,6 +40,12 @@ export function DesignSheet({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
           <ThemePanel
             theme={doc.theme}
+            title={doc.title}
+            onTitleChange={(title) =>
+              edit((d) => {
+                d.title = title;
+              }, "doc:title")
+            }
             seed={slug}
             onChange={(theme, coalesceKey) =>
               edit((d) => {

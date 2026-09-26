@@ -32,8 +32,8 @@ describe("the clarify schema", () => {
   it("accepts the two shapes the author can answer in", () => {
     const ok = {
       questions: [
-        { question: "Which plans?", why: "so I know where to branch", kind: "choice" as const, options: ["Free", "Pro"] },
-        { question: "What's your UPI id?", why: "", kind: "text" as const, options: [] },
+        { question: "Which plans?", why: "so I know where to branch", kind: "choice" as const, options: ["Free", "Pro"], multiple: true },
+        { question: "What's your UPI id?", why: "", kind: "text" as const, options: [], multiple: false },
       ],
     };
     expect(ClarifyQuestions.safeParse(ok).success).toBe(true);
