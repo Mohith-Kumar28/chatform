@@ -119,6 +119,15 @@ describe("auto layout", () => {
     for (const [id, box] of at) if (!id.startsWith("end_")) expect(box.y).toBeLessThan(bottom);
   });
 
+  it("puts an ending nothing leads to on the bottom row too, not beside the welcome", () => {
+    const base = hackathon();
+    const doc = FormDoc.parse({ ...base, endings: [...base.endings, ending("end_orphan")] });
+    const { at } = draw(doc);
+    const bottom = Math.max(...[...at.values()].map((b) => b.y));
+    expect(at.get("end_orphan")!.y).toBe(bottom);
+    expectNoOverlaps(at);
+  });
+
   it("keeps arms in order and apart when each ends at its own ending", () => {
     const { at } = draw(intake());
     const heads = ["q_idea", "q_traction", "q_revenue"].map((ref) => at.get(ref)!.x);

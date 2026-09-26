@@ -141,6 +141,16 @@ export function layoutGraph(
     const minlen = Math.max(1, (rank.get(edge.target) ?? 1) - (rank.get(edge.source) ?? 0));
     g.setEdge(edge.source, edge.target, { minlen });
   }
+  // An ending nothing leads to yet has no edge for `minlen` to act on, so dagre
+  // ranks it as its own little graph and puts it on the TOP row, beside the
+  // welcome. Tie it to the start with an edge that only sets its row.
+  const start = nodes.find((n) => n.type === "start")?.id ?? nodes[0]?.id;
+  const reached = new Set(forward.map((e) => e.target));
+  for (const node of nodes) {
+    if (node.type !== "ending" || reached.has(node.id) || !start || start === node.id) continue;
+    const minlen = Math.max(1, (rank.get(node.id) ?? 1) - (rank.get(start) ?? 0));
+    g.setEdge(start, node.id, { minlen, weight: 0 });
+  }
 
   dagre.layout(g, { constraints: armOrderConstraints(nodes, forward, rank) });
 
