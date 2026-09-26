@@ -10,7 +10,7 @@ import {
   OrgRoleChoice,
   refreshAccess,
   WorkspaceGrantsPicker,
-  WorkspaceRoleHelp,
+  grantsSentence,
   type Grants,
   type WorkspaceLite
 } from "@/components/settings/access/access-shared"
@@ -116,6 +116,7 @@ export function InviteMemberDialog({
   const atSeatLimit = seatLimit !== null && seatsUsed >= seatLimit
 
   const emailValid = EMAIL.test(email.trim())
+  const summary = grantsSentence(emailValid ? email.trim() : "They", role, grants, workspaces)
   const needsWorkspace = role === "member" && Object.keys(grants).length === 0
   const canSubmit = emailValid && !needsWorkspace && !invite.isPending && !atSeatLimit
 
@@ -185,12 +186,15 @@ export function InviteMemberDialog({
                 onChange={setGrants}
                 disabled={invite.isPending}
               />
-              {touched && needsWorkspace ? (
-                <FieldDescription className="text-destructive">Pick at least one workspace.</FieldDescription>
-              ) : (
-                <WorkspaceRoleHelp />
+              {touched && needsWorkspace && (
+                <FieldDescription className="text-destructive">Tick at least one workspace.</FieldDescription>
               )}
             </Field>
+          )}
+
+          {/* The whole invitation in one sentence, read just before sending. */}
+          {summary && (
+            <p className="bg-muted/50 text-muted-foreground rounded-lg px-3 py-2 text-sm">{summary}</p>
           )}
 
           <DialogFooter>

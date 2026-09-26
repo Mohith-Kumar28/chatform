@@ -28,7 +28,7 @@ import {
   OrgRoleChoice,
   refreshAccess,
   WorkspaceGrantsPicker,
-  WorkspaceRoleHelp,
+  grantsSentence,
   type AccessMap,
   type Grants,
   type WorkspaceLite,
@@ -106,6 +106,7 @@ function AccessForm({
 
   const save = usePutApiMembersByMemberIdAccess();
   const needsWorkspace = role === "member" && Object.keys(grants).length === 0;
+  const summary = grantsSentence(member.name, role, grants, workspaces);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -140,15 +141,15 @@ function AccessForm({
         <Field data-invalid={needsWorkspace}>
           <FieldLabel>Workspaces</FieldLabel>
           <WorkspaceGrantsPicker workspaces={workspaces} value={grants} onChange={setGrants} disabled={save.isPending} />
-          {needsWorkspace ? (
+          {needsWorkspace && (
             <FieldDescription className="text-destructive">
-              Give them at least one workspace, or remove them from the organization.
+              Tick at least one workspace, or remove them from the organization.
             </FieldDescription>
-          ) : (
-            <WorkspaceRoleHelp />
           )}
         </Field>
       )}
+
+      {summary && <p className="bg-muted/50 text-muted-foreground rounded-lg px-3 py-2 text-sm">{summary}</p>}
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel} disabled={save.isPending}>

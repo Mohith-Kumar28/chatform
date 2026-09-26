@@ -171,14 +171,16 @@ export function WorkspaceSwitcher({ className }: { className?: string } = {}) {
               harder to use than one that holds still. */}
           {list.map((ws) => (
             <DropdownMenuItem key={ws.id} onSelect={() => switchTo(ws.slug)}>
-              <span className="min-w-0 flex-1 truncate">{ws.name}</span>
+              {/* The tick leads, in a slot every row keeps, so names line up
+                  and the mark cannot be read as part of the form count. */}
+              <Check className={cn("size-3.5 shrink-0", ws.id === current?.id ? "opacity-100" : "opacity-0")} />
+              <span className={cn("min-w-0 flex-1 truncate", ws.id === current?.id && "font-medium")}>{ws.name}</span>
               {ws.myRole === "viewer" && (
                 <span className="text-muted-foreground shrink-0 text-xs">View only</span>
               )}
-              <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+              <span className="text-muted-foreground w-5 shrink-0 text-right text-xs tabular-nums">
                 {ws.formCount}
               </span>
-              {ws.id === current?.id && <Check className="size-3.5 shrink-0" />}
             </DropdownMenuItem>
           ))}
           {(canCreate || (canManageAccess && current)) && <DropdownMenuSeparator />}
@@ -187,7 +189,7 @@ export function WorkspaceSwitcher({ className }: { className?: string } = {}) {
           {canManageAccess && current && (
             <DropdownMenuItem onSelect={() => setAccessOpen(true)}>
               <Users className="size-3.5" />
-              Manage access to {current.name}
+              Share workspace…
             </DropdownMenuItem>
           )}
           {canCreate && (
@@ -210,7 +212,7 @@ export function WorkspaceSwitcher({ className }: { className?: string } = {}) {
               <DialogTitle>New workspace</DialogTitle>
               <DialogDescription>
                 A folder for a set of forms. Admins can open it straight away; add anyone
-                else from Manage access.
+                else with Share workspace.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-2 py-4">

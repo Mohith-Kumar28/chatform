@@ -60,8 +60,8 @@ export function roleWithArticle(role: string): string {
  * boundary and refuses regardless of what this array claims.
  */
 export const ASSIGNABLE_ROLES = [
-  { value: "member", label: "Member", blurb: "Only the workspaces you choose." },
-  { value: "admin", label: "Admin", blurb: "Every workspace, plus people and settings. Not billing." },
+  { value: "member", label: "Member", blurb: "Only the workspaces you pick." },
+  { value: "admin", label: "Admin", blurb: "Every workspace, people and settings." },
 ] as const;
 
 /** What a member can do inside one workspace. */

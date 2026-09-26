@@ -193,11 +193,11 @@ export function WorkspacesSection() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  aria-label={`Who can open ${ws.name}`}
+                  aria-label={`Share ${ws.name}`}
                   onClick={() => setAccessFor(ws)}
                 >
                   <Users className="size-3.5" />
-                  Access
+                  Share
                 </Button>
               )}
               {canUpdate && (
@@ -241,7 +241,7 @@ export function WorkspacesSection() {
               <DialogTitle>New workspace</DialogTitle>
               <DialogDescription>
                 A folder for a set of forms. Admins can open it straight away; add anyone
-                else from its Access button.
+                else with Share.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-2 py-4">

@@ -1,5 +1,6 @@
 "use client"
 
+import { AccessCell } from "@/components/settings/access/access-shared"
 import { formatAdditionalFieldValue } from "@better-auth-ui/core"
 import {
   memberRoleLabels,
@@ -35,8 +36,8 @@ export type OrganizationInvitationRowProps = {
   showEmail?: boolean
   showRole?: boolean
   showStatus?: boolean
-  /** "All workspaces", or the ones accepting will open. Absent hides the column. */
-  access?: string
+  /** The role and what accepting opens. Absent hides the column. */
+  access?: { title: string; detail: string }
 }
 
 /*
@@ -173,7 +174,9 @@ export function OrganizationInvitationRow({
       {showRole && <TableCell className="text-sm">{roleLabel}</TableCell>}
 
       {access !== undefined && (
-        <TableCell className="text-muted-foreground max-w-56 truncate text-sm">{access}</TableCell>
+        <TableCell className="max-w-64">
+          <AccessCell access={access} />
+        </TableCell>
       )}
 
       {showStatus && (

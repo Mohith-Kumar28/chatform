@@ -46,7 +46,6 @@ import { useEntitlements } from "@/hooks/use-entitlements"
 import { accessSummary, type AccessMap } from "@/components/settings/access/access-shared"
 import { getGetApiWorkspaceAccessQueryKey, useGetApiWorkspaceAccess } from "@/lib/api/dashboard/dashboard"
 import { apiData } from "@/lib/api/payload"
-import { isOrgAdminRole } from "@/lib/roles"
 import { cn } from "@/lib/utils"
 import { InviteMemberDialog } from "./invite-member-dialog"
 import { OrganizationMemberRow } from "./organization-member-row"
@@ -557,15 +556,19 @@ export function OrganizationMembers({
                   </OrganizationSortableTableHead>
                 )}
 
-                {table.getColumn("role")?.getIsVisible() && (
-                  <OrganizationSortableTableHead
-                    column={table.getColumn("role")}
-                  >
-                    {organizationLocalization.role}
-                  </OrganizationSortableTableHead>
+                {/* Admins see one Access column that says the role and what it
+                    opens; everyone else keeps the plain role. */}
+                {accessMap ? (
+                  <TableHead>Access</TableHead>
+                ) : (
+                  table.getColumn("role")?.getIsVisible() && (
+                    <OrganizationSortableTableHead
+                      column={table.getColumn("role")}
+                    >
+                      {organizationLocalization.role}
+                    </OrganizationSortableTableHead>
+                  )
                 )}
-
-                {accessMap && <TableHead>Access</TableHead>}
 
                 {showTeams && table.getColumn("teams")?.getIsVisible() && (
                   <TableHead>{organizationLocalization.teams}</TableHead>
@@ -592,11 +595,11 @@ export function OrganizationMembers({
                       ownerCount={ownerCount}
                       organization={activeOrganization}
                       selectableRow={showSelection ? row : undefined}
-                      showRole={table.getColumn("role")?.getIsVisible()}
+                      showRole={!accessMap && table.getColumn("role")?.getIsVisible()}
                       access={
                         accessMap
                           ? accessSummary(
-                              isOrgAdminRole(row.original.role),
+                              row.original.role,
                               accessMap.members[row.original.id]
                             )
                           : undefined
