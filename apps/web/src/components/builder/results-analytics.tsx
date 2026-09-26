@@ -109,6 +109,8 @@ export function ResultsAnalytics({ analytics }: { analytics: AnalyticsPayload })
   }));
 
   const places = analytics.places ?? [];
+  // Everyone started counts every response; the map only the ones with a location.
+  const unplaced = Math.max(0, analytics.starts - places.reduce((n, p) => n + p.count, 0));
   const channels = analytics.byChannel ?? [];
   const referrers = analytics.byReferrer ?? [];
   const campaigns = analytics.byCampaign ?? [];
@@ -252,12 +254,20 @@ export function ResultsAnalytics({ analytics }: { analytics: AnalyticsPayload })
                       <span className="text-muted-foreground block truncate text-xs">{p.region}</span>
                     )}
                   </span>
-                  <span className="tabular shrink-0 text-sm">{p.count}</span>
-                  {p.completed !== undefined && <FinishRing completed={p.completed} total={p.count} label="" />}
+                  {p.completed === undefined ? (
+                    <span className="tabular shrink-0 text-sm">{p.count}</span>
+                  ) : (
+                    <FinishSplit completed={p.completed} total={p.count} />
+                  )}
                 </li>
               ))}
             </ol>
           </div>
+          {unplaced > 0 && (
+            <p className="text-muted-foreground text-caption mt-3">
+              {unplaced} {unplaced === 1 ? "response has" : "responses have"} no location, from before it was recorded.
+            </p>
+          )}
         </ChartCard>
       )}
 
@@ -314,6 +324,32 @@ export function ResultsAnalytics({ analytics }: { analytics: AnalyticsPayload })
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * "1 finished · 1 didn't", in the map's two colours, leaving out a zero.
+ *
+ * A percentage ring said "0%" for a city whose one person had not finished,
+ * which read as a place with no data rather than a partial response.
+ */
+function FinishSplit({ completed, total }: { completed: number; total: number }) {
+  const partial = Math.max(0, total - completed);
+  return (
+    <span className="tabular flex shrink-0 items-center gap-2.5 text-xs" title={`${completed} finished, ${partial} didn't finish`}>
+      {completed > 0 && (
+        <span className="inline-flex items-center gap-1">
+          <span aria-hidden className="size-2 rounded-full bg-[var(--chart-1)]" />
+          {completed} finished
+        </span>
+      )}
+      {partial > 0 && (
+        <span className="text-muted-foreground inline-flex items-center gap-1">
+          <span aria-hidden className="size-2 rounded-full bg-[var(--chart-2)]" />
+          {partial} didn&apos;t
+        </span>
+      )}
+    </span>
   );
 }
 

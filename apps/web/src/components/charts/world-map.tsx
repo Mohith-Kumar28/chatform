@@ -19,22 +19,24 @@ const K = WORLD_WIDTH / 360;
 const x = (lon: number) => (lon + 180) * K;
 const y = (lat: number) => (WORLD_TOP_LAT - lat) * K;
 
-/** Smallest dot, in viewBox units (the map is 1000 wide): still a hover target. */
-const R_MIN = 2.2;
-/** Largest dot, for the busiest place on a busy form. */
-const R_MAX = 15;
+/** The quietest place, in viewBox units (the map is 1000 wide, ~800px on screen). */
+const R_MIN = 8;
+/** The busiest place. */
+const R_MAX = 28;
+/** Every place the same size, which is where every young form starts. */
+const R_EVEN = 17;
 
 /**
- * The radius for the busiest place, which depends on how busy that is.
+ * Between R_MIN and R_MAX, by where a place sits between the quietest and the
+ * busiest. By area (the square root), so twice the people is twice the ink.
  *
- * Scaling only against the leader made one response in each of three cities
- * three of the biggest dots the map can draw, which says "lots of people here"
- * about three people. The ceiling now grows with the leader's count, on a log
- * scale: one response is a dot, a hundred is a disc, and nothing grows past
- * R_MAX however big the form gets.
+ * Until the counts differ there is nothing to compare, so every dot is one
+ * comfortable size. A log-scaled ceiling was tried first and drew a form's
+ * first handful of responses as specks nobody could find on the map.
  */
-function topRadius(max: number): number {
-  return Math.min(R_MAX, 3.2 + 2.6 * Math.log2(Math.max(1, max)));
+function radius(count: number, min: number, max: number): number {
+  if (max <= min) return R_EVEN;
+  return R_MIN + Math.sqrt((count - min) / (max - min)) * (R_MAX - R_MIN);
 }
 
 /**
@@ -54,14 +56,15 @@ export function WorldMap({ points }: { points: MapPoint[] }) {
   const [hover, setHover] = useState<MapPoint | null>(null);
 
   const dots = useMemo(() => {
-    const max = Math.max(1, ...points.map((p) => p.count));
-    const top = topRadius(max);
+    const counts = points.map((p) => p.count);
+    const max = Math.max(1, ...counts);
+    const min = Math.min(max, ...counts);
     return (
       [...points]
         // Biggest first, so a small city beside a big one stays on top and hoverable.
         .sort((a, b) => b.count - a.count)
         .map((p) => {
-          const r = R_MIN + Math.sqrt(p.count / max) * (top - R_MIN);
+          const r = radius(p.count, min, max);
           const share = p.count > 0 ? Math.min(1, p.completed / p.count) : 0;
           return { p, cx: x(p.lon), cy: y(p.lat), r, inner: r * Math.sqrt(share) };
         })
@@ -86,19 +89,31 @@ export function WorldMap({ points }: { points: MapPoint[] }) {
               onMouseEnter={() => setHover(p)}
               onMouseLeave={() => setHover((h) => (h === p ? null : h))}
             >
-              {/* A ring in the card colour, so overlapping dots stay two marks. */}
+              {/* Translucent with a firmer edge: the land shows through, and two
+                  overlapping places still read as two circles. */}
               <circle
                 cx={cx}
                 cy={cy}
                 r={r}
                 fill="var(--chart-2)"
-                fillOpacity={active ? 0.95 : 0.75}
-                stroke="var(--card)"
-                strokeWidth={1}
+                fillOpacity={active ? 0.55 : 0.32}
+                stroke="var(--chart-2)"
+                strokeOpacity={0.8}
+                strokeWidth={1.2}
                 className="transition-[fill-opacity] duration-150"
               />
               {inner > 0 && (
-                <circle cx={cx} cy={cy} r={inner} fill="var(--chart-1)" fillOpacity={active ? 1 : 0.9} pointerEvents="none" />
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={inner}
+                  fill="var(--chart-1)"
+                  fillOpacity={active ? 0.8 : 0.6}
+                  stroke="var(--chart-1)"
+                  strokeOpacity={0.9}
+                  strokeWidth={1.2}
+                  pointerEvents="none"
+                />
               )}
               {/* A bigger invisible target than the smallest dots draw. */}
               <circle cx={cx} cy={cy} r={Math.max(r, 6)} fill="transparent">
