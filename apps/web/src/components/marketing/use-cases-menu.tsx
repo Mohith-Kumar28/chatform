@@ -67,12 +67,14 @@ export function UseCasesMenu({ onWash }: { onWash: boolean }) {
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((was) => !was)}
-        className={cn(
-          "text-body inline-flex items-center gap-1 rounded-full px-3 py-1.5 transition-colors duration-[var(--duration-micro)]",
+        // `text-body` outside `cn`, as in `marketing-nav.tsx`: merged, it is
+        // dropped beside `text-muted-foreground` and the trigger grows on scroll.
+        className={`text-body ${cn(
+          "inline-flex items-center gap-1 rounded-full px-3 py-1.5 transition-colors duration-[var(--duration-micro)]",
           onWash
             ? "opacity-75 hover:bg-black/5 hover:opacity-100"
             : "text-muted-foreground hover:text-foreground hover:bg-accent/60",
-        )}
+        )}`}
       >
         Use cases
         <ChevronDown

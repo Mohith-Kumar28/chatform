@@ -149,8 +149,8 @@ export function LaunchVideo() {
   return (
     <section
       id={LAUNCH_VIDEO_ID}
-      aria-labelledby="launch-video-title"
-      className="relative scroll-mt-16 overflow-hidden px-6 pt-4 pb-16 sm:pt-8 sm:pb-24"
+      aria-label="Launch video"
+      className="relative scroll-mt-16 overflow-x-clip px-6 pt-4 pb-16 sm:pt-8 sm:pb-24"
     >
       {/* The dot grid from the hero, carried down so the band reads as the
           hero's continuation rather than a new section. */}
@@ -160,22 +160,18 @@ export function LaunchVideo() {
       />
 
       <div className="relative mx-auto max-w-5xl">
-        <h2
-          id="launch-video-title"
-          className="font-display text-center text-[clamp(2rem,1.4rem+2vw,3rem)] leading-[1.05] font-bold tracking-[-0.04em] text-balance"
-        >
-          See it in action.
-        </h2>
 
-        <div className="relative mt-10 sm:mt-14">
+        <div className="relative">
           {/* The halo: the mark's hues on a slow turn, blurred into light
               behind the frame. Rotating a conic gradient moves the colour
-              around the edge without anything visibly spinning. */}
+              around the edge without anything visibly spinning. The section
+              clips only sideways, so the light bleeds up into the hero and
+              down into the next band instead of stopping on a hard line. */}
           <div
             aria-hidden
-            className="pointer-events-none absolute -inset-6 sm:-inset-10"
+            className="pointer-events-none absolute -inset-10 sm:-inset-20"
           >
-            <div className="absolute inset-0 overflow-hidden rounded-[3rem] opacity-60 blur-3xl dark:opacity-45">
+            <div className="absolute inset-0 overflow-hidden rounded-[4rem] opacity-60 blur-[90px] dark:opacity-45">
               <div
                 className="absolute top-1/2 left-1/2 aspect-square w-[150%] -translate-x-1/2 -translate-y-1/2 [animation:spin_18s_linear_infinite] [background:conic-gradient(from_0deg,var(--brand-orange),var(--family-content),var(--brand-violet),var(--family-number),var(--brand-orange))]"
               />
@@ -239,17 +235,16 @@ export function WatchVideoCue({ className }: { className?: string }) {
           ?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
         window.dispatchEvent(new Event(PLAY_EVENT));
       }}
-      // White, like the hero's second pill: the cue sits where the wash fades
-      // into the page, and ink on that fade disappears in the dark theme.
+      // Plain ink, no fill: a nudge, not a third button beside the two pills.
       className={
-        "group inline-flex items-center gap-1.5 rounded-full bg-white/90 py-2 pr-3.5 pl-4 text-sm font-semibold text-[var(--on-band-vivid)] shadow-[0_8px_24px_-8px_rgb(0_0_0/0.35)] backdrop-blur transition-colors hover:bg-white " +
+        "group inline-flex flex-col items-center gap-0.5 text-sm font-medium opacity-60 transition-opacity hover:opacity-100 " +
         (className ?? "")
       }
     >
       Watch the video
       <ChevronDown
         className="size-4 [animation:cf-cue-bob_1.8s_var(--ease-out)_infinite]"
-        strokeWidth={2.5}
+        strokeWidth={2}
       />
     </a>
   );

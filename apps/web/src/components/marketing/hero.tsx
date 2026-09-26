@@ -473,7 +473,9 @@ export function Hero() {
       </div>
 
       {/* The way down to the launch video, centred under both columns. */}
-      <div className="relative mt-10 flex justify-center sm:mt-12">
+      {/* Page ink, not the wash's: by this height the wash has faded into
+          the page, which is charcoal in the dark theme. */}
+      <div className="text-foreground relative mt-8 flex justify-center sm:mt-10">
         <WatchVideoCue />
       </div>
     </section>

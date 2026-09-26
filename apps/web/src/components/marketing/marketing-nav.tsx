@@ -14,7 +14,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 import { Logo } from "@/components/brand/logo";
 import { UseCasesMenu } from "./use-cases-menu";
@@ -73,8 +72,10 @@ export function MarketingNav() {
   return (
     <header
       className={cn(
-        "sticky top-0 z-[var(--z-sticky)] transition-colors duration-[var(--duration-standard)] ease-[var(--ease-out)]",
-        scrolled && "bg-background/80 border-border/60 border-b backdrop-blur-md",
+        // The border is always there and only changes colour, so turning the
+        // backdrop on never adds a pixel to the bar's height.
+        "sticky top-0 z-[var(--z-sticky)] border-b border-transparent transition-colors duration-[var(--duration-standard)] ease-[var(--ease-out)]",
+        scrolled && "bg-background/80 border-border/60 backdrop-blur-md",
       )}
       style={overWash && !scrolled ? { color: "var(--on-band-vivid)" } : undefined}
     >
@@ -107,12 +108,15 @@ export function MarketingNav() {
             <li key={link.href}>
               <Link
                 href={link.href}
-                className={cn(
-                  "text-body rounded-full px-3 py-1.5 transition-colors duration-[var(--duration-micro)]",
+                // `text-body` stays outside `cn`: tailwind-merge reads our
+                // custom size as a colour and drops it beside
+                // `text-muted-foreground`, so the links grew 2px on scroll.
+                className={`text-body ${cn(
+                  "rounded-full px-3 py-1.5 transition-colors duration-[var(--duration-micro)]",
                   overWash && !scrolled
                     ? "opacity-75 hover:bg-black/5 hover:opacity-100"
                     : "text-muted-foreground hover:text-foreground hover:bg-accent/60",
-                )}
+                )}`}
               >
                 {link.label}
               </Link>
@@ -121,7 +125,6 @@ export function MarketingNav() {
         </ul>
 
         <div className="ml-auto flex items-center gap-1.5 lg:ml-0">
-          <ThemeToggle />
           {/* One button, not two.
 
               It was "Sign in" beside "Start free", which is a choice offered
