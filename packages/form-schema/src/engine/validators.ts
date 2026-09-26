@@ -370,6 +370,9 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
       let v = raw.trim();
       if (!/^https?:\/\//i.test(v)) v = `https://${v}`;
       if (!URL_RE.test(v)) return fail("invalid_url", "That doesn't look like a valid URL.");
+      if (block.httpsOnly && !/^https:\/\//i.test(v)) {
+        return fail("invalid_url", "Please use a secure link that starts with https://.");
+      }
       return ok(v);
     }
 

@@ -594,7 +594,9 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
           }),
         );
       case "url":
-        return done(BlockSchema.parse({ ...base, type, unique: flag(config, "unique") }));
+        return done(
+          BlockSchema.parse({ ...base, type, unique: flag(config, "unique"), httpsOnly: flag(config, "httpsonly") }),
+        );
       case "nps":
       case "signature":
         return done(BlockSchema.parse({ ...base, type }));
@@ -894,6 +896,7 @@ export function applyBlockConfig(block: Block, raw: string | undefined): Block |
       break;
     case "url":
       bool("unique", "unique");
+      bool("httpsonly", "httpsOnly");
       break;
     case "number":
       bool("unique", "unique");

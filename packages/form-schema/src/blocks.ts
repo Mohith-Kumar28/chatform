@@ -411,7 +411,13 @@ export const Block = z.discriminatedUnion("type", [
     /** SMS a six-digit code and hold the answer until it comes back. */
     verify: VerifyAnswer,
   }),
-  z.object({ ...BlockBase, type: z.literal("url"), unique: Unique }),
+  z.object({
+    ...BlockBase,
+    type: z.literal("url"),
+    unique: Unique,
+    /** Refuse `http://` links; a bare domain is still read as `https://`. */
+    httpsOnly: z.boolean().default(false),
+  }),
   z.object({
     ...BlockBase,
     type: z.literal("number"),

@@ -137,7 +137,16 @@ export function TypeFields({
       );
 
     case "url":
-      return <UniqueField checked={block.unique} patch={patch} />;
+      return (
+        <>
+          <SwitchField
+            label="HTTPS only"
+            checked={block.httpsOnly}
+            onChange={(v) => patch({ httpsOnly: v } as Partial<Block>)}
+          />
+          <UniqueField checked={block.unique} patch={patch} />
+        </>
+      );
 
     case "phone":
       return (

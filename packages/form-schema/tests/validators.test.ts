@@ -105,3 +105,22 @@ describe("an Other answer", () => {
     expect(validateAnswer(multi(false), ["opt_guitar01", "violin"])).toMatchObject({ ok: false, code: "invalid_option" });
   });
 });
+
+describe("a url question marked httpsOnly", () => {
+  const block = (httpsOnly: boolean) =>
+    Block.parse({ id: "blk_url0001", ref: "q_site", type: "url", title: "Website?", httpsOnly });
+
+  it("refuses an http link", () => {
+    const result = validateAnswer(block(true), "http://acme.com");
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("invalid_url");
+  });
+
+  it("still reads a bare domain as https", () => {
+    expect(validateAnswer(block(true), "acme.com").value).toBe("https://acme.com");
+  });
+
+  it("accepts http when the rule is off", () => {
+    expect(validateAnswer(block(false), "http://acme.com").ok).toBe(true);
+  });
+});

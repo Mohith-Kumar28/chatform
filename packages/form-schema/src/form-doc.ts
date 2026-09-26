@@ -170,6 +170,8 @@ export interface PublicBlock {
    * what lets the field agree with the rule it will be judged by.
    */
   countryHint?: string;
+  /** url: only `https://` links are accepted, so the composer locks its scheme. */
+  httpsOnly?: boolean;
   /**
    * Which reusable detail this question holds, already resolved.
    *
@@ -378,6 +380,9 @@ export function toPublicBlock(b: Block): PublicBlock {
         place it could have *prevented* a wrong answer never saw it.
       */
       pub.countryHint = b.countryHint;
+      break;
+    case "url":
+      pub.httpsOnly = b.httpsOnly;
       break;
     default:
       break;

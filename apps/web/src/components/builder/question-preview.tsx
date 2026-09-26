@@ -6,6 +6,7 @@ import { FileUp } from "lucide-react";
 import { fileDownloadUrl, toPublicBlock, type Block, type FormDoc } from "@repo/form-schema";
 import { FileCard } from "@/components/chat/file-card";
 import { PhoneInput } from "@/components/chat/composers/phone";
+import { UrlInput } from "@/components/chat/composers/url";
 import { QuestionAffordance } from "@/components/chat/question-affordance";
 import { SendRow, TextInput } from "@/components/chat/composers/primitives";
 import { inputSemanticsFor } from "@/components/chat/composers/input-semantics";
@@ -306,6 +307,8 @@ function TypedComposer({ block }: { block: ReturnType<typeof toPublicBlock> }) {
                 countryHint={block.countryHint}
                 placeholder={block.placeholder || "Your number"}
               />
+            ) : block.type === "url" ? (
+              <UrlInput value="" onChange={noop} httpsOnly={block.httpsOnly} placeholder="example.com" />
             ) : (
               <TextInput
                 value=""

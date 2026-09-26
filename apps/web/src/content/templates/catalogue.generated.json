@@ -1447,7 +1447,8 @@
      "agentHints": null,
      "media": null,
      "type": "url",
-     "unique": false
+     "unique": false,
+     "httpsOnly": false
     },
     {
      "id": "blk_quotereq08",
@@ -1983,7 +1984,8 @@
      "agentHints": null,
      "media": null,
      "type": "url",
-     "unique": false
+     "unique": false,
+     "httpsOnly": false
     },
     {
      "id": "blk_partners05",
@@ -8537,7 +8539,8 @@
      "agentHints": null,
      "media": null,
      "type": "url",
-     "unique": false
+     "unique": false,
+     "httpsOnly": false
     },
     {
      "id": "blk_speakers15",
@@ -9457,7 +9460,8 @@
      "agentHints": null,
      "media": null,
      "type": "url",
-     "unique": false
+     "unique": false,
+     "httpsOnly": false
     },
     {
      "id": "blk_jobappli09",
@@ -9483,7 +9487,8 @@
      "agentHints": null,
      "media": null,
      "type": "url",
-     "unique": false
+     "unique": false,
+     "httpsOnly": false
     },
     {
      "id": "blk_jobappli11",
@@ -9736,7 +9741,8 @@
      "agentHints": null,
      "media": null,
      "type": "url",
-     "unique": false
+     "unique": false,
+     "httpsOnly": false
     },
     {
      "id": "blk_jobappli22",
@@ -19059,7 +19065,8 @@
      "agentHints": null,
      "media": null,
      "type": "url",
-     "unique": false
+     "unique": false,
+     "httpsOnly": false
     },
     {
      "id": "blk_testimon11",

@@ -84,7 +84,7 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
     configKeys: ["unique", "country", "countryhint", "verify"],
     config: "country=<2-letter code> to assume a dialling code; verify=true ONLY when the author asked for the number to be confirmed. It texts a code and holds the answer until it comes back; unique=true to refuse a value another respondent already gave, such as a team name, a username or a seat number",
   },
-  url: { summary: "A web address.", configKeys: ["unique"], config: "unique=true to refuse a value another respondent already gave, such as a team name, a username or a seat number" },
+  url: { summary: "A web address.", configKeys: ["unique", "httpsonly"], config: "httpsOnly=true ONLY when the author asked for secure (https) links; unique=true to refuse a value another respondent already gave, such as a team name, a username or a seat number" },
   number: {
     summary: "A quantity: how many guests, how many seats, a budget.",
     configKeys: ["unique", "integeronly", "min", "max", "currency"],

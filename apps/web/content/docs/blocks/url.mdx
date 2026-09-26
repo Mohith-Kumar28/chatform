@@ -32,6 +32,10 @@ Fields specific to `url`. The [fields every block has](/docs/blocks/common-field
     "unique": {
       "default": false,
       "type": "boolean"
+    },
+    "httpsOnly": {
+      "default": false,
+      "type": "boolean"
     }
   },
   "required": [
@@ -190,7 +194,7 @@ Fields specific to `url`. The [fields every block has](/docs/blocks/common-field
 }
 ```
 
-In a generated draft these arrive as `config` pairs: `unique=true to refuse a value another respondent already gave, such as a team name, a username or a seat number`.
+In a generated draft these arrive as `config` pairs: `httpsOnly=true ONLY when the author asked for secure (https) links; unique=true to refuse a value another respondent already gave, such as a team name, a username or a seat number`.
 
 ## What you receive
 
@@ -205,7 +209,8 @@ In a generated draft these arrive as `config` pairs: `unique=true to refuse a va
   "required": true,
   "imageKey": null,
   "media": null,
-  "identityField": "url"
+  "identityField": "url",
+  "httpsOnly": false
 }
 ```
 

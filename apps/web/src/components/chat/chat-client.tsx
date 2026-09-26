@@ -32,6 +32,7 @@ import { useDictation } from "@/hooks/use-dictation";
 import { FREE_TEXT, inputSemanticsFor } from "./composers/input-semantics";
 import { PhoneInput } from "./composers/phone";
 import { isSendablePhone } from "./composers/phone-value";
+import { UrlInput } from "./composers/url";
 import { forgetValue, suggestionsFor } from "./respondent-profile";
 import { QuestionAffordance } from "./question-affordance";
 import { QuestionMedia } from "./question-media";
@@ -2215,6 +2216,7 @@ const Composer = memo(function Composer({
    * the value it holds is E.164 rather than anything anybody typed.
    */
   const isPhone = block?.type === "phone";
+  const isUrl = block?.type === "url";
 
   /*
    * Saying the answer instead of typing it — the same browser recogniser the
@@ -2243,7 +2245,7 @@ const Composer = memo(function Composer({
   // M starts and stops the mic when the respondent is not typing. See `isDictateShortcut`.
   const toggleDictation = dictation.toggle;
   // `status` rather than `disabled`, which is declared below the early returns.
-  const canDictate = dictation.supported && status !== "error" && !isPhone;
+  const canDictate = dictation.supported && status !== "error" && !isPhone && !isUrl;
   useEffect(() => {
     if (!canDictate) return;
     const onKey = (e: KeyboardEvent) => {
@@ -2474,6 +2476,15 @@ const Composer = memo(function Composer({
             onSubmit={submit}
             countryHint={block.countryHint}
             placeholder="Your number"
+            autoFocus
+          />
+        ) : isUrl ? (
+          <UrlInput
+            value={text}
+            onChange={setText}
+            onSubmit={submit}
+            httpsOnly={block.httpsOnly}
+            placeholder="example.com"
             autoFocus
           />
         ) : (
