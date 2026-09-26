@@ -1,14 +1,36 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { ImagePlus, Loader2, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ImagePlus, Loader2, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import type { ThemeDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { BufferedInput } from "@/components/ui/buffered-input";
 import { uploadAsset } from "@/lib/assets";
+import {
+  hueDistance,
+  isDarkTheme,
+  pickBrand,
+  swatchesFromBlob,
+  swatchesFromUrl,
+  themeFromAccent,
+  themeFromSwatches,
+  type Swatch,
+} from "@/lib/brand-palette";
 
+/** The colour fields a palette writes, which is also what "Undo" puts back. */
+const PALETTE_KEYS = [
+  "background",
+  "surface",
+  "text",
+  "accent",
+  "accentText",
+  "botBubble",
+  "userBubble",
+  "userBubbleText",
+] as const satisfies readonly (keyof ThemeDoc)[];
 
 /**
  * Optional brand logo and name.
@@ -16,6 +38,12 @@ import { uploadAsset } from "@/lib/assets";
  * Both are opt-in — a form with neither still looks finished, falling back to
  * the form's initial and title. The logo replaces the letter avatar in the chat
  * header and appears on the completion screen; the name sits under the agent's.
+ *
+ * Uploading a logo also dresses the form in it: the logo's colours are read
+ * from the file in the browser, the brand colour becomes the accent, and the
+ * page, ink and bubbles are derived from it (`themeFromSwatches`). It happens
+ * in the same change as the upload, so one undo takes back both, and the
+ * toast offers to keep the logo and put the old colours back.
  */
 export function BrandField({
   theme,
@@ -26,6 +54,35 @@ export function BrandField({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  /** Keyed by the logo they came from, so a stale read never shows under a new logo. */
+  const [read, setRead] = useState<{ url: string; swatches: Swatch[] } | null>(null);
+  const swatches = read && read.url === theme.logoUrl ? read.swatches : null;
+  const dark = isDarkTheme(theme);
+
+  // A logo uploaded before this existed, or on another visit: read it from its URL.
+  useEffect(() => {
+    const url = theme.logoUrl;
+    if (!url || read?.url === url) return;
+    let live = true;
+    swatchesFromUrl(url)
+      .then((s) => live && setRead({ url, swatches: s }))
+      .catch(() => live && setRead({ url, swatches: [] }));
+    return () => {
+      live = false;
+    };
+  }, [theme.logoUrl, read?.url]);
+
+  function applyPalette(palette: Partial<ThemeDoc> | null, extra: Partial<ThemeDoc> = {}) {
+    if (!palette) {
+      onChange(extra);
+      return;
+    }
+    const before = Object.fromEntries(PALETTE_KEYS.map((k) => [k, theme[k]])) as Partial<ThemeDoc>;
+    onChange({ ...extra, ...palette });
+    toast.success("Colours matched to your logo", {
+      action: { label: "Undo", onClick: () => onChange(before) },
+    });
+  }
 
   async function upload(file: File) {
     if (!file.type.startsWith("image/")) {
@@ -34,8 +91,10 @@ export function BrandField({
     }
     setBusy(true);
     try {
-      const asset = await uploadAsset(file);
-      onChange({ logoUrl: asset.url, logoKey: asset.key });
+      // Read from the file in hand, alongside the upload rather than after it.
+      const [asset, found] = await Promise.all([uploadAsset(file), swatchesFromBlob(file).catch(() => [])]);
+      setRead({ url: asset.url, swatches: found });
+      applyPalette(themeFromSwatches(found, dark), { logoUrl: asset.url, logoKey: asset.key });
     } catch (err) {
       toast.error("Couldn't upload", { description: err instanceof Error ? err.message : undefined });
     } finally {
@@ -87,6 +146,29 @@ export function BrandField({
         )}
       </div>
 
+      {theme.logoUrl && swatches && swatches.length > 0 && (
+        <LogoSwatches
+          swatches={swatches}
+          accent={theme.accent}
+          onPick={(hex) => {
+            /*
+             * The picked colour leads. The logo's other brand hue, if it has
+             * one far enough round the wheel, still dresses their bubble, so
+             * picking the violet in an orange-and-violet mark gives a violet
+             * form with an orange bubble rather than a violet-only one.
+             */
+            const other = pickBrand(swatches.filter((s) => s.hex !== hex));
+            const second =
+              other && other.primary.c >= 0.045 && hueDistance(other.primary.h, swatches.find((s) => s.hex === hex)!.h) >= 40
+                ? other.primary.hex
+                : null;
+            const palette = themeFromAccent(hex, { dark, secondary: second });
+            if (palette) onChange(palette);
+          }}
+          onMatch={() => applyPalette(themeFromSwatches(swatches, dark))}
+        />
+      )}
+
       <input
         ref={inputRef}
         type="file"
@@ -98,6 +180,52 @@ export function BrandField({
           e.target.value = "";
         }}
       />
+    </div>
+  );
+}
+
+/**
+ * The logo's colours, each one a way to set the accent, and a button that puts
+ * the automatic match back after the colours have been changed by hand.
+ */
+function LogoSwatches({
+  swatches,
+  accent,
+  onPick,
+  onMatch,
+}: {
+  swatches: Swatch[];
+  accent: string;
+  onPick: (hex: string) => void;
+  onMatch: () => void;
+}) {
+  // Near-white is the logo's backdrop more often than its colour, and it makes
+  // an accent nobody can see.
+  const shown = swatches.filter((s) => !(s.l > 0.93 && s.c < 0.04));
+  if (shown.length === 0) return null;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-muted-foreground text-xs">From your logo</span>
+      <div className="flex flex-1 gap-1.5">
+        {shown.map((s) => (
+          <button
+            key={s.hex}
+            type="button"
+            title={`Use ${s.hex} as the accent`}
+            aria-label={`Use ${s.hex} as the accent`}
+            onClick={() => onPick(s.hex)}
+            className={cn(
+              "size-5 rounded-full transition-transform hover:scale-110",
+              s.hex.toLowerCase() === accent.toLowerCase() && "ring-ring ring-2 ring-offset-2 ring-offset-background",
+            )}
+            style={{ background: s.hex, boxShadow: "inset 0 0 0 1px rgb(0 0 0 / 0.08)" }}
+          />
+        ))}
+      </div>
+      <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs" onClick={onMatch}>
+        <Wand2 className="size-3.5" />
+        Match
+      </Button>
     </div>
   );
 }

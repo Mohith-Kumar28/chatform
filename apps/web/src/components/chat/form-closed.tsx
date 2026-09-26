@@ -5,6 +5,7 @@ import { CalendarX2, Clock, Users } from "lucide-react";
 import { CLOSED_MESSAGE_DEFAULT, type PublicFormConfig } from "@repo/form-schema";
 import { safeMediaSrc } from "@repo/guard";
 import { chatThemeVars } from "@/lib/chat-theme";
+import { useThemeFonts } from "@/lib/theme-fonts";
 import { LogoMark } from "@/components/brand/logo";
 import { RichText, SAFE_ELEMENTS } from "./rich-text";
 import { cn } from "@/lib/utils";
@@ -78,6 +79,7 @@ export function FormClosed({
   const authored = body && body !== CLOSED_MESSAGE_DEFAULT ? body : null;
 
   const full = config.closedReason === "capacity";
+  useThemeFonts(config.theme);
 
   return (
     <div

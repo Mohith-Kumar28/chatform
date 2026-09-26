@@ -1,5 +1,6 @@
 "use client";
 
+import { useLayoutEffect, useRef, useState } from "react";
 import { FormDoc, ThemeDoc } from "@repo/form-schema";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,6 +9,9 @@ import { BrandField } from "./brand-field";
 import { PatternField } from "./pattern-field";
 import { LockedControl } from "@/components/billing/gate";
 import { BufferedInput } from "@/components/ui/buffered-input";
+import { Switch } from "@/components/ui/switch";
+import { FontPicker } from "./font-picker";
+import { isDarkTheme, themeFromAccent } from "@/lib/brand-palette";
 
 type Theme = FormDoc["theme"];
 
@@ -18,11 +22,14 @@ type Theme = FormDoc["theme"];
  * with a right answer in the hands of whoever was clicking. The runtime now
  * derives ink from the fill behind it (`readableInk`), so the panel offers only
  * the choices that are actually taste.
+ *
+ * Accent first, because with "Match to accent" on it is the one that moves the
+ * other four.
  */
 const COLOR_FIELDS: { key: keyof Theme; label: string }[] = [
+  { key: "accent", label: "Accent" },
   { key: "background", label: "Background" },
   { key: "text", label: "Text" },
-  { key: "accent", label: "Accent" },
   { key: "botBubble", label: "Agent bubble" },
   { key: "userBubble", label: "Their bubble" },
 ];
@@ -96,7 +103,29 @@ export function ThemePanel({
   /** `coalesceKey` merges a burst of changes to one control into a single undo step. */
   onChange: (next: Theme, coalesceKey?: string) => void;
 }) {
-  const patch = (p: Partial<Theme>, coalesceKey?: string) => onChange({ ...theme, ...p }, coalesceKey);
+  /*
+   * Merged onto the latest theme rather than the one this render closed over:
+   * the logo toast's "Undo" fires seconds later, and merging its old colours
+   * onto a stale theme would have taken the new logo back out with them.
+   */
+  const latest = useRef(theme);
+  useLayoutEffect(() => {
+    latest.current = theme;
+  }, [theme]);
+  const patch = (p: Partial<Theme>, coalesceKey?: string) => onChange({ ...latest.current, ...p }, coalesceKey);
+
+  /*
+   * On by default: most people pick one brand colour and want a form that
+   * agrees with it, not five pickers to reconcile by eye. Off, the accent moves
+   * alone, for the author who has tuned the page by hand. Not stored: it is a
+   * way of editing, not a property of the form.
+   */
+  const [linked, setLinked] = useState(true);
+  const setColor = (key: keyof Theme, value: string) => {
+    const derived = key === "accent" && linked ? themeFromAccent(value, { dark: isDarkTheme(theme) }) : null;
+    // The accent stays exactly what was picked; only the colours around it move.
+    patch(derived ? { ...derived, accent: value } : ({ [key]: value } as Partial<Theme>), `theme:${key}`);
+  };
 
   return (
     <div className="w-full space-y-6">
@@ -127,6 +156,12 @@ export function ThemePanel({
       </Section>
 
       <Section title="Colours">
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="theme-linked" className="text-xs font-normal">
+            Match the other colours to the accent
+          </Label>
+          <Switch id="theme-linked" size="sm" checked={linked} onCheckedChange={setLinked} />
+        </div>
         <div className="grid grid-cols-2 gap-3">
           {COLOR_FIELDS.map(({ key, label }) => {
             const value = (theme[key] as string | undefined) ?? "";
@@ -152,13 +187,13 @@ export function ThemePanel({
                       fires once the drag has been over for three seconds rather
                       than at every pause within it.
                     */
-                    onChange={(e) => patch({ [key]: e.target.value } as Partial<Theme>, `theme:${key}`)}
+                    onChange={(e) => setColor(key, e.target.value)}
                     className="size-8 shrink-0 cursor-pointer rounded-md border"
                     aria-label={label}
                   />
                   <BufferedInput
                     value={value}
-                    onCommit={(v) => patch({ [key]: v } as Partial<Theme>, `theme:${key}`)}
+                    onCommit={(v) => setColor(key, v)}
                     placeholder="#FD6F29"
                     className="font-mono text-xs"
                   />
@@ -193,24 +228,21 @@ export function ThemePanel({
             </SelectContent>
           </Select>
         </div>
+      </Section>
+
+      <Section title="Fonts">
+        {/*
+          Picked here and nowhere else: the hosted page, the embed and every
+          preview read the theme, so an embedded form is set in the same faces.
+        */}
         <LockedControl feature="custom_fonts" className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="font-heading">Heading</Label>
-            <BufferedInput
-              id="font-heading"
-              value={theme.fontHeading}
-              onCommit={(v) => patch({ fontHeading: v }, "theme:fontHeading")}
-              placeholder="Bricolage Grotesque"
-            />
+            <FontPicker id="font-heading" value={theme.fontHeading} onChange={(v) => patch({ fontHeading: v })} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="font-body">Body</Label>
-            <BufferedInput
-              id="font-body"
-              value={theme.fontBody}
-              onCommit={(v) => patch({ fontBody: v }, "theme:fontBody")}
-              placeholder="Inter"
-            />
+            <FontPicker id="font-body" value={theme.fontBody} onChange={(v) => patch({ fontBody: v })} />
           </div>
         </LockedControl>
       </Section>

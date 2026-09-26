@@ -10,6 +10,7 @@ import { QuestionAffordance } from "@/components/chat/question-affordance";
 import { SendRow, TextInput } from "@/components/chat/composers/primitives";
 import { inputSemanticsFor } from "@/components/chat/composers/input-semantics";
 import { chatThemeVars } from "@/lib/chat-theme";
+import { useThemeFonts } from "@/lib/theme-fonts";
 import { API_ORIGIN } from "@/lib/api/mutator";
 import { LogoMark } from "@/components/brand/logo";
 import { useEntitlements } from "@/hooks/use-entitlements";
@@ -44,6 +45,7 @@ export function QuestionPreview({
   slug?: string | null;
 }) {
   const themeVars = useMemo(() => chatThemeVars(doc.theme, slug), [doc.theme, slug]);
+  useThemeFonts(doc.theme);
   /*
     A verified payment block names an account id, and which gateway that
     account is lives in D1 — so `toPublicBlock` leaves `paymentProvider` unset

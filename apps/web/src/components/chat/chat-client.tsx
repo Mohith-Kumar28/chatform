@@ -19,6 +19,7 @@ import { safeHref, safeMediaSrc } from "@repo/guard";
 import { QuestionDescription, RichText, SAFE_ELEMENTS } from "./rich-text";
 import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
+import { useThemeFonts } from "@/lib/theme-fonts";
 import { LogoMark } from "@/components/brand/logo";
 import { AuthCard } from "./auth-card";
 import { warmGoogleSignIn } from "./google-signin";
@@ -367,6 +368,7 @@ export function ChatSurface({
     () => chatThemeVars(config.theme, config.slug),
     [config.theme, config.slug],
   );
+  useThemeFonts(config.theme);
 
   /**
    * A framed form gets its own way out.

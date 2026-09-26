@@ -9,6 +9,7 @@ import {
   resolvePattern,
   rgbaFromHex,
 } from "@/lib/background-patterns";
+import { fontStack } from "@/lib/theme-fonts";
 
 /**
  * Maps a form's ThemeDoc onto the scoped `--cf-*` variables the chat surface
@@ -213,7 +214,13 @@ export function chatThemeVars(theme: ThemeDoc, seed?: string | null): CSSPropert
      */
     "--cf-pattern": tile ? patternImage(tile, patternInk(theme, tile)) : "none",
     "--cf-pattern-size": tile ? patternSize(tile) : "auto",
-    fontFamily: `${theme.fontBody}, ui-sans-serif, system-ui, sans-serif`,
-    "--cf-font-heading": `${theme.fontHeading}, ${theme.fontBody}, ui-sans-serif, sans-serif`,
+    /*
+     * Stacks rather than bare names: quoted, pointed at the bundled `next/font`
+     * faces where the theme names one of those, and falling back by the
+     * face's own category. The families themselves are fetched by
+     * `useThemeFonts`, which every surface calling this also calls.
+     */
+    fontFamily: fontStack(theme.fontBody),
+    "--cf-font-heading": fontStack(theme.fontHeading, theme.fontBody),
   } as CSSProperties;
 }

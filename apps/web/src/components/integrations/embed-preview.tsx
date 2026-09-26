@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Lock, MessageCircle, RotateCcw, SendHorizontal, X } from "lucide-react";
 import type { Block, ThemeDoc } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
+import { useThemeFonts } from "@/lib/theme-fonts";
 import { isOverlay, type EmbedConfig } from "@/lib/embed-snippet";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/brand/logo";
@@ -432,6 +433,7 @@ function MockConversation({
   // `progressBar` defaults to and what the runtime header actually says. It
   // read "Question 2 of 9" here, a mode the form has to be switched into.
   const pct = Math.round((1 / Math.max(script.total, 2)) * 100);
+  useThemeFonts(theme);
 
   return (
     <div className="chat-surface flex h-full flex-col overflow-hidden" style={chatThemeVars(theme, slug)}>
