@@ -21,10 +21,10 @@ export function useDuplicateForm() {
   return async (form: { id: string; title: string }, { open = false }: { open?: boolean } = {}) => {
     const title = `${form.title} (copy)`.slice(0, 200);
     try {
-      const res = await postApiForms({ title, duplicateOf: form.id });
-      // A 403 is the plan's form limit, and its message says so.
-      if (res.status !== 200) throw new Error(res.data.error?.message ?? "Couldn't duplicate");
-      const id = res.data.id;
+      // The mutator hands back the body itself and throws on a non-2xx (a 403
+      // is the plan's form limit, and its message says so), whatever the
+      // generated `{ status, data }` type claims. See `use-autosave`.
+      const { id } = (await postApiForms({ title, duplicateOf: form.id })) as unknown as { id: string };
       void invalidateForms(queryClient);
       if (open) {
         router.push(`/forms/${id}/build`);
