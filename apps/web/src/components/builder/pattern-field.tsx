@@ -1,6 +1,7 @@
 "use client";
 
 import { FormDoc } from "@repo/form-schema";
+import { useState } from "react";
 import { Ban, Shuffle } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger } from "@/components/ui/select";
@@ -157,30 +158,71 @@ export function PatternField({
           ))}
         </SelectContent>
       </Select>
-      {/*
-        How visible the tile is. 25% is the quiet default, 100% is plainly
-        there, 0% is none (see `patternOpacity`). Committed on every keystroke
-        that parses, clamped, so the preview follows the number.
-      */}
-      <div className="relative h-full">
-        <input
-          id="theme-pattern-opacity"
-          type="number"
-          inputMode="numeric"
-          min={0}
-          max={100}
-          step={5}
-          disabled={isNone}
-          value={theme.backgroundPatternOpacity ?? DEFAULT_PATTERN_OPACITY}
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            if (e.target.value === "" || !Number.isFinite(n)) return;
-            onChange({ backgroundPatternOpacity: Math.round(Math.min(100, Math.max(0, n))) });
-          }}
-          className="border-input dark:bg-input/30 h-full w-full rounded-md border bg-transparent py-1.5 pr-7 pl-3 text-sm tabular-nums shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-        />
-        <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm">%</span>
-      </div>
+      <OpacityInput
+        value={theme.backgroundPatternOpacity ?? DEFAULT_PATTERN_OPACITY}
+        disabled={isNone}
+        onChange={(n) => onChange({ backgroundPatternOpacity: n })}
+      />
+    </div>
+  );
+}
+
+/**
+ * How visible the tile is, as a plain 0-100 box. 25% is the quiet default,
+ * 100% is plainly there, 0% is none (see `patternOpacity`).
+ *
+ * It keeps its own text while you type. Bound straight to the saved number, a
+ * cleared box was thrown away, so backspacing "100" got stuck at "1" and there
+ * was no way to type a fresh value. Now it takes digits only, commits each one
+ * that parses so the preview follows, and an empty box snaps back on blur.
+ */
+function OpacityInput({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: number;
+  disabled: boolean;
+  onChange: (n: number) => void;
+}) {
+  // Null when not mid-edit, so outside changes (undo, a preset) show as-is.
+  const [draft, setDraft] = useState<string | null>(null);
+
+  return (
+    <div className="relative h-full">
+      <input
+        id="theme-pattern-opacity"
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        maxLength={3}
+        disabled={disabled}
+        value={draft ?? String(value)}
+        onFocus={(e) => {
+          setDraft(String(value));
+          e.target.select();
+        }}
+        onChange={(e) => {
+          const digits = e.target.value.replace(/\D/g, "").slice(0, 3);
+          if (digits === "") {
+            setDraft("");
+            return;
+          }
+          const n = Math.min(100, Number(digits));
+          setDraft(String(n));
+          if (n !== value) onChange(n);
+        }}
+        onBlur={() => setDraft(null)}
+        onKeyDown={(e) => {
+          if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+          e.preventDefault();
+          const n = Math.min(100, Math.max(0, value + (e.key === "ArrowUp" ? 5 : -5)));
+          setDraft(String(n));
+          if (n !== value) onChange(n);
+        }}
+        className="border-input dark:bg-input/30 h-full w-full rounded-md border bg-transparent py-1.5 pr-7 pl-3 text-sm tabular-nums shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
+      />
+      <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm">%</span>
     </div>
   );
 }
