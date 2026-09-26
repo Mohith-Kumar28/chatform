@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ChatDemo } from "./chat-demo";
 import { HERO_SCRIPT } from "./chat-demo-scripts";
 import { GradientField } from "@/components/brand/gradient-field";
-import { ArrowMark, CircleMark, HandNote } from "./annotate";
+import { CircleMark } from "./annotate";
 import { WatchVideoCue } from "./launch-video";
 
 /**
@@ -154,7 +154,7 @@ export function Hero() {
               words a person running a form actually measures. Everything the
               old line implied is still on the page and better placed for it:
               the band directly beneath breaks the claim into three mechanisms,
-              and `TheDropOff` under that carries the evidence that long forms
+              and /why-conversation-works carries the evidence that long forms
               lose people, with citations.
 
               It quotes a rate now. "more" was doing the work of a number and
@@ -421,37 +421,6 @@ export function Hero() {
               at, since the fallback button goes to a section of this page and
               "a real form" would be a lie about an anchor.
             */}
-            {DEMO_SLUG ? (
-              <span
-                aria-hidden
-                className="pointer-events-none hidden select-none items-center gap-1 sm:flex"
-                style={{ color: "var(--on-band-vivid)" }}
-              >
-                {/* Armed here rather than by an `InView`: the hero is the top
-                    of the document and is on screen at load, so waiting for an
-                    intersection would only mean the mark is already finished
-                    by the time anyone could have watched it draw. */}
-                <span data-armed="" data-inview="" className="flex items-center gap-1">
-                  {/* Nudged down by a transform, not a margin: the arrowhead
-                      sits near the top of its own box, and the row is centred,
-                      so untouched it points past the pill's shoulder instead of
-                      at it. A transform moves the head without moving the box
-                      the row is aligning. */}
-                  <ArrowMark
-                    dir="up-left"
-                    positioned={false}
-                    draw
-                    delay={1500}
-                    className="size-11 shrink-0 translate-y-1.5"
-                  />
-                  <HandNote tilt={-5} className="text-[1.15rem] leading-tight">
-                    a real form,
-                    <br />
-                    no signup
-                  </HandNote>
-                </span>
-              </span>
-            ) : null}
           </div>
 
           {/* "200 AI conversations a month" is a metering detail nobody has
@@ -467,17 +436,19 @@ export function Hero() {
                 both reach it. */}
             Free forever · Unlimited submissions · No card
           </p>
+
+          {/* The margin note, pointing down the page at the launch video.
+              It replaced "a real form, no signup" beside the pills, which
+              restated the button it pointed at. Orange ink on purpose, set
+              at full strength: by this height the wash has darkened
+              enough for the brand orange to stand off it. */}
+          <WatchVideoCue className="mt-4 ml-1 text-[var(--brand-orange)] [text-shadow:0_1px_12px_rgb(0_0_0/0.18)]" />
         </div>
 
         <ChatDemo script={HERO_SCRIPT} variant="hero" />
       </div>
 
       {/* The way down to the launch video, centred under both columns. */}
-      {/* Page ink, not the wash's: by this height the wash has faded into
-          the page, which is charcoal in the dark theme. */}
-      <div className="text-foreground relative mt-8 flex justify-center sm:mt-10">
-        <WatchVideoCue />
-      </div>
     </section>
   );
 }

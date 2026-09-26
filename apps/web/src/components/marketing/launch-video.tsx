@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Volume2 } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { Volume2 } from "lucide-react";
+import { HandNote } from "./annotate";
 
 /**
  * The launch video, in its own band directly under the hero.
@@ -220,10 +221,17 @@ export function LaunchVideo() {
 }
 
 /**
- * The cue at the foot of the hero. Scrolls to the band and starts the video
+ * The hero's margin note: handwriting and a dashed arrow that loops once and
+ * heads down the page. Clicking it scrolls to the band and starts the video
  * with sound, since the click is the permission browsers ask for.
+ *
+ * The dashed stroke cannot draw itself on the usual way, because the draw
+ * animation spends `stroke-dasharray` on the reveal. So the dashes sit under a
+ * mask, and the mask is the solid stroke that draws.
  */
 export function WatchVideoCue({ className }: { className?: string }) {
+  const maskId = useId();
+  const d = "M6 10 C 52 2, 92 22, 80 52 C 72 72, 44 62, 54 44 C 64 26, 98 48, 88 104";
   return (
     <a
       href={`#${LAUNCH_VIDEO_ID}`}
@@ -235,17 +243,52 @@ export function WatchVideoCue({ className }: { className?: string }) {
           ?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
         window.dispatchEvent(new Event(PLAY_EVENT));
       }}
-      // Plain ink, no fill: a nudge, not a third button beside the two pills.
-      className={
-        "group inline-flex flex-col items-center gap-0.5 text-sm font-medium opacity-60 transition-opacity hover:opacity-100 " +
-        (className ?? "")
-      }
+      className={"group inline-flex items-start gap-1 " + (className ?? "")}
     >
-      Watch the video
-      <ChevronDown
-        className="size-4 [animation:cf-cue-bob_1.8s_var(--ease-out)_infinite]"
-        strokeWidth={2}
-      />
+      <HandNote tilt={-4} className="mt-1 text-[1.7rem] transition-transform group-hover:-translate-y-0.5">
+        watch the product tour
+      </HandNote>
+      {/* Armed by hand, like the hero's other marks: this is the top of the
+          document and on screen at load. */}
+      <span data-armed="" data-inview="" className="contents">
+        <svg
+          aria-hidden
+          viewBox="0 0 110 112"
+          fill="none"
+          className="-mb-10 h-24 w-24 shrink-0 translate-y-3"
+        >
+          <defs>
+            <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="110" height="112">
+              <path
+                d={d}
+                stroke="white"
+                strokeWidth="6"
+                strokeLinecap="round"
+                pathLength={1}
+                className="cf-a-draw"
+                style={{ animationDelay: "1500ms", animationDuration: "1100ms" }}
+              />
+            </mask>
+          </defs>
+          <path
+            d={d}
+            mask={`url(#${maskId})`}
+            stroke="currentColor"
+            strokeWidth="2.25"
+            strokeLinecap="round"
+            strokeDasharray="5 6"
+          />
+          <path
+            d="M78 94 L88 105 L98 92"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="cf-a-pop"
+            style={{ animationDelay: "2500ms", transformOrigin: "88px 104px" }}
+          />
+        </svg>
+      </span>
     </a>
   );
 }

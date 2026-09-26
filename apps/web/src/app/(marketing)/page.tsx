@@ -8,7 +8,6 @@ import { WhatItDoes } from "@/components/marketing/what-it-does";
 import { Developers } from "@/components/marketing/developers";
 import { PricingSection } from "@/components/marketing/pricing-section";
 import { CtaBand } from "@/components/marketing/cta-band";
-import { TheDropOff } from "@/components/marketing/the-drop-off";
 import { Band, BandTitle, BandLede } from "@/components/marketing/band";
 import { InView } from "@/components/marketing/in-view";
 import { ArrowMark, HandNote } from "@/components/marketing/annotate";
@@ -103,31 +102,15 @@ export const metadata: Metadata = {
  * the full spectrum, violet, cream, sand with coloured tiles, ink, cream,
  * orange. The same colours a respondent moves through, in the same order.
  *
- * `HowItConverts` is second, immediately under the hero, and it is the band
- * this page was missing. The hero promises an outcome; `TheDropOff` proves the
- * problem is real; `WhatItDoes` shows what you get. Between those there was
- * no answer to the only question a visitor actually has, which
- * is what the product does differently to get the outcome. It now sits in the
- * first scroll, in three tiles, in the order a respondent meets them: it asks
- * better, it chases the ones who left, and it can tell you whether the chasing
- * worked.
+ * `LaunchVideo` sits directly under the hero: the chat demo up there makes the
+ * point in seconds, and the video gets the full width for the long version.
  *
- * It goes above `TheDropOff` rather than below. Both bands carry citations and
- * running them together would read as one long bibliography, but the ordering
- * argument is simpler than that: the pillars answer the headline, and the
- * drop-off band explains why the headline is true. Somebody who is already
- * sold does not need the second one, and somebody who is not will scroll one
- * band further to find it.
+ * `HowItConverts` follows, in three tiles: it talks like a person, it chases
+ * the ones who left, and it answers the questions a form leaves unanswered.
  *
- * `TheDropOff` is the page's evidence, and it matters more now that the hero
- * states an outcome instead of a problem. "More submissions" is a claim with
- * nothing under it until somebody explains why the current form gets fewer,
- * so this band carries three findings and three citations — that long forms
- * are abandoned for being long, and that the same questions asked as a
- * conversation come back better answered — and then gets out of the way. It
- * sits before `TheMoment` rather than after: the argument is "here is why you
- * are losing them" and then "here is the moment that stops", and that order
- * does not reverse.
+ * `TheDropOff` ("a long form is a list of reasons to leave") was removed on
+ * 2026-09-27 at the owner's call; its citations still live in
+ * `content/research.ts` and on /why-conversation-works.
  */
 export default function LandingPage() {
   const catalogue = buildCatalogue();
@@ -156,7 +139,6 @@ export default function LandingPage() {
       <LaunchVideo />
       <HowItConverts />
       <SpectrumStrip />
-      <TheDropOff />
       <TheMoment />
       <WhatItDoes />
       <Developers />

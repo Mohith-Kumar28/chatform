@@ -1,6 +1,6 @@
 import { Band, BandTitle, BandLede } from "./band";
 import { InView } from "./in-view";
-import { ArrowMark, HandNote } from "./annotate";
+import { BookOpen } from "lucide-react";
 import { study } from "@/content/research";
 
 /**
@@ -24,18 +24,22 @@ import { study } from "@/content/research";
  * different heights, which is the one thing a row of three cards must never
  * do.
  *
+ * The third tile is the one a form cannot fake at all: a respondent asks
+ * something back, and gets an answer from the docs and links the owner gave it
+ * before the conversation carries on. The first and third tiles play as short
+ * chats, typing dots and all, because a still of a chat undersells the part
+ * where it replies.
+ *
  * What this band must never grow: a recovery percentage. The number the
  * category quotes — some share of people who "convert on the third email" —
  * is conversion of emails sent, measured with no control group, by vendors
- * selling the emails. `content/research.ts` says why at more length. The
- * strongest honest version of that claim is the third tile: we will tell you
- * the real number for your own form.
+ * selling the emails. `content/research.ts` says why at more length.
  */
 
 const TONE = {
-  ask: "text",
+  talk: "text",
   chase: "choice",
-  prove: "scale",
+  answer: "scale",
 } as const;
 
 export function HowItConverts() {
@@ -46,7 +50,7 @@ export function HowItConverts() {
     <Band id="how-it-works">
       <div className="max-w-2xl">
         <BandTitle>Three pillars behind more submissions.</BandTitle>
-        <BandLede>Better questions, automatic follow-ups, and proof they worked.</BandLede>
+        <BandLede>It talks like a person, follows up on its own, and answers back.</BandLede>
       </div>
 
       {/* Four rows, shared by all three tiles: title, sentence, graphic, source.
@@ -54,9 +58,9 @@ export function HowItConverts() {
           same line no matter how tall their contents are. */}
       <ol className="mt-12 grid gap-4 lg:grid-cols-3 lg:grid-rows-[auto_auto_1fr_auto]">
         <Pillar
-          tone={TONE.ask}
-          title="Better questions"
-          body="One at a time — and when an answer is too thin to use, it asks again."
+          tone={TONE.talk}
+          title="Talks like a person"
+          body="One question at a time, in plain words. A thin answer gets a follow-up question."
           source={xiao}
         >
           <MiniChat />
@@ -72,12 +76,12 @@ export function HowItConverts() {
         </Pillar>
 
         <Pillar
-          tone={TONE.prove}
-          title="Proof it worked"
-          body="Hold some people back from the emails. The gap between the two is your real recovery."
-          note="No other form builder we could find offers one."
+          tone={TONE.answer}
+          title="Answers their questions"
+          body="A form goes quiet when someone is unsure. chatform answers, then picks up where they were."
+          note="Answers come from the docs and links you give it."
         >
-          <Holdout />
+          <AnswersBack />
         </Pillar>
       </ol>
     </Band>
@@ -163,26 +167,123 @@ function Panel({ children, className }: { children: React.ReactNode; className?:
   );
 }
 
-/** Two turns: a thin answer, and the question that refuses to accept it. */
-function MiniChat() {
+/**
+ * The chat graphics share one timeline: each turn arrives on its own delay,
+ * and a reply from chatform is preceded by typing dots that hold its place and
+ * clear as it lands. Played once, by the `Panel`'s `InView`, when the tile
+ * scrolls into view. Without motion (or before arming) every bubble is simply
+ * there and the dots are not.
+ */
+type Turn = { from: "bot" | "person"; text: React.ReactNode; at: number; tag?: string };
+
+const TYPING_MS = 700;
+
+function Thread({ turns, tone }: { turns: Turn[]; tone: "text" | "scale" }) {
   return (
     <Panel className="gap-2">
-      <p
-        className="text-micro rounded-lg px-2.5 py-2"
-        style={{ background: "var(--family-text-soft)", color: "var(--family-text-ink)" }}
-      >
-        What went wrong with the last tool you tried?
-      </p>
-      <p className="text-micro text-muted-foreground border-border/60 self-end rounded-lg border px-2.5 py-2">
-        it was bad
-      </p>
-      <p
-        className="text-micro rounded-lg px-2.5 py-2"
-        style={{ background: "var(--family-text-soft)", color: "var(--family-text-ink)" }}
-      >
-        Bad how — the price, or something it couldn&rsquo;t do?
-      </p>
+      {turns.map((turn, i) =>
+        turn.from === "person" ? (
+          <p
+            key={i}
+            className="cf-a-slide-r text-micro text-muted-foreground border-border/60 self-end rounded-lg border px-2.5 py-2"
+            style={{ animationDelay: `${turn.at}ms` }}
+          >
+            {turn.text}
+          </p>
+        ) : (
+          // The dots and the bubble share one grid cell, so the dots take
+          // exactly the room the reply will, and nothing jumps when it lands.
+          <div key={i} className="grid">
+            {i > 0 ? (
+              <span
+                aria-hidden
+                className="cf-a-typing flex items-center gap-1 self-start justify-self-start rounded-lg px-2.5 py-2.5 [grid-area:1/1]"
+                style={{
+                  background: `var(--family-${tone}-soft)`,
+                  animationDelay: `${turn.at - TYPING_MS}ms`,
+                }}
+              >
+                {[0, 1, 2].map((dot) => (
+                  <span
+                    key={dot}
+                    className="block size-1 rounded-full [animation:cf-typing-dot_1.1s_ease-in-out_infinite]"
+                    style={{
+                      background: `var(--family-${tone}-ink)`,
+                      animationDelay: `${dot * 140}ms`,
+                    }}
+                  />
+                ))}
+              </span>
+            ) : null}
+            <div
+              className="cf-a-slide-l flex flex-col items-start gap-1 [grid-area:1/1]"
+              style={{ animationDelay: `${turn.at}ms` }}
+            >
+              <p
+                className="text-micro rounded-lg px-2.5 py-2"
+                style={{
+                  background: `var(--family-${tone}-soft)`,
+                  color: `var(--family-${tone}-ink)`,
+                }}
+              >
+                {turn.text}
+              </p>
+              {turn.tag ? (
+                <span
+                  className="cf-a-pop text-micro inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium"
+                  style={{
+                    animationDelay: `${turn.at + 260}ms`,
+                    color: `var(--family-${tone}-ink)`,
+                    border: `1px solid color-mix(in oklch, var(--family-${tone}-ink) 30%, transparent)`,
+                  }}
+                >
+                  <BookOpen aria-hidden className="size-3" strokeWidth={2} />
+                  {turn.tag}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ),
+      )}
     </Panel>
+  );
+}
+
+/** A thin answer, and the question that refuses to accept it. */
+function MiniChat() {
+  return (
+    <Thread
+      tone="text"
+      turns={[
+        { from: "bot", text: "What went wrong with the last tool you tried?", at: 150 },
+        { from: "person", text: "it was bad", at: 750 },
+        {
+          from: "bot",
+          text: <>Bad how? The price, or something it couldn&rsquo;t do?</>,
+          at: 1650,
+        },
+      ]}
+    />
+  );
+}
+
+/** The respondent asks back, gets an answer, and the form carries on. */
+function AnswersBack() {
+  return (
+    <Thread
+      tone="scale"
+      turns={[
+        { from: "bot", text: "How many people are on your team?", at: 150 },
+        { from: "person", text: "wait, who sees my answers?", at: 750 },
+        {
+          from: "bot",
+          text: "Only the Northwind team. Nothing is shared outside it.",
+          at: 1650,
+          tag: "From your docs",
+        },
+        { from: "bot", text: "So, how many on your team?", at: 2700 },
+      ]}
+    />
   );
 }
 
@@ -271,65 +372,5 @@ function Cadence() {
         </div>
       </div>
     </Panel>
-  );
-}
-
-/**
- * Two bars and the difference between them, which is the entire idea.
- *
- * This band's one pen mark, and it goes here rather than on the heading
- * because the heading does not need help. What needs pointing at is the
- * distance between two bar ends — the thing the tile is about, and the only
- * thing on the page a reader might scan straight past. The arrow lands after
- * the second bar has finished growing, so the note arrives at a gap that
- * already exists rather than announcing one.
- */
-function Holdout() {
-  return (
-    <Panel className="gap-3">
-      <Bar label="Reminded" width="72%" filled />
-      <Bar label="Held back" width="46%" />
-      {/* `text-foreground` on both, not the tile's ink.
-          The mark is inside the panel, and a panel carries `--background` —
-          near-black in the dark theme. Everything else in here already sets a
-          page-surface colour (`text-muted-foreground` on the bar labels, the
-          family inks on the chat bubbles); the pen was the one thing left
-          inheriting the violet tile's near-black, so in dark mode the note and
-          its arrow were drawn in the panel's own colour and disappeared. */}
-      <div className="text-foreground mt-1 flex items-start justify-center gap-1 pl-8">
-        <ArrowMark
-          dir="up-right"
-          positioned={false}
-          draw
-          delay={1150}
-          className="size-9 shrink-0 opacity-55"
-        />
-        <HandNote tilt={-4} className="cf-a-rise mt-2 text-[1.15rem]" style={{ animationDelay: "1500ms" }}>
-          that gap, in your numbers
-        </HandNote>
-      </div>
-    </Panel>
-  );
-}
-
-function Bar({ label, width, filled }: { label: string; width: string; filled?: boolean }) {
-  return (
-    <div className="flex items-center gap-2.5">
-      <span className="text-micro text-muted-foreground w-16 shrink-0">{label}</span>
-      <span className="bg-muted h-2.5 flex-1 overflow-hidden rounded-full">
-        {/* Two elements again: the outer one is the bar's width, the inner one
-            is what grows into it. Animating the width itself would lay out
-            every frame; `scaleX` on a child does it on the compositor. */}
-        <span className="block h-full rounded-full" style={{ width }}>
-          <span
-            className="cf-a-grow block h-full rounded-full"
-            style={{
-              animationDelay: filled ? "160ms" : "440ms",
-              background: filled ? "var(--family-scale-ink)" : "var(--family-scale-soft)",
-            }}
-          />
-        </span>
-      </span>
-    </div>
   );
 }
