@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Lock, MessageCircle, RotateCcw, X } from "lucide-react";
+import { Lock, MessageCircle, RotateCcw, SendHorizontal, X } from "lucide-react";
 import type { Block, ThemeDoc } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { isOverlay, type EmbedConfig } from "@/lib/embed-snippet";
@@ -149,7 +149,6 @@ export function EmbedPreview({
                       theme={theme}
                       blocks={blocks}
                       compact={device === "mobile"}
-                      phone={device === "mobile"}
                     />
                   </div>
                 ) : null
@@ -165,7 +164,6 @@ export function EmbedPreview({
                 theme={theme}
                 blocks={blocks}
                 compact={device === "mobile"}
-                phone={device === "mobile"}
               />
             </div>
           )}
@@ -183,7 +181,6 @@ export function EmbedPreview({
                     theme={theme}
                     blocks={blocks}
                     compact={takeover || config.width < 380}
-                    phone={device === "mobile"}
                     onClose={launcherCloses ? undefined : onToggle}
                   />
                 </div>
@@ -407,7 +404,6 @@ function MockConversation({
   theme,
   blocks,
   compact,
-  phone,
   onClose,
 }: {
   title: string;
@@ -420,13 +416,6 @@ function MockConversation({
   theme: ThemeDoc;
   blocks: Block[];
   compact: boolean;
-  /**
-   * Whether the stage is a phone. `kbd-hint` — the rule every key chip in the
-   * runtime is gated on — asks the *real* pointer, and the real pointer here is
-   * the desktop the studio is open on, so left to itself it would draw an Enter
-   * key onto a phone that has no keyboard.
-   */
-  phone: boolean;
   /**
    * Overlay modes only: the close the panel carries itself.
    *
@@ -514,21 +503,15 @@ function MockConversation({
         )}
       </div>
 
-      {/* `SendRow`, to the pixel: a labelled pill carrying the Enter chip, not
-          the circular arrow this drew — a control the runtime has never
-          shipped, on the one row of the panel everybody looks at. */}
+      {/* `SendRow`, to the pixel: the round paper-plane button the runtime
+          draws, on the one row of the panel everybody looks at. */}
       <footer className="shrink-0">
         <div className={cn("flex items-end py-3", pad)}>
           <div className="h-11 min-w-0 flex-1 rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 text-[0.9375rem] leading-[2.75rem] opacity-50">
             {script.placeholder}
           </div>
-          <span className="ml-2 inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-[var(--cf-accent)] px-4 text-sm font-medium text-[var(--cf-accent-text)]">
-            Send
-            {!phone && (
-              <kbd className="grid size-4 shrink-0 place-items-center rounded bg-[color-mix(in_oklch,var(--cf-accent-text)_25%,transparent)] font-sans text-[0.625rem] leading-none font-medium">
-                ↵
-              </kbd>
-            )}
+          <span className="ml-2 inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--cf-accent)] text-[var(--cf-accent-text)]">
+            <SendHorizontal className="size-5 translate-x-px" strokeWidth={2.25} aria-hidden />
           </span>
         </div>
         <p className="pb-2 text-center text-[0.6875rem] opacity-40">

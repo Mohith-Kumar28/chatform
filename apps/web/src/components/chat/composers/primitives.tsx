@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef } from "react";
-import { Mic, SkipForward, Square } from "lucide-react";
+import { Mic, SendHorizontal, SkipForward, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InputSemantics } from "./input-semantics";
 
@@ -251,24 +251,28 @@ export function SendRow({
         >
           <div className="pb-2 sm:pb-0 sm:pr-2">{onSkip && <SkipButton onSkip={onSkip} />}</div>
         </div>
+        {/*
+          An icon, not a labelled pill. "Send" plus its Enter chip cost the
+          message box about 60px, which on a phone or a narrow embed is where
+          a typed email address runs out of room. The paper plane is the one
+          every messaging app has taught; Enter still sends, and the tooltip
+          says so to anyone with a pointer to hover.
+        */}
         <button
           type="button"
           onClick={onSend}
           onMouseDown={keepFocus}
           disabled={disabled}
+          aria-label={label}
+          title={`${label} (Enter)`}
           className={cn(
-            "inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-medium",
+            "inline-flex size-11 shrink-0 items-center justify-center self-end rounded-full",
             "bg-[var(--cf-accent)] text-[var(--cf-accent-text)]",
-            "transition-transform duration-[var(--duration-micro)] active:scale-[0.97]",
+            "transition-transform duration-[var(--duration-micro)] active:scale-[0.94]",
             "motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40",
           )}
         >
-          {label}
-          {/* Says Enter sends, in the same key chip the choice chips use. The
-              icon this replaces was hidden below `sm`, which is the width proxy
-              `kbd-hint` exists to avoid: an embedded form in a 400px frame on
-              a desktop has a keyboard and was told nothing. */}
-          <KeyHint tone="inverse">↵</KeyHint>
+          <SendHorizontal className="size-5 translate-x-px" strokeWidth={2.25} aria-hidden />
         </button>
       </div>
     </div>
