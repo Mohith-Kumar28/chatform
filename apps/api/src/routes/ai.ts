@@ -433,9 +433,16 @@ export async function clarifyFormHandler(c: AiCtx) {
     if (!c.env.OPENROUTER_API_KEY) return c.json({ questions: [] });
     const { prompt } = validBody<z.infer<typeof ClarifyBody>>(c);
     const started = Date.now();
+    // The pages are read after this step, not before, so without this the
+    // model asked the author to list the fields of the form they had just
+    // linked. Saying so costs nothing; fetching the pages here would cost the
+    // author several seconds before the first question.
+    const linked = extractUrls(prompt).length > 0
+      ? `${prompt}\n\n(Every link above is read automatically before drafting, including any form on it: its questions, options, order and required fields. Never ask what a linked page or form contains.)`
+      : prompt;
     const { questions, usage } = await clarifyRequest({
       env: c.env,
-      prompt,
+      prompt: linked,
       system: CLARIFY_SYSTEM,
       organizationId: c.get("orgId"),
       trace: { userId: c.get("userId"), source: callSource(c) },
