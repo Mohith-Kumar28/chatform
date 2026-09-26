@@ -269,12 +269,19 @@ export function describeEditChanges(before: FormDoc, applied: EditApplication): 
 /**
  * The flow codes worth sending back to the model.
  *
- * Narrow on purpose: these three are the ways an edit leaves the form
+ * Narrow on purpose: the first three are the ways an edit leaves the form
  * structurally unfinishable, and they are the ones a model can act on from the
  * message alone. A payment block with no UPI id is also an error, and is not
  * this function's business — it is the author's to fill in.
  */
-const FLOW_CODES = new Set(["unreachable_blocks", "no_route_to_ending", "dangling_target"]);
+const FLOW_CODES = new Set([
+  "unreachable_blocks",
+  "no_route_to_ending",
+  "dangling_target",
+  // Not unfinishable, but always a slip when an edit causes it: an ending
+  // written or re-pointed and then never routed to. The fix is in the message.
+  "ending_unreachable",
+]);
 
 type LintIssue = ReturnType<typeof lintFormDoc>[number];
 

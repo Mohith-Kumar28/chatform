@@ -1360,7 +1360,33 @@ export function draftToDoc(draft: GenerationDraft): NormalizedDraft {
 
   const endings = normalizeDraftEndings(draft.endings);
 
-  const branches = resolveBranches(draft.branches ?? [], blocks, optionIdsByRef);
+  /*
+   * Branches name questions and endings by the refs the model wrote, and both
+   * were just normalized: "Intake received" became `end_intake_received`. A
+   * branch still saying `intake_received` matched nothing, `buildFlowRules`
+   * dropped it without a word, and the ending it was for arrived in the
+   * builder with nothing leading to it. So the branch is translated too, one
+   * draft entry to one normalized entry (`normalizeDraftEndings` keeps order).
+   */
+  const endingAlias = new Map<string, string>();
+  for (const [i, e] of draft.endings.entries()) {
+    const to = endings[i]?.ref;
+    if (!to) continue;
+    // By title as well: a model that named the ending in prose meant it.
+    if (e.title) endingAlias.set(e.title.trim().toLowerCase(), to);
+    if (!e.ref) continue;
+    endingAlias.set(e.ref, to);
+    endingAlias.set(e.ref.trim().toLowerCase(), to);
+  }
+  const alias = (raw: string) =>
+    refAlias.get(raw) ?? endingAlias.get(raw) ?? endingAlias.get(raw.trim().toLowerCase()) ?? raw;
+  const draftBranches = (draft.branches ?? []).map((br) => ({
+    ...br,
+    whenRef: refAlias.get(br.whenRef) ?? br.whenRef,
+    then: alias(br.then),
+  }));
+
+  const branches = resolveBranches(draftBranches, blocks, optionIdsByRef);
   // A branch pointing at a question above the one that decides it is discarded
   // by `buildFlowRules`, because honouring it would loop. Ordering the blocks
   // first turns that from a lost branch into a moved question — see
@@ -1385,6 +1411,29 @@ export function draftToDoc(draft: GenerationDraft): NormalizedDraft {
   } satisfies FormDocInput);
 
   return { doc, issues: lintFormDoc(doc), blocks: ordered, ruleCount: logic.length };
+}
+
+/**
+ * Drop endings nothing can send anybody to.
+ *
+ * The last resort after the model has had its chance to wire them up: an
+ * ending no route or rule reaches is never shown to a respondent, so removing
+ * it changes nothing they see, and leaving it hands the author a warning about
+ * a mistake they did not make. Never removes the last ending that accepts a
+ * response.
+ */
+export function pruneOrphanEndings(doc: FormDoc): FormDoc {
+  const orphans = new Set(
+    lintFormDoc(doc)
+      .filter((i) => i.code === "ending_unreachable")
+      .flatMap((i) => i.refs ?? []),
+  );
+  if (orphans.size === 0) return doc;
+  const endings = doc.endings.filter((e) => !orphans.has(e.ref));
+  if (!endings.some((e) => e.kind !== "screen_out")) return doc;
+  const layout = { ...doc.layout };
+  for (const ref of orphans) delete layout[ref];
+  return { ...doc, endings, layout };
 }
 
 /** The edit draft's new blocks, normalized against a form that already exists. */

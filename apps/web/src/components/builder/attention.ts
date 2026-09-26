@@ -56,7 +56,7 @@ export const ATTENTION_FIELD: Record<string, string> = {
 };
 
 /** What is wrong with one question or ending, as the canvas and the banner draw it. */
-export type NodeProblem = { level: "error" | "warning"; messages: string[]; attention?: boolean };
+export type NodeProblem = { level: "error" | "warning"; messages: string[]; codes: string[]; attention?: boolean };
 
 /**
  * Where the flow is broken, per node.
@@ -101,16 +101,17 @@ export function publishProblems(doc: FormDoc): Map<string, NodeProblem> {
       const existing = out.get(ref);
       if (existing) {
         existing.messages.push(issue.message);
+        existing.codes.push(issue.code);
         if (issue.level === "error") existing.level = "error";
       } else {
-        out.set(ref, { level: issue.level, messages: [issue.message] });
+        out.set(ref, { level: issue.level, messages: [issue.message], codes: [issue.code] });
       }
     }
   }
   // A question missing a setting it needs, drawn yellow ("needs attention")
   // unless its routes are already broken, which is the louder of the two.
   for (const [ref, a] of setupAttention(doc)) {
-    if (!out.has(ref)) out.set(ref, { level: "warning", messages: a.messages, attention: true });
+    if (!out.has(ref)) out.set(ref, { level: "warning", messages: a.messages, codes: a.codes, attention: true });
   }
   return out;
 }

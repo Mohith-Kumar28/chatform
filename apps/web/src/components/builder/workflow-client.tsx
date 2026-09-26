@@ -207,9 +207,9 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
    * to need the banner in the first place. From the outside, a button that did
    * nothing.
    *
-   * `setCenter` rather than `fitView`, and at the zoom already in use: being
-   * shown where a problem is should not also rescale the canvas under someone
-   * who had set it where they wanted it. Centred on the node's middle, so a
+   * `setCenter` rather than `fitView`: being shown where a problem is should
+   * not rescale the whole canvas. It only comes in to 100% when the author was
+   * zoomed further out than that, where a shaking node is too small to read. Centred on the node's middle, so a
    * wide branch card does not land half off the edge.
    */
 
@@ -223,7 +223,9 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
     setCenter(
       node.position.x + (node.measured?.width ?? node.width ?? 180) / 2,
       node.position.y + (node.measured?.height ?? node.height ?? 60) / 2,
-      { zoom: getZoom(), duration: 320 },
+      // Closer in if the canvas is zoomed out, so the node is legible when it
+      // shakes; never further out than the author had it.
+      { zoom: Math.max(getZoom(), 1), duration: 320 },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pulse]);
@@ -1110,6 +1112,7 @@ function ProblemNote({ problem }: { problem: NodeProblem }) {
 /** The headline of a lint message; the full text is in the tooltip. */
 function shortProblem(message: string): string {
   if (message.startsWith("No path reaches")) return "Nothing reaches this";
+  if (message.startsWith("Nothing sends anybody")) return "Nothing connects here";
   if (message.startsWith("From these questions")) return "No way to finish from here";
   if (message.includes("can never run")) return "A route never runs";
   return "Broken connection";
@@ -1144,10 +1147,16 @@ function EndingNode({ id, data, selected, deletable }: NodeProps) {
   const screenOut = kind === "screen_out";
   const Icon = screenOut ? ShieldAlert : Flag;
   const accent = screenOut ? "var(--destructive)" : "var(--success)";
+  const card = useRef<HTMLDivElement>(null);
+  useAttentionShake(id, card);
   return (
     <NodeMenu id={id} kind="ending" deletable={deletable !== false}>
       <div
-        className="w-56 rounded-xl border-2 border-dashed px-3 py-2.5 shadow-sm"
+        ref={card}
+        className={cn(
+          "relative w-56 rounded-xl border-2 border-dashed px-3 py-2.5 shadow-sm",
+          problem && (problem.level === "error" ? "ring-2 ring-[var(--destructive)]" : "ring-2 ring-amber-400"),
+        )}
         style={{
           background: screenOut ? "var(--destructive-soft)" : "var(--success-soft)",
           borderColor: selected ? accent : `color-mix(in oklab, ${accent} 55%, transparent)`,
@@ -1156,6 +1165,15 @@ function EndingNode({ id, data, selected, deletable }: NodeProps) {
         }}
       >
         <Handle type="target" position={Position.Top} style={{ background: accent }} />
+        {problem && (
+          <span
+            title={problem.messages.join("\n\n")}
+            className="absolute -top-2.5 right-3 inline-flex items-center gap-1 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] leading-none font-semibold text-amber-950 shadow-xs"
+          >
+            <AlertTriangle className="size-2.5" strokeWidth={2.5} aria-hidden />
+            Needs attention
+          </span>
+        )}
         <div className="flex items-center gap-2">
           <Icon className="size-3.5 shrink-0" style={{ color: accent }} />
           <span className="truncate text-xs font-semibold">{title}</span>

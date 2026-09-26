@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Flag, Plus, ShieldAlert, X } from "lucide-react";
 import { DEFAULT_REDIRECT_DELAY_SEC } from "@repo/form-schema";
 import type { Block, ConditionGroup, FormDoc, LogicRule } from "@repo/form-schema";
@@ -19,6 +20,10 @@ import { cn } from "@/lib/utils";
 import { LockedControl } from "@/components/billing/gate";
 import { Field, fieldInputClass } from "./fields";
 import { RichDescription } from "./rich-description";
+import { InspectorActions } from "./inspector-actions";
+import { ProblemCallout } from "./problem-callout";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { canRemoveEnding, useBuilderStore } from "@/stores/builder-store";
 
 const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
 
@@ -58,6 +63,11 @@ export function EndingInspector({
    */
   const otherSuccess = doc.endings.some((x) => x.ref !== ending.ref && x.kind !== "screen_out");
 
+  const duplicateEnding = useBuilderStore((s) => s.duplicateEnding);
+  const removeEnding = useBuilderStore((s) => s.removeEnding);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const removable = canRemoveEnding(doc, ending.ref);
+
   const requirements = ending.requirements;
   const setRequirements = (next: FormDoc["endings"][number]["requirements"]) => patch({ requirements: next });
 
@@ -74,8 +84,27 @@ export function EndingInspector({
         >
           {screenOut ? <ShieldAlert className="size-3.5" /> : <Flag className="size-3.5" />}
         </div>
-        <p className="text-sm font-semibold">Ending</p>
+        <p className="min-w-0 flex-1 text-sm font-semibold">Ending</p>
+        <InspectorActions
+          label="ending"
+          onDuplicate={() => duplicateEnding(ending.ref)}
+          onDelete={removable ? () => setConfirmDelete(true) : undefined}
+          deleteBlockedReason={
+            doc.endings.length < 2 ? "A form needs at least one ending" : "A form needs one ending that accepts responses"
+          }
+        />
       </div>
+
+      <ProblemCallout nodeRef={ending.ref} doc={doc} />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete "${ending.title.slice(0, 40) || "this ending"}"?`}
+        description="Routes and rules that send people here are removed too."
+        confirmLabel="Delete ending"
+        onConfirm={() => removeEnding(ending.ref)}
+      />
 
       <Field label="Outcome">
         <Select

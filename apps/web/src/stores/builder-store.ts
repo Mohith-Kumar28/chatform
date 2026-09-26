@@ -199,6 +199,20 @@ export interface BuilderState {
    * palettes are now the one catalogue, so both need the operation.
    */
   addEnding: () => void;
+  /**
+   * Remove an ending, dropping the routes and rules that sent people there.
+   * Refused for the last ending and for the last one that accepts a response:
+   * a form needs somewhere to finish, and lint blocks publishing without one.
+   */
+  removeEnding: (ref: string) => void;
+  duplicateEnding: (ref: string) => void;
+}
+
+/** Whether `ref` can go without leaving the form with no accepting ending. */
+export function canRemoveEnding(doc: FormDoc, ref: string): boolean {
+  const ending = doc.endings.find((e) => e.ref === ref);
+  if (!ending || doc.endings.length < 2) return false;
+  return ending.kind === "screen_out" || doc.endings.some((e) => e.ref !== ref && e.kind !== "screen_out");
 }
 
 /**
@@ -529,6 +543,38 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       } as never);
     });
     set({ selectedEndingRef: ref, selectedRef: null });
+  },
+
+  removeEnding: (ref) => {
+    const { doc } = get();
+    if (!doc || !canRemoveEnding(doc, ref)) return;
+    get().edit((d) => {
+      d.endings = d.endings.filter((e) => e.ref !== ref) as never;
+      // The same cleanup the canvas does when a node is deleted: a route into
+      // the ending goes with it, and so does any rule that named it.
+      d.logic = d.logic.filter((r) => !(r.action_kind === "goto" && r.target === ref)) as never;
+      d.endingRules = pruneEndingRules(d.endingRules as never, {
+        endings: d.endings as { ref: string }[],
+        blocks: d.blocks as { ref: string }[],
+      }) as never;
+      if (d.layout) delete (d.layout as Record<string, unknown>)[ref];
+      repairLogic(d);
+    });
+    if (get().selectedEndingRef === ref) set({ selectedEndingRef: null });
+  },
+
+  duplicateEnding: (ref) => {
+    const { doc } = get();
+    const source = doc?.endings.find((e) => e.ref === ref);
+    if (!doc || !source) return;
+    const copyRef = `end_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
+    get().edit((d) => {
+      const index = d.endings.findIndex((e) => e.ref === ref);
+      // A copy has nothing sending anyone to it yet, so it is the author's to
+      // wire up; it keeps the wording, which is the part worth copying.
+      d.endings.splice(index + 1, 0, { ...structuredClone(source), id: copyRef, ref: copyRef } as never);
+    });
+    set({ selectedEndingRef: copyRef, selectedRef: null });
   },
 }));
 

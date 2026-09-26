@@ -1083,6 +1083,12 @@ export interface EditAgentRun {
   question?: string;
 }
 
+/** The last step called `finish_edit` and it did not come back "Rejected: …". */
+export const finishAccepted = ({ steps }: { steps: { toolResults: { toolName: string; output: unknown }[] }[] }) =>
+  (steps[steps.length - 1]?.toolResults ?? []).some(
+    (r) => r.toolName === "finish_edit" && !(typeof r.output === "string" && r.output.startsWith("Rejected:")),
+  );
+
 /**
  * One edit, as a tool loop.
  *
@@ -1128,7 +1134,12 @@ export async function runEditAgent(opts: {
       // of room to keep going. `ask_user` has no `execute`, so the loop would
       // end on it anyway; naming it here makes that intent explicit rather
       // than incidental.
-      stopWhen: [stepCountIs(EDIT_MAX_STEPS), hasToolCall("finish_edit"), hasToolCall("ask_user")],
+      //
+      // `finish_edit` only when it was ACCEPTED. `hasToolCall` stops on any
+      // call, and a rejected finish ("your changes broke the flow, fix it and
+      // call again") is a call too: the loop ended on the very message asking
+      // the model to repair, so the repair round never happened.
+      stopWhen: [stepCountIs(EDIT_MAX_STEPS), finishAccepted, hasToolCall("ask_user")],
       /**
        * The commonest tool-loop failure is a model that DESCRIBES the edit in
        * prose instead of making it, and a sentence changes nothing. Required on

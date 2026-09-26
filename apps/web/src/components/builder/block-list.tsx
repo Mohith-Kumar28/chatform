@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { setupAttention, type Attention } from "./attention";
+import { publishProblems, setupAttention, type Attention, type NodeProblem } from "./attention";
 import { useAttentionShake } from "./use-attention-shake";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -38,7 +38,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
-import type { Block } from "@repo/form-schema";
+import type { Block, FormDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -96,7 +96,15 @@ export function BlockList() {
     [doc],
   );
   // Questions missing something they need to publish, marked on their rows.
-  const attention = useMemo(() => (doc ? setupAttention(doc) : new Map<string, Attention>()), [doc]);
+  // Wiring problems too (nothing leads here, a route that never runs): they
+  // were drawn on the Flow canvas only, so "Show me" from this view selected
+  // a row that looked exactly like every other.
+  const problems = useMemo(() => (doc ? publishProblems(doc) : new Map<string, NodeProblem>()), [doc]);
+  const attention = useMemo(() => {
+    const out = doc ? setupAttention(doc) : new Map<string, Attention>();
+    for (const [ref, p] of problems) if (!out.has(ref)) out.set(ref, { messages: p.messages, codes: p.codes });
+    return out;
+  }, [doc, problems]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -172,44 +180,15 @@ export function BlockList() {
               Ending
             </p>
             <ol className="space-y-0.5">
-              {/*
-                Green accepts, red refuses — the same pairing the canvas node
-                and the ending inspector use. Every ending was the same orange
-                flag here, so the row that turns people away looked exactly
-                like the one that thanks them.
-              */}
-              {doc.endings.map((ending) => {
-                const screenOut = ending.kind === "screen_out";
-                const isSelected = selectedEndingRef === ending.ref;
-                const accent = screenOut ? "var(--destructive)" : "var(--success)";
-                const Icon = screenOut ? ShieldAlert : Flag;
-                return (
-                  <li key={ending.ref}>
-                    <button
-                      type="button"
-                      onClick={() => selectEnding(ending.ref)}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left",
-                        "transition-opacity duration-[var(--duration-micro)]",
-                        isSelected ? "opacity-100" : "opacity-[0.82] hover:opacity-100",
-                      )}
-                      style={{
-                        background: screenOut ? "var(--destructive-soft)" : "var(--success-soft)",
-                        color: screenOut
-                          ? "var(--destructive-soft-foreground)"
-                          : "var(--success-soft-foreground)",
-                        boxShadow: isSelected ? `inset 3px 0 0 0 ${accent}` : undefined,
-                      }}
-                    >
-                      <Icon className="size-3.5 shrink-0" strokeWidth={2} style={{ color: accent }} />
-                      <span className="line-clamp-1 min-w-0 flex-1 text-xs">{ending.title}</span>
-                      <span className="text-micro shrink-0 font-medium tracking-wide uppercase opacity-70">
-                        {screenOut ? "Can't submit" : "Done"}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
+              {doc.endings.map((ending) => (
+                <EndingRow
+                  key={ending.ref}
+                  ending={ending}
+                  selected={selectedEndingRef === ending.ref}
+                  problem={problems.get(ending.ref)}
+                  onSelect={() => selectEnding(ending.ref)}
+                />
+              ))}
             </ol>
           </div>
         </div>
@@ -327,7 +306,7 @@ function SortableRow({
         "transition-[background-color,box-shadow] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
         TONE_CLASSES[meta.tone],
         selected ? "ring-0" : "opacity-[0.82] hover:opacity-100",
-        attention && "opacity-100 ring-2 ring-amber-400 ring-inset",
+        attention && "opacity-100 outline-2 -outline-offset-2 outline-amber-400",
         isDragging && "shadow-md z-10 opacity-100",
       )}
     >
@@ -668,5 +647,67 @@ function BlockPicker({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * One ending in the list.
+ *
+ * Green accepts, red refuses: the same pairing the canvas node and the ending
+ * inspector use. Every ending was the same orange flag here, so the row that
+ * turns people away looked exactly like the one that thanks them. A problem
+ * (usually: nothing sends anybody here) gets the same ring and pill as a
+ * question, and "Show me" shakes it into view.
+ */
+function EndingRow({
+  ending,
+  selected,
+  problem,
+  onSelect,
+}: {
+  ending: FormDoc["endings"][number];
+  selected: boolean;
+  problem?: NodeProblem;
+  onSelect: () => void;
+}) {
+  const row = useRef<HTMLButtonElement>(null);
+  useAttentionShake(ending.ref, row, true);
+  const screenOut = ending.kind === "screen_out";
+  const accent = screenOut ? "var(--destructive)" : "var(--success)";
+  const Icon = screenOut ? ShieldAlert : Flag;
+  return (
+    <li className="relative">
+      {problem && (
+        <span
+          title={problem.messages.join("\n\n")}
+          className="pointer-events-none absolute -top-2 right-5 z-10 inline-flex items-center gap-1 rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] leading-none font-semibold text-amber-950 shadow-xs"
+        >
+          <AlertTriangle className="size-2.5" strokeWidth={2.5} aria-hidden />
+          Needs attention
+        </span>
+      )}
+      <button
+        ref={row}
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          "flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left",
+          "transition-opacity duration-[var(--duration-micro)]",
+          selected || problem ? "opacity-100" : "opacity-[0.82] hover:opacity-100",
+          problem && "outline-2 -outline-offset-2 outline-amber-400",
+        )}
+        style={{
+          background: screenOut ? "var(--destructive-soft)" : "var(--success-soft)",
+          color: screenOut ? "var(--destructive-soft-foreground)" : "var(--success-soft-foreground)",
+          boxShadow: selected ? `inset 3px 0 0 0 ${accent}` : undefined,
+        }}
+      >
+        <Icon className="size-3.5 shrink-0" strokeWidth={2} style={{ color: accent }} />
+        <span className="line-clamp-1 min-w-0 flex-1 text-xs">{ending.title}</span>
+        <span className="text-micro shrink-0 font-medium tracking-wide uppercase opacity-70">
+          {screenOut ? "Can't submit" : "Done"}
+        </span>
+      </button>
+    </li>
   );
 }

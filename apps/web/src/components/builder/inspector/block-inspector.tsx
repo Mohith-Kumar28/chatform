@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { AlertTriangle, Bot, ChevronDown, GitBranch, Sparkles, Trash2 } from "lucide-react";
+import { AlertTriangle, Bot, ChevronDown, GitBranch, Sparkles } from "lucide-react";
 import {
   IDENTITY_FIELDS,
   IDENTITY_FIELD_LABELS,
@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/select";
 import { useBuilderStore, useSelectedBlock } from "@/stores/builder-store";
 import { EndingInspector } from "./ending-inspector";
+import { InspectorActions } from "./inspector-actions";
+import { ProblemCallout } from "./problem-callout";
 import { BLOCK_GROUPS, BLOCK_LIBRARY, blockMeta, TONE_CLASSES } from "../block-library";
 import { defaultBlock } from "../default-block";
 import { ATTENTION_FIELD, setupAttention } from "../attention";
@@ -60,6 +62,7 @@ export function BlockInspector() {
   const block = useSelectedBlock();
   const updateBlock = useBuilderStore((s) => s.updateBlock);
   const removeBlock = useBuilderStore((s) => s.removeBlock);
+  const duplicateBlock = useBuilderStore((s) => s.duplicateBlock);
   const doc = useBuilderStore((s) => s.doc);
   const edit = useBuilderStore((s) => s.edit);
   const selectedEndingRef = useBuilderStore((s) => s.selectedEndingRef);
@@ -189,19 +192,16 @@ export function BlockInspector() {
           )}
         </div>
         {block.type !== "welcome" && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Delete block"
-            onClick={() => setConfirmDelete(true)}
-            className="text-muted-foreground hover:text-destructive shrink-0"
-          >
-            <Trash2 className="size-3.5" />
-          </Button>
+          <InspectorActions
+            label="question"
+            onDuplicate={() => duplicateBlock(block.ref)}
+            onDelete={() => setConfirmDelete(true)}
+          />
         )}
       </div>
 
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pt-2 pb-[var(--fab-clearance)]">
+        {doc && <ProblemCallout nodeRef={block.ref} doc={doc} />}
         {doc && <AttentionCallout key={block.ref} blockRef={block.ref} doc={doc} />}
         <TextField
           label="Question"

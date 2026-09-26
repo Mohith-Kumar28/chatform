@@ -29,7 +29,7 @@ import {
 } from "../lib/ai.js";
 import { logAiGeneration } from "../lib/ai-usage.js";
 import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL, CLARIFY_SYSTEM, withClarifications, type BuilderTurn } from "../lib/agent-prompts.js";
-import { draftToDoc } from "../lib/draft-normalize.js";
+import { draftToDoc, pruneOrphanEndings } from "../lib/draft-normalize.js";
 import { withDefaultPaymentAccount } from "../lib/payments/default-account.js";
 import { applyEditDraft, introducedFlowProblems, describeEditChanges } from "../lib/edit-apply.js";
 import { buildEditContext, buildEditTools, type EditOutcome } from "../lib/edit-tools.js";
@@ -227,22 +227,22 @@ async function generateWithRetry(opts: {
       continue;
     }
 
-    if (!hasErrors(normalized.issues)) {
-      const doc = await withDefaultPaymentAccount(opts.env, opts.organizationId, normalized.doc);
-      return { doc, issues: normalized.issues, tokens, usage, model };
+    // Errors, and the one warning that is always the model's slip rather than
+    // the author's choice: an ending it wrote and then never sent anybody to.
+    // Left alone it reached the builder as "1 step may not do what it says"
+    // on a form the author had not touched yet.
+    const repairable = normalized.issues.filter((i) => i.level === "error" || i.code === "ending_unreachable");
+    if (repairable.length === 0 || attempt === 1) {
+      // On the second attempt, whatever is left ships: the document parsed, so
+      // the author is better served by a form with a flagged issue in the
+      // builder than by nothing at all. An ending still unconnected is dropped
+      // first; nobody could have reached it, so nobody loses anything.
+      const pruned = pruneOrphanEndings(normalized.doc);
+      const doc = await withDefaultPaymentAccount(opts.env, opts.organizationId, pruned);
+      return { doc, issues: pruned === normalized.doc ? normalized.issues : lintFormDoc(pruned), tokens, usage, model };
     }
 
-    lastError = normalized.issues
-      .filter((i) => i.level === "error")
-      .map((i) => `${i.path ?? ""}: ${i.message}`)
-      .join("\n");
-    if (attempt === 1) {
-      // Second attempt still has lint errors. The document is structurally
-      // valid — it parsed — so the author is better served by a form with a
-      // flagged issue in the builder than by nothing at all.
-      const doc = await withDefaultPaymentAccount(opts.env, opts.organizationId, normalized.doc);
-      return { doc, issues: normalized.issues, tokens, usage, model };
-    }
+    lastError = repairable.map((i) => `${i.path ?? ""}: ${i.message}`).join("\n");
     opts.onRetry?.("Fixing a problem with the flow");
   }
 
