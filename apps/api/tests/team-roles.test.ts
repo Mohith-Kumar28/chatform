@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { roleAllows, ASSIGNABLE_ROLES, type RoleName } from "../src/lib/permissions.js";
+import { roleAllows, isRoleName, ASSIGNABLE_ROLES, WORKSPACE_ROLES, type RoleName } from "../src/lib/permissions.js";
 
 /**
  * The role matrix the team page shows, pinned to the statements that enforce it.
@@ -59,8 +59,8 @@ const CAPABILITIES: {
     viewer: false,
   },
   {
-    label: "Invite and remove teammates",
-    probe: ["member", "delete"],
+    label: "Invite teammates, choose who opens each workspace",
+    probe: ["member", "update"],
     owner: true,
     admin: true,
     editor: false,
@@ -96,19 +96,24 @@ describe("the role matrix shown on /team", () => {
   }
 
   /**
-   * The invite form and the per-row role menu both offer these three, and both
-   * of them send the value straight to Better Auth. A role that is offered but
-   * not registered is accepted by the endpoint and then resolves to no
-   * permissions at all — the teammate lands in the organization able to do
-   * nothing, with no error anywhere to explain it.
+   * The invite form offers admin and member. A member's working permissions
+   * come from their workspace role, so the pair that matters is admin (every
+   * form, organization-wide) and the two workspace roles (forms inside one).
+   * A role that is offered but not registered is accepted by Better Auth and
+   * then resolves to nothing, with no error anywhere to explain it.
    */
-  it("offers only roles that carry permissions", () => {
-    for (const role of ASSIGNABLE_ROLES) {
-      expect(
-        roleAllows(role as RoleName, "form" as never, "read" as never),
-        `${role} resolves to no permissions`,
-      ).toBe(true);
+  it("offers only registered roles, and workspace roles that carry permissions", () => {
+    for (const role of ASSIGNABLE_ROLES) expect(isRoleName(role), role).toBe(true);
+    expect(roleAllows("admin", "form" as never, "read" as never)).toBe(true);
+    for (const role of WORKSPACE_ROLES) {
+      expect(roleAllows(role, "form" as never, "read" as never), `${role} resolves to no permissions`).toBe(true);
     }
+  });
+
+  /** A member holds nothing organization-wide; everything comes from a workspace grant. */
+  it("gives the member role nothing on its own", () => {
+    expect(roleAllows("member", "form", "read")).toBe(false);
+    expect(roleAllows("member", "invitation", "create")).toBe(false);
   });
 
   /** `owner` is deliberately not assignable from the invite UI. */

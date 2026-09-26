@@ -24,16 +24,16 @@ import { ROLE_LABELS } from "@/lib/roles"
  *   workspace      a folder of forms inside it
  *
  * and the library's own vocabulary is simply correct. What is left here is the
- * one thing it cannot know: that an invitation is to an *organization*, and so
- * grants a role and consumes a seat, rather than to any one folder.
+ * one thing it cannot know: that an invitation is to an organization, and so
+ * consumes a seat, and for a member also names the workspaces they can open.
  */
 const orgLocalization = {
   organizationsDescription:
     "An organization is an account: it holds your plan, your teammates and the workspaces your forms live in.",
   inviteMemberDescription:
-    "We'll email them a link to join this organization. Choose the role they'll have once they accept — it applies across every workspace in it.",
+    "We'll email them a link to join. Admins open every workspace; members open only the ones you choose.",
   changeMemberRoleDescription:
-    "Choose the role this member should have. Roles are set per organization, not per workspace.",
+    "Admins open every workspace. Members open only the workspaces they're added to.",
   organizationInvitationsEmptyDescription:
     "Invite a teammate to collaborate across this organization.",
   userInvitationsEmptyDescription:

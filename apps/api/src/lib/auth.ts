@@ -14,6 +14,7 @@ import { emailOTP, organization } from "better-auth/plugins";
 import { createDb, schema } from "@repo/db";
 import type { Bindings } from "../env.js";
 import { ac, roles } from "./permissions.js";
+import { applyInvitationGrants } from "./workspace-access.js";
 import { apiKeyPlugin } from "./apikey-config.js";
 import { getEntitlements, countSeats } from "./entitlements.js";
 import { seatLimit } from "@repo/entitlements";
@@ -415,6 +416,14 @@ export function createAuth(env: Bindings) {
           });
         },
         organizationHooks: {
+          /**
+           * The workspaces an invitation named become real grants the moment
+           * it is accepted. Without this, a member invited to "Marketing" would
+           * land in an organization where they can open nothing.
+           */
+          afterAcceptInvitation: async ({ invitation, member }) => {
+            await applyInvitationGrants(env, invitation.id, member.id, member.role);
+          },
           /**
            * Seat limit, enforced where invitations are actually created.
            *

@@ -6309,6 +6309,81 @@
                         ]
                       }
                     },
+                    "byCampaign": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "completed": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "count",
+                          "completed"
+                        ]
+                      }
+                    },
+                    "byDeviceType": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "completed": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "count",
+                          "completed"
+                        ]
+                      }
+                    },
+                    "byLanguage": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          },
+                          "completed": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "count",
+                          "completed"
+                        ]
+                      }
+                    },
+                    "byWeekHour": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        }
+                      }
+                    },
                     "durationBuckets": {
                       "type": "array",
                       "items": {

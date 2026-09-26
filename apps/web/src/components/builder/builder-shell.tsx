@@ -57,7 +57,14 @@ export function BuilderShell({
   const markPublished = useBuilderStore((s) => s.markPublished);
   const loadedId = useBuilderStore((s) => s.formId);
 
-  const { flush, retry } = useAutosave(formId);
+  /*
+    A viewer in this form's workspace. Optimistic until the row arrives (and
+    when an older API omits the field): the server refuses a save regardless,
+    so guessing "editable" costs nothing.
+  */
+  const permissions = (form as { permissions?: Record<string, string[]> } | undefined)?.permissions;
+  const readOnly = permissions !== undefined && !(permissions.form ?? []).includes("update");
+  const { flush, retry } = useAutosave(formId, { enabled: !readOnly });
   const [publishing, setPublishing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   /**
@@ -214,7 +221,7 @@ export function BuilderShell({
     () => ({
       onPreview: () => setPreviewOpen(true),
       onPublish: () => {
-        if (!publishing) void onPublish().catch(() => {});
+        if (!publishing && !readOnly) void onPublish().catch(() => {});
       },
       onSave: () => void flush(),
       onCopyLink: canCopyLink ? copyLink : null,
@@ -222,7 +229,7 @@ export function BuilderShell({
     // `onPublish` is recreated each render and closes over nothing that the
     // other dependencies do not already track.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [publishing, flush, canCopyLink, copyLink],
+    [publishing, readOnly, flush, canCopyLink, copyLink],
   );
 
   const { shortcuts, helpOpen, setHelpOpen } = useBuilderShortcuts(shortcutActions);
@@ -345,13 +352,22 @@ export function BuilderShell({
             publishedAt={row.publishedAt}
             unpublished={unpublished}
             onPublish={onPublish}
-            onUnpublish={onUnpublish}
+            onUnpublish={readOnly ? undefined : onUnpublish}
+            readOnly={readOnly}
             publishing={publishing}
             onPreview={() => setPreviewOpen(true)}
             onCopyLink={copyLink}
-            onRename={doc ? (title) => edit((d) => { d.title = title; }, "doc:title") : undefined}
+            onRename={doc && !readOnly ? (title) => edit((d) => { d.title = title; }, "doc:title") : undefined}
             onRetrySave={retry}
           />
+        )}
+
+        {/* One line, not a lock screen: a viewer can still read the whole form,
+            its results and its settings. They just cannot change them. */}
+        {readOnly && !unavailable && (
+          <div className="bg-muted/60 text-muted-foreground border-b px-4 py-2 text-center text-sm">
+            You can view this form. Ask an admin for Editor access to change it.
+          </div>
         )}
 
         <div className="fab-clear min-h-0 flex-1">

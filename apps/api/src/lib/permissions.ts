@@ -104,28 +104,72 @@ export const viewer = ac.newRole({
 });
 
 /**
- * `member` is Better Auth's default role name and the value the invite flow used before
- * this module existed. Migration 0003 rewrites those rows to `editor`, but the alias
- * stays registered so an un-migrated row — or a Better Auth internal default — resolves
- * to the same permissions instead of silently losing all of them.
+ * `member` is the organization role of everyone who is not an owner or admin.
+ *
+ * It grants nothing at the organization level on purpose: what a member may do
+ * with forms, responses and the AI is decided per workspace by the role on their
+ * `workspace_members` row, which is `editor` or `viewer` above. Those two are
+ * workspace roles now. Rows that still say `editor` or `viewer` at the
+ * organization level predate per-workspace access and are read as `member`
+ * (see `orgTier`), with their grants backfilled by migration 0042.
  */
-export const member = editor;
-
+export const member = ac.newRole({});
 export const roles = { owner, admin, editor, viewer, member } as const;
 
 export type RoleName = keyof typeof roles;
 
 export const ROLE_NAMES = Object.keys(roles) as RoleName[];
 
-/** Roles offered in the invite UI — `member` is legacy and deliberately not listed. */
-export const ASSIGNABLE_ROLES = ["admin", "editor", "viewer"] as const;
+/** Organization roles offered in the invite UI. */
+export const ASSIGNABLE_ROLES = ["admin", "member"] as const;
+
+/** Roles a member can hold inside one workspace. */
+export const WORKSPACE_ROLES = ["editor", "viewer"] as const;
+export type WorkspaceRole = (typeof WORKSPACE_ROLES)[number];
+
+export function isWorkspaceRole(value: unknown): value is WorkspaceRole {
+  return value === "editor" || value === "viewer";
+}
+
+/**
+ * Resources whose permission is decided by the workspace a thing lives in rather
+ * than by the organization. Everything else (billing, members, keys, domains,
+ * the audit trail, creating workspaces) stays an organization question.
+ */
+export const WORKSPACE_RESOURCES: ReadonlySet<Resource> = new Set<Resource>([
+  "form",
+  "submission",
+  "analytics",
+  "ai",
+  "branding",
+  "webhook",
+]);
+
+/** Owners and admins reach every workspace without a grant. */
+export function isOrgAdmin(role: string | null | undefined): boolean {
+  if (!role) return false;
+  return role.split(",").some((r) => {
+    const name = r.trim();
+    return name === "owner" || name === "admin";
+  });
+}
+
+/**
+ * The organization-level role a stored role string stands for: owners and admins
+ * as themselves, everyone else as `member`. Legacy org-wide `editor` / `viewer`
+ * rows land here too, so they can never outrank their workspace grants.
+ */
+export function orgTier(role: string | null | undefined): string {
+  if (!role) return "";
+  return isOrgAdmin(role) ? role : "member";
+}
 
 export const ROLE_LABELS: Record<RoleName, { label: string; blurb: string }> = {
   owner: { label: "Owner", blurb: "Full access, including billing." },
   admin: { label: "Admin", blurb: "Everything except billing and deleting the organization." },
-  editor: { label: "Editor", blurb: "Build forms and read every response." },
+  editor: { label: "Editor", blurb: "Build, edit and publish forms, and work with every response." },
   viewer: { label: "Viewer", blurb: "Read completed responses and basic analytics." },
-  member: { label: "Editor", blurb: "Build forms and read every response." },
+  member: { label: "Member", blurb: "Only the workspaces they're added to." },
 };
 
 export function isRoleName(value: string): value is RoleName {
@@ -166,4 +210,10 @@ export function permissionsFor(role: string | null | undefined): Record<string, 
     if (allowed.length > 0) out[resource] = allowed;
   }
   return out;
+}
+
+/** The workspace-scoped slice of a role's permissions: what it may do inside one workspace. */
+export function workspacePermissionsFor(role: string | null | undefined): Record<string, string[]> {
+  const all = permissionsFor(role);
+  return Object.fromEntries(Object.entries(all).filter(([resource]) => WORKSPACE_RESOURCES.has(resource as Resource)));
 }

@@ -4,7 +4,7 @@ import { validator } from "../lib/validator.js";
 import { z } from "zod";
 import { BAD_WEBHOOK_URL, deliverableUrl } from "../lib/webhook-url.js";
 import type { Bindings } from "../env.js";
-import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
+import { requireSession, requireOrg, assertFormAccess, type GuardVars } from "../lib/guards.js";
 import {
   EVENT_ALIASES,
   listDeliveries,
@@ -13,7 +13,8 @@ import {
   sendSigned,
   webhookQueueStats,
 } from "../lib/webhooks.js";
-import { requirePermission, type AuthzVars } from "../lib/authorize.js";
+import { requirePermission, assertPermission, type AuthzVars } from "../lib/authorize.js";
+import { accessFor, workspaceFilter } from "../lib/workspace-access.js";
 import { getEntitlements, countWebhooks } from "../lib/entitlements.js";
 import { limitReached } from "@repo/entitlements";
 
@@ -46,6 +47,48 @@ webhooksRouter.patch("/webhooks/:id", requirePermission("webhook", "update"));
 webhooksRouter.post("/webhooks/:id/*", requirePermission("webhook", "update"));
 webhooksRouter.get("/webhooks/*", requirePermission("webhook", "read"));
 
+type WebhookCtx = Parameters<typeof assertFormAccess>[0] & Parameters<typeof assertPermission>[0];
+
+/**
+ * Where a webhook sits decides who may touch it.
+ *
+ * A form's webhook belongs to that form's workspace, so it is judged there, and
+ * a form id from another organization (or a workspace the caller was not added
+ * to) is not found. An organization-wide webhook (`formId: null`) fires for
+ * every form in every workspace, which makes it an admin's.
+ */
+async function webhookScope(
+  c: WebhookCtx,
+  formId: string | null,
+  action: "create" | "read" | "update" | "delete",
+): Promise<Response | null> {
+  const access = await accessFor(c as never);
+  if (!formId) {
+    if (access.admin) return null;
+    return c.json({ error: { code: "forbidden", message: "Only admins manage organization-wide webhooks" } }, 403);
+  }
+  const form = await assertFormAccess(c, formId);
+  if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+  if (access.admin) return null;
+  return assertPermission(c, "webhook", action, { workspaceId: form.workspace_id });
+}
+
+/** The same judgement for a webhook that already exists, by its id. */
+const WEBHOOK_ACTION: Record<string, "read" | "update" | "delete"> = { GET: "read", PATCH: "update", POST: "update", DELETE: "delete" };
+async function existingWebhookScope(c: WebhookCtx, next: () => Promise<void>) {
+  const id = c.req.param("id");
+  if (!id || id === "stats") return next();
+  const row = await c.env.DB.prepare(`SELECT form_id FROM webhooks WHERE id = ? AND organization_id = ?`)
+    .bind(id, c.get("orgId") ?? "")
+    .first<{ form_id: string | null }>();
+  if (!row) return c.json({ error: { code: "not_found", message: "Webhook not found" } }, 404);
+  const denied = await webhookScope(c, row.form_id, WEBHOOK_ACTION[c.req.method] ?? "update");
+  if (denied) return denied;
+  return next();
+}
+webhooksRouter.use("/webhooks/:id", existingWebhookScope);
+webhooksRouter.use("/webhooks/:id/*", existingWebhookScope);
+
 const WebhookRow = z.object({
   id: z.string(),
   url: z.string(),
@@ -62,10 +105,18 @@ webhooksRouter.get(
   async (c) => {
     const orgId = c.get("orgId");
     if (!orgId) return c.json([]);
+    // A member sees the webhooks on forms in their workspaces, and not the
+    // organization-wide ones, which are an admin's.
+    const access = await accessFor(c as never);
+    const filter = workspaceFilter(access, "f.workspace_id");
     const rows = await c.env.DB.prepare(
-      `SELECT id, url, secret, events, form_id, active, created_at FROM webhooks WHERE organization_id = ? ORDER BY created_at DESC`,
+      access.admin
+        ? `SELECT id, url, secret, events, form_id, active, created_at FROM webhooks WHERE organization_id = ? ORDER BY created_at DESC`
+        : `SELECT w.id, w.url, w.secret, w.events, w.form_id, w.active, w.created_at
+             FROM webhooks w JOIN forms f ON f.id = w.form_id
+            WHERE w.organization_id = ?${filter.sql} ORDER BY w.created_at DESC`,
     )
-      .bind(orgId)
+      .bind(orgId, ...filter.binds)
       .all<{ id: string; url: string; secret: string; events: string; form_id: string | null; active: number; created_at: number }>();
     return c.json(
       (rows.results ?? []).map((r) => ({
@@ -101,6 +152,10 @@ webhooksRouter.post(
     if (!orgId) return c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
     const { url, events, formId } = c.req.valid("json");
     if (!deliverableUrl(c.env, url)) return c.json(BAD_WEBHOOK_URL, 400);
+    // Also the check that `formId` is this organization's at all, which this
+    // route used to skip: `/v1` checked it, the dashboard wrote whatever it got.
+    const denied = await webhookScope(c, formId ?? null, "create");
+    if (denied) return denied;
 
     /**
      * Per-form ceiling, counted live rather than metered — a counter would drift the
@@ -162,7 +217,10 @@ webhooksRouter.get(
   async (c) => {
     const orgId = c.get("orgId");
     if (!orgId) return c.json({ total: { pending: 0, failed: 0, delivered24h: 0, lastDeliveredAt: null }, endpoints: [] });
-    return c.json(await webhookQueueStats(c.env, orgId, c.req.query("formId") ?? null));
+    const formId = c.req.query("formId") ?? null;
+    const denied = await webhookScope(c, formId, "read");
+    if (denied) return denied;
+    return c.json(await webhookQueueStats(c.env, orgId, formId));
   },
 );
 

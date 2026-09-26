@@ -28,6 +28,8 @@ import type {
   DeleteApiPaymentAccountsById200,
   DeleteApiPaymentAccountsById404,
   DeleteApiWebhooksById200,
+  DeleteApiWorkspacesByIdMembersByMemberId200,
+  DeleteApiWorkspacesByIdMembersByMemberId404,
   GetApiAuditLogs200,
   GetApiAuditLogsParams,
   GetApiAuthOk200,
@@ -58,7 +60,10 @@ import type {
   GetApiTemplatesBySlug404,
   GetApiWebhooks200Item,
   GetApiWebhooksStats200,
+  GetApiWorkspaceAccess200,
   GetApiWorkspaces200Item,
+  GetApiWorkspacesByIdMembers200Item,
+  GetApiWorkspacesByIdMembers404,
   PatchApiFormsByIdWorkspace200,
   PatchApiFormsByIdWorkspace404,
   PatchApiFormsByIdWorkspaceBody,
@@ -107,6 +112,10 @@ import type {
   PostApiFormsByIdVersionsByVersionRestore200,
   PostApiFormsByIdVersionsByVersionRestore404,
   PostApiFormsByIdVersionsByVersionRestore422,
+  PostApiInvitations200,
+  PostApiInvitations402,
+  PostApiInvitations409,
+  PostApiInvitationsBody,
   PostApiKeys200,
   PostApiKeysBody,
   PostApiKeysByIdRotate200,
@@ -137,7 +146,15 @@ import type {
   PutApiFormsByIdDoc200,
   PutApiFormsByIdDoc409,
   PutApiFormsByIdDoc429,
-  PutApiFormsByIdDocBody
+  PutApiFormsByIdDocBody,
+  PutApiMembersByMemberIdAccess200,
+  PutApiMembersByMemberIdAccess404,
+  PutApiMembersByMemberIdAccess409,
+  PutApiMembersByMemberIdAccessBody,
+  PutApiWorkspacesByIdMembersByMemberId200,
+  PutApiWorkspacesByIdMembersByMemberId404,
+  PutApiWorkspacesByIdMembersByMemberId409,
+  PutApiWorkspacesByIdMembersByMemberIdBody
 } from '../generated.schemas';
 
 import { customFetch } from '.././mutator';
@@ -2195,6 +2212,588 @@ export const useDeleteApiWorkspacesById = <TError = void,
         TContext
       > => {
       return useMutation(getDeleteApiWorkspacesByIdMutationOptions(options));
+    }
+    export type getApiWorkspacesByIdMembersResponse200 = {
+  data: GetApiWorkspacesByIdMembers200Item[]
+  status: 200
+}
+
+export type getApiWorkspacesByIdMembersResponse404 = {
+  data: GetApiWorkspacesByIdMembers404
+  status: 404
+}
+
+export type getApiWorkspacesByIdMembersResponseSuccess = (getApiWorkspacesByIdMembersResponse200) & {
+  headers: Headers;
+};
+export type getApiWorkspacesByIdMembersResponseError = (getApiWorkspacesByIdMembersResponse404) & {
+  headers: Headers;
+};
+
+export type getApiWorkspacesByIdMembersResponse = (getApiWorkspacesByIdMembersResponseSuccess | getApiWorkspacesByIdMembersResponseError)
+
+export const getGetApiWorkspacesByIdMembersUrl = (id: string,) => {
+
+
+
+
+  return `/api/workspaces/${id}/members`
+}
+
+/**
+ * @summary List who can open a workspace
+ */
+export const getApiWorkspacesByIdMembers = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiWorkspacesByIdMembersResponse> => {
+
+  return customFetch<getApiWorkspacesByIdMembersResponse>(getGetApiWorkspacesByIdMembersUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiWorkspacesByIdMembersQueryKey = (id: string,) => {
+    return [
+    `/api/workspaces/${id}/members`
+    ] as const;
+    }
+
+
+export const getGetApiWorkspacesByIdMembersQueryOptions = <TData = Awaited<ReturnType<typeof getApiWorkspacesByIdMembers>>, TError = GetApiWorkspacesByIdMembers404>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiWorkspacesByIdMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiWorkspacesByIdMembersQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiWorkspacesByIdMembers>>> = ({ signal }) => getApiWorkspacesByIdMembers(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiWorkspacesByIdMembers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiWorkspacesByIdMembersQueryResult = NonNullable<Awaited<ReturnType<typeof getApiWorkspacesByIdMembers>>>
+export type GetApiWorkspacesByIdMembersQueryError = GetApiWorkspacesByIdMembers404
+
+
+/**
+ * @summary List who can open a workspace
+ */
+
+export function useGetApiWorkspacesByIdMembers<TData = Awaited<ReturnType<typeof getApiWorkspacesByIdMembers>>, TError = GetApiWorkspacesByIdMembers404>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiWorkspacesByIdMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiWorkspacesByIdMembersQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type putApiWorkspacesByIdMembersByMemberIdResponse200 = {
+  data: PutApiWorkspacesByIdMembersByMemberId200
+  status: 200
+}
+
+export type putApiWorkspacesByIdMembersByMemberIdResponse404 = {
+  data: PutApiWorkspacesByIdMembersByMemberId404
+  status: 404
+}
+
+export type putApiWorkspacesByIdMembersByMemberIdResponse409 = {
+  data: PutApiWorkspacesByIdMembersByMemberId409
+  status: 409
+}
+
+export type putApiWorkspacesByIdMembersByMemberIdResponseSuccess = (putApiWorkspacesByIdMembersByMemberIdResponse200) & {
+  headers: Headers;
+};
+export type putApiWorkspacesByIdMembersByMemberIdResponseError = (putApiWorkspacesByIdMembersByMemberIdResponse404 | putApiWorkspacesByIdMembersByMemberIdResponse409) & {
+  headers: Headers;
+};
+
+export type putApiWorkspacesByIdMembersByMemberIdResponse = (putApiWorkspacesByIdMembersByMemberIdResponseSuccess | putApiWorkspacesByIdMembersByMemberIdResponseError)
+
+export const getPutApiWorkspacesByIdMembersByMemberIdUrl = (id: string,
+    memberId: string,) => {
+
+
+
+
+  return `/api/workspaces/${id}/members/${memberId}`
+}
+
+/**
+ * @summary Add a member to a workspace, or change their role there
+ */
+export const putApiWorkspacesByIdMembersByMemberId = async (id: string,
+    memberId: string,
+    putApiWorkspacesByIdMembersByMemberIdBody: PutApiWorkspacesByIdMembersByMemberIdBody, options?: Parameters<typeof customFetch>[1]): Promise<putApiWorkspacesByIdMembersByMemberIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<putApiWorkspacesByIdMembersByMemberIdResponse>(getPutApiWorkspacesByIdMembersByMemberIdUrl(id,memberId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(putApiWorkspacesByIdMembersByMemberIdBody)
+  }
+);}
+
+
+
+
+
+export const getPutApiWorkspacesByIdMembersByMemberIdMutationOptions = <TError = PutApiWorkspacesByIdMembersByMemberId404 | PutApiWorkspacesByIdMembersByMemberId409,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiWorkspacesByIdMembersByMemberId>>, TError,PutApiWorkspacesByIdMembersByMemberIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiWorkspacesByIdMembersByMemberId>>, TError,PutApiWorkspacesByIdMembersByMemberIdMutationVariables, TContext> => {
+
+const mutationKey = ['putApiWorkspacesByIdMembersByMemberId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiWorkspacesByIdMembersByMemberId>>, PutApiWorkspacesByIdMembersByMemberIdMutationVariables> = (props) => {
+          const {id,memberId,data} = props ?? {};
+
+          return  putApiWorkspacesByIdMembersByMemberId(id,memberId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiWorkspacesByIdMembersByMemberIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiWorkspacesByIdMembersByMemberId>>>
+    export type PutApiWorkspacesByIdMembersByMemberIdMutationBody = PutApiWorkspacesByIdMembersByMemberIdBody
+    export type PutApiWorkspacesByIdMembersByMemberIdMutationError = PutApiWorkspacesByIdMembersByMemberId404 | PutApiWorkspacesByIdMembersByMemberId409
+    export type PutApiWorkspacesByIdMembersByMemberIdMutationVariables = {id: string;memberId: string;data: PutApiWorkspacesByIdMembersByMemberIdBody}
+
+    /**
+ * @summary Add a member to a workspace, or change their role there
+ */
+export const usePutApiWorkspacesByIdMembersByMemberId = <TError = PutApiWorkspacesByIdMembersByMemberId404 | PutApiWorkspacesByIdMembersByMemberId409,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiWorkspacesByIdMembersByMemberId>>, TError,PutApiWorkspacesByIdMembersByMemberIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof putApiWorkspacesByIdMembersByMemberId>>,
+        TError,
+        PutApiWorkspacesByIdMembersByMemberIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiWorkspacesByIdMembersByMemberIdMutationOptions(options));
+    }
+    export type deleteApiWorkspacesByIdMembersByMemberIdResponse200 = {
+  data: DeleteApiWorkspacesByIdMembersByMemberId200
+  status: 200
+}
+
+export type deleteApiWorkspacesByIdMembersByMemberIdResponse404 = {
+  data: DeleteApiWorkspacesByIdMembersByMemberId404
+  status: 404
+}
+
+export type deleteApiWorkspacesByIdMembersByMemberIdResponseSuccess = (deleteApiWorkspacesByIdMembersByMemberIdResponse200) & {
+  headers: Headers;
+};
+export type deleteApiWorkspacesByIdMembersByMemberIdResponseError = (deleteApiWorkspacesByIdMembersByMemberIdResponse404) & {
+  headers: Headers;
+};
+
+export type deleteApiWorkspacesByIdMembersByMemberIdResponse = (deleteApiWorkspacesByIdMembersByMemberIdResponseSuccess | deleteApiWorkspacesByIdMembersByMemberIdResponseError)
+
+export const getDeleteApiWorkspacesByIdMembersByMemberIdUrl = (id: string,
+    memberId: string,) => {
+
+
+
+
+  return `/api/workspaces/${id}/members/${memberId}`
+}
+
+/**
+ * @summary Remove a member from a workspace
+ */
+export const deleteApiWorkspacesByIdMembersByMemberId = async (id: string,
+    memberId: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteApiWorkspacesByIdMembersByMemberIdResponse> => {
+
+  return customFetch<deleteApiWorkspacesByIdMembersByMemberIdResponse>(getDeleteApiWorkspacesByIdMembersByMemberIdUrl(id,memberId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiWorkspacesByIdMembersByMemberIdMutationOptions = <TError = DeleteApiWorkspacesByIdMembersByMemberId404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiWorkspacesByIdMembersByMemberId>>, TError,DeleteApiWorkspacesByIdMembersByMemberIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiWorkspacesByIdMembersByMemberId>>, TError,DeleteApiWorkspacesByIdMembersByMemberIdMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiWorkspacesByIdMembersByMemberId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiWorkspacesByIdMembersByMemberId>>, DeleteApiWorkspacesByIdMembersByMemberIdMutationVariables> = (props) => {
+          const {id,memberId} = props ?? {};
+
+          return  deleteApiWorkspacesByIdMembersByMemberId(id,memberId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiWorkspacesByIdMembersByMemberIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiWorkspacesByIdMembersByMemberId>>>
+
+    export type DeleteApiWorkspacesByIdMembersByMemberIdMutationError = DeleteApiWorkspacesByIdMembersByMemberId404
+    export type DeleteApiWorkspacesByIdMembersByMemberIdMutationVariables = {id: string;memberId: string}
+
+    /**
+ * @summary Remove a member from a workspace
+ */
+export const useDeleteApiWorkspacesByIdMembersByMemberId = <TError = DeleteApiWorkspacesByIdMembersByMemberId404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiWorkspacesByIdMembersByMemberId>>, TError,DeleteApiWorkspacesByIdMembersByMemberIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiWorkspacesByIdMembersByMemberId>>,
+        TError,
+        DeleteApiWorkspacesByIdMembersByMemberIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiWorkspacesByIdMembersByMemberIdMutationOptions(options));
+    }
+    export type getApiWorkspaceAccessResponse200 = {
+  data: GetApiWorkspaceAccess200
+  status: 200
+}
+
+export type getApiWorkspaceAccessResponseSuccess = (getApiWorkspaceAccessResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiWorkspaceAccessResponse = (getApiWorkspaceAccessResponseSuccess)
+
+export const getGetApiWorkspaceAccessUrl = () => {
+
+
+
+
+  return `/api/workspace-access`
+}
+
+/**
+ * @summary Workspace access for every member and pending invitation
+ */
+export const getApiWorkspaceAccess = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiWorkspaceAccessResponse> => {
+
+  return customFetch<getApiWorkspaceAccessResponse>(getGetApiWorkspaceAccessUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiWorkspaceAccessQueryKey = () => {
+    return [
+    `/api/workspace-access`
+    ] as const;
+    }
+
+
+export const getGetApiWorkspaceAccessQueryOptions = <TData = Awaited<ReturnType<typeof getApiWorkspaceAccess>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiWorkspaceAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiWorkspaceAccessQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiWorkspaceAccess>>> = ({ signal }) => getApiWorkspaceAccess({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiWorkspaceAccess>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiWorkspaceAccessQueryResult = NonNullable<Awaited<ReturnType<typeof getApiWorkspaceAccess>>>
+export type GetApiWorkspaceAccessQueryError = unknown
+
+
+/**
+ * @summary Workspace access for every member and pending invitation
+ */
+
+export function useGetApiWorkspaceAccess<TData = Awaited<ReturnType<typeof getApiWorkspaceAccess>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiWorkspaceAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiWorkspaceAccessQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type putApiMembersByMemberIdAccessResponse200 = {
+  data: PutApiMembersByMemberIdAccess200
+  status: 200
+}
+
+export type putApiMembersByMemberIdAccessResponse404 = {
+  data: PutApiMembersByMemberIdAccess404
+  status: 404
+}
+
+export type putApiMembersByMemberIdAccessResponse409 = {
+  data: PutApiMembersByMemberIdAccess409
+  status: 409
+}
+
+export type putApiMembersByMemberIdAccessResponseSuccess = (putApiMembersByMemberIdAccessResponse200) & {
+  headers: Headers;
+};
+export type putApiMembersByMemberIdAccessResponseError = (putApiMembersByMemberIdAccessResponse404 | putApiMembersByMemberIdAccessResponse409) & {
+  headers: Headers;
+};
+
+export type putApiMembersByMemberIdAccessResponse = (putApiMembersByMemberIdAccessResponseSuccess | putApiMembersByMemberIdAccessResponseError)
+
+export const getPutApiMembersByMemberIdAccessUrl = (memberId: string,) => {
+
+
+
+
+  return `/api/members/${memberId}/access`
+}
+
+/**
+ * @summary Set a member's organization role and workspace access
+ */
+export const putApiMembersByMemberIdAccess = async (memberId: string,
+    putApiMembersByMemberIdAccessBody: PutApiMembersByMemberIdAccessBody, options?: Parameters<typeof customFetch>[1]): Promise<putApiMembersByMemberIdAccessResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<putApiMembersByMemberIdAccessResponse>(getPutApiMembersByMemberIdAccessUrl(memberId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(putApiMembersByMemberIdAccessBody)
+  }
+);}
+
+
+
+
+
+export const getPutApiMembersByMemberIdAccessMutationOptions = <TError = PutApiMembersByMemberIdAccess404 | PutApiMembersByMemberIdAccess409,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiMembersByMemberIdAccess>>, TError,PutApiMembersByMemberIdAccessMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiMembersByMemberIdAccess>>, TError,PutApiMembersByMemberIdAccessMutationVariables, TContext> => {
+
+const mutationKey = ['putApiMembersByMemberIdAccess'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiMembersByMemberIdAccess>>, PutApiMembersByMemberIdAccessMutationVariables> = (props) => {
+          const {memberId,data} = props ?? {};
+
+          return  putApiMembersByMemberIdAccess(memberId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiMembersByMemberIdAccessMutationResult = NonNullable<Awaited<ReturnType<typeof putApiMembersByMemberIdAccess>>>
+    export type PutApiMembersByMemberIdAccessMutationBody = PutApiMembersByMemberIdAccessBody
+    export type PutApiMembersByMemberIdAccessMutationError = PutApiMembersByMemberIdAccess404 | PutApiMembersByMemberIdAccess409
+    export type PutApiMembersByMemberIdAccessMutationVariables = {memberId: string;data: PutApiMembersByMemberIdAccessBody}
+
+    /**
+ * @summary Set a member's organization role and workspace access
+ */
+export const usePutApiMembersByMemberIdAccess = <TError = PutApiMembersByMemberIdAccess404 | PutApiMembersByMemberIdAccess409,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiMembersByMemberIdAccess>>, TError,PutApiMembersByMemberIdAccessMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof putApiMembersByMemberIdAccess>>,
+        TError,
+        PutApiMembersByMemberIdAccessMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiMembersByMemberIdAccessMutationOptions(options));
+    }
+    export type postApiInvitationsResponse200 = {
+  data: PostApiInvitations200
+  status: 200
+}
+
+export type postApiInvitationsResponse402 = {
+  data: PostApiInvitations402
+  status: 402
+}
+
+export type postApiInvitationsResponse409 = {
+  data: PostApiInvitations409
+  status: 409
+}
+
+export type postApiInvitationsResponseSuccess = (postApiInvitationsResponse200) & {
+  headers: Headers;
+};
+export type postApiInvitationsResponseError = (postApiInvitationsResponse402 | postApiInvitationsResponse409) & {
+  headers: Headers;
+};
+
+export type postApiInvitationsResponse = (postApiInvitationsResponseSuccess | postApiInvitationsResponseError)
+
+export const getPostApiInvitationsUrl = () => {
+
+
+
+
+  return `/api/invitations`
+}
+
+/**
+ * @summary Invite someone to the organization and to chosen workspaces
+ */
+export const postApiInvitations = async (postApiInvitationsBody: PostApiInvitationsBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiInvitationsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiInvitationsResponse>(getPostApiInvitationsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiInvitationsBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiInvitationsMutationOptions = <TError = PostApiInvitations402 | PostApiInvitations409,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInvitations>>, TError,PostApiInvitationsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInvitations>>, TError,PostApiInvitationsMutationVariables, TContext> => {
+
+const mutationKey = ['postApiInvitations'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInvitations>>, PostApiInvitationsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInvitations(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInvitationsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInvitations>>>
+    export type PostApiInvitationsMutationBody = PostApiInvitationsBody
+    export type PostApiInvitationsMutationError = PostApiInvitations402 | PostApiInvitations409
+    export type PostApiInvitationsMutationVariables = {data: PostApiInvitationsBody}
+
+    /**
+ * @summary Invite someone to the organization and to chosen workspaces
+ */
+export const usePostApiInvitations = <TError = PostApiInvitations402 | PostApiInvitations409,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInvitations>>, TError,PostApiInvitationsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInvitations>>,
+        TError,
+        PostApiInvitationsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInvitationsMutationOptions(options));
     }
     export type postApiFeedbackResponse200 = {
   data: PostApiFeedback200

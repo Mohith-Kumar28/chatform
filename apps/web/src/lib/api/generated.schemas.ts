@@ -2095,6 +2095,11 @@ export const GetApiInvitationPreview200State = {
   not_found: 'not_found',
 } as const;
 
+export type GetApiInvitationPreview200WorkspacesItem = {
+  name: string;
+  role: string;
+};
+
 export type GetApiInvitationPreview200 = {
   state: GetApiInvitationPreview200State;
   email: string | null;
@@ -2104,6 +2109,7 @@ export type GetApiInvitationPreview200 = {
   inviterEmail: string | null;
   expiresAt: number | null;
   recipientHasAccount: boolean;
+  workspaces: GetApiInvitationPreview200WorkspacesItem[];
 };
 
 export type GetApiAuthOk200 = {
@@ -2148,6 +2154,8 @@ export type PostApiFormsBody = {
   doc?: unknown;
 };
 
+export type PostApiForms200Permissions = {[key: string]: string[]};
+
 export type PostApiForms200 = {
   id: string;
   title: string;
@@ -2160,6 +2168,7 @@ export type PostApiForms200 = {
   workingRevision: number;
   publishedAt: number | null;
   hasUnpublishedChanges: boolean;
+  permissions?: PostApiForms200Permissions;
 };
 
 export type PostApiForms403ErrorIssuesItem = {
@@ -2186,6 +2195,8 @@ export type DeleteApiFormsById200 = {
   ok: boolean;
 };
 
+export type GetApiFormsById200Permissions = {[key: string]: string[]};
+
 export type GetApiFormsById200 = {
   id: string;
   title: string;
@@ -2198,6 +2209,7 @@ export type GetApiFormsById200 = {
   workingRevision: number;
   publishedAt: number | null;
   hasUnpublishedChanges: boolean;
+  permissions?: GetApiFormsById200Permissions;
 };
 
 export type GetApiFormsById404ErrorIssuesItem = {
@@ -2578,12 +2590,17 @@ export type DeleteApiFormsByIdKnowledgeBySourceId200 = {
   ok: boolean;
 };
 
+export type GetApiWorkspaces200ItemPermissions = {[key: string]: string[]};
+
 export type GetApiWorkspaces200Item = {
   id: string;
   name: string;
   slug: string;
   formCount: number;
   createdAt: number;
+  myRole: string;
+  permissions: GetApiWorkspaces200ItemPermissions;
+  memberCount: number;
 };
 
 export type PostApiWorkspacesBody = {
@@ -2616,6 +2633,303 @@ export type PatchApiWorkspacesById200 = {
   slug: string;
   formCount: number;
   createdAt: number;
+};
+
+export type GetApiWorkspacesByIdMembers200Item = {
+  memberId: string;
+  userId: string;
+  name: string | null;
+  email: string;
+  image: string | null;
+  role: string;
+  viaOrgRole: boolean;
+};
+
+export type GetApiWorkspacesByIdMembers404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type GetApiWorkspacesByIdMembers404Error = {
+  code: string;
+  message: string;
+  issues?: GetApiWorkspacesByIdMembers404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type GetApiWorkspacesByIdMembers404 = {
+  error: GetApiWorkspacesByIdMembers404Error;
+};
+
+export type PutApiWorkspacesByIdMembersByMemberIdBodyRole = typeof PutApiWorkspacesByIdMembersByMemberIdBodyRole[keyof typeof PutApiWorkspacesByIdMembersByMemberIdBodyRole];
+
+
+export const PutApiWorkspacesByIdMembersByMemberIdBodyRole = {
+  editor: 'editor',
+  viewer: 'viewer',
+} as const;
+
+export type PutApiWorkspacesByIdMembersByMemberIdBody = {
+  role: PutApiWorkspacesByIdMembersByMemberIdBodyRole;
+};
+
+export type PutApiWorkspacesByIdMembersByMemberId200 = {
+  ok: boolean;
+};
+
+export type PutApiWorkspacesByIdMembersByMemberId404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PutApiWorkspacesByIdMembersByMemberId404Error = {
+  code: string;
+  message: string;
+  issues?: PutApiWorkspacesByIdMembersByMemberId404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PutApiWorkspacesByIdMembersByMemberId404 = {
+  error: PutApiWorkspacesByIdMembersByMemberId404Error;
+};
+
+export type PutApiWorkspacesByIdMembersByMemberId409ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PutApiWorkspacesByIdMembersByMemberId409Error = {
+  code: string;
+  message: string;
+  issues?: PutApiWorkspacesByIdMembersByMemberId409ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PutApiWorkspacesByIdMembersByMemberId409 = {
+  error: PutApiWorkspacesByIdMembersByMemberId409Error;
+};
+
+export type DeleteApiWorkspacesByIdMembersByMemberId200 = {
+  ok: boolean;
+};
+
+export type DeleteApiWorkspacesByIdMembersByMemberId404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type DeleteApiWorkspacesByIdMembersByMemberId404Error = {
+  code: string;
+  message: string;
+  issues?: DeleteApiWorkspacesByIdMembersByMemberId404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type DeleteApiWorkspacesByIdMembersByMemberId404 = {
+  error: DeleteApiWorkspacesByIdMembersByMemberId404Error;
+};
+
+export type GetApiWorkspaceAccess200MembersItemRole = typeof GetApiWorkspaceAccess200MembersItemRole[keyof typeof GetApiWorkspaceAccess200MembersItemRole];
+
+
+export const GetApiWorkspaceAccess200MembersItemRole = {
+  editor: 'editor',
+  viewer: 'viewer',
+} as const;
+
+export type GetApiWorkspaceAccess200MembersItem = {
+  workspaceId: string;
+  role: GetApiWorkspaceAccess200MembersItemRole;
+  name: string;
+};
+
+export type GetApiWorkspaceAccess200Members = {[key: string]: GetApiWorkspaceAccess200MembersItem[]};
+
+export type GetApiWorkspaceAccess200InvitationsItemRole = typeof GetApiWorkspaceAccess200InvitationsItemRole[keyof typeof GetApiWorkspaceAccess200InvitationsItemRole];
+
+
+export const GetApiWorkspaceAccess200InvitationsItemRole = {
+  editor: 'editor',
+  viewer: 'viewer',
+} as const;
+
+export type GetApiWorkspaceAccess200InvitationsItem = {
+  workspaceId: string;
+  role: GetApiWorkspaceAccess200InvitationsItemRole;
+  name: string;
+};
+
+export type GetApiWorkspaceAccess200Invitations = {[key: string]: GetApiWorkspaceAccess200InvitationsItem[]};
+
+export type GetApiWorkspaceAccess200 = {
+  workspaceCount: number;
+  members: GetApiWorkspaceAccess200Members;
+  invitations: GetApiWorkspaceAccess200Invitations;
+};
+
+export type PutApiMembersByMemberIdAccessBodyRole = typeof PutApiMembersByMemberIdAccessBodyRole[keyof typeof PutApiMembersByMemberIdAccessBodyRole];
+
+
+export const PutApiMembersByMemberIdAccessBodyRole = {
+  admin: 'admin',
+  member: 'member',
+} as const;
+
+export type PutApiMembersByMemberIdAccessBodyWorkspacesItemRole = typeof PutApiMembersByMemberIdAccessBodyWorkspacesItemRole[keyof typeof PutApiMembersByMemberIdAccessBodyWorkspacesItemRole];
+
+
+export const PutApiMembersByMemberIdAccessBodyWorkspacesItemRole = {
+  editor: 'editor',
+  viewer: 'viewer',
+} as const;
+
+export type PutApiMembersByMemberIdAccessBodyWorkspacesItem = {
+  workspaceId: string;
+  role: PutApiMembersByMemberIdAccessBodyWorkspacesItemRole;
+};
+
+export type PutApiMembersByMemberIdAccessBody = {
+  role: PutApiMembersByMemberIdAccessBodyRole;
+  /** @maxItems 90 */
+  workspaces: PutApiMembersByMemberIdAccessBodyWorkspacesItem[];
+};
+
+export type PutApiMembersByMemberIdAccess200 = {
+  ok: boolean;
+};
+
+export type PutApiMembersByMemberIdAccess404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PutApiMembersByMemberIdAccess404Error = {
+  code: string;
+  message: string;
+  issues?: PutApiMembersByMemberIdAccess404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PutApiMembersByMemberIdAccess404 = {
+  error: PutApiMembersByMemberIdAccess404Error;
+};
+
+export type PutApiMembersByMemberIdAccess409ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PutApiMembersByMemberIdAccess409Error = {
+  code: string;
+  message: string;
+  issues?: PutApiMembersByMemberIdAccess409ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PutApiMembersByMemberIdAccess409 = {
+  error: PutApiMembersByMemberIdAccess409Error;
+};
+
+export type PostApiInvitationsBodyRole = typeof PostApiInvitationsBodyRole[keyof typeof PostApiInvitationsBodyRole];
+
+
+export const PostApiInvitationsBodyRole = {
+  admin: 'admin',
+  member: 'member',
+} as const;
+
+export type PostApiInvitationsBodyWorkspacesItemRole = typeof PostApiInvitationsBodyWorkspacesItemRole[keyof typeof PostApiInvitationsBodyWorkspacesItemRole];
+
+
+export const PostApiInvitationsBodyWorkspacesItemRole = {
+  editor: 'editor',
+  viewer: 'viewer',
+} as const;
+
+export type PostApiInvitationsBodyWorkspacesItem = {
+  workspaceId: string;
+  role: PostApiInvitationsBodyWorkspacesItemRole;
+};
+
+export type PostApiInvitationsBody = {
+  /**
+     * @maxLength 320
+     * @pattern ^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$
+     */
+  email: string;
+  role: PostApiInvitationsBodyRole;
+  /** @maxItems 90 */
+  workspaces?: PostApiInvitationsBodyWorkspacesItem[];
+  resend?: boolean;
+  organizationId?: string;
+};
+
+export type PostApiInvitations200 = {
+  id: string;
+};
+
+export type PostApiInvitations402ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiInvitations402Error = {
+  code: string;
+  message: string;
+  issues?: PostApiInvitations402ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiInvitations402 = {
+  error: PostApiInvitations402Error;
+};
+
+export type PostApiInvitations409ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiInvitations409Error = {
+  code: string;
+  message: string;
+  issues?: PostApiInvitations409ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiInvitations409 = {
+  error: PostApiInvitations409Error;
 };
 
 export type PostApiFeedback200 = {
@@ -2922,6 +3236,11 @@ export type GetApiFormsByIdSubmissions200SubmissionsItemTranscriptItem = {
   createdAt: number;
 };
 
+export type GetApiFormsByIdSubmissions200SubmissionsItemFollowUpStepsItem = {
+  step: number;
+  status: string;
+};
+
 export type GetApiFormsByIdSubmissions200SubmissionsItemFollowUp = {
   sent: number;
   scheduled: number;
@@ -2938,6 +3257,7 @@ export type GetApiFormsByIdSubmissions200SubmissionsItemFollowUp = {
   lastSentAt: number | null;
   stoppedStatus: string | null;
   stoppedReason: string | null;
+  steps: GetApiFormsByIdSubmissions200SubmissionsItemFollowUpStepsItem[];
 } | null;
 
 export type GetApiFormsByIdSubmissions200SubmissionsItem = {
@@ -3075,26 +3395,49 @@ export type GetApiFormsByIdAnalytics200PlacesItem = {
   lat: number;
   lon: number;
   count: number;
+  completed: number;
 };
 
 export type GetApiFormsByIdAnalytics200ByBrowserItem = {
   label: string;
   count: number;
+  completed: number;
 };
 
 export type GetApiFormsByIdAnalytics200ByOsItem = {
   label: string;
   count: number;
+  completed: number;
 };
 
 export type GetApiFormsByIdAnalytics200ByChannelItem = {
   label: string;
   count: number;
+  completed: number;
 };
 
 export type GetApiFormsByIdAnalytics200ByReferrerItem = {
   label: string;
   count: number;
+  completed: number;
+};
+
+export type GetApiFormsByIdAnalytics200ByCampaignItem = {
+  label: string;
+  count: number;
+  completed: number;
+};
+
+export type GetApiFormsByIdAnalytics200ByDeviceTypeItem = {
+  label: string;
+  count: number;
+  completed: number;
+};
+
+export type GetApiFormsByIdAnalytics200ByLanguageItem = {
+  label: string;
+  count: number;
+  completed: number;
 };
 
 export type GetApiFormsByIdAnalytics200DurationBucketsItem = {
@@ -3129,6 +3472,10 @@ export type GetApiFormsByIdAnalytics200 = {
   byOs: GetApiFormsByIdAnalytics200ByOsItem[];
   byChannel: GetApiFormsByIdAnalytics200ByChannelItem[];
   byReferrer: GetApiFormsByIdAnalytics200ByReferrerItem[];
+  byCampaign: GetApiFormsByIdAnalytics200ByCampaignItem[];
+  byDeviceType: GetApiFormsByIdAnalytics200ByDeviceTypeItem[];
+  byLanguage: GetApiFormsByIdAnalytics200ByLanguageItem[];
+  byWeekHour: number[][];
   durationBuckets: GetApiFormsByIdAnalytics200DurationBucketsItem[];
   locked: string[];
   lockedContext: GetApiFormsByIdAnalytics200LockedContext;
@@ -4701,6 +5048,24 @@ export type GetV1FormsByIdAnalytics200ByReferrerItem = {
   count: number;
 };
 
+export type GetV1FormsByIdAnalytics200ByCampaignItem = {
+  label: string;
+  count: number;
+  completed: number;
+};
+
+export type GetV1FormsByIdAnalytics200ByDeviceTypeItem = {
+  label: string;
+  count: number;
+  completed: number;
+};
+
+export type GetV1FormsByIdAnalytics200ByLanguageItem = {
+  label: string;
+  count: number;
+  completed: number;
+};
+
 export type GetV1FormsByIdAnalytics200DurationBucketsItem = {
   label: string;
   count: number;
@@ -4725,6 +5090,10 @@ export type GetV1FormsByIdAnalytics200 = {
   byOs?: GetV1FormsByIdAnalytics200ByOsItem[];
   byChannel?: GetV1FormsByIdAnalytics200ByChannelItem[];
   byReferrer?: GetV1FormsByIdAnalytics200ByReferrerItem[];
+  byCampaign?: GetV1FormsByIdAnalytics200ByCampaignItem[];
+  byDeviceType?: GetV1FormsByIdAnalytics200ByDeviceTypeItem[];
+  byLanguage?: GetV1FormsByIdAnalytics200ByLanguageItem[];
+  byWeekHour?: number[][];
   durationBuckets: GetV1FormsByIdAnalytics200DurationBucketsItem[];
   locked?: string[];
   [key: string]: unknown;

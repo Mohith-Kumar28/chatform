@@ -30,7 +30,8 @@ import {
 } from "@repo/entitlements";
 import type { Bindings } from "../env.js";
 import type { GuardVars } from "./guards.js";
-import { roleAllows, type ActionOf, type Resource } from "./permissions.js";
+import { roleAllows, orgTier, WORKSPACE_RESOURCES, type ActionOf, type Resource } from "./permissions.js";
+import { accessFor, bestGrant, type WorkspaceAccess } from "./workspace-access.js";
 import {
   getEntitlements,
   checkQuota,
@@ -46,6 +47,7 @@ import { recordGate } from "./gate-log.js";
 export type AuthzVars = GuardVars & {
   entitlements: Entitlements;
   role: string;
+  access: WorkspaceAccess;
 };
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Partial<AuthzVars> }>;
@@ -200,7 +202,7 @@ export function requirePermission<R extends Resource>(resource: R, action: Actio
       if (denial) return denial;
       return next();
     }
-    const role = await roleFor(c);
+    const role = await effectiveRole(c, resource);
     if (!roleAllows(role, resource, action)) {
       const ent = await entitlementsFor(c);
       return deny(c, forbidden(resource, action, ent.planId), `${resource}.${action}`);
@@ -209,15 +211,54 @@ export function requirePermission<R extends Resource>(resource: R, action: Actio
   };
 }
 
-/** The same check, callable inside a handler when the decision depends on the request. */
+/**
+ * The role a permission is judged by.
+ *
+ * Organization resources (billing, members, keys, creating workspaces) read the
+ * organization role, with anyone below admin read as `member`. Workspace
+ * resources (forms, responses, analytics, the AI) read the caller's role in the
+ * workspace the request is about: the form's, when `requireFormAccess` has
+ * loaded one, or `workspaceId` when the handler names its target. Without
+ * either, a member is judged by their strongest grant, and the handler checks
+ * the real target once it knows it.
+ */
+async function effectiveRole(c: Ctx, resource: Resource, workspaceId?: string | null): Promise<string> {
+  const orgRole = await roleFor(c);
+  if (!WORKSPACE_RESOURCES.has(resource)) return orgTier(orgRole);
+  const access = await accessFor(c);
+  if (access.admin) return orgRole;
+  const target = workspaceId ?? c.get("form")?.workspace_id ?? null;
+  if (target) return access.grants.get(target) ?? "";
+  return bestGrant(access) ?? "";
+}
+
+/**
+ * The same check, callable inside a handler when the decision depends on the request.
+ * Pass `workspaceId` when the request targets a workspace the context does not
+ * already carry, such as the destination of a new or moved form.
+ */
 export async function assertPermission<R extends Resource>(
   c: Ctx,
   resource: R,
   action: ActionOf<R>,
+  opts: { workspaceId?: string | null } = {},
 ): Promise<Response | null> {
   if (c.get("keyId")) return scopeDenial(c, resource, action);
-  const role = await roleFor(c);
+  const role = await effectiveRole(c, resource, opts.workspaceId);
   if (roleAllows(role, resource, action)) return null;
+  const ent = await entitlementsFor(c);
+  return deny(c, forbidden(resource, action, ent.planId), `${resource}.${action}`);
+}
+
+/**
+ * A workspace resource with no workspace: an organization-wide webhook, a
+ * payment account every form can charge through. Judged by the organization
+ * role alone, so only owners and admins pass, whatever a member's grants say.
+ */
+export async function assertOrgWide<R extends Resource>(c: Ctx, resource: R, action: ActionOf<R>): Promise<Response | null> {
+  if (c.get("keyId")) return scopeDenial(c, resource, action);
+  const role = orgTier(await roleFor(c));
+  if (role !== "member" && roleAllows(role, resource, action)) return null;
   const ent = await entitlementsFor(c);
   return deny(c, forbidden(resource, action, ent.planId), `${resource}.${action}`);
 }

@@ -41,6 +41,7 @@ const BOUNDED_ELSEWHERE: Record<string, string> = {
   "lib/knowledge/vectorize-store.ts": "ids come from one page of vector matches",
   "routes/audit.ts": "actor ids come from one page of audit rows",
   "routes/v1/forms.ts": "`formIds` pinned on an API key, capped at mint time",
+  "routes/workspace-access.ts": "grant lists are capped at MAX_GRANTS (90) by the body schema",
   "routes/v1/responses.ts": "`requested` is a validated status enum — five values at most",
 };
 

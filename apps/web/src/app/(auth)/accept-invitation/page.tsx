@@ -51,6 +51,8 @@ interface InvitationPreview {
   inviterEmail: string | null;
   expiresAt: number | null;
   recipientHasAccount: boolean;
+  /** The workspaces accepting opens, for a member invitation. Empty for an admin. */
+  workspaces?: { name: string; role: string }[];
 }
 
 /** The dead ends, each with its own reason. "Ask for another" is only useful advice on some of them. */
@@ -205,13 +207,23 @@ function AcceptInvitation() {
    */
   const roleLabel = preview.role ? roleWithArticle(preview.role) : "a teammate";
   const who = preview.inviterName?.trim() || preview.inviterEmail?.trim() || "Someone";
+  /*
+    What they are being let into. A member is invited to named workspaces, and
+    saying which is the difference between "join Acme" and knowing what you
+    will be able to open when you do.
+  */
+  const spaces = preview.workspaces ?? [];
+  const invitedTo =
+    spaces.length === 0
+      ? `${who} invited you as ${roleLabel}.`
+      : `${who} invited you to ${listNames(spaces.map((w) => w.name))} in ${org}.`;
 
   // Nobody signed in. The address is known, so the account they need is named
   // rather than guessed at, and sign-in is handed it.
   if (!session) {
     const hasAccount = preview.recipientHasAccount;
     return (
-      <Shell title={`Join ${org} on chatform`} description={`${who} invited you as ${roleLabel}.`}>
+      <Shell title={`Join ${org} on chatform`} description={invitedTo}>
         <Button asChild className="w-full rounded-full">
           <Link href={signInHref(preview.email, hasAccount ? undefined : "signup")}>
             {hasAccount ? "Sign in to accept" : "Create your account"}
@@ -255,7 +267,7 @@ function AcceptInvitation() {
   }
 
   return (
-    <Shell title={`Join ${org}`} description={`${who} invited you as ${roleLabel}.`}>
+    <Shell title={`Join ${org}`} description={invitedTo}>
       <Button onClick={accept} disabled={accepting} className="w-full rounded-full">
         {accepting ? "…" : "Accept invitation"}
       </Button>
@@ -265,6 +277,14 @@ function AcceptInvitation() {
       </p>
     </Shell>
   );
+}
+
+/** "Marketing", "Marketing and Sales", "Marketing, Sales and 2 more". */
+function listNames(names: string[]): string {
+  if (names.length === 1) return names[0]!;
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  if (names.length === 3) return `${names[0]}, ${names[1]} and ${names[2]}`;
+  return `${names[0]}, ${names[1]} and ${names.length - 2} more`;
 }
 
 const EMPTY: InvitationPreview = {

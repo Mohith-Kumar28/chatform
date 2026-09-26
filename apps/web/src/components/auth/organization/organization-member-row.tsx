@@ -24,9 +24,8 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { organizationPlugin } from "@/lib/auth/organization-plugin"
-import { ASSIGNABLE_ROLES } from "@/lib/roles"
 import { UserView } from "../user/user-view"
-import { EditMemberRolesDialog } from "./edit-member-roles-dialog"
+import { ManageAccessDialog } from "@/components/settings/access/manage-access-dialog"
 import { LeaveOrganizationDialog } from "./leave-organization-dialog"
 import {
   type OrganizationSelectableRow,
@@ -42,6 +41,8 @@ export type OrganizationMemberRowProps = {
   selectableRow?: OrganizationSelectableRow<Member & { user: Partial<User> }>
   showRole?: boolean
   showTeams?: boolean
+  /** "All workspaces", or the ones this member was added to. Absent hides the column. */
+  access?: string
 }
 
 export function OrganizationMemberRow({
@@ -51,7 +52,8 @@ export function OrganizationMemberRow({
   organization,
   selectableRow,
   showRole = true,
-  showTeams
+  showTeams,
+  access
 }: OrganizationMemberRowProps) {
   const { authClient } = useAuth<OrganizationAuthClient>()
   const {
@@ -100,29 +102,6 @@ export function OrganizationMemberRow({
   const roleLabel = memberRoleLabels(member.role, mergedRoles).join(", ")
   const teamNames = memberTeams.data?.map((team) => team.name).join(", ")
 
-  /**
-   * The options the role editor offers for THIS member.
-   *
-   * Two rules, and they pull in opposite directions. `ASSIGNABLE_ROLES` is what
-   * may be handed out, which excludes `owner` and the legacy `member`. But a
-   * single-select whose options exclude the value it is currently showing
-   * renders empty — so the roles this member already holds are always kept,
-   * whatever they are. An owner therefore reads "Owner" rather than a blank
-   * box, and a row still on the legacy `member` reads "Editor", which is what
-   * it has always meant.
-   *
-   * The `creatorRole` rule is unchanged and still outermost: only an owner may
-   * see the owner role at all.
-   */
-  const held = new Set(parseMemberRoles(member.role))
-  const offerable = new Set<string>([
-    ...ASSIGNABLE_ROLES.map((r) => r.value),
-    ...(dynamicRoles.data ?? []).map((r) => r.role)
-  ])
-  const assignableRoles = Object.entries(mergedRoles).filter(
-    ([key]) => (isOwner || key !== creatorRole) && (offerable.has(key) || held.has(key))
-  )
-
   const isCurrentUser = session?.user.id === member.userId
   const targetIsOwner = hasMemberRole(member.role, creatorRole)
   const canManageTarget = isOwner || !targetIsOwner
@@ -164,6 +143,10 @@ export function OrganizationMemberRow({
 
       {showRole && <TableCell>{roleLabel}</TableCell>}
 
+      {access !== undefined && (
+        <TableCell className="text-muted-foreground max-w-56 truncate text-sm">{access}</TableCell>
+      )}
+
       {showTeams && (
         <TableCell className="text-sm">
           {memberTeams.isPending ? (
@@ -191,29 +174,25 @@ export function OrganizationMemberRow({
               <Pencil />
             </Button>
           )}
-          {canManageTarget && hasUpdatePermission?.success && (
+          {/* The owner's access is the whole organization and is not edited
+              here; transferring ownership is a different operation. */}
+          {!targetIsOwner && hasUpdatePermission?.success && (
             <Button
               className="size-8"
               onClick={() => setRoleEditorOpen(true)}
               size="icon"
               variant="ghost"
+              aria-label={`Manage access for ${member.user.name || member.user.email}`}
             >
               <Pencil />
-              <span className="sr-only">
-                {organizationLocalization.changeMemberRole}
-              </span>
             </Button>
           )}
 
-          {canManageTarget && hasUpdatePermission?.success && (
-            <EditMemberRolesDialog
-              member={member}
+          {!targetIsOwner && hasUpdatePermission?.success && (
+            <ManageAccessDialog
+              member={{ id: member.id, role: member.role, name: member.user.name || member.user.email || "this member" }}
               onOpenChange={setRoleEditorOpen}
               open={roleEditorOpen}
-              organizationId={organization.id}
-              protectedRole={creatorRole}
-              protectedRoleRemovalDisabled={onlyOwnerActionDisabled}
-              roles={assignableRoles}
             />
           )}
 

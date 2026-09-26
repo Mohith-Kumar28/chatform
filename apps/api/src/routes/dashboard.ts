@@ -81,6 +81,7 @@ dashboardRouter.get(
                 inviterEmail: z.string().nullable(),
                 expiresAt: z.number().nullable(),
                 recipientHasAccount: z.boolean(),
+                workspaces: z.array(z.object({ name: z.string(), role: z.string() })),
               }),
             ),
           },
@@ -99,6 +100,7 @@ dashboardRouter.get(
       inviterEmail: null,
       expiresAt: null,
       recipientHasAccount: false,
+      workspaces: [] as { name: string; role: string }[],
     };
     if (!id) return c.json(miss);
 
@@ -146,6 +148,20 @@ dashboardRouter.get(
           ? (row.status as "accepted" | "rejected" | "canceled")
           : ("not_found" as const);
 
+    // Only the names, only for a live invitation: the link is the credential,
+    // and the page says which workspaces accepting it opens.
+    const workspaces =
+      state === "pending"
+        ? ((
+            await c.env.DB.prepare(
+              `SELECT w.name, iw.role FROM invitation_workspaces iw JOIN workspaces w ON w.id = iw.workspace_id
+                WHERE iw.invitation_id = ? ORDER BY w.created_at ASC`,
+            )
+              .bind(id)
+              .all<{ name: string; role: string }>()
+          ).results ?? [])
+        : [];
+
     return c.json({
       state,
       email: row.email,
@@ -155,6 +171,7 @@ dashboardRouter.get(
       inviterEmail: row.inviterEmail,
       expiresAt: row.expiresAt ?? null,
       recipientHasAccount: Boolean(row.hasAccount),
+      workspaces,
     });
   },
 );

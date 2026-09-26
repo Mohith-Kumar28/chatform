@@ -14,6 +14,7 @@ import type { KeyType } from "./apikey-config.js";
 import { LEGACY_SCOPES, type Scopes } from "./scopes.js";
 import { respondentToken } from "../routes/helpers.js";
 import { IMPERSONATION_HEADER, resolveImpersonation } from "./impersonation.js";
+import { canOpenWorkspace } from "./workspace-access.js";
 
 /**
  * Authorization guards — the single source of truth for who may touch what.
@@ -188,6 +189,9 @@ export const requireFormAccess: MiddlewareHandler<{ Bindings: Bindings; Variable
   const form = await loadFormForOrg(c.env, formId, orgId);
   if (!form) return notFound(c, "Form not found");
   c.set("orgId", orgId);
+  // A form in a workspace the caller was not added to does not exist for them:
+  // 404, never 403, so its id confirms nothing.
+  if (!(await canOpenWorkspace(c, form.workspace_id))) return notFound(c, "Form not found");
   c.set("form", form);
   await next();
 };
@@ -199,7 +203,9 @@ export async function assertFormAccess(c: GuardCtx, formId: string): Promise<For
   const orgId = c.get("orgId") ?? (await resolveOrgId(c.env, userId));
   if (!orgId) return null;
   const form = await loadFormForOrg(c.env, formId, orgId);
-  if (form) c.set("orgId", orgId);
+  if (!form) return null;
+  c.set("orgId", orgId);
+  if (!(await canOpenWorkspace(c, form.workspace_id))) return null;
   return form;
 }
 

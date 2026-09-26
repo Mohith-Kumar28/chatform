@@ -45,7 +45,17 @@ function issuesFrom(err: ApiError): DocIssue[] {
  * Returns `flush` so Publish, ⌘S and the leave-guard can force a pending save
  * rather than being disabled while dirty, and `retry` for the failure indicator.
  */
-export function useAutosave(formId: string) {
+export function useAutosave(formId: string, opts: { enabled?: boolean } = {}) {
+  /*
+    Off for someone who may only view this form's workspace: every save would be
+    refused, and a failing save indicator is the wrong way to say "read-only".
+    Read through a ref so the debouncer and flush see the current answer.
+  */
+  const enabled = opts.enabled ?? true;
+  const enabledRef = useRef(enabled);
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
   const doc = useBuilderStore((s) => s.doc);
   const saveState = useBuilderStore((s) => s.saveState);
   const markSaving = useBuilderStore((s) => s.markSaving);
@@ -250,7 +260,7 @@ export function useAutosave(formId: string) {
   }, [debouncer]);
 
   useEffect(() => {
-    if (!doc || saveState !== "dirty") return;
+    if (!enabledRef.current || !doc || saveState !== "dirty") return;
     if (dirtySince.current === null) dirtySince.current = Date.now();
     /*
       On disk first, and unconditionally.
@@ -274,7 +284,7 @@ export function useAutosave(formId: string) {
     if (retryTimer.current) clearTimeout(retryTimer.current);
     debouncer.cancel();
     const state = useBuilderStore.getState();
-    if (state.doc && state.saveState !== "saved") await saveRef.current(state.doc);
+    if (enabledRef.current && state.doc && state.saveState !== "saved") await saveRef.current(state.doc);
   }, [debouncer]);
 
   /*
@@ -353,7 +363,7 @@ export function useAutosave(formId: string) {
     retry: useCallback(() => {
       attempt.current = 0;
       const state = useBuilderStore.getState();
-      if (state.doc) void saveRef.current(state.doc);
+      if (enabledRef.current && state.doc) void saveRef.current(state.doc);
     }, []),
   };
 }

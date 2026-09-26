@@ -6,7 +6,7 @@ import { FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
 import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
-import { requirePermission, requireGauge, type AuthzVars } from "../lib/authorize.js";
+import { requirePermission, requireGauge, assertPermission, type AuthzVars } from "../lib/authorize.js";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
 import { listTemplates, getTemplate, createFormFromTemplate } from "../lib/templates-service.js";
 
@@ -114,7 +114,11 @@ templatesRouter.post(
     // organization's first when the caller names none.
     const ws = await requireWorkspace(c, c.req.query("ws"));
     if (ws === undefined) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
-    if (!ws) return c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
+    if (!ws) return c.get("orgId")
+      ? c.json({ error: { code: "no_workspace", message: "You haven't been added to a workspace yet. Ask an admin to add you." } }, 403)
+      : c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
+    const denied = await assertPermission(c, "form", "create", { workspaceId: ws.wsId });
+    if (denied) return denied;
 
     const created = await createFormFromTemplate(c.env, {
       slug: c.req.param("slug"),

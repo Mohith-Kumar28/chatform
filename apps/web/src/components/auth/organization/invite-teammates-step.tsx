@@ -17,12 +17,20 @@ import {
   SelectTrigger,
 } from "@/components/ui/select"
 import { ENTITLEMENTS_KEY, useEntitlements } from "@/hooks/use-entitlements"
-import { authClient } from "@/lib/auth/auth-client"
-import {
-  ASSIGNABLE_ROLES,
-  type AssignableRole,
-  DEFAULT_INVITE_ROLE,
-} from "@/lib/roles"
+import { WORKSPACE_ROLES } from "@/lib/roles"
+import { getApiForms, getApiWorkspaces, postApiInvitations } from "@/lib/api/dashboard/dashboard"
+import { apiData } from "@/lib/api/payload"
+
+/**
+ * A new organization has one workspace, so the choice here is the whole of
+ * someone's access: edit or view that workspace, or be an admin of the lot.
+ * The full per-workspace picker lives in the invite dialog, for later.
+ */
+const STEP_ROLES = [
+  ...WORKSPACE_ROLES,
+  { value: "admin", label: "Admin", blurb: "Every workspace, plus people and settings. Not billing." },
+] as const
+type StepRole = (typeof STEP_ROLES)[number]["value"]
 import { cn } from "@/lib/utils"
 
 /** One row of the form: an address and the role it is being invited to. */
@@ -30,13 +38,26 @@ interface Row {
   /** Stable across re-orders, so React does not reuse the wrong input. */
   id: number
   email: string
-  role: AssignableRole
+  role: StepRole
   /** Set only after a send attempt that this row specifically failed. */
   error?: string
 }
 
 let nextRowId = 0
-const blankRow = (): Row => ({ id: nextRowId++, email: "", role: DEFAULT_INVITE_ROLE })
+const blankRow = (): Row => ({ id: nextRowId++, email: "", role: "editor" })
+
+/**
+ * The organization's workspace. A just-created organization may not have one
+ * yet: the server makes it on the first forms read, for an admin, so ask once
+ * if the list comes back empty.
+ */
+async function onlyWorkspaceId(): Promise<string | null> {
+  const first = apiData<{ id: string }[]>(await getApiWorkspaces()) ?? []
+  if (first[0]) return first[0].id
+  await getApiForms()
+  const again = apiData<{ id: string }[]>(await getApiWorkspaces()) ?? []
+  return again[0]?.id ?? null
+}
 
 export type InviteTeammatesStepProps = {
   /**
@@ -134,20 +155,29 @@ export function InviteTeammatesStep({
     const failed: Row[] = []
     let sentNow = 0
 
+    let workspaceId: string | null = null
+    try {
+      workspaceId = await onlyWorkspaceId()
+    } catch {
+      workspaceId = null
+    }
+
     for (const row of filled) {
       const email = row.email.trim()
       try {
-        const res = await authClient.organization.inviteMember({
+        if (row.role !== "admin" && !workspaceId) throw new Error("Couldn't find this organization's workspace")
+        await postApiInvitations({
           email,
+          role: row.role === "admin" ? "admin" : "member",
           organizationId,
-          role: row.role as never,
+          workspaces: row.role === "admin" ? [] : [{ workspaceId: workspaceId!, role: row.role }],
         })
-        if (res.error) throw new Error(res.error.message ?? "Invite failed")
         sentNow++
       } catch (err) {
+        const message = (err as { error?: { message?: string } })?.error?.message
         failed.push({
           ...row,
-          error: err instanceof Error ? err.message : "Invite failed",
+          error: message ?? (err instanceof Error ? err.message : "Invite failed"),
         })
       }
     }
@@ -211,7 +241,7 @@ export function InviteTeammatesStep({
               <Select
                 value={row.role}
                 disabled={sending}
-                onValueChange={(value) => update(row.id, { role: value as AssignableRole })}
+                onValueChange={(value) => update(row.id, { role: value as StepRole })}
               >
                 {/*
                   The label, spelled out, rather than `<SelectValue />`.
@@ -226,10 +256,10 @@ export function InviteTeammatesStep({
                   names the role.
                 */}
                 <SelectTrigger className="w-28 shrink-0" aria-label="Role">
-                  {ASSIGNABLE_ROLES.find((role) => role.value === row.role)?.label}
+                  {STEP_ROLES.find((role) => role.value === row.role)?.label}
                 </SelectTrigger>
                 <SelectContent>
-                  {ASSIGNABLE_ROLES.map((role) => (
+                  {STEP_ROLES.map((role) => (
                     <SelectItem
                       key={role.value}
                       value={role.value}

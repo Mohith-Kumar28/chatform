@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Folder, ChevronsUpDown, Loader2, Plus, Check } from "lucide-react";
+import { Folder, ChevronsUpDown, Loader2, Plus, Check, Users } from "lucide-react";
+import { WorkspaceAccessDialog } from "@/components/settings/access/workspace-access-dialog";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -60,6 +61,7 @@ interface Workspace {
   slug: string;
   formCount: number;
   createdAt: number;
+  myRole?: string;
 }
 
 export function WorkspaceSwitcher({ className }: { className?: string } = {}) {
@@ -73,6 +75,7 @@ export function WorkspaceSwitcher({ className }: { className?: string } = {}) {
   const create = usePostApiWorkspaces();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
   const [name, setName] = useState("");
 
   // `apiData` because the generated types claim a `{ data, headers }` wrapper
@@ -92,6 +95,7 @@ export function WorkspaceSwitcher({ className }: { className?: string } = {}) {
    */
   if (isLoading || list.length === 0) return null;
   const canCreate = allows("workspace", "create");
+  const canManageAccess = allows("member", "update");
   if (list.length === 1 && !canCreate) return null;
 
   function switchTo(next: string) {
@@ -168,23 +172,36 @@ export function WorkspaceSwitcher({ className }: { className?: string } = {}) {
           {list.map((ws) => (
             <DropdownMenuItem key={ws.id} onSelect={() => switchTo(ws.slug)}>
               <span className="min-w-0 flex-1 truncate">{ws.name}</span>
+              {ws.myRole === "viewer" && (
+                <span className="text-muted-foreground shrink-0 text-xs">View only</span>
+              )}
               <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                 {ws.formCount}
               </span>
               {ws.id === current?.id && <Check className="size-3.5 shrink-0" />}
             </DropdownMenuItem>
           ))}
+          {(canCreate || (canManageAccess && current)) && <DropdownMenuSeparator />}
+          {/* Who can open the workspace you are in: the door for the admin who
+              starts from the folder rather than from a person. */}
+          {canManageAccess && current && (
+            <DropdownMenuItem onSelect={() => setAccessOpen(true)}>
+              <Users className="size-3.5" />
+              Manage access to {current.name}
+            </DropdownMenuItem>
+          )}
           {canCreate && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
-                <Plus className="size-3.5" />
-                New workspace
-              </DropdownMenuItem>
-            </>
+            <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
+              <Plus className="size-3.5" />
+              New workspace
+            </DropdownMenuItem>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {accessOpen && current && (
+        <WorkspaceAccessDialog open onOpenChange={setAccessOpen} workspace={current} />
+      )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
@@ -192,7 +209,8 @@ export function WorkspaceSwitcher({ className }: { className?: string } = {}) {
             <DialogHeader>
               <DialogTitle>New workspace</DialogTitle>
               <DialogDescription>
-                A folder for a set of forms. Everyone in this organization can see it.
+                A folder for a set of forms. Admins can open it straight away; add anyone
+                else from Manage access.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-2 py-4">

@@ -55,6 +55,10 @@ import { OrganizationTableBulkAction } from "./organization-table-bulk-action"
 import { OrganizationTablePagination } from "./organization-table-pagination"
 import { OrganizationTableSelectAll } from "./organization-table-selection"
 import { useOrganizationTableState } from "./organization-table-state"
+import { accessSummary, type AccessMap } from "@/components/settings/access/access-shared"
+import { getGetApiWorkspaceAccessQueryKey, useGetApiWorkspaceAccess } from "@/lib/api/dashboard/dashboard"
+import { apiData } from "@/lib/api/payload"
+import { isOrgAdminRole } from "@/lib/roles"
 import { OrganizationTableViewOptions } from "./organization-table-view-options"
 
 const invitationColumnHelper = createOrganizationColumnHelper<Invitation>()
@@ -104,6 +108,19 @@ export function OrganizationInvitations({
   const canCancel = useHasPermission(authClient, {
     permissions: { invitation: ["cancel"] }
   })
+
+  // Which workspaces each invitation opens once accepted: admins only, like
+  // the members table's Access column.
+  const canManageAccess = useHasPermission(authClient, {
+    permissions: { member: ["update"] }
+  })
+  const { data: accessData } = useGetApiWorkspaceAccess({
+    query: {
+      queryKey: getGetApiWorkspaceAccessQueryKey(),
+      enabled: canManageAccess.data?.success === true
+    }
+  })
+  const accessMap = apiData<AccessMap>(accessData)
 
   const isPending = invitationsPending || canCancel.isPending
   const tableState = useOrganizationTableState(
@@ -413,6 +430,8 @@ export function OrganizationInvitations({
                   </OrganizationSortableTableHead>
                 )}
 
+                {accessMap && <TableHead>Access</TableHead>}
+
                 {table.getColumn("status")?.getIsVisible() && (
                   <OrganizationSortableTableHead
                     column={table.getColumn("status")}
@@ -433,7 +452,7 @@ export function OrganizationInvitations({
               ) : !table.getRowModel().rows.length ? (
                 <TableRow>
                   <TableCell
-                    colSpan={visibleColumnCount + 1 + Number(showSelection)}
+                    colSpan={visibleColumnCount + 1 + Number(showSelection) + Number(Boolean(accessMap))}
                   >
                     <OrganizationInvitationsEmpty
                       isInvitePending={canInvite.isPending}
@@ -457,6 +476,14 @@ export function OrganizationInvitations({
                         .getColumn("createdAt")
                         ?.getIsVisible()}
                       showRole={table.getColumn("role")?.getIsVisible()}
+                      access={
+                        accessMap
+                          ? accessSummary(
+                              isOrgAdminRole(row.original.role ?? ""),
+                              accessMap.invitations[row.original.id]
+                            )
+                          : undefined
+                      }
                       showStatus={table.getColumn("status")?.getIsVisible()}
                     />
                   ))

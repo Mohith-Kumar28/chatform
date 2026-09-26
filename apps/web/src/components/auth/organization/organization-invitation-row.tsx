@@ -35,6 +35,8 @@ export type OrganizationInvitationRowProps = {
   showEmail?: boolean
   showRole?: boolean
   showStatus?: boolean
+  /** "All workspaces", or the ones accepting will open. Absent hides the column. */
+  access?: string
 }
 
 /*
@@ -59,7 +61,8 @@ export function OrganizationInvitationRow({
   showCreatedAt = true,
   showEmail = true,
   showRole = true,
-  showStatus = true
+  showStatus = true,
+  access
 }: OrganizationInvitationRowProps) {
   const { authClient } = useAuth<OrganizationAuthClient>()
   const {
@@ -168,6 +171,10 @@ export function OrganizationInvitationRow({
       )}
 
       {showRole && <TableCell className="text-sm">{roleLabel}</TableCell>}
+
+      {access !== undefined && (
+        <TableCell className="text-muted-foreground max-w-56 truncate text-sm">{access}</TableCell>
+      )}
 
       {showStatus && (
         <TableCell className="text-sm">

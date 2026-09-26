@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AiCapBanner } from "@/components/billing/ai-cap-banner";
 import { CreateFormDialog } from "@/components/forms/create-form-dialog";
+import { NoWorkspaceState } from "@/components/dashboard/no-workspace-state";
 import { FormCard, type FormRow } from "@/components/forms/form-card";
 
 type Sort = "newest" | "oldest" | "responses" | "alpha";
@@ -95,13 +96,25 @@ export function DashboardContent() {
   const { data: workspaceData } = useGetApiWorkspaces();
   const workspaces = useMemo(
     () =>
-      apiData<{ id: string; name: string; slug: string }[]>(workspaceData) ??
-      [],
+      apiData<
+        { id: string; name: string; slug: string; permissions?: Record<string, string[]> }[]
+      >(workspaceData) ?? [],
     [workspaceData],
   );
-  const currentWorkspaceId = (
-    workspaces.find((w) => w.slug === ws) ?? workspaces[0]
-  )?.id;
+  const currentWorkspace = workspaces.find((w) => w.slug === ws) ?? workspaces[0];
+  const currentWorkspaceId = currentWorkspace?.id;
+  /*
+    What the caller's role in this workspace lets them do. Optimistic until the
+    list arrives, the same rule `allows` follows, so an editor's grid does not
+    flash read-only on every load. The server refuses regardless.
+  */
+  const canEditHere = !currentWorkspace || (currentWorkspace.permissions?.form ?? []).includes("update");
+  // Only workspaces this person may put forms into are places to move one.
+  const moveTargets = useMemo(
+    () => workspaces.filter((w) => (w.permissions?.form ?? []).includes("create")),
+    [workspaces],
+  );
+  const noWorkspace = workspaceData !== undefined && workspaces.length === 0;
 
   const moveForm = usePatchApiFormsByIdWorkspace();
 
@@ -247,10 +260,14 @@ export function DashboardContent() {
    * component — so the shell announces the intent and this answers it.
    */
   useEffect(() => {
-    const open = () => setCreateOpen(true);
+    // A viewer cannot create here, so the shortcut does nothing rather than
+    // opening a dialog whose submit is refused.
+    const open = () => {
+      if (canEditHere) setCreateOpen(true);
+    };
     window.addEventListener(NEW_FORM_EVENT, open);
     return () => window.removeEventListener(NEW_FORM_EVENT, open);
-  }, []);
+  }, [canEditHere]);
 
   const remove = useDeleteApiFormsById<Error>({
     mutation: {
@@ -360,7 +377,7 @@ export function DashboardContent() {
                   <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
                     Move to workspace
                   </DropdownMenuLabel>
-                  {workspaces.map((w) => (
+                  {moveTargets.map((w) => (
                     <DropdownMenuItem
                       key={w.id}
                       disabled={w.id === currentWorkspaceId}
@@ -423,23 +440,25 @@ export function DashboardContent() {
                 </>
               )}
 
-              <TooltipProvider delayDuration={400}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      shape="pill"
-                      onClick={() => setCreateOpen(true)}
-                      data-tour="new-form"
-                    >
-                      <Plus className="size-4" />
-                      New form
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <TooltipHint label="New form" keys="N" />
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              {canEditHere && !noWorkspace && (
+                <TooltipProvider delayDuration={400}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        shape="pill"
+                        onClick={() => setCreateOpen(true)}
+                        data-tour="new-form"
+                      >
+                        <Plus className="size-4" />
+                        New form
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <TooltipHint label="New form" keys="N" />
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </>
           )}
         </div>
@@ -460,6 +479,14 @@ export function DashboardContent() {
               <div key={i} className="shimmer h-64 rounded-2xl" />
             ))}
           </div>
+        ) : noWorkspace ? (
+          <NoWorkspaceState />
+        ) : allForms.length === 0 && !canEditHere ? (
+          <EmptyState
+            icon={MessageSquarePlus}
+            title="No forms here yet"
+            description="You can view this workspace. Forms appear here once an editor creates them."
+          />
         ) : allForms.length === 0 ? (
           <EmptyState
             icon={MessageSquarePlus}
@@ -514,17 +541,18 @@ export function DashboardContent() {
                   form={form}
                   selected={selected.has(form.id)}
                   onSelectedChange={
-                    workspaces.length > 1
+                    canEditHere && moveTargets.length > 1
                       ? (on) => toggleSelected(form.id, on)
                       : undefined
                   }
                   anySelected={selectedCount > 0}
-                  onDelete={() => setPendingDelete(form)}
+                  readOnly={!canEditHere}
+                  onDelete={canEditHere ? () => setPendingDelete(form) : undefined}
                   onUnpublish={
-                    form.status === "published" ? () => setPendingOffline(form) : undefined
+                    canEditHere && form.status === "published" ? () => setPendingOffline(form) : undefined
                   }
-                  onPublish={() => publish.mutate({ id: form.id })}
-                  workspaces={workspaces}
+                  onPublish={canEditHere ? () => publish.mutate({ id: form.id }) : undefined}
+                  workspaces={canEditHere ? moveTargets : []}
                   currentWorkspaceId={currentWorkspaceId}
                   onMove={(workspaceId) => {
                     void (async () => {

@@ -56,7 +56,7 @@ const CAPABILITIES = [
   { label: "Build, edit and publish forms", owner: true, admin: true, editor: true, viewer: false },
   { label: "Export responses, see partial ones", owner: true, admin: true, editor: true, viewer: false },
   { label: "API keys, custom domain, audit log", owner: true, admin: true, editor: false, viewer: false },
-  { label: "Invite and remove teammates", owner: true, admin: true, editor: false, viewer: false },
+  { label: "Invite teammates, choose who opens each workspace", owner: true, admin: true, editor: false, viewer: false },
   { label: "Change the plan", owner: true, admin: false, editor: false, viewer: false },
 ] as const;
 
@@ -113,14 +113,19 @@ export function PeopleSection() {
             <AccordionItem value="roles" className="border-b-0">
               <AccordionTrigger className="px-6 py-4 text-sm">What each role can do</AccordionTrigger>
               <AccordionContent className="px-6">
+                <p className="text-muted-foreground mb-3 text-sm">
+                  Owners and admins open every workspace. A member opens only the workspaces
+                  they&apos;re added to, as an Editor or a Viewer in each one.
+                </p>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[26rem] text-sm">
                     <thead>
                       <tr className="text-muted-foreground text-xs">
                         <th className="py-2 text-left font-medium">Can</th>
-                        {["Owner", "Admin", "Editor", "Viewer"].map((r) => (
-                          <th key={r} className="w-16 py-2 text-center font-medium">
+                        {["Owner", "Admin", "Editor", "Viewer"].map((r, i) => (
+                          <th key={r} className="w-20 py-2 text-center font-medium">
                             {r}
+                            {i >= 2 && <span className="block text-[10px] font-normal">in a workspace</span>}
                           </th>
                         ))}
                       </tr>

@@ -28,6 +28,9 @@ import { cn } from "@/lib/utils";
  */
 export function InviteTeamButton({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
+  // Read at click time rather than through `useSearchParams`, which would need
+  // a Suspense boundary around the whole header for one value.
+  const [slug, setSlug] = useState<string | null>(null);
   const ent = useEntitlements();
 
   /*
@@ -41,7 +44,10 @@ export function InviteTeamButton({ className }: { className?: string }) {
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setSlug(new URLSearchParams(window.location.search).get("ws"));
+          setOpen(true);
+        }}
         className={cn(
           "text-muted-foreground hover:text-foreground hover:bg-muted/60 inline-flex items-center gap-1.5",
           "rounded-full px-2.5 py-1 text-sm transition-colors duration-[var(--duration-micro)]",
@@ -52,7 +58,7 @@ export function InviteTeamButton({ className }: { className?: string }) {
         Invite team
       </button>
 
-      <InviteMemberDialog open={open} onOpenChange={setOpen} />
+      <InviteMemberDialog open={open} onOpenChange={setOpen} currentWorkspaceSlug={slug} />
     </>
   );
 }

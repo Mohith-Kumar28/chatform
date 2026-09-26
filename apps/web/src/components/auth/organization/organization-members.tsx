@@ -43,6 +43,10 @@ import {
 } from "@/components/ui/table"
 import { organizationPlugin } from "@/lib/auth/organization-plugin"
 import { useEntitlements } from "@/hooks/use-entitlements"
+import { accessSummary, type AccessMap } from "@/components/settings/access/access-shared"
+import { getGetApiWorkspaceAccessQueryKey, useGetApiWorkspaceAccess } from "@/lib/api/dashboard/dashboard"
+import { apiData } from "@/lib/api/payload"
+import { isOrgAdminRole } from "@/lib/roles"
 import { cn } from "@/lib/utils"
 import { InviteMemberDialog } from "./invite-member-dialog"
 import { OrganizationMemberRow } from "./organization-member-row"
@@ -212,6 +216,21 @@ export function OrganizationMembers({
     permissions: { member: ["delete"] },
     enabled: Boolean(activeOrganization?.id)
   })
+
+  // Workspace access is an admin's view: the endpoint refuses anyone else, so
+  // it is not asked for, and the column is simply absent for them.
+  const canManageAccess = useHasPermission(authClient, {
+    organizationId: activeOrganization?.id,
+    permissions: { member: ["update"] },
+    enabled: Boolean(activeOrganization?.id)
+  })
+  const { data: accessData } = useGetApiWorkspaceAccess({
+    query: {
+      queryKey: getGetApiWorkspaceAccessQueryKey(),
+      enabled: canManageAccess.data?.success === true
+    }
+  })
+  const accessMap = apiData<AccessMap>(accessData)
 
   const isPending =
     activeOrganizationPending ||
@@ -546,6 +565,8 @@ export function OrganizationMembers({
                   </OrganizationSortableTableHead>
                 )}
 
+                {accessMap && <TableHead>Access</TableHead>}
+
                 {showTeams && table.getColumn("teams")?.getIsVisible() && (
                   <TableHead>{organizationLocalization.teams}</TableHead>
                 )}
@@ -572,6 +593,14 @@ export function OrganizationMembers({
                       organization={activeOrganization}
                       selectableRow={showSelection ? row : undefined}
                       showRole={table.getColumn("role")?.getIsVisible()}
+                      access={
+                        accessMap
+                          ? accessSummary(
+                              isOrgAdminRole(row.original.role),
+                              accessMap.members[row.original.id]
+                            )
+                          : undefined
+                      }
                       showTeams={
                         showTeams &&
                         table.getColumn("teams")?.getIsVisible() === true

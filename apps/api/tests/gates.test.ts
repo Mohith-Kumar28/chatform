@@ -42,8 +42,24 @@ async function setPlan(orgId: string, planId: PlanId): Promise<void> {
   await invalidateEntitlements(DB(), orgId);
 }
 
+/**
+ * `editor` and `viewer` are workspace roles now: the member becomes an
+ * organization `member` holding that role in every workspace, which is what
+ * migration 0042 did to every existing editor and viewer.
+ */
 async function setRole(orgId: string, role: string): Promise<void> {
-  await DB().DB.prepare(`UPDATE members SET role = ? WHERE organization_id = ?`).bind(role, orgId).run();
+  const tier = role === "editor" || role === "viewer" ? "member" : role;
+  await DB().DB.prepare(`UPDATE members SET role = ? WHERE organization_id = ?`).bind(tier, orgId).run();
+  await DB().DB.prepare(
+    `DELETE FROM workspace_members WHERE member_id IN (SELECT id FROM members WHERE organization_id = ?)`,
+  ).bind(orgId).run();
+  if (tier !== "member") return;
+  await DB().DB.prepare(
+    `INSERT INTO workspace_members (id, workspace_id, member_id, role, created_at)
+     SELECT 'wm_' || lower(hex(randomblob(12))), w.id, m.id, ?, 0
+       FROM members m JOIN workspaces w ON w.organization_id = m.organization_id
+      WHERE m.organization_id = ?`,
+  ).bind(role, orgId).run();
 }
 
 const auth = (t: Tenant) => ({ cookie: t.cookie, "content-type": "application/json" });

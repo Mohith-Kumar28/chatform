@@ -15,6 +15,7 @@ import { dashboardRouter } from "./routes/dashboard.js";
 import { formsRouter } from "./routes/forms.js";
 import { knowledgeRouter } from "./routes/knowledge.js";
 import { workspacesRouter } from "./routes/workspaces.js";
+import { workspaceAccessRouter } from "./routes/workspace-access.js";
 import { builderFeedbackRouter } from "./routes/builder-feedback.js";
 import { aiRouter } from "./routes/ai.js";
 import { resultsRouter } from "./routes/results.js";
@@ -346,6 +347,7 @@ export function createApp() {
   app.route("/api", formsRouter);
   app.route("/api", knowledgeRouter);
   app.route("/api", workspacesRouter);
+  app.route("/api", workspaceAccessRouter);
   app.route("/api", builderFeedbackRouter);
   app.route("/api", aiRouter);
   app.route("/api", resultsRouter);

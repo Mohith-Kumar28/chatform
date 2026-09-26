@@ -13,6 +13,7 @@ import {
   type GuardVars,
 } from "../lib/guards.js";
 import { requirePermission, requireScope, type AuthzVars } from "../lib/authorize.js";
+import { canOpenWorkspace } from "../lib/workspace-access.js";
 import { assetLimit } from "../lib/ratelimit.js";
 import { contentLength } from "../lib/inputs.js";
 import { getEntitlements, storageBytes } from "../lib/entitlements.js";
@@ -561,11 +562,18 @@ filesAdminRouter.get("/files/:id/download", async (c) => {
   const orgId = c.get("orgId");
   // Scope by organization: a file id from another tenant must 404.
   const row = await c.env.DB.prepare(
-    `SELECT r2_key, filename, mime FROM files WHERE id = ? AND organization_id = ? AND status = 'confirmed'`,
+    `SELECT fi.r2_key, fi.filename, fi.mime, f.workspace_id
+       FROM files fi LEFT JOIN forms f ON f.id = fi.form_id
+      WHERE fi.id = ? AND fi.organization_id = ? AND fi.status = 'confirmed'`,
   )
     .bind(fileId, orgId ?? "")
-    .first<{ r2_key: string; filename: string; mime: string }>();
+    .first<{ r2_key: string; filename: string; mime: string; workspace_id: string | null }>();
   if (!row) return c.json({ error: { code: "not_found", message: "File not found" } }, 404);
+  // A respondent's upload is part of a response, and responses are read inside
+  // the form's workspace. A file with no form falls to the organization's admins.
+  if (!(await canOpenWorkspace(c as never, row.workspace_id))) {
+    return c.json({ error: { code: "not_found", message: "File not found" } }, 404);
+  }
   const obj = await c.env.R2.get(row.r2_key);
   if (!obj) return c.json({ error: { code: "not_found", message: "Object missing" } }, 404);
   // Respondent-supplied bytes are never served with a renderable content type

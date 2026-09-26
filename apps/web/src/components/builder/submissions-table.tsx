@@ -65,6 +65,7 @@ import {
   getGetApiFormsByIdAnalyticsQueryKey,
   getGetApiFormsByIdSubmissionsQueryKey,
   useDeleteApiFormsByIdSubmissions,
+  useGetApiFormsById,
 } from "@/lib/api/dashboard/dashboard";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -1219,7 +1220,16 @@ export function SubmissionsTable({
   const ent = useEntitlements();
   const queryClient = useQueryClient();
   const del = useDeleteApiFormsByIdSubmissions();
-  const canDelete = ent.allows("submission", "delete");
+  /*
+    Deleting a response is decided by the caller's role in this form's
+    workspace, which the form row carries. The organization-wide map only
+    covers owners and admins now, so it is the fallback, not the answer.
+  */
+  const { data: formRow } = useGetApiFormsById(formId as never);
+  const formPermissions = (formRow as { permissions?: Record<string, string[]> } | undefined)?.permissions;
+  const canDelete = formPermissions
+    ? (formPermissions.submission ?? []).includes("delete")
+    : ent.allows("submission", "delete");
 
   /**
    * How far in the Follow-up column has to sit, measured rather than assumed.

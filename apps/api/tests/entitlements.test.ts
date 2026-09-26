@@ -392,10 +392,9 @@ describe("roles", () => {
     expect(roleAllows("viewer", "form", "update")).toBe(false);
   });
 
-  it("keeps the legacy 'member' name working as an editor", () => {
-    // An un-migrated row, or a Better Auth internal default, must not silently lose
-    // every permission it had.
-    expect(roleAllows("member", "form", "publish")).toBe(true);
+  it("reads 'member' as an organization role with no form rights of its own", () => {
+    // A member's form rights come from their workspace grants, never from here.
+    expect(roleAllows("member", "form", "publish")).toBe(false);
     expect(roleAllows("member", "billing", "manage")).toBe(false);
   });
 

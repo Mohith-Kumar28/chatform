@@ -1,4 +1,5 @@
 import type { Bindings } from "../env.js";
+import { accessFor, canOpenWorkspace, workspaceFilter } from "./workspace-access.js";
 
 /** `ws_` + 12 hex. The id shape every workspace row has had since the table existed. */
 export function newWorkspaceId(): string {
@@ -41,7 +42,8 @@ export function workspaceSlug(name: string): string {
  * invisible while nothing sent the field, a cross-tenant write the moment
  * anything did.
  *
- * `null` means "no organization"; `undefined` means "that workspace is not
+ * `null` means "no organization", or a member who has not been added to any
+ * workspace yet; `undefined` means "that workspace is not
  * yours", and callers turn the second into a 404 rather than a 403 — the same
  * rule `guards.ts` applies to forms, since confirming an id exists is itself
  * an answer.
@@ -50,28 +52,37 @@ export function workspaceSlug(name: string): string {
  * workspace is a state a new account is legitimately in.
  */
 export async function requireWorkspace(
-  c: { env: Bindings; get: (k: string) => unknown },
+  c: { env: Bindings; get: (k: string) => unknown; set: (k: never, v: never) => void },
   ref?: string | null,
 ): Promise<{ orgId: string; wsId: string } | null | undefined> {
   const userId = c.get("userId") as string;
   const orgId = c.get("orgId") as string | undefined;
   if (!orgId) return null;
 
+  // A workspace the caller was not added to resolves exactly like one in
+  // another organization: not found. Owners and admins open every workspace.
   if (ref) {
     const row = await c.env.DB.prepare(
       `SELECT id FROM workspaces WHERE organization_id = ? AND (slug = ? OR id = ?) LIMIT 1`,
     )
       .bind(orgId, ref, ref)
       .first<{ id: string }>();
-    return row ? { orgId, wsId: row.id } : undefined;
+    if (!row || !(await canOpenWorkspace(c as never, row.id))) return undefined;
+    return { orgId, wsId: row.id };
   }
 
+  const access = await accessFor(c as never);
+  const filter = workspaceFilter(access, "id");
   const ws = await c.env.DB.prepare(
-    `SELECT id FROM workspaces WHERE organization_id = ? ORDER BY created_at LIMIT 1`,
+    `SELECT id FROM workspaces WHERE organization_id = ?${filter.sql} ORDER BY created_at LIMIT 1`,
   )
-    .bind(orgId)
+    .bind(orgId, ...filter.binds)
     .first<{ id: string }>();
   if (ws) return { orgId, wsId: ws.id };
+
+  // Only an admin conjures the first workspace. A member with no grants is
+  // waiting to be added to one, not entitled to make their own.
+  if (!access.admin) return null;
 
   const wsId = newWorkspaceId();
   await c.env.DB.prepare(

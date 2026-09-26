@@ -1,527 +1,212 @@
 "use client"
 
-import {
-  getAdditionalFieldDefaultValues,
-  getAdditionalFieldSubmitValues,
-  validateEmailAddress
-} from "@better-auth-ui/core"
-import {
-  mergeOrganizationRoleLabels,
-  type OrganizationAuthClient,
-  type OrganizationRolesAuthClient,
-  type OrganizationTeamsAuthClient
-} from "@better-auth-ui/core/plugins/organization"
-import { useAuth, useAuthPlugin } from "@better-auth-ui/react"
-import {
-  useActiveOrganization,
-  useHasPermission,
-  useInviteMember,
-  useListOrganizationInvitations,
-  useListRoles,
-  useListTeams
-} from "@better-auth-ui/react/plugins/organization"
-import { ChevronDown, UserPlus } from "lucide-react"
-import { useEffect, useMemo, useRef } from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { Loader2, UserPlus } from "lucide-react"
+import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { gateErrorFrom } from "@/lib/auth/paywalled"
-import { openPaywall } from "@/stores/paywall-store"
-import { buttonVariants } from "@/components/ui/button"
 import { LockedControl } from "@/components/billing/gate"
-import { useEntitlements } from "@/hooks/use-entitlements"
+import {
+  grantsToList,
+  OrgRoleChoice,
+  refreshAccess,
+  WorkspaceGrantsPicker,
+  WorkspaceRoleHelp,
+  type Grants,
+  type WorkspaceLite
+} from "@/components/settings/access/access-shared"
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu"
-import { Field, FieldLabel } from "@/components/ui/field"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select"
-import { organizationPlugin } from "@/lib/auth/organization-plugin"
-import { ASSIGNABLE_ROLES, DEFAULT_INVITE_ROLE } from "@/lib/roles"
-import { cn } from "@/lib/utils"
-import {
-  getAuthAdditionalFieldValidators,
-  isAuthFormFieldInvalid,
-  useAuthForm
-} from "../auth-form"
+import { useEntitlements } from "@/hooks/use-entitlements"
+import { getGetApiWorkspacesQueryKey, useGetApiWorkspaces, usePostApiInvitations } from "@/lib/api/dashboard/dashboard"
+import { apiData } from "@/lib/api/payload"
+import { DEFAULT_INVITE_ROLE, type AssignableRole } from "@/lib/roles"
 
 /** Props for the `InviteMemberDialog` component. */
 export type InviteMemberDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /**
+   * The workspace to start ticked, as Editor: the one the invite was opened
+   * from. Absent, a single-workspace organization ticks its only one.
+   */
+  defaultWorkspaceId?: string
+  /**
+   * Opened from somewhere that is looking at a workspace by URL: its `?ws=`
+   * slug, or null for the first workspace. Resolved once the list arrives.
+   */
+  currentWorkspaceSlug?: string | null
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** The message the server sent, or the exception's own. */
+function reason(err: unknown): string | undefined {
+  if (err && typeof err === "object" && "error" in err) {
+    const inner = (err as { error?: { message?: string } }).error
+    if (inner?.message) return inner.message
+  }
+  return err instanceof Error ? err.message : undefined
 }
 
 /**
- * The role an invitation lands on before anybody touches the picker.
+ * Invite someone: an address, a role, and for a member, which workspaces.
  *
- * Was "member if it is offered, otherwise whatever happens to be last" — a
- * heuristic that only looked sane while the list was the library's own
- * owner/admin/member. Against this product's list it would have defaulted every
- * invitation to the last entry, which is `viewer`: the most restricted role in
- * the product, silently, for the common case of adding a teammate.
- */
-const pickDefaultRole = (keys: string[]) =>
-  keys.includes(DEFAULT_INVITE_ROLE) ? DEFAULT_INVITE_ROLE : (keys.at(0) ?? "")
-
-/**
- * Render a dialog for inviting a member to the organization.
+ * One step, the way Typeform, Tally and Notion do it. Admin needs no workspace
+ * list because an admin opens every workspace; a member needs at least one,
+ * or they would arrive in an organization where they can open nothing.
+ *
+ * Sent through `POST /api/invitations`, which still has Better Auth create the
+ * invitation (so the seat check and the email are unchanged) and then records
+ * the workspaces for the moment it is accepted. A seat refusal is a 402 gate
+ * envelope, which the app's fetch layer turns into the paywall on its own.
  */
 export function InviteMemberDialog({
   open,
-  onOpenChange
+  onOpenChange,
+  defaultWorkspaceId,
+  currentWorkspaceSlug
 }: InviteMemberDialogProps) {
-  const { authClient, localization } = useAuth<OrganizationAuthClient>()
-  const {
-    allowMultipleRoles,
-    modelFields: { invitation: invitationFields },
-    dynamicAccessControl,
-    invitationLimit,
-    localization: organizationLocalization,
-    roles,
-    teams: teamsEnabled
-  } = useAuthPlugin(organizationPlugin)
-  const { data: activeOrganization } = useActiveOrganization(authClient)
-  const teams = useListTeams(authClient as OrganizationTeamsAuthClient, {
-    query: { organizationId: activeOrganization?.id },
-    enabled: teamsEnabled
-  })
-  const invitations = useListOrganizationInvitations(authClient)
-  const canInvite = useHasPermission(authClient, {
-    organizationId: activeOrganization?.id,
-    permissions: { invitation: ["create"] }
-  })
-  const canReadRoles = useHasPermission(authClient, {
-    organizationId: activeOrganization?.id,
-    permissions: { ac: ["read"] }
-  })
-  const dynamicRoles = useListRoles(authClient as OrganizationRolesAuthClient, {
-    query: { organizationId: activeOrganization?.id },
-    enabled:
-      dynamicAccessControl?.enabled === true &&
-      canReadRoles.data?.success === true
-  })
-  /**
-   * Which roles an invitation may hand out — not which roles exist.
-   *
-   * The plugin's `roles` map is labels for every role a row can hold, so it
-   * necessarily includes `owner` and the legacy `member`. Offered here, the
-   * first is a privilege escalation dressed as a dropdown item (an organization
-   * has one owner and transferring it is a different operation) and the second
-   * is a second way to spell `editor`. `ASSIGNABLE_ROLES` is the list that
-   * answers this question, and says why.
-   *
-   * Roles created through dynamic access control are kept: those are the
-   * organization's own, and nothing here knows better than it does.
-   */
-  const assignableRoles = useMemo(() => {
-    const all = mergeOrganizationRoleLabels(roles, dynamicRoles.data)
-    const offerable = new Set<string>([
-      ...ASSIGNABLE_ROLES.map((r) => r.value),
-      ...(dynamicRoles.data ?? []).map((r) => r.role)
-    ])
-    return Object.fromEntries(
-      Object.entries(all).filter(([key]) => offerable.has(key))
-    )
-  }, [dynamicRoles.data, roles])
+  const queryClient = useQueryClient()
+  const { data } = useGetApiWorkspaces({ query: { queryKey: getGetApiWorkspacesQueryKey(), enabled: open } })
+  const workspaces = apiData<WorkspaceLite[]>(data) ?? []
 
-  const activeOrganizationId = activeOrganization?.id
-  const previousOrganizationId = useRef(activeOrganizationId)
+  const [email, setEmail] = useState("")
+  const [role, setRole] = useState<AssignableRole>(DEFAULT_INVITE_ROLE)
+  const [grants, setGrants] = useState<Grants>({})
+  const [touched, setTouched] = useState(false)
 
-  const { mutateAsync: inviteMember, isPending: isInviting } = useInviteMember(
-    authClient as OrganizationTeamsAuthClient,
-    {
-      onSuccess: () => {
-        onOpenChange(false)
-        toast.success(organizationLocalization.inviteMemberSuccess)
-      },
-      /**
-       * A seat refusal is a paywall, not a toast.
-       *
-       * The server enforces seats in `beforeCreateInvitation` — the only place
-       * that sees every path into `invitations`, including this dialog calling
-       * the endpoint directly. That guard throws a real gate envelope, but Better
-       * Auth's client is a second HTTP stack that never passes through the app's
-       * fetch mutator, so without this the envelope was thrown away and the
-       * person saw the raw `PAYMENT_REQUIRED` code.
-       */
-      onError: (error) => {
-        const gate = gateErrorFrom(error)
-        if (gate) {
-          onOpenChange(false)
-          openPaywall(gate)
-          return
-        }
-        toast.error(
-          (error as { message?: string })?.message ||
-            "Could not send the invitation."
-        )
-      }
-    }
-  )
+  // The workspace to start ticked: named outright, or the one the page is on.
+  const startId =
+    defaultWorkspaceId ??
+    (currentWorkspaceSlug !== undefined
+      ? (workspaces.find((w) => (w as { slug?: string }).slug === currentWorkspaceSlug) ?? workspaces[0])?.id
+      : workspaces.length === 1
+        ? workspaces[0]!.id
+        : undefined)
 
-  const atInvitationLimit =
-    invitationLimit !== undefined &&
-    (invitations.data?.filter((invitation) => invitation.status === "pending")
-      .length ?? 0) >= invitationLimit
+  // Fresh every time it opens.
+  useEffect(() => {
+    if (!open) return
+    setEmail("")
+    setRole(DEFAULT_INVITE_ROLE)
+    setTouched(false)
+    setGrants({})
+  }, [open])
 
-  /**
-   * The seat ceiling is answered here, not on the control that opened this.
-   *
-   * Both entry points — the header's "Invite team" and the members table's
-   * "Invite member" — stay live at the ceiling and open this dialog. A padlock
-   * on the thing you press to *start* refuses before anyone has said what they
-   * want, and it costs the surface around it a second button and a chip. The
-   * refusal belongs on the submit button instead: by then the person has typed
-   * an address, which is the moment the offer is worth anything.
-   *
-   * `gauges.seats` is the server's own count: members plus invitations that
-   * could still be accepted. Recomputing it from the rows in the table is how
-   * this dialog and the endpoint end up disagreeing about whether there is room.
-   */
+  // Tick the starting workspace once it is known, unless someone already chose.
+  useEffect(() => {
+    if (!open || !startId) return
+    setGrants((g) => (Object.keys(g).length ? g : { [startId]: "editor" }))
+  }, [open, startId])
+
+  const invite = usePostApiInvitations()
+
   const ent = useEntitlements()
   const seatLimit = ent.limit("seats")
   const seatsUsed = ent.data?.gauges.seats ?? 0
   const atSeatLimit = seatLimit !== null && seatsUsed >= seatLimit
 
-  const form = useAuthForm({
-    defaultValues: {
-      additionalFields: getAdditionalFieldDefaultValues(invitationFields),
-      email: "",
-      roles: [] as string[],
-      teamId: ""
-    },
-    onSubmit: async ({ value }) => {
-      if (
-        !activeOrganizationId ||
-        !canInvite.data?.success ||
-        value.roles.length === 0 ||
-        atInvitationLimit ||
-        atSeatLimit
-      )
-        return
+  const emailValid = EMAIL.test(email.trim())
+  const needsWorkspace = role === "member" && Object.keys(grants).length === 0
+  const canSubmit = emailValid && !needsWorkspace && !invite.isPending && !atSeatLimit
 
-      const teamId = teams.data?.some((team) => team.id === value.teamId)
-        ? value.teamId
-        : undefined
-
-      try {
-        await inviteMember({
-          ...getAdditionalFieldSubmitValues(
-            invitationFields,
-            value.additionalFields
-          ),
-          email: value.email.trim(),
-          organizationId: activeOrganizationId,
-          role: value.roles as Parameters<typeof inviteMember>[0]["role"],
-          teamId
-        })
-      } catch {
-        // The mutation reports the error through its configured handler.
-      }
-    }
-  })
-
-  useEffect(() => {
-    const keys = Object.keys(assignableRoles)
-    const current = form.getFieldValue("roles")
-    const kept = current.filter((entry) => keys.includes(entry))
-    const roles =
-      kept.length > 0
-        ? allowMultipleRoles
-          ? kept
-          : kept.slice(0, 1)
-        : (() => {
-            const fallback = pickDefaultRole(keys)
-            return fallback ? [fallback] : []
-          })()
-
-    form.setFieldValue("roles", roles)
-  }, [allowMultipleRoles, assignableRoles, form])
-
-  useEffect(() => {
-    const organizationChanged =
-      previousOrganizationId.current !== activeOrganizationId
-
-    if (open || organizationChanged) {
-      const fallback = pickDefaultRole(Object.keys(assignableRoles))
-      form.reset({
-        additionalFields: getAdditionalFieldDefaultValues(invitationFields),
-        email: "",
-        roles: fallback ? [fallback] : [],
-        teamId: ""
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setTouched(true)
+    if (!canSubmit) return
+    try {
+      await invite.mutateAsync({
+        data: {
+          email: email.trim(),
+          role,
+          workspaces: role === "member" ? grantsToList(grants) : []
+        }
       })
+      await refreshAccess(queryClient)
+      toast.success(`Invitation sent to ${email.trim()}`)
+      onOpenChange(false)
+    } catch (err) {
+      // A 402 has already opened the paywall; anything else is worth a toast.
+      const status = (err as { status?: number })?.status
+      if (status === 402) {
+        onOpenChange(false)
+        return
+      }
+      toast.error("Couldn't send the invitation", { description: reason(err) })
     }
-    previousOrganizationId.current = activeOrganizationId
-  }, [activeOrganizationId, assignableRoles, form, invitationFields, open])
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <form.AppForm>
-          <form.AuthFormRoot className="flex flex-col gap-6">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <UserPlus />
-                {organizationLocalization.inviteMember}
-              </DialogTitle>
+      <DialogContent className="sm:max-w-lg">
+        <form onSubmit={submit} className="flex flex-col gap-5">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="size-4" />
+              Invite a teammate
+            </DialogTitle>
+            <DialogDescription>They get an email with a link to join.</DialogDescription>
+          </DialogHeader>
 
-              <DialogDescription>
-                {organizationLocalization.inviteMemberDescription}
-              </DialogDescription>
-            </DialogHeader>
+          <Field data-invalid={touched && !emailValid}>
+            <FieldLabel htmlFor="invite-email">Email</FieldLabel>
+            <Input
+              id="invite-email"
+              type="email"
+              autoFocus
+              placeholder="name@company.com"
+              value={email}
+              disabled={invite.isPending}
+              onChange={(e) => setEmail(e.target.value)}
+              aria-invalid={touched && !emailValid}
+            />
+          </Field>
 
-            <div className="flex flex-col gap-4">
-              <form.AppField
-                name="email"
-                validators={{
-                  onChange: ({ value }) =>
-                    validateEmailAddress(value, {
-                      invalidMessage: localization.auth.invalidEmail,
-                      requiredMessage: localization.auth.fieldRequired
-                    })
-                }}
-              >
-                {(field) => {
-                  const isInvalid = isAuthFormFieldInvalid(field.state.meta)
+          <Field>
+            <FieldLabel>Role</FieldLabel>
+            <OrgRoleChoice value={role} onChange={setRole} disabled={invite.isPending} idPrefix="invite-role" />
+          </Field>
 
-                  return (
-                    <Field data-invalid={isInvalid}>
-                      <FieldLabel htmlFor="invite-member-email">
-                        {localization.auth.email}
-                      </FieldLabel>
-                      <Input
-                        id="invite-member-email"
-                        name={field.name}
-                        type="email"
-                        autoFocus
-                        placeholder={localization.auth.email}
-                        disabled={isInviting}
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.target.value)
-                        }
-                        aria-invalid={isInvalid}
-                      />
-                      <field.AuthFormFieldError />
-                    </Field>
-                  )
-                }}
-              </form.AppField>
-
-              <form.AppField
-                name="roles"
-                validators={{
-                  onChange: ({ value }) =>
-                    value.length > 0
-                      ? undefined
-                      : localization.auth.fieldRequired
-                }}
-              >
-                {(field) => {
-                  const selectedRoles = field.state.value
-                  const roleSummary = selectedRoles
-                    .map((entry) => assignableRoles[entry] ?? entry)
-                    .join(", ")
-                  const toggleRole = (role: string) =>
-                    field.handleChange(
-                      selectedRoles.includes(role)
-                        ? selectedRoles.filter((entry) => entry !== role)
-                        : [...selectedRoles, role]
-                    )
-
-                  return (
-                    <Field
-                      data-invalid={isAuthFormFieldInvalid(field.state.meta)}
-                    >
-                      <FieldLabel htmlFor="invite-member-role">
-                        {organizationLocalization.role}
-                      </FieldLabel>
-                      {allowMultipleRoles ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            id="invite-member-role"
-                            disabled={isInviting}
-                            className={cn(
-                              buttonVariants({ variant: "outline" }),
-                              "w-full justify-between font-normal"
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                !roleSummary && "text-muted-foreground"
-                              )}
-                            >
-                              {roleSummary ||
-                                organizationLocalization.selectRoles}
-                            </span>
-                            <ChevronDown className="opacity-50" />
-                          </DropdownMenuTrigger>
-
-                          <DropdownMenuContent
-                            align="start"
-                            className="w-(--radix-dropdown-menu-trigger-width)"
-                          >
-                            {Object.entries(assignableRoles).map(
-                              ([key, label]) => {
-                                const checked = selectedRoles.includes(key)
-
-                                return (
-                                  <DropdownMenuCheckboxItem
-                                    key={key}
-                                    checked={checked}
-                                    disabled={
-                                      checked && selectedRoles.length === 1
-                                    }
-                                    onSelect={(event) => {
-                                      event.preventDefault()
-                                      toggleRole(key)
-                                    }}
-                                  >
-                                    {label}
-                                  </DropdownMenuCheckboxItem>
-                                )
-                              }
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : (
-                        <Select
-                          disabled={isInviting}
-                          onValueChange={(role) => field.handleChange([role])}
-                          value={selectedRoles[0] ?? ""}
-                        >
-                          <SelectTrigger
-                            id="invite-member-role"
-                            className="w-full"
-                          >
-                            <SelectValue
-                              placeholder={organizationLocalization.selectRoles}
-                            />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectGroup>
-                              {Object.entries(assignableRoles).map(
-                                ([key, label]) => (
-                                  <SelectItem key={key} value={key}>
-                                    {label}
-                                  </SelectItem>
-                                )
-                              )}
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                      )}
-                      <field.AuthFormFieldError />
-                    </Field>
-                  )
-                }}
-              </form.AppField>
-
-              {teamsEnabled && (
-                <form.AppField name="teamId">
-                  {(field) => (
-                    <Field>
-                      <FieldLabel htmlFor="invite-member-team">
-                        {organizationLocalization.team}
-                      </FieldLabel>
-                      <Select
-                        value={field.state.value}
-                        onValueChange={(value) =>
-                          field.handleChange(value ?? "")
-                        }
-                        disabled={isInviting}
-                      >
-                        <SelectTrigger
-                          id="invite-member-team"
-                          className="w-full"
-                        >
-                          <SelectValue
-                            placeholder={organizationLocalization.selectTeam}
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {teams.data?.map((team) => (
-                            <SelectItem key={team.id} value={team.id}>
-                              {team.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                  )}
-                </form.AppField>
+          {role === "member" && (
+            <Field data-invalid={touched && needsWorkspace}>
+              <FieldLabel>Workspaces</FieldLabel>
+              <WorkspaceGrantsPicker
+                workspaces={workspaces}
+                value={grants}
+                onChange={setGrants}
+                disabled={invite.isPending}
+              />
+              {touched && needsWorkspace ? (
+                <FieldDescription className="text-destructive">Pick at least one workspace.</FieldDescription>
+              ) : (
+                <WorkspaceRoleHelp />
               )}
+            </Field>
+          )}
 
-              {invitationFields.map((configuredField) => (
-                <form.AppField
-                  key={configuredField.name}
-                  name={`additionalFields.${configuredField.name}`}
-                  validators={getAuthAdditionalFieldValidators(
-                    configuredField,
-                    localization.auth.fieldRequired
-                  )}
-                >
-                  {(field) => (
-                    <field.AuthFormAdditionalField
-                      field={configuredField}
-                      isPending={isInviting}
-                      optionalLabel={localization.settings.optional}
-                    />
-                  )}
-                </form.AppField>
-              ))}
-            </div>
-
-            <DialogFooter>
-              <DialogClose
-                className={buttonVariants({ variant: "outline" })}
-                disabled={isInviting}
-                type="button"
-              >
-                {localization.settings.cancel}
-              </DialogClose>
-
-              {/* Padlocked rather than merely disabled: a dead button explains
-                  nothing, and the chip is the only thing here that names the
-                  plan which would raise the ceiling. */}
-              <LockedControl
-                limit="seats"
-                used={seatsUsed}
-                locked={atSeatLimit}
-                chip="inline"
-              >
-                <form.AuthFormSubmitButton
-                  disabled={
-                    isInviting ||
-                    atInvitationLimit ||
-                    canInvite.isPending ||
-                    !canInvite.data?.success
-                  }
-                >
-                  {organizationLocalization.inviteMember}
-                </form.AuthFormSubmitButton>
-              </LockedControl>
-            </DialogFooter>
-          </form.AuthFormRoot>
-        </form.AppForm>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={invite.isPending}>
+              Cancel
+            </Button>
+            {/* Padlocked rather than merely disabled: the chip is the only
+                thing here that names the plan which would raise the ceiling. */}
+            <LockedControl limit="seats" used={seatsUsed} locked={atSeatLimit} chip="inline">
+              <Button type="submit" disabled={invite.isPending || atSeatLimit}>
+                {invite.isPending && <Loader2 className="size-3.5 animate-spin" />}
+                Send invite
+              </Button>
+            </LockedControl>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   )

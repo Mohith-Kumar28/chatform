@@ -209,6 +209,34 @@ export const workspaces = sqliteTable(
   (t) => [uniqueIndex("uq_workspaces_org_slug").on(t.organizationId, t.slug)],
 );
 
+/**
+ * Who, besides the organization's owners and admins, may open a workspace, and
+ * at what role. Keyed on the membership so leaving the organization drops it.
+ */
+export const workspaceMembers = sqliteTable(
+  "workspace_members",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    memberId: text("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["editor", "viewer"] }).notNull(),
+    createdBy: text("created_by"),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [uniqueIndex("uq_workspace_members").on(t.workspaceId, t.memberId), index("idx_workspace_members_member").on(t.memberId)],
+);
+
+/** The workspace grants an invitation carries until it is accepted. */
+export const invitationWorkspaces = sqliteTable(
+  "invitation_workspaces",
+  {
+    invitationId: text("invitation_id").notNull().references(() => invitations.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["editor", "viewer"] }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.invitationId, t.workspaceId] })],
+);
+
 export const forms = sqliteTable(
   "forms",
   {

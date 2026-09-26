@@ -7,7 +7,9 @@ import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
 import { hashPassword, isHashedPassword } from "../lib/crypto.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
-import { requirePermission, requireGauge, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
+import { requirePermission, requireGauge, entitlementsFor, assertPermission, type AuthzVars } from "../lib/authorize.js";
+import { workspaceRoleFor } from "../lib/workspace-access.js";
+import { workspacePermissionsFor } from "../lib/permissions.js";
 import { stripForPublish, checkDocLimits, checkGatewayPayments } from "../lib/doc-entitlements.js";
 import { publishFingerprint, hasUnpublishedChanges } from "../lib/publish-state.js";
 import { backfillFollowUps } from "../lib/followups.js";
@@ -71,6 +73,8 @@ const FormFull = FormSummary.extend({
   publishedAt: z.number().nullable(),
   /** True when the draft differs from what respondents are currently answering. */
   hasUnpublishedChanges: z.boolean(),
+  /** What the caller may do with this form, by their role in its workspace. Only on `GET /forms/:id`. */
+  permissions: z.record(z.string(), z.array(z.string())).optional(),
 });
 
 /**
@@ -333,7 +337,13 @@ formsRouter.post(
     const body = c.req.valid("json");
     const ws = await requireWorkspace(c, body.workspaceId);
     if (ws === undefined) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
-    if (!ws) return c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
+    if (!ws) return c.get("orgId")
+      ? c.json({ error: { code: "no_workspace", message: "You haven't been added to a workspace yet. Ask an admin to add you." } }, 403)
+      : c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
+    // The middleware judged the caller's strongest grant; this is the workspace
+    // the form is actually going into.
+    const denied = await assertPermission(c, "form", "create", { workspaceId: ws.wsId });
+    if (denied) return denied;
     const userId = c.get("userId") as string;
     let workingSchema: string;
     if (body.doc !== undefined) {
@@ -408,6 +418,10 @@ formsRouter.patch(
     const form = c.get("form")!;
     const target = await requireWorkspace(c, c.req.valid("json").workspaceId);
     if (!target) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
+    // Moving takes edit rights on both ends: the gate already checked the form's
+    // own workspace, and nobody may drop a form into one they only view.
+    const denied = await assertPermission(c, "form", "create", { workspaceId: target.wsId });
+    if (denied) return denied;
     await c.env.DB.prepare(`UPDATE forms SET workspace_id = ?, updated_at = ? WHERE id = ? AND organization_id = ?`)
       .bind(target.wsId, Date.now(), form.id, form.organization_id)
       .run();
@@ -473,6 +487,9 @@ formsRouter.get(
         planId: (await entitlementsFor(c)).planId,
         activeChecksum: row.checksum,
       }),
+      // So the builder can open read-only for a viewer instead of letting them
+      // type into a document every save of which is refused.
+      permissions: workspacePermissionsFor(await workspaceRoleFor(c as never, c.get("form")!.workspace_id)),
     });
   },
 );

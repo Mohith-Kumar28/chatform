@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FolderOpen, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { FolderOpen, Loader2, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,6 +15,7 @@ import { apiData } from "@/lib/api/payload";
 import { invalidateForms } from "@/lib/query-keys";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { SettingsSectionHeader } from "@/components/settings/settings-section-header";
+import { WorkspaceAccessDialog } from "@/components/settings/access/workspace-access-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -38,11 +39,9 @@ import {
  * are renamed and removed, because neither belongs in a menu you open twenty
  * times a day.
  *
- * Deliberately not a member list. A workspace is an organising boundary, not a
- * permission one — everyone in the organization sees all of them, and roles
- * live one level up on the People page. If per-workspace access is ever added
- * it arrives here, and until then an access column would be a control that
- * implies a restriction the server does not enforce.
+ * Each row also says who can open it and leads to that workspace's access
+ * dialog. Admins open every workspace; members open only the ones they were
+ * added to, here or from their row on the People page.
  */
 
 interface Workspace {
@@ -51,6 +50,7 @@ interface Workspace {
   slug: string;
   formCount: number;
   createdAt: number;
+  memberCount?: number;
 }
 
 /** The message the server sent, or the exception's own. */
@@ -76,11 +76,13 @@ export function WorkspacesSection() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Workspace | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Workspace | null>(null);
+  const [accessFor, setAccessFor] = useState<Workspace | null>(null);
   const [name, setName] = useState("");
 
   const canCreate = allows("workspace", "create");
   const canUpdate = allows("workspace", "update");
   const canDelete = allows("workspace", "delete");
+  const canManageAccess = allows("member", "update");
   const max = limit("workspaces_count");
 
   async function refresh() {
@@ -136,8 +138,8 @@ export function WorkspacesSection() {
         title="Workspaces"
         description={
           <>
-            Folders for your forms. Everyone in this organization can see every
-            workspace{max != null && <> — your plan includes {max}</>}.
+            Folders for your forms. Admins can open every workspace; add anyone
+            else to the ones they need{max != null && <>. Your plan includes {max}</>}.
           </>
         }
         readOnly={!canCreate && !canUpdate && !canDelete}
@@ -177,8 +179,27 @@ export function WorkspacesSection() {
                 <p className="truncate text-sm font-medium">{ws.name}</p>
                 <p className="text-muted-foreground text-xs">
                   {ws.formCount} {ws.formCount === 1 ? "form" : "forms"}
+                  {canManageAccess && ws.memberCount !== undefined && (
+                    <>
+                      {" · "}
+                      {ws.memberCount === 0
+                        ? "Admins only"
+                        : `${ws.memberCount} ${ws.memberCount === 1 ? "member" : "members"} + admins`}
+                    </>
+                  )}
                 </p>
               </div>
+              {canManageAccess && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Who can open ${ws.name}`}
+                  onClick={() => setAccessFor(ws)}
+                >
+                  <Users className="size-3.5" />
+                  Access
+                </Button>
+              )}
               {canUpdate && (
                 <Button
                   variant="ghost"
@@ -219,7 +240,8 @@ export function WorkspacesSection() {
             <DialogHeader>
               <DialogTitle>New workspace</DialogTitle>
               <DialogDescription>
-                A folder for a set of forms. Everyone in this organization can see it.
+                A folder for a set of forms. Admins can open it straight away; add anyone
+                else from its Access button.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-2 py-4">
@@ -278,6 +300,14 @@ export function WorkspacesSection() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {accessFor && (
+        <WorkspaceAccessDialog
+          open
+          onOpenChange={(open) => !open && setAccessFor(null)}
+          workspace={accessFor}
+        />
+      )}
 
       <ConfirmDialog
         open={pendingDelete !== null}

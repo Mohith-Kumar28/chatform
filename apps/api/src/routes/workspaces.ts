@@ -7,6 +7,8 @@ import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
 import { requirePermission, requireGauge, type AuthzVars } from "../lib/authorize.js";
 import { audit } from "../lib/gate-log.js";
 import { newWorkspaceId, workspaceSlug } from "../lib/workspace.js";
+import { accessFor, workspaceFilter } from "../lib/workspace-access.js";
+import { workspacePermissionsFor } from "../lib/permissions.js";
 
 /**
  * Workspaces — the folders forms live in, inside an organization.
@@ -22,10 +24,11 @@ import { newWorkspaceId, workspaceSlug } from "../lib/workspace.js";
  *   organization   who pays, who is a member, what role they hold
  *   workspace      which forms you are looking at
  *
- * Membership is deliberately not modelled here. Every member of an organization
- * can see every workspace in it; a workspace is an organising boundary, not a
- * permission one. Restricting that later is a `workspace_members` table and a
- * filter in two queries — nothing in this file has to change shape for it.
+ * Access is per workspace. Owners and admins open every workspace; everyone
+ * else opens the ones on their `workspace_members` rows, as an editor or a
+ * viewer (`lib/workspace-access.ts`). A workspace the caller was not added to
+ * is absent from every list and 404s by id, exactly like another
+ * organization's.
  */
 
 export const workspacesRouter = new Hono<{
@@ -39,11 +42,10 @@ workspacesRouter.use("/workspaces", requireOrg);
 workspacesRouter.use("/workspaces/*", requireOrg);
 
 /**
- * Reading the list is not gated on a role.
- *
- * A viewer needs it to navigate at all — the switcher is how they reach the
- * forms their role does let them read, and a workspace name is not a secret
- * from someone already inside the organization.
+ * Reading the list is not gated on a role: it is filtered instead, to the
+ * workspaces the caller can open. Creating, renaming and deleting a workspace,
+ * and deciding who is in it, are organization questions, so only owners and
+ * admins pass those gates.
  */
 workspacesRouter.post("/workspaces", requirePermission("workspace", "create"), requireGauge("workspaces_count", "workspaces"));
 workspacesRouter.patch("/workspaces/:id", requirePermission("workspace", "update"));
@@ -57,6 +59,15 @@ const Workspace = z.object({
   createdAt: z.number(),
 });
 
+const WorkspaceListItem = Workspace.extend({
+  /** The caller's role here: `owner` / `admin` for organization admins, else `editor` / `viewer`. */
+  myRole: z.string(),
+  /** What that role allows in this workspace, in the `permissionsFor` shape. */
+  permissions: z.record(z.string(), z.array(z.string())),
+  /** Members with an explicit grant. Owners and admins are not counted; they are in every workspace. */
+  memberCount: z.number(),
+});
+
 const NameBody = z.object({ name: z.string().min(1).max(60) });
 
 workspacesRouter.get(
@@ -64,25 +75,34 @@ workspacesRouter.get(
   describeRoute({
     tags: ["dashboard"],
     summary: "List workspaces in the active organization",
-    responses: { 200: { description: "Workspaces", content: { "application/json": { schema: resolver(z.array(Workspace)) } } } },
+    responses: { 200: { description: "Workspaces", content: { "application/json": { schema: resolver(z.array(WorkspaceListItem)) } } } },
   }),
   async (c) => {
     const orgId = c.get("orgId")!;
+    const access = await accessFor(c as never);
+    const filter = workspaceFilter(access, "w.id");
     const rows = await c.env.DB.prepare(
       `SELECT w.id, w.name, w.slug, w.created_at,
-              (SELECT COUNT(*) FROM forms f WHERE f.workspace_id = w.id AND f.deleted_at IS NULL) AS form_count
-         FROM workspaces w WHERE w.organization_id = ? ORDER BY w.created_at ASC`,
+              (SELECT COUNT(*) FROM forms f WHERE f.workspace_id = w.id AND f.deleted_at IS NULL) AS form_count,
+              (SELECT COUNT(*) FROM workspace_members wm WHERE wm.workspace_id = w.id) AS member_count
+         FROM workspaces w WHERE w.organization_id = ?${filter.sql} ORDER BY w.created_at ASC`,
     )
-      .bind(orgId)
-      .all<{ id: string; name: string; slug: string; created_at: number; form_count: number }>();
+      .bind(orgId, ...filter.binds)
+      .all<{ id: string; name: string; slug: string; created_at: number; form_count: number; member_count: number }>();
     return c.json(
-      (rows.results ?? []).map((r) => ({
-        id: r.id,
-        name: r.name,
-        slug: r.slug,
-        formCount: r.form_count,
-        createdAt: r.created_at,
-      })),
+      (rows.results ?? []).map((r) => {
+        const myRole = access.admin ? access.orgRole || "admin" : (access.grants.get(r.id) ?? "viewer");
+        return {
+          id: r.id,
+          name: r.name,
+          slug: r.slug,
+          formCount: r.form_count,
+          createdAt: r.created_at,
+          myRole,
+          permissions: workspacePermissionsFor(myRole),
+          memberCount: r.member_count,
+        };
+      }),
     );
   },
 );

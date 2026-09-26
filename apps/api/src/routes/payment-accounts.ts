@@ -4,7 +4,7 @@ import { validator } from "../lib/validator.js";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
 import { getAuth, requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
-import { assertFeature, assertPermission, type AuthzVars } from "../lib/authorize.js";
+import { assertFeature, assertPermission, assertOrgWide, type AuthzVars } from "../lib/authorize.js";
 import { getEntitlements } from "../lib/entitlements.js";
 import { webOrigins } from "../lib/origins.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
@@ -352,7 +352,7 @@ paymentAccountsRouter.post(
     },
   }),
   async (c) => {
-    const refused = refuseImpersonation(c) ?? (await assertPermission(c, "webhook", "create")) ?? (await connectGate(c, "payments.connect"));
+    const refused = refuseImpersonation(c) ?? (await assertOrgWide(c, "webhook", "create")) ?? (await connectGate(c, "payments.connect"));
     if (refused) return refused;
     return handleOAuthStart(c, c.req.param("provider"), c.req.valid("json").returnTo);
   },
@@ -374,7 +374,7 @@ paymentAccountsRouter.post(
     },
   }),
   async (c) => {
-    const refused = refuseImpersonation(c) ?? (await assertPermission(c, "webhook", "create")) ?? (await connectGate(c, "payments.connect"));
+    const refused = refuseImpersonation(c) ?? (await assertOrgWide(c, "webhook", "create")) ?? (await connectGate(c, "payments.connect"));
     if (refused) return refused;
     return handleStripeConnect(c, c.req.valid("json").restrictedKey);
   },
@@ -396,7 +396,7 @@ paymentAccountsRouter.post(
     },
   }),
   async (c) => {
-    const refused = refuseImpersonation(c) ?? (await assertPermission(c, "webhook", "create")) ?? (await connectGate(c, "payments.onboard"));
+    const refused = refuseImpersonation(c) ?? (await assertOrgWide(c, "webhook", "create")) ?? (await connectGate(c, "payments.onboard"));
     if (refused) return refused;
     return handleCashfreeOnboard(c, c.req.valid("json"));
   },
@@ -416,7 +416,7 @@ paymentAccountsRouter.patch(
     },
   }),
   async (c) => {
-    const refused = refuseImpersonation(c) ?? (await assertPermission(c, "webhook", "update"));
+    const refused = refuseImpersonation(c) ?? (await assertOrgWide(c, "webhook", "update"));
     if (refused) return refused;
     return handleRename(c, c.req.param("id"), c.req.valid("json"));
   },
@@ -434,7 +434,7 @@ paymentAccountsRouter.delete(
     },
   }),
   async (c) => {
-    const refused = refuseImpersonation(c) ?? (await assertPermission(c, "webhook", "delete"));
+    const refused = refuseImpersonation(c) ?? (await assertOrgWide(c, "webhook", "delete"));
     if (refused) return refused;
     return handleDisconnect(c, c.req.param("id"));
   },

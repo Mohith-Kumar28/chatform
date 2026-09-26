@@ -6,7 +6,7 @@ import { z } from "zod";
 import { FormDoc, buildFlowRules, lintFormDoc, hasErrors, migrateFormDoc, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, assertFormAccess, keyOwnsForm, type GuardVars } from "../lib/guards.js";
-import { requirePermission, requireQuota, requireGauge, type AuthzVars } from "../lib/authorize.js";
+import { requirePermission, requireQuota, requireGauge, assertPermission, type AuthzVars } from "../lib/authorize.js";
 import { meter } from "../lib/entitlements.js";
 import { isInternalCall } from "../lib/internal-call.js";
 import {
@@ -517,8 +517,12 @@ aiRouter.post(
       return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
     }
     if (!ws) {
-      return c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
+      return c.get("orgId")
+      ? c.json({ error: { code: "no_workspace", message: "You haven't been added to a workspace yet. Ask an admin to add you." } }, 403)
+      : c.json({ error: { code: "no_organization", message: "Create an organization first" } }, 403);
     }
+    const denied = await assertPermission(c, "form", "create", { workspaceId: ws.wsId });
+    if (denied) return denied;
     const userId = c.get("userId") as string;
     const orgId = c.get("orgId");
     // One Langfuse trace for the whole generation: research, draft, any retry.
@@ -744,7 +748,7 @@ type EditDraftOut = Awaited<ReturnType<typeof generateEdit>>["draft"];
 type EditStage = "reading" | "editing" | "checking" | "repairing";
 
 /** One edit's outcome, before it is either serialised or streamed. */
-type EditOutcomeResult = { status: 200 | 404 | 422 | 502 | 503; body: Record<string, unknown> };
+type EditOutcomeResult = { status: 200 | 403 | 404 | 422 | 502 | 503; body: Record<string, unknown> };
 
 /**
  * The whole edit, with its progress reported rather than hidden.
@@ -778,6 +782,10 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
     }
     const form = await assertFormAccess(c, formId);
     if (!form) return { status: 404, body: { error: { code: "not_found", message: "Form not found" } } };
+    // Editing is judged in the form's own workspace: a viewer there may not, even
+    // if they edit somewhere else.
+    const denied = await assertPermission(c, "form", "update", { workspaceId: form.workspace_id });
+    if (denied) return { status: 403, body: await denied.json() };
     const row = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ? AND deleted_at IS NULL`)
       .bind(formId)
       .first<{ working_schema: string }>();

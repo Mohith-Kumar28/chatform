@@ -70,6 +70,7 @@ export function BuilderHeader({
   onCopyLink,
   onRename,
   onRetrySave,
+  readOnly = false,
 }: {
   formId: string;
   title: string;
@@ -104,6 +105,8 @@ export function BuilderHeader({
   onRename?: (title: string) => void;
   /** Try a failed save again now. Shown beside the failure state. */
   onRetrySave?: () => void;
+  /** The caller only views this workspace: no Publish, since the server would refuse it. */
+  readOnly?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -286,6 +289,7 @@ export function BuilderHeader({
               The button stays mounted and only changes appearance: swapping elements here
               costs the tooltip and the focus ring mid-interaction.
             */}
+            {!readOnly && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -331,6 +335,7 @@ export function BuilderHeader({
                 )}
               </TooltipContent>
             </Tooltip>
+            )}
 
             {/*
               The overflow, last in the row and vertical.

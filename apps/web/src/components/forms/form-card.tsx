@@ -149,9 +149,16 @@ export function FormCard({
   selected = false,
   onSelectedChange,
   anySelected = false,
+  readOnly = false,
 }: {
   form: FormRow;
-  onDelete: () => void;
+  /** Absent for someone who may only view this workspace: no Delete at all. */
+  onDelete?: () => void;
+  /**
+   * The caller only views this workspace. The card opens Results, the place
+   * they can actually do something, rather than a builder that refuses saves.
+   */
+  readOnly?: boolean;
   /**
    * Takes a live form off the air. Absent on grids that cannot do it, which is
    * what keeps the item out of the menu rather than showing one that fails.
@@ -336,11 +343,15 @@ export function FormCard({
             </M.Sub>
           </>
         )}
-      <M.Separator />
-      <M.Item variant="destructive" onSelect={onDelete}>
-        <Trash2 className="size-3.5" />
-        Delete
-      </M.Item>
+      {onDelete && (
+        <>
+          <M.Separator />
+          <M.Item variant="destructive" onSelect={onDelete}>
+            <Trash2 className="size-3.5" />
+            Delete
+          </M.Item>
+        </>
+      )}
     </>
   );
 
@@ -592,7 +603,7 @@ export function FormCard({
           )}
         >
           <Link
-            href={`/forms/${form.id}/build`}
+            href={readOnly ? `/forms/${form.id}/results` : `/forms/${form.id}/build`}
             className="flex min-w-0 flex-1 flex-col"
           >
             <ChatThumb

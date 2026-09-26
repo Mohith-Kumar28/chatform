@@ -17,7 +17,7 @@ import {
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
 import { requirePermission, entitlementsFor, type AuthzVars } from "../lib/authorize.js";
-import { permissionsFor, ROLE_LABELS, isRoleName } from "../lib/permissions.js";
+import { permissionsFor, ROLE_LABELS, isRoleName, orgTier } from "../lib/permissions.js";
 import {
   getEntitlements,
   invalidateEntitlements,
@@ -241,7 +241,9 @@ billingRouter.get(
       storageBytes(c.env, orgId),
     ]);
 
-    const role = roleRow?.role ?? "";
+    // The organization tier: owner, admin or member. What a member may do with
+    // forms is per workspace and comes back on `GET /workspaces` instead.
+    const role = orgTier(roleRow?.role ?? "");
     const primary = role.split(",")[0]?.trim() ?? "";
 
     return c.json({
