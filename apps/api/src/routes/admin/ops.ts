@@ -4,6 +4,8 @@ import { z } from "zod";
 import type { Bindings } from "../../env.js";
 import type { PlatformAdminVars } from "../../lib/platform-admin.js";
 import { invalidateEntitlements } from "../../lib/entitlements.js";
+import { enqueueMail } from "../../lib/mail.js";
+import { notifyIfUpgraded, planBefore } from "../../lib/plan-mail.js";
 import { endImpersonation, startImpersonation } from "../../lib/impersonation.js";
 import { audit, rows } from "./shared.js";
 
@@ -190,6 +192,8 @@ opsRouter.post(
     // The KV cache is what the runbook told you to delete by hand afterwards.
     await invalidateEntitlements(c.env, orgId);
     await audit(c, orgId, "admin.override.granted", { resourceType: "entitlement", resourceId: key, kind, value, reason, expiresAt });
+    // The owner hears about it, the same way they would about a plan they paid for.
+    await enqueueMail(c.env, { kind: "access_granted", organizationId: orgId, grants: [{ kind, key, value }], expiresAt });
     return c.json({ ok: true });
   },
 );
@@ -349,6 +353,7 @@ opsRouter.post(
       );
     }
 
+    const before = await planBefore(c.env, orgId);
     const now = Date.now();
     const endsAt = months ? addMonths(now, months) : null;
     await c.env.DB.prepare(
@@ -390,6 +395,8 @@ opsRouter.post(
       endsAt,
       reason,
     });
+    // Same card a paying customer gets, marked as a gift.
+    await notifyIfUpgraded(c.env, orgId, before, { gifted: true, endsAt });
     return c.json({ ok: true, planId, endsAt });
   },
 );

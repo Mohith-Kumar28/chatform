@@ -1,4 +1,6 @@
 import type { Bindings } from "../env.js";
+import type { PlanId } from "@repo/entitlements";
+import type { AccessGrant } from "./mail-templates.js";
 
 /**
  * Every outbound email leaves through this file.
@@ -335,6 +337,12 @@ export type MailJob =
   | {
       kind: "invitation";
       to: string;
+      /**
+       * Read by the consumer to list the workspaces the invitation opens. Those
+       * rows are written after Better Auth has already queued this job, which
+       * is why the job is sent with a delay and looks them up when it runs.
+       */
+      invitationId?: string;
       inviterName: string | null;
       inviterEmail: string | null;
       organizationName: string;
@@ -424,6 +432,27 @@ export type MailJob =
       userId: string;
     }
   | {
+      /**
+       * An organization moved up a plan, paid or gifted by a platform admin.
+       * Mailed to the owner. The consumer reads the owner and the org name.
+       */
+      kind: "plan_upgraded";
+      organizationId: string;
+      planId: PlanId;
+      previousPlanId: PlanId;
+      cycle: "monthly" | "yearly" | null;
+      /** When a gifted plan ends; null for paid plans and open-ended gifts. */
+      endsAt: number | null;
+      gifted: boolean;
+    }
+  | {
+      /** A platform admin unlocked a feature or raised a limit. Mailed to the owner. */
+      kind: "access_granted";
+      organizationId: string;
+      grants: AccessGrant[];
+      expiresAt: number | null;
+    }
+  | {
       /** A form was created, by any route. Mailed to `PLATFORM_ADMIN_EMAILS`. */
       kind: "admin_new_form";
       formId: string;
@@ -439,9 +468,9 @@ export type MailJob =
  * created the account. A dropped notification is a smaller problem than a 500
  * on the path that produced it.
  */
-export async function enqueueMail(env: Bindings, job: MailJob): Promise<void> {
+export async function enqueueMail(env: Bindings, job: MailJob, opts?: { delaySeconds?: number }): Promise<void> {
   try {
-    await env.Q_EMAIL.send(job);
+    await env.Q_EMAIL.send(job, opts?.delaySeconds ? { delaySeconds: opts.delaySeconds } : undefined);
   } catch (err) {
     console.error("mail_enqueue_failed", job.kind, err);
   }

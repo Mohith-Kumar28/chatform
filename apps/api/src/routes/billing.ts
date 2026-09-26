@@ -31,6 +31,7 @@ import {
   verifyCatalogue,
 } from "../lib/entitlements.js";
 import { audit, markConverted } from "../lib/gate-log.js";
+import { notifyIfUpgraded, planBefore } from "../lib/plan-mail.js";
 import {
   createCheckoutSession,
   createPortalSession,
@@ -617,6 +618,16 @@ async function markEvent(env: Bindings, id: string, status: string, note?: strin
  * "what did we do about it" log for events we deliberately ignore.
  */
 export async function dispatch(env: Bindings, evt: DodoWebhookEvent): Promise<string> {
+  // Every subscription event can move the plan, so every one is bracketed by a
+  // before/after read; `notifyIfUpgraded` mails only when it went up.
+  const orgId = evt.type.startsWith("subscription.") ? eventTarget(evt)?.orgId : undefined;
+  const before = orgId ? await planBefore(env, orgId) : null;
+  const result = await applyEvent(env, evt);
+  if (orgId) await notifyIfUpgraded(env, orgId, before, { gifted: false });
+  return result;
+}
+
+async function applyEvent(env: Bindings, evt: DodoWebhookEvent): Promise<string> {
   const target = eventTarget(evt);
   const subscriptionId = evt.data?.subscription_id;
 

@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { viewPaths } from "@better-auth-ui/core";
 import { Auth } from "@/components/auth/auth";
 import { emailOtpPlugin } from "@/lib/auth/email-otp-plugin";
+import { safeNext } from "@/lib/safe-next";
 
 /**
  * The Better Auth UI auth views, on one route.
@@ -49,7 +50,7 @@ export default function AuthViewPage({
     // Only a path, for the same reason `/signin` only honours a path in
     // `?next=`: this value ends up deciding where a freshly authenticated
     // browser lands.
-    const safe = next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : null;
+    const safe = safeNext(next, "") || null;
     const mode = path === viewPaths.auth.signUp ? "?mode=signup" : "";
     const joiner = mode ? "&" : "?";
     redirect(`/signin${mode}${safe ? `${joiner}next=${encodeURIComponent(safe)}` : ""}`);

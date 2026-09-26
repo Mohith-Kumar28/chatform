@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordField } from "@/components/auth/password-field";
 import { API_ORIGIN } from "@/lib/api/mutator";
+import { safeNext } from "@/lib/safe-next";
 
 function SignInForm() {
   /**
@@ -96,12 +97,7 @@ function SignInForm() {
    * — a protocol, a `//host`, a backslash Chrome will normalise — falls back to
    * the dashboard.
    */
-  const nextPath = (() => {
-    const raw = params.get("next");
-    if (!raw) return "/dashboard";
-    if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return "/dashboard";
-    return raw;
-  })();
+  const nextPath = safeNext(params.get("next"));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -185,7 +181,12 @@ function SignInForm() {
       const res = await signIn.social({
         provider: "google",
         callbackURL: `${window.location.origin}${nextPath}`,
-        errorCallbackURL: `${window.location.origin}/signin?error=google`,
+        // Back to this same page, so a failed attempt keeps where they were headed.
+        errorCallbackURL: `${window.location.origin}/signin?${new URLSearchParams({
+          error: "google",
+          ...(nextPath !== "/dashboard" ? { next: nextPath } : {}),
+          ...(mode === "signup" ? { mode: "signup" } : {}),
+        })}`,
       });
       if (res.error) throw new Error(res.error.message ?? "Google sign-in failed");
     } catch (err) {

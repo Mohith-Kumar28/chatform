@@ -7,6 +7,7 @@ import { API_ORIGIN, authClient } from "@/lib/auth/auth-client";
 import { uploadAuthImage } from "@/lib/auth/upload-image";
 import { deleteUserPlugin } from "@/lib/auth/delete-user-plugin";
 import { emailOtpPlugin } from "@/lib/auth/email-otp-plugin";
+import { safeNext } from "@/lib/safe-next";
 import { organizationPlugin } from "@/lib/auth/organization-plugin";
 import { AuthProvider } from "./auth-provider";
 
@@ -114,7 +115,15 @@ export function AuthUIProvider({ children }: { children: React.ReactNode }) {
        * navigates through.
        */
       navigate={({ to, replace }) => {
-        const safe = to.startsWith("/") && !to.startsWith("//") && !to.startsWith("/\\") ? to : "/dashboard";
+        const safe = safeNext(to);
+        // Leaving an auth view (confirming an address, finishing two-factor)
+        // means the session just changed. A full load reads it fresh, the way
+        // `/signin` does after a password, instead of rendering the page with
+        // whatever the signed-out client had cached.
+        if (window.location.pathname.startsWith("/auth/") && !safe.startsWith("/auth/")) {
+          window.location.assign(safe);
+          return;
+        }
         return replace ? router.replace(safe) : router.push(safe);
       }}
       plugins={[

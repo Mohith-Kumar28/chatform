@@ -213,16 +213,30 @@ describe("transport", () => {
 
 describe("invitation and reset", () => {
   it("mails an invitation with the inviter, the workspace and the accept link", async () => {
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO invitations (id, organization_id, email, role, status, expires_at, inviter_id, created_at)
+         VALUES ('inv_mail_1', ?, 'new@example.com', 'member', 'pending', ?, ?, ?)`,
+      ).bind(t.orgId, now + 3 * 86_400_000, t.userId, now),
+      env.DB.prepare(
+        `INSERT INTO workspaces (id, organization_id, name, slug, created_by, created_at) VALUES ('ws_mail_mkt', ?, 'Marketing', 'marketing', ?, ?)`,
+      ).bind(t.orgId, t.userId, now),
+      env.DB.prepare(
+        `INSERT INTO invitation_workspaces (invitation_id, workspace_id, role) VALUES ('inv_mail_1', 'ws_mail_mkt', 'editor'), ('inv_mail_1', ?, 'viewer')`,
+      ).bind(t.workspaceId),
+    ]);
     const { sent, binding } = captureBinding();
     await runMailJob(withMail({ EMAIL: binding }), {
       kind: "invitation",
       to: "new@example.com",
+      invitationId: "inv_mail_1",
       inviterName: "Ada Lovelace",
       inviterEmail: "ada@example.com",
       organizationName: "Acme",
-      role: "editor",
+      role: "member",
       acceptUrl: "https://app.chatform.in/accept-invitation?id=inv_1",
-      expiresAt: Date.now() + 3 * 86_400_000,
+      expiresAt: now + 3 * 86_400_000,
     });
     expect(sent).toHaveLength(1);
     const m = sent[0]!;
@@ -230,12 +244,35 @@ describe("invitation and reset", () => {
     expect(m.subject).toContain("Ada Lovelace");
     expect(m.subject).toContain("Acme");
     expect(m.html).toContain("https://app.chatform.in/accept-invitation?id=inv_1");
-    expect(m.html).toContain("an editor");
+    // The organization role is a member; what they can open is per workspace.
+    expect(m.html).toContain("a member");
+    expect(m.html).not.toContain("an editor");
+    expect(m.html).toContain("Marketing");
+    expect(m.html).toContain("Editor");
+    expect(m.html).toContain("Default");
+    expect(m.html).toContain("Viewer");
+    expect(m.text).toContain("Marketing: Editor");
     expect(m.html).toContain("expires in 3 days");
     // Answering an invitation should reach the person who sent it.
     expect(m.replyTo).toBe("ada@example.com");
     // The plain-text part is not optional — a message without one is scored as spam.
     expect(m.text).toContain("https://app.chatform.in/accept-invitation?id=inv_1");
+  });
+
+  it("tells an admin invitee they get every workspace", async () => {
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "invitation",
+      to: "boss@example.com",
+      inviterName: "Ada",
+      inviterEmail: null,
+      organizationName: "Acme",
+      role: "admin",
+      acceptUrl: "https://app.chatform.in/accept-invitation?id=inv_2",
+      expiresAt: null,
+    });
+    expect(sent[0]!.html).toContain("All, with full access");
+    expect(sent[0]!.html).toContain("an admin");
   });
 
   /**
@@ -691,5 +728,66 @@ describe("auto-reply", () => {
     });
     expect(sent[0]!.html).not.toContain("q_nmae");
     expect(sent[0]!.html).toContain("Hi !");
+  });
+});
+
+describe("plan and access mail", () => {
+  it("mails the owner what a paid upgrade unlocked, without unbuilt features", async () => {
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "plan_upgraded",
+      organizationId: t.orgId,
+      planId: "pro",
+      previousPlanId: "free",
+      cycle: "yearly",
+      endsAt: null,
+      gifted: false,
+    });
+    expect(sent).toHaveLength(1);
+    const m = sent[0]!;
+    expect(m.to).toBe("mailtest@example.com");
+    expect(m.subject).toBe("You're on chatform Pro");
+    expect(m.html).toContain("Welcome to Pro");
+    expect(m.html).toContain("Partial responses");
+    expect(m.html).toContain("Yearly");
+    // `soon` features are priced but not built, so they are not promised here.
+    expect(m.html).not.toContain("Custom domain");
+    // Free already had the knowledge base; it did not just unlock.
+    expect(m.html).not.toContain("Knowledge base");
+    expect(m.html).not.toContain("—");
+    expect(m.text).toContain("/dashboard");
+  });
+
+  it("marks a gifted plan as a gift with its end date", async () => {
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "plan_upgraded",
+      organizationId: t.orgId,
+      planId: "business",
+      previousPlanId: "pro",
+      cycle: "monthly",
+      endsAt: Date.UTC(2027, 9, 14),
+      gifted: true,
+    });
+    const m = sent[0]!;
+    expect(m.subject).toBe("You've been given chatform Business");
+    expect(m.html).toContain("A gift from the chatform team");
+    expect(m.html).toContain("14 Oct 2027");
+    expect(m.html).toContain("Activity log");
+    expect(m.html).not.toContain("Partial responses");
+  });
+
+  it("mails a feature or limit an admin switched on", async () => {
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "access_granted",
+      organizationId: t.orgId,
+      grants: [{ kind: "limit", key: "ai_conversations_per_month", value: "5000" }],
+      expiresAt: null,
+    });
+    const m = sent[0]!;
+    expect(m.to).toBe("mailtest@example.com");
+    expect(m.html).toContain("AI conversations: 5,000 a month");
+    expect(m.html).toContain("No end date");
   });
 });

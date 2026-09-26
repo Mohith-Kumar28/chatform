@@ -807,3 +807,39 @@ describe("dispatch, called directly", () => {
     expect(count?.n).toBe(1);
   });
 });
+
+describe("the upgrade mail", () => {
+  /** The real env with a queue that records what it was handed. */
+  function recording(): { env: Bindings; jobs: { kind: string; planId?: string; previousPlanId?: string; gifted?: boolean }[] } {
+    const jobs: { kind: string }[] = [];
+    const q = { send: async (j: { kind: string }) => void jobs.push(j) };
+    return { env: { ...DB(), Q_EMAIL: q } as unknown as Bindings, jobs };
+  }
+
+  it("mails once on Free to Pro, and not on the renewals that follow", async () => {
+    const { env: e, jobs } = recording();
+    await dispatch(e, subscriptionEvent("subscription.active", org.orgId) as never);
+    // The proration renewal twenty seconds later, and a plain renewal a month on.
+    await dispatch(e, subscriptionEvent("subscription.renewed", org.orgId) as never);
+    await dispatch(e, subscriptionEvent("subscription.renewed", org.orgId) as never);
+    const mails = jobs.filter((j) => j.kind === "plan_upgraded");
+    expect(mails).toHaveLength(1);
+    expect(mails[0]).toMatchObject({ planId: "pro", previousPlanId: "free", gifted: false });
+  });
+
+  it("mails on Pro to Business, and not on the way back down", async () => {
+    const { env: e, jobs } = recording();
+    await dispatch(e, subscriptionEvent("subscription.active", org.orgId) as never);
+    await dispatch(e, subscriptionEvent("subscription.plan_changed", org.orgId, {}, { planId: "business" }) as never);
+    await dispatch(e, subscriptionEvent("subscription.plan_changed", org.orgId, {}, { planId: "pro" }) as never);
+    const mails = jobs.filter((j) => j.kind === "plan_upgraded");
+    expect(mails.map((m) => `${m.previousPlanId}>${m.planId}`)).toEqual(["free>pro", "pro>business"]);
+  });
+
+  it("does not mail when a subscription is cancelled", async () => {
+    const { env: e, jobs } = recording();
+    await dispatch(e, subscriptionEvent("subscription.active", org.orgId) as never);
+    await dispatch(e, subscriptionEvent("subscription.cancelled", org.orgId) as never);
+    expect(jobs.filter((j) => j.kind === "plan_upgraded")).toHaveLength(1);
+  });
+});

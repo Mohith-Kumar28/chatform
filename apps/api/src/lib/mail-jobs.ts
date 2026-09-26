@@ -26,6 +26,7 @@ import {
   type MailResult,
 } from "./mail.js";
 import {
+  accessGrantedEmail,
   autoReplyEmail,
   builderFeedbackEmail,
   escapeHtml,
@@ -34,10 +35,12 @@ import {
   invitationEmail,
   otpEmail,
   passwordResetEmail,
+  planUpgradedEmail,
   platformEventEmail,
   stamp,
   submissionNotificationEmail,
   type AnswerLine,
+  type InvitationWorkspace,
 } from "./mail-templates.js";
 import { webOrigins } from "./origins.js";
 import { platformAdminEmails } from "./platform-admin.js";
@@ -72,7 +75,9 @@ import { meter } from "./entitlements.js";
 export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOutcome> {
   switch (job.kind) {
     case "invitation": {
+      const workspaces = job.invitationId ? await invitationWorkspaceGrants(env, job.invitationId) : [];
       const msg = invitationEmail({
+        workspaces,
         organizationName: job.organizationName,
         inviterName: job.inviterName,
         inviterEmail: job.inviterEmail,
@@ -117,7 +122,72 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOu
 
     case "admin_new_form":
       return runNewFormJob(env, job);
+
+    case "plan_upgraded": {
+      const who = await ownerOf(env, job.organizationId);
+      if (!who) return NO_MAIL;
+      const msg = planUpgradedEmail({
+        organizationName: who.orgName,
+        recipientName: who.name,
+        planId: job.planId,
+        previousPlanId: job.previousPlanId,
+        cycle: job.cycle,
+        endsAt: job.endsAt,
+        gifted: job.gifted,
+        dashboardUrl: `${webOrigins(env)[0]!}/dashboard`,
+      });
+      return oneMessage(who.email, await sendMail(env, { to: who.email, ...msg }));
+    }
+
+    case "access_granted": {
+      const who = await ownerOf(env, job.organizationId);
+      if (!who) return NO_MAIL;
+      const msg = accessGrantedEmail({
+        organizationName: who.orgName,
+        recipientName: who.name,
+        grants: job.grants,
+        expiresAt: job.expiresAt,
+        dashboardUrl: `${webOrigins(env)[0]!}/dashboard`,
+      });
+      return oneMessage(who.email, await sendMail(env, { to: who.email, ...msg }));
+    }
   }
+}
+
+/** The workspaces an invitation opens, by name, for the invitation mail. */
+async function invitationWorkspaceGrants(env: Bindings, invitationId: string): Promise<InvitationWorkspace[]> {
+  const res = await env.DB.prepare(
+    `SELECT w.name AS name, iw.role AS role
+       FROM invitation_workspaces iw JOIN workspaces w ON w.id = iw.workspace_id
+      WHERE iw.invitation_id = ?
+      ORDER BY w.name COLLATE NOCASE`,
+  )
+    .bind(invitationId)
+    .all<InvitationWorkspace>();
+  return res.results ?? [];
+}
+
+/**
+ * Who a plan or access mail goes to: the organization's owner, the one person
+ * who is always there and always entitled to know what the account can do.
+ * Roles are stored comma-separated, hence the `LIKE`.
+ */
+async function ownerOf(
+  env: Bindings,
+  orgId: string,
+): Promise<{ email: string; name: string | null; orgName: string } | null> {
+  return (
+    (await env.DB.prepare(
+      `SELECT u.email AS email, u.name AS name, o.name AS orgName
+         FROM members m
+         JOIN users u ON u.id = m.user_id
+         JOIN organizations o ON o.id = m.organization_id
+        WHERE m.organization_id = ? AND m.role LIKE '%owner%'
+        ORDER BY m.created_at ASC LIMIT 1`,
+    )
+      .bind(orgId)
+      .first<{ email: string; name: string | null; orgName: string }>()) ?? null
+  );
 }
 
 /** One message to every platform admin. Throws only when nobody got it, so the queue retries. */

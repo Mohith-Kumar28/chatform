@@ -1,3 +1,4 @@
+import { FEATURES, LIMIT_KEYS, PLANS, limitMeta, type LimitKey, type PlanId } from "@repo/entitlements";
 import type { MailMessage } from "./mail.js";
 
 /**
@@ -153,7 +154,108 @@ function p(html: string): string {
   return `<p style="margin:0 0 14px 0;font-size:15px;line-height:1.6;color:${INK};">${html}</p>`;
 }
 
+// ─────────────────────────── card pieces ───────────────────────────
+//
+// The announcement mails (an invitation, a plan upgrade, a gift) are the ones a
+// person keeps and forwards, so they get more than a heading and a paragraph.
+// Still tables and inline styles, for the same Outlook reasons as `layout`.
+
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+/** Orange at roughly 10% on white, for the check discs. Solid, because Outlook drops rgba. */
+const ORANGE_TINT = "#ffece2";
+
+/** A small pill above the heading, then a large heading, then one line under it. */
+function hero(a: { eyebrow?: string; title: string; subtitle?: string }): string {
+  const pill = a.eyebrow
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 14px 0;">
+  <tr>
+    <td style="border-radius:999px;padding:4px 12px;background-color:${ORANGE};background-image:linear-gradient(100deg, ${ORANGE}, ${VIOLET});font-family:${FONT};font-size:11px;line-height:16px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${ON_PRIMARY};">${escapeHtml(a.eyebrow)}</td>
+  </tr>
+</table>`
+    : "";
+  return `${pill}<h1 style="margin:0 0 10px 0;font-size:26px;line-height:1.25;font-weight:700;letter-spacing:-0.025em;color:${INK};">${escapeHtml(a.title)}</h1>
+${a.subtitle ? `<p style="margin:0 0 22px 0;font-size:15px;line-height:1.6;color:${MUTED};">${a.subtitle}</p>` : ""}`;
+}
+
+/** Feature copy is shared with the app, which uses em dashes; mail does not. */
+function plainDash(text: string): string {
+  return text.replace(/\s*—\s*/g, ", ");
+}
+
+/** Checked rows: a bold label with a muted line under it. */
+function featureList(items: { label: string; blurb?: string }[], more = 0): string {
+  const rows = items
+    .map(
+      (it) => `<tr>
+    <td valign="top" width="30" style="padding:0 0 14px 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td align="center" valign="middle" width="20" height="20" style="width:20px;height:20px;border-radius:999px;background-color:${ORANGE_TINT};font-family:${FONT};font-size:12px;line-height:20px;font-weight:700;color:${ORANGE};">&#10003;</td>
+      </tr></table>
+    </td>
+    <td valign="top" style="padding:0 0 14px 0;font-family:${FONT};">
+      <div style="font-size:15px;line-height:20px;font-weight:600;color:${INK};">${escapeHtml(plainDash(it.label))}</div>
+      ${it.blurb ? `<div style="margin-top:2px;font-size:13px;line-height:1.5;color:${MUTED};">${escapeHtml(plainDash(it.blurb))}</div>` : ""}
+    </td>
+  </tr>`,
+    )
+    .join("\n");
+  const tail = more > 0 ? `<p style="margin:0 0 8px 30px;font-size:13px;color:${MUTED};">And ${more} more.</p>` : "";
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 6px 0;">
+${rows}
+</table>${tail}`;
+}
+
+/** Up to three big numbers side by side. */
+function statTiles(tiles: { value: string; label: string }[]): string {
+  if (tiles.length === 0) return "";
+  const cells = tiles
+    .map(
+      (t, i) => `<td width="${Math.floor(100 / tiles.length)}%" valign="top" style="padding:14px 12px;${i > 0 ? `border-left:1px solid ${BORDER};` : ""}font-family:${FONT};text-align:center;">
+      <div style="font-size:20px;line-height:1.2;font-weight:700;letter-spacing:-0.02em;color:${INK};">${escapeHtml(t.value)}</div>
+      <div style="margin-top:4px;font-size:12px;line-height:1.4;color:${MUTED};">${escapeHtml(t.label)}</div>
+    </td>`,
+    )
+    .join("\n");
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0 18px 0;background-color:${GROUND};border:1px solid ${BORDER};border-radius:12px;">
+  <tr>
+${cells}
+  </tr>
+</table>`;
+}
+
+/** A quiet box of label and value pairs. Values are HTML, labels are text. */
+function detailRows(rows: [label: string, valueHtml: string][]): string {
+  if (rows.length === 0) return "";
+  const body = rows
+    .map(
+      ([label, value], i) => `<tr>
+    <td valign="top" style="padding:12px 16px;${i > 0 ? `border-top:1px solid ${BORDER};` : ""}font-family:${FONT};font-size:13px;line-height:1.5;color:${MUTED};">${escapeHtml(label)}</td>
+    <td valign="top" align="right" style="padding:12px 16px;${i > 0 ? `border-top:1px solid ${BORDER};` : ""}font-family:${FONT};font-size:14px;line-height:1.5;font-weight:600;color:${INK};">${value}</td>
+  </tr>`,
+    )
+    .join("\n");
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 4px 0;background-color:${GROUND};border:1px solid ${BORDER};border-radius:12px;">
+${body}
+</table>`;
+}
+
+/** "14 Oct 2027", in UTC so the date in the mail matches the date in the app. */
+function longDate(ms: number): string {
+  return new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}
+
 // ─────────────────────────── team invitation ───────────────────────────
+
+/** One workspace the invitation opens, and what they can do in it. */
+export interface InvitationWorkspace {
+  name: string;
+  role: string;
+}
+
+const WORKSPACE_ROLE_COPY: Record<string, { title: string; blurb: string }> = {
+  editor: { title: "Editor", blurb: "Editors build, edit and publish forms, and work with every response." },
+  viewer: { title: "Viewer", blurb: "Viewers read completed responses and basic analytics." },
+};
 
 export function invitationEmail(a: {
   organizationName: string;
@@ -162,21 +264,48 @@ export function invitationEmail(a: {
   role: string;
   acceptUrl: string;
   expiresAt: number | null;
+  workspaces?: InvitationWorkspace[];
 }): Omit<MailMessage, "to"> {
   const org = escapeHtml(a.organizationName);
   // "Someone" rather than an empty space: an invitation from nobody reads as
   // phishing, and the inviter's name is the single strongest signal that it is not.
   const who = a.inviterName?.trim() || a.inviterEmail?.trim() || "Someone";
-  const roleLabel = ROLE_LABELS[a.role] ?? a.role;
+  const primary = a.role.split(",")[0]?.trim() ?? a.role;
+  const isAdmin = primary === "admin" || primary === "owner";
+  const roleLabel = ROLE_LABELS[primary] ?? "a member";
+  const roleTitle = isAdmin ? (primary === "owner" ? "Owner" : "Admin") : "Member";
   const expiry = a.expiresAt ? relativeExpiry(a.expiresAt) : null;
+  const workspaces = isAdmin ? [] : (a.workspaces ?? []);
+
+  const rows: [string, string][] = [["Team role", escapeHtml(roleTitle)]];
+  if (isAdmin) rows.push(["Workspaces", "All, with full access"]);
+  for (const w of workspaces) {
+    rows.push([w.name, escapeHtml(WORKSPACE_ROLE_COPY[w.role]?.title ?? w.role)]);
+  }
+  const roleNotes = [...new Set(workspaces.map((w) => w.role))]
+    .map((r) => WORKSPACE_ROLE_COPY[r]?.blurb)
+    .filter((b): b is string => Boolean(b));
+  const note = isAdmin
+    ? "Admins can open every workspace and manage people and settings."
+    : roleNotes.join(" ");
 
   const body = [
-    h1(`Join ${a.organizationName} on chatform`),
-    p(`<strong>${escapeHtml(who)}</strong> invited you to the <strong>${org}</strong> organization as ${escapeHtml(roleLabel)}.`),
+    hero({
+      eyebrow: "Team invite",
+      title: `Join ${a.organizationName} on chatform`,
+      subtitle: `<strong style="color:${INK};">${escapeHtml(who)}</strong> invited you to build and run forms together in <strong style="color:${INK};">${org}</strong>.`,
+    }),
+    detailRows(rows),
+    note ? `<p style="margin:10px 0 0 0;font-size:13px;line-height:1.5;color:${MUTED};">${escapeHtml(note)}</p>` : "",
     button(a.acceptUrl, "Accept invitation"),
     expiry ? p(`<span style="color:${MUTED};font-size:13px;">This invitation ${escapeHtml(expiry)}.</span>`) : "",
     fallbackLink(a.acceptUrl),
   ].join("\n");
+
+  const textAccess = [
+    `Team role: ${roleTitle}`,
+    ...(isAdmin ? ["Workspaces: all, with full access"] : workspaces.map((w) => `${w.name}: ${WORKSPACE_ROLE_COPY[w.role]?.title ?? w.role}`)),
+  ];
 
   return {
     subject: `${who} invited you to ${a.organizationName} on chatform`,
@@ -188,6 +317,8 @@ export function invitationEmail(a: {
     text: [
       `${who} invited you to the ${a.organizationName} organization on chatform as ${roleLabel}.`,
       ``,
+      ...textAccess,
+      ``,
       `Accept: ${a.acceptUrl}`,
       expiry ? `\nThis invitation ${expiry}.` : ``,
       ``,
@@ -197,29 +328,18 @@ export function invitationEmail(a: {
 }
 
 /**
- * The role names a person would recognise, which are not always the ones the
- * database stores.
- *
- * `member` is Better Auth's legacy default and is the reason this map exists.
- * It reads as a role and is not one — it is what `editor` was called before the
- * role list settled, and the database still holds it for anyone invited back
- * then. Saying "a member" tells the reader nothing about what they will be able
- * to do, so it is spelled as what it actually grants.
- *
- * The web app says the same thing from `lib/roles.ts`, which is the copy this
- * one has to agree with: the invitation email and `/accept-invitation` are two
- * halves of one moment, and an email promising "a member" above a page offering
- * "an editor" is the same invitation contradicting itself. Deliberately still
- * two copies — `apps/api` and `apps/web` cannot import from each other, and a
- * shared package for four strings costs more than it saves. If a fifth role
- * arrives, it arrives here and there.
+ * The organization role, with its article, the way the web app's `lib/roles.ts`
+ * spells it: an organization role is owner, admin or member. `editor` and
+ * `viewer` are per-workspace now, and a row that still holds one at the
+ * organization level predates that and reads as a member. What a member can
+ * actually open is the workspace list under it, not this word.
  */
 const ROLE_LABELS: Record<string, string> = {
   owner: "an owner",
   admin: "an admin",
-  editor: "an editor",
-  viewer: "a viewer",
-  member: "an editor",
+  member: "a member",
+  editor: "a member",
+  viewer: "a member",
 };
 
 /** "expires in 3 days" / "expires today" / "has expired". */
@@ -1048,4 +1168,180 @@ export function builderFeedbackEmail(a: {
       `Account: ${a.consoleUrl}`,
     ].join("\n"),
   };
+}
+
+// ─────────────────────────── plan upgraded ───────────────────────────
+
+/** How many unlocked features the upgrade card lists before "And N more". */
+const UPGRADE_FEATURE_ROWS = 6;
+
+/**
+ * Which unlocked features lead the list. The catalogue's own order is by
+ * area (branding first), which opens the card on "Custom fonts"; this puts
+ * the ones people upgrade for on top. Anything not named follows in catalogue
+ * order, so a new feature still shows up without touching this.
+ */
+const UPGRADE_HEADLINERS: readonly string[] = [
+  "partial_responses",
+  "remove_branding",
+  "advanced_analytics",
+  "collect_payments",
+  "followup_email",
+  "verified_answers",
+  "activity_log",
+  "one_response_per_identity",
+  "agent_model_picker",
+  "conversation_analytics",
+  "brand_logo",
+];
+
+/**
+ * "You're on Pro now", for a paid upgrade and an admin's gift alike.
+ *
+ * The features listed are exactly what the new plan has that the old one did
+ * not, read from the catalogue, minus anything marked `soon`: promising an
+ * unbuilt feature in a receipt-like mail is the same misrepresentation the
+ * pricing page is careful to avoid.
+ */
+export function planUpgradedEmail(a: {
+  organizationName: string;
+  recipientName: string | null;
+  planId: PlanId;
+  previousPlanId: PlanId;
+  cycle: "monthly" | "yearly" | null;
+  endsAt: number | null;
+  gifted: boolean;
+  dashboardUrl: string;
+}): Omit<MailMessage, "to"> {
+  const plan = PLANS[a.planId];
+  const before = new Set<string>(PLANS[a.previousPlanId].features);
+  const rank = (k: string) => {
+    const i = UPGRADE_HEADLINERS.indexOf(k);
+    return i === -1 ? UPGRADE_HEADLINERS.length : i;
+  };
+  const unlocked = plan.features
+    .filter((k) => !before.has(k) && !FEATURES[k].soon)
+    .map((k, i) => ({ k, i }))
+    .sort((a, b) => rank(a.k) - rank(b.k) || a.i - b.i)
+    .map(({ k }) => FEATURES[k]);
+  const shown = unlocked.slice(0, UPGRADE_FEATURE_ROWS);
+
+  const tiles = (["ai_conversations_per_month", "workspaces_count", "seats"] as const).map((key) => ({
+    value: `${limitValue(plan.limits[key])}${key === "ai_conversations_per_month" && plan.limits[key] !== null ? " / mo" : ""}`,
+    label: limitMeta(key).label,
+  }));
+
+  const billing = a.gifted ? "A gift from the chatform team" : a.cycle === "yearly" ? "Yearly" : "Monthly";
+  const rows: [string, string][] = [
+    ["Plan", escapeHtml(plan.name)],
+    ["Billing", escapeHtml(billing)],
+  ];
+  if (a.gifted) rows.push(["Access until", a.endsAt ? escapeHtml(longDate(a.endsAt)) : "No end date"]);
+
+  const hi = a.recipientName?.trim() ? `${escapeHtml(a.recipientName.trim().split(/\s+/)[0]!)}, ` : "";
+  const lead = a.gifted
+    ? `${hi}the chatform team put <strong style="color:${INK};">${escapeHtml(a.organizationName)}</strong> on ${escapeHtml(plan.name)}, on us. Here is what just unlocked.`
+    : `${hi}<strong style="color:${INK};">${escapeHtml(a.organizationName)}</strong> is now on ${escapeHtml(plan.name)}. Here is what just unlocked.`;
+
+  const body = [
+    hero({ eyebrow: `${plan.name} plan`, title: a.gifted ? `A gift: ${plan.name} is yours` : `Welcome to ${plan.name}`, subtitle: lead }),
+    featureList(shown, unlocked.length - shown.length),
+    statTiles(tiles),
+    detailRows(rows),
+    button(a.dashboardUrl, "Open chatform"),
+  ].join("\n");
+
+  return {
+    subject: a.gifted ? `You've been given chatform ${plan.name}` : `You're on chatform ${plan.name}`,
+    html: layout({
+      preheader: `${a.organizationName} is on ${plan.name}. ${plan.tagline}`,
+      body,
+      footer: `You received this because you own ${escapeHtml(a.organizationName)} on chatform.`,
+    }),
+    text: [
+      a.gifted ? `The chatform team put ${a.organizationName} on ${plan.name}, on us.` : `${a.organizationName} is now on ${plan.name}.`,
+      ``,
+      `What just unlocked:`,
+      ...unlocked.map((f) => `- ${plainDash(f.label)}`),
+      ``,
+      ...tiles.map((t) => `${t.label}: ${t.value}`),
+      `Billing: ${billing}`,
+      ...(a.gifted ? [`Access until: ${a.endsAt ? longDate(a.endsAt) : "no end date"}`] : []),
+      ``,
+      `Open chatform: ${a.dashboardUrl}`,
+    ].join("\n"),
+  };
+}
+
+function limitValue(v: number | null): string {
+  return v === null ? "Unlimited" : v.toLocaleString("en-US");
+}
+
+// ─────────────────────────── access granted ───────────────────────────
+
+/** One thing an admin switched on or raised for an account. */
+export interface AccessGrant {
+  kind: "feature" | "limit";
+  key: string;
+  /** A limit's new value as stored: a decimal string, or "" for unlimited. */
+  value: string;
+}
+
+/** A feature unlocked or a limit raised by the chatform team, outside any plan. */
+export function accessGrantedEmail(a: {
+  organizationName: string;
+  recipientName: string | null;
+  grants: AccessGrant[];
+  expiresAt: number | null;
+  dashboardUrl: string;
+}): Omit<MailMessage, "to"> {
+  const items = a.grants.map(describeGrant).filter((g): g is { label: string; blurb?: string } => g !== null);
+  const hi = a.recipientName?.trim() ? `${escapeHtml(a.recipientName.trim().split(/\s+/)[0]!)}, ` : "";
+  const onlyLimits = a.grants.every((g) => g.kind === "limit");
+  const headline =
+    items.length === 1 && !onlyLimits ? `Unlocked: ${plainDash(items[0]!.label)}` : onlyLimits ? "Your limit just went up" : "New access, unlocked";
+
+  const body = [
+    hero({
+      eyebrow: "A gift from chatform",
+      title: headline,
+      subtitle: `${hi}the chatform team switched this on for <strong style="color:${INK};">${escapeHtml(a.organizationName)}</strong>. Enjoy.`,
+    }),
+    featureList(items),
+    detailRows([["Access until", a.expiresAt ? escapeHtml(longDate(a.expiresAt)) : "No end date"]]),
+    button(a.dashboardUrl, "Open chatform"),
+  ].join("\n");
+
+  return {
+    subject: items.length === 1 ? `You've been given ${plainDash(items[0]!.label)} on chatform` : `You've been given new access on chatform`,
+    html: layout({
+      preheader: `The chatform team switched on ${items.map((i) => plainDash(i.label)).join(", ")} for ${a.organizationName}.`,
+      body,
+      footer: `You received this because you own ${escapeHtml(a.organizationName)} on chatform.`,
+    }),
+    text: [
+      `The chatform team switched this on for ${a.organizationName}:`,
+      ``,
+      ...items.map((i) => `- ${plainDash(i.label)}${i.blurb ? `: ${plainDash(i.blurb)}` : ""}`),
+      ``,
+      `Access until: ${a.expiresAt ? longDate(a.expiresAt) : "no end date"}`,
+      ``,
+      `Open chatform: ${a.dashboardUrl}`,
+    ].join("\n"),
+  };
+}
+
+/** A grant as a row: a feature by its catalogue label, a limit as "Label: value". */
+function describeGrant(g: AccessGrant): { label: string; blurb?: string } | null {
+  if (g.kind === "feature") {
+    const meta = (FEATURES as Record<string, { label: string; blurb: string } | undefined>)[g.key];
+    return meta ? { label: meta.label, blurb: meta.blurb } : null;
+  }
+  if (!(LIMIT_KEYS as readonly string[]).includes(g.key)) return null;
+  const meta = limitMeta(g.key as LimitKey);
+  const n = g.value === "" ? null : Number(g.value);
+  if (n !== null && !Number.isFinite(n)) return null;
+  const unit = meta.unit === "megabytes" ? " MB" : "";
+  const per = meta.kind === "monthly" ? " a month" : "";
+  return { label: `${meta.label}: ${n === null ? "Unlimited" : `${n.toLocaleString("en-US")}${unit}${per}`}` };
 }

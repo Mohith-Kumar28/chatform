@@ -1,6 +1,7 @@
 import { isGateError, type GateError } from "@repo/entitlements";
 import { openPaywall } from "@/stores/paywall-store";
 import { readImpersonation } from "@/lib/impersonation";
+import { UNAUTHORIZED_EVENT } from "@/lib/safe-next";
 
 /**
  * Orval mutator — every generated hook/fetcher routes through here.
@@ -117,6 +118,8 @@ export async function throwApiError(res: Response, url: string): Promise<never> 
     } catch {
       if (raw) message = raw.slice(0, 300);
     }
+    // Only guarded pages listen; see `AuthGuard`.
+    if (res.status === 401 && typeof window !== "undefined") window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
     // A gate denial is expected product behaviour, not a fault worth a console error.
     if (!gate) console.error(`[api] ${res.status} ${url}`, message);
     const retryAfter = Number(res.headers.get("retry-after"));

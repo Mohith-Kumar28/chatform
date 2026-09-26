@@ -421,16 +421,19 @@ export function createAuth(env: Bindings) {
          */
         sendInvitationEmail: async (data, request) => {
           const acceptUrl = `${linkOrigin(env, request)}/accept-invitation?id=${encodeURIComponent(data.id)}`;
+          // Delayed a few seconds: `POST /invitations` writes the workspace
+          // grants only after this returns, and the mail lists them.
           await enqueueMail(env, {
             kind: "invitation",
             to: data.email,
+            invitationId: data.id,
             inviterName: data.inviter.user.name ?? null,
             inviterEmail: data.inviter.user.email ?? null,
             organizationName: data.organization.name,
             role: data.role,
             acceptUrl,
             expiresAt: data.invitation.expiresAt ? new Date(data.invitation.expiresAt).getTime() : null,
-          });
+          }, { delaySeconds: 5 });
         },
         organizationHooks: {
           /**

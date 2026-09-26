@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/auth-client";
 import { purgePersistedCache } from "@/lib/api/persist";
 import { Button } from "@/components/ui/button";
+import { currentPath, UNAUTHORIZED_EVENT } from "@/lib/safe-next";
 
 /**
  * The single session gate. The dashboard shell and the builder shell both use
@@ -33,9 +34,22 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isPending || session || transportFailure) return;
-    const next = encodeURIComponent(pathname);
-    router.replace(`/signin?next=${next}`);
+    // The whole address, not just the path: `/usage?plan=pro&cycle=yearly`
+    // coming back as `/usage` loses the very thing the person clicked.
+    router.replace(`/signin?next=${encodeURIComponent(currentPath())}`);
   }, [isPending, session, transportFailure, router, pathname]);
+
+  /**
+   * A session that ends while the page is open (expired, revoked, signed out
+   * in another tab) shows up first as a 401 from some API call. Re-ask for the
+   * session rather than trusting that one response; if it really is gone, the
+   * effect above sends them to sign in and back here afterwards.
+   */
+  useEffect(() => {
+    const onUnauthorized = () => void refetch();
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+  }, [refetch]);
 
   /**
    * The persisted query cache belongs to whoever was signed in when it was
