@@ -8,6 +8,7 @@ import {
   Check,
   CircleAlert,
   CloudOff,
+  CopyPlus,
   ExternalLink,
   FileClock,
   Link2,
@@ -17,8 +18,14 @@ import {
   Play,
   PowerOff,
   Redo2,
+  Trash2,
   Undo2,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { deleteApiFormsById } from "@/lib/api/dashboard/dashboard";
+import { invalidateForms } from "@/lib/query-keys";
+import { useDuplicateForm } from "@/components/forms/use-duplicate-form";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -134,6 +141,32 @@ export function BuilderHeader({
     form with a live audience that is the whole cost of the action.
   */
   const [confirmOffline, setConfirmOffline] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const duplicate = useDuplicateForm();
+  const queryClient = useQueryClient();
+
+  /*
+   * The copy is made from what the server has saved, so an edit still in the
+   * autosave queue would be missing from it. Wait for the save to land first:
+   * it is usually already there, and otherwise a second away.
+   */
+  const duplicateHere = async () => {
+    for (let i = 0; i < 20 && useBuilderStore.getState().saveState !== "saved"; i++) {
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    await duplicate({ id: formId, title }, { open: true });
+  };
+
+  const deleteHere = async () => {
+    try {
+      await deleteApiFormsById(formId);
+      void invalidateForms(queryClient);
+      toast.success("Form deleted");
+      router.push("/dashboard");
+    } catch (e) {
+      toast.error("Couldn't delete", { description: e instanceof Error ? e.message : undefined });
+    }
+  };
 
   const undo = useBuilderStore((s) => s.undo);
   const redo = useBuilderStore((s) => s.redo);
@@ -368,12 +401,35 @@ export function BuilderHeader({
                   <FileClock className="size-3.5" />
                   Version history
                 </DropdownMenuItem>
-                {slug && published && (
+                {!readOnly && (
+                  <DropdownMenuItem onSelect={() => void duplicateHere()}>
+                    <CopyPlus className="size-3.5" />
+                    Duplicate form
+                  </DropdownMenuItem>
+                )}
+                {slug && published && !readOnly && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem variant="destructive" onSelect={() => setConfirmOffline(true)}>
                       <PowerOff className="size-3.5" />
                       Unpublish
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {!readOnly && (
+                  <>
+                    <DropdownMenuSeparator />
+                    {/* Same rule as the dashboard: a live form comes down before it goes. */}
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() =>
+                        published
+                          ? toast.error("Unpublish this form first, then delete it.")
+                          : setConfirmDelete(true)
+                      }
+                    >
+                      <Trash2 className="size-3.5" />
+                      Delete form
                     </DropdownMenuItem>
                   </>
                 )}
@@ -403,6 +459,15 @@ export function BuilderHeader({
         }
         confirmLabel="Unpublish"
         onConfirm={() => onUnpublish?.()}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete "${title.slice(0, 60)}"?`}
+        description="The form and its link are removed. This can't be undone from here."
+        confirmLabel="Delete form"
+        onConfirm={() => void deleteHere()}
       />
     </TooltipProvider>
   );

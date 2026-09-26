@@ -2164,6 +2164,7 @@ export type PostApiFormsBody = {
   title: string;
   workspaceId?: string;
   doc?: unknown;
+  duplicateOf?: string;
 };
 
 export type PostApiForms200Permissions = {[key: string]: string[]};

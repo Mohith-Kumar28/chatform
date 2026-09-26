@@ -9136,7 +9136,10 @@
                   "workspaceId": {
                     "type": "string"
                   },
-                  "doc": {}
+                  "doc": {},
+                  "duplicateOf": {
+                    "type": "string"
+                  }
                 },
                 "required": [
                   "title"

@@ -224,6 +224,13 @@ const CreateFormBody = z.object({
   title: z.string().min(1).max(200),
   workspaceId: z.string().optional(),
   doc: z.unknown().optional(),
+  /**
+   * Copy another form of this organization: its working document (not its
+   * responses, versions or slug), into its workspace unless `workspaceId`
+   * says otherwise. Read on the server so a copy is exactly what is saved,
+   * never whatever an open tab last had.
+   */
+  duplicateOf: z.string().optional(),
 });
 
 const UpdateDocBody = z.object({
@@ -343,7 +350,20 @@ formsRouter.post(
   }),
   async (c) => {
     const body = c.req.valid("json");
-    const ws = await requireWorkspace(c, body.workspaceId);
+    let source: { working_schema: string; workspace_id: string } | null = null;
+    if (body.duplicateOf) {
+      source = await c.env.DB.prepare(
+        `SELECT working_schema, workspace_id FROM forms WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`,
+      )
+        .bind(body.duplicateOf, c.get("orgId") ?? "")
+        .first<{ working_schema: string; workspace_id: string }>();
+      // Copying reads the form, so the caller must be able to open its workspace,
+      // not only the one the copy lands in.
+      if (!source || !(await requireWorkspace(c, source.workspace_id))) {
+        return c.json({ error: { code: "not_found", message: "No such form" } }, 404);
+      }
+    }
+    const ws = await requireWorkspace(c, body.workspaceId ?? source?.workspace_id);
     if (ws === undefined) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
     if (!ws) return c.get("orgId")
       ? c.json({ error: { code: "no_workspace", message: "You haven't been added to a workspace yet. Ask an admin to add you." } }, 403)
@@ -354,7 +374,11 @@ formsRouter.post(
     if (denied) return denied;
     const userId = c.get("userId") as string;
     let workingSchema: string;
-    if (body.doc !== undefined) {
+    if (source) {
+      const parsed = FormDoc.safeParse({ ...JSON.parse(source.working_schema), title: body.title });
+      if (!parsed.success) return apiError(c, 422, "invalid_doc", "That form can't be copied.");
+      workingSchema = JSON.stringify(parsed.data);
+    } else if (body.doc !== undefined) {
       const parsed = FormDoc.safeParse(body.doc);
       if (!parsed.success) {
         const described = describeSchemaError(parsed.error);

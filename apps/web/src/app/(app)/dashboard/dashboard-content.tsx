@@ -64,6 +64,7 @@ import { AiCapBanner } from "@/components/billing/ai-cap-banner";
 import { CreateFormDialog } from "@/components/forms/create-form-dialog";
 import { NoWorkspaceState } from "@/components/dashboard/no-workspace-state";
 import { FormCard, type FormRow } from "@/components/forms/form-card";
+import { useDuplicateForm } from "@/components/forms/use-duplicate-form";
 
 type Sort = "newest" | "oldest" | "responses" | "alpha";
 type StatusFilter = "all" | "live" | "draft";
@@ -268,6 +269,8 @@ export function DashboardContent() {
     window.addEventListener(NEW_FORM_EVENT, open);
     return () => window.removeEventListener(NEW_FORM_EVENT, open);
   }, [canEditHere]);
+
+  const duplicate = useDuplicateForm();
 
   const remove = useDeleteApiFormsById<Error>({
     mutation: {
@@ -548,6 +551,7 @@ export function DashboardContent() {
                   anySelected={selectedCount > 0}
                   readOnly={!canEditHere}
                   onDelete={canEditHere ? () => setPendingDelete(form) : undefined}
+                  onDuplicate={canEditHere ? () => void duplicate(form) : undefined}
                   onUnpublish={
                     canEditHere && form.status === "published" ? () => setPendingOffline(form) : undefined
                   }

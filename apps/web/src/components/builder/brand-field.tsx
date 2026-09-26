@@ -53,6 +53,8 @@ export function BrandField({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  /** A file is being dragged over the row. */
+  const [over, setOver] = useState(false);
   /** Keyed by the logo they came from, so a stale read never shows under a new logo. */
   const [read, setRead] = useState<{ url: string; swatches: Swatch[] } | null>(null);
   const swatches = read && read.url === theme.logoUrl ? read.swatches : null;
@@ -108,7 +110,28 @@ export function BrandField({
         bare 48px tile beside a text field read as decoration: nobody could
         tell a logo went there.
       */}
-      <div className="flex items-center gap-3 rounded-xl border border-dashed p-3">
+      <div
+        // It was drawn as a drop zone and refused drops. Now it takes one.
+        onDragOver={(e) => {
+          if (busy || !e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+          setOver(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file && !busy) void upload(file);
+        }}
+        className={cn(
+          "flex items-center gap-3 rounded-xl border border-dashed p-3 transition-colors",
+          over && "border-primary bg-primary/5",
+        )}
+      >
         <button
           type="button"
           disabled={busy}
@@ -126,7 +149,9 @@ export function BrandField({
           )}
         </button>
 
-        <p className="min-w-0 flex-1 text-sm font-medium">{theme.logoUrl ? "Your logo" : "Upload your logo"}</p>
+        <p className="min-w-0 flex-1 text-sm font-medium">
+          {over ? "Drop to upload" : theme.logoUrl ? "Your logo" : "Upload your logo"}
+        </p>
 
         <div className="flex shrink-0 items-center gap-1">
           <Button variant="outline" size="sm" disabled={busy} onClick={() => inputRef.current?.click()}>

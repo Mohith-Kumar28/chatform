@@ -6,6 +6,7 @@ import {
   BarChart3,
   Check as CheckIcon,
   Copy,
+  CopyPlus,
   ExternalLink,
   Link2,
   MessageSquare,
@@ -141,6 +142,7 @@ export interface FormRow {
 export function FormCard({
   form,
   onDelete,
+  onDuplicate,
   onUnpublish,
   onPublish,
   workspaces = [],
@@ -154,6 +156,8 @@ export function FormCard({
   form: FormRow;
   /** Absent for someone who may only view this workspace: no Delete at all. */
   onDelete?: () => void;
+  /** Copy it into a new draft. Absent for a viewer, who cannot create forms here. */
+  onDuplicate?: () => void;
   /**
    * The caller only views this workspace. The card opens Results, the place
    * they can actually do something, rather than a builder that refuses saves.
@@ -343,6 +347,15 @@ export function FormCard({
             </M.Sub>
           </>
         )}
+      {onDuplicate && (
+        <>
+          <M.Separator />
+          <M.Item onSelect={onDuplicate}>
+            <CopyPlus className="size-3.5" />
+            Duplicate
+          </M.Item>
+        </>
+      )}
       {onDelete && (
         <>
           <M.Separator />
