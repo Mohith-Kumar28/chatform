@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { SettingsNav } from "@/components/settings/settings-nav";
 import { SettingsShell } from "@/components/settings/settings-shell";
+import { SettingsScopeTabs } from "@/components/settings/settings-scope-tabs";
 
 /**
  * One area for everything that is not a form.
@@ -50,7 +51,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
             <ChevronLeft className="size-3.5" strokeWidth={2} aria-hidden />
             Forms
           </Link>
-          <h1 className="text-h1 mb-6">Settings</h1>
+          <SettingsScopeTabs />
         </>
       }
     >

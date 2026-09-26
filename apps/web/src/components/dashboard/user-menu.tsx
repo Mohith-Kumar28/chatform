@@ -100,20 +100,20 @@ export function UserMenu() {
         <DropdownMenuSeparator />
 
         {/*
-          One door, six rooms.
+          Your own settings.
 
           This used to be two items — "Account" for you, "Workspace" for the one
           you are signed into — and they were here because neither had a nav
           slot. Meanwhile Team and API keys *did* have nav slots, so the same
           category of screen was split across the header and this menu with no
           principle deciding which went where. They are all sections of
-          `/settings` now, so this is one item, and the menu is back to holding
-          only what has nowhere else to be.
+          `/settings` now. This menu is about you, so it opens the profile
+          half; the organization switcher's gear opens the organization half.
         */}
         <DropdownMenuItem asChild>
-          <Link href="/settings">
+          <Link href="/settings/profile">
             <SettingsIcon className="size-3.5" strokeWidth={1.75} />
-            Settings
+            Profile settings
           </Link>
         </DropdownMenuItem>
 

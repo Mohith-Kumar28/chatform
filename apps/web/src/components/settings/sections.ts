@@ -116,3 +116,25 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
 ];
 
 export const SETTINGS_SECTIONS: SettingsSection[] = SETTINGS_GROUPS.flatMap((g) => g.sections);
+
+/**
+ * Which half of settings a path belongs to.
+ *
+ * Organization settings and your own profile used to share one rail, so the
+ * avatar menu and the organization switcher both landed on the same mixed
+ * page. They are two areas now, each with its own addresses and a tab to
+ * cross between them; anything that is not an account section is the
+ * organization's.
+ */
+export function settingsScope(pathname: string): SettingsGroup["id"] {
+  const account = SETTINGS_GROUPS.find((g) => g.id === "account")!;
+  return account.sections.some((s) => pathname === s.href || pathname.startsWith(s.href + "/"))
+    ? "account"
+    : "organization";
+}
+
+/** Where each tab lands: the first section of its group. */
+export const SCOPE_HOME: Record<SettingsGroup["id"], string> = {
+  organization: "/settings/general",
+  account: "/settings/profile",
+};

@@ -150,7 +150,7 @@ export function OrganizationSwitcher() {
           <span aria-hidden className="bg-border/80 h-4 w-px shrink-0" />
 
           <Link
-            href="/settings"
+            href="/settings/general"
             aria-label={`Settings for ${current?.name ?? "this organization"}`}
             className={cn(
               "hover:bg-muted hover:text-foreground rounded-r-full px-2 py-1.5",

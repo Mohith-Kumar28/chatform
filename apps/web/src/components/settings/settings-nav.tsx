@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useActiveOrg } from "@/hooks/use-active-org";
-import { SETTINGS_GROUPS } from "@/components/settings/sections";
+import { SETTINGS_GROUPS, settingsScope } from "@/components/settings/sections";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -33,12 +33,15 @@ export function SettingsNav() {
   const { org, isPending } = useActiveOrg();
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  // Only the half you are in: the tabs above the card cross between them.
+  const scope = settingsScope(pathname);
+  const groups = SETTINGS_GROUPS.filter((g) => g.id === scope);
 
   return (
     <>
       {/* ── desktop rail ── */}
       <nav aria-label="Settings" className="hidden w-56 shrink-0 space-y-4 p-3 md:block">
-        {SETTINGS_GROUPS.map((group) => (
+        {groups.map((group) => (
           <div key={group.id}>
             <div className="px-3 pb-1.5">
               {/* The first group is named after the organization itself, which
@@ -95,7 +98,7 @@ export function SettingsNav() {
         aria-label="Settings"
         className="-mx-4 flex snap-x gap-1 overflow-x-auto px-4 pb-3 md:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {SETTINGS_GROUPS.flatMap((g) => g.sections).map((s) => (
+        {groups.flatMap((g) => g.sections).map((s) => (
           <Link
             key={s.id}
             href={s.href}
