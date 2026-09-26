@@ -510,13 +510,15 @@ export function ChatSurface({
         style={themeVars}
         inert={replay}
       >
-        <ChatBoot title={config.agentName || config.title} logoUrl={safeMediaSrc(config.theme.logoUrl)} />
+        <ChatBoot title={config.title} logoUrl={safeMediaSrc(config.theme.logoUrl)} />
       </div>
     );
   }
 
-  // The builder can name the interviewer; fall back to the form title.
-  const agentName = config.agentName || config.title;
+  // The header shows the form name, edited in the design sheet. A separate
+  // header name used to override it from Settings; that field is gone, and an
+  // old value left on a form would otherwise pin a name nobody can edit.
+  const agentName = config.title;
   // Review and the ending both mean every question is answered; without this
   // the bar dropped to zero at the last step because there is no current
   // question to read progress from.

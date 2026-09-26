@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   BookOpen,
+  ChevronDown,
+  ExternalLink,
   FileText,
   Globe,
   ImageIcon,
@@ -33,6 +35,7 @@ import {
 import { isPlanDenial } from "@/lib/api/mutator";
 import { uploadKnowledgeFile } from "./upload-knowledge";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/format";
 
 /**
  * The knowledge base, as one component.
@@ -454,42 +457,126 @@ function SourceRow({
     status: string;
     error: string | null;
     bytes: number;
+    chunkCount: number;
+    createdAt: number;
+    indexedAt: number | null;
   };
   onDelete: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const detailsId = useId();
   const Icon = KIND_ICON[source.kind] ?? FileText;
   const pending = PENDING_STATUSES.has(source.status);
   const failed = source.status === "failed";
+  const isWeb = source.kind === "link" || source.kind === "crawl";
+  /*
+    The whole address, not the hostname the title defaults to. Three rows all
+    reading "tgmlabs.co" told the author nothing about which page each one was,
+    or which of them had failed.
+  */
+  const url = isWeb && source.origin ? source.origin : null;
+  // A file's origin is its filename; only worth a line when the title hides it.
+  const filename = !isWeb && source.origin && source.origin !== source.title ? source.origin : null;
 
   return (
-    <li className="border-border bg-card flex items-start gap-3 rounded-xl border p-3">
-      <Icon className={cn("mt-0.5 size-4 shrink-0", failed ? "text-destructive" : "text-muted-foreground")} strokeWidth={1.75} />
-      <div className="min-w-0 flex-1">
-        <p className="text-body truncate font-medium">{source.title}</p>
-        <p className={cn("text-caption mt-0.5 flex items-center gap-1.5", failed ? "text-destructive" : "text-muted-foreground")}>
-          {pending && <Loader2 className="size-3 animate-spin" />}
-          <span>{STATUS_LABEL[source.status] ?? source.status}</span>
-          {source.status === "ready" && source.bytes > 0 && <span>· {formatBytes(source.bytes)}</span>}
-        </p>
-        {/*
-          The reason, in place, in the author's words rather than a log line.
-          A source that could not be read is the one state where saying nothing
-          would leave someone believing the agent knows something it does not.
-        */}
-        {failed && source.error && <p className="text-destructive text-caption mt-1">{source.error}</p>}
+    <li className="border-border bg-card rounded-xl border">
+      <div className="flex items-start gap-3 p-3">
+        <Icon className={cn("mt-0.5 size-4 shrink-0", failed ? "text-destructive" : "text-muted-foreground")} strokeWidth={1.75} />
+        <div className="min-w-0 flex-1">
+          <p className="text-body truncate font-medium">{source.title}</p>
+          {url && (
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground text-caption mt-0.5 flex min-w-0 items-center gap-1 underline-offset-2 hover:underline"
+              title={url}
+            >
+              <span className="truncate">{url}</span>
+              <ExternalLink className="size-3 shrink-0" />
+            </a>
+          )}
+          {filename && <p className="text-muted-foreground text-caption mt-0.5 truncate">{filename}</p>}
+          {/*
+            One line of status. A failure shows its reason here instead of the
+            bare label, so the row doesn't say "Couldn't read" twice in red.
+          */}
+          <p className={cn("text-caption mt-1 flex items-center gap-1.5", failed ? "text-destructive" : "text-muted-foreground")}>
+            {pending && <Loader2 className="size-3 animate-spin" />}
+            <span>{failed && source.error ? source.error : (STATUS_LABEL[source.status] ?? source.status)}</span>
+            {source.status === "ready" && source.bytes > 0 && <span>· {formatBytes(source.bytes)}</span>}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-controls={detailsId}
+            aria-label={open ? "Hide details" : "Show details"}
+            className="text-muted-foreground"
+          >
+            <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
+          </Button>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            onClick={onDelete}
+            aria-label={`Remove ${source.title}`}
+            className="text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        </div>
       </div>
-      <Button
-        size="icon-sm"
-        variant="ghost"
-        onClick={onDelete}
-        aria-label={`Remove ${source.title}`}
-        className="text-muted-foreground hover:text-destructive shrink-0"
-      >
-        <Trash2 className="size-3.5" />
-      </Button>
+      {open && (
+        <dl id={detailsId} className="border-border text-caption grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 border-t px-3 py-3 pl-10">
+          <DetailRow label="Type">{KIND_LABEL[source.kind] ?? source.kind}</DetailRow>
+          {source.origin && (
+            <DetailRow label={isWeb ? "URL" : "File"}>
+              <span className="break-all">{source.origin}</span>
+            </DetailRow>
+          )}
+          <DetailRow label="Status">
+            <span className={cn(failed && "text-destructive")}>{STATUS_LABEL[source.status] ?? source.status}</span>
+          </DetailRow>
+          {failed && source.error && (
+            <DetailRow label="Reason">
+              <span className="text-destructive">{source.error}</span>
+            </DetailRow>
+          )}
+          <DetailRow label="Added">{formatDateTime(source.createdAt)}</DetailRow>
+          {source.indexedAt != null && <DetailRow label="Indexed">{formatDateTime(source.indexedAt)}</DetailRow>}
+          {source.status === "ready" && (
+            <>
+              <DetailRow label="Size">{formatBytes(source.bytes)}</DetailRow>
+              <DetailRow label="Sections">{source.chunkCount}</DetailRow>
+            </>
+          )}
+        </dl>
+      )}
     </li>
   );
 }
+
+function DetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="min-w-0">{children}</dd>
+    </>
+  );
+}
+
+const KIND_LABEL: Record<string, string> = {
+  file: "Document",
+  text: "Pasted text",
+  link: "Web page",
+  crawl: "Web page (crawled)",
+  image: "Image",
+  audio: "Audio",
+};
 
 /**
  * The first failure worth showing, as a sentence.

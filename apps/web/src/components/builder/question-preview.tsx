@@ -62,7 +62,8 @@ export function QuestionPreview({
     const provider = paymentAccounts?.accounts.find((a) => a.id === gatewayAccountId)?.provider;
     return provider ? { ...projected, paymentProvider: provider } : projected;
   }, [block, gatewayAccountId, paymentAccounts]);
-  const agentName = doc.settings.agent.displayName || doc.title;
+  // Same as the live header: the form name, never the retired header override.
+  const agentName = doc.title;
 
   // The brand logo is a Pro feature (`brand_logo`) — publish strips them for
   // a plan that doesn't include it, so a free-plan preview must show the same
