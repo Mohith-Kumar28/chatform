@@ -96,6 +96,31 @@ export function formatTheirTime(
   }
 }
 
+/**
+ * The viewer's own zone as a short name, "IST" or "BST", for the line that sits
+ * above a respondent's time so the two clocks are both labelled.
+ *
+ * Browsers only abbreviate zones their locale knows ("GMT+5:30" for Kolkata in
+ * en-US), so a few English locales are tried before settling for the offset.
+ */
+export function viewerZoneLabel(ts: number | string | Date): string {
+  const date = new Date(ts);
+  let fallback = "";
+  for (const locale of [undefined, "en-IN", "en-US", "en-GB"]) {
+    try {
+      const name = new Intl.DateTimeFormat(locale, { timeZoneName: "short" })
+        .formatToParts(date)
+        .find((p) => p.type === "timeZoneName")?.value;
+      if (!name) continue;
+      if (!/^(GMT|UTC)([+-]|$)/.test(name)) return name;
+      fallback ||= name;
+    } catch {
+      // An unknown locale; try the next one.
+    }
+  }
+  return fallback || "your time";
+}
+
 /** "America/New_York" as "New York". */
 export function zoneCity(zone: string): string {
   return (zone.split("/").pop() ?? zone).replaceAll("_", " ");

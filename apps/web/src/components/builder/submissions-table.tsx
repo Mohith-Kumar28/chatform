@@ -80,6 +80,7 @@ import {
   formatRelative,
   formatShortDateTime,
   formatTheirTime,
+  viewerZoneLabel,
   isPast,
 } from "@/lib/format";
 import { useClientValue } from "@/hooks/use-client-value";
@@ -759,6 +760,7 @@ function FollowUpTimeline({ steps, zone }: { steps: FollowUpStepModel[]; zone: s
                     : formatDateTime(s.at)
                   : "scheduled")}
               {s.state === "later" && "after that"}
+              {s.at && (s.state === "sent" || s.state === "next") && <ViewerZone at={s.at} zone={zone} />}
             </span>
             {/* Reminders land on their clock, not ours: 03:00 there is a bad time to send. */}
             {s.at && (s.state === "sent" || s.state === "next") && <TheirTime at={s.at} zone={zone} block className="text-right" />}
@@ -1749,6 +1751,7 @@ export function SubmissionsTable({
                       )}
                     >
                       {formatWhen(row)}
+                      <ViewerZone at={submittedAt(row)} zone={respondentTimeZone(row.metadata)} />
                       <TheirTime at={submittedAt(row)} zone={respondentTimeZone(row.metadata)} block />
                     </td>
                   </tr>
@@ -2347,8 +2350,18 @@ function formatWhen(row: SubmissionRecord): string {
 }
 
 /**
+ * " · IST" after the viewer's time, only when a respondent's time sits under
+ * it. With one clock on screen there is nothing to tell apart, so no label.
+ */
+function ViewerZone({ at, zone }: { at: number; zone: string | null }) {
+  if (!formatTheirTime(at, zone)) return null;
+  return <> · {viewerZoneLabel(at)}</>;
+}
+
+/**
  * The same moment on the respondent's clock, only when it differs from the
- * viewer's: "7 Sept, 03:11 · New York" under a time that read 12:41 here.
+ * viewer's: "7 Sept, 03:11 · New York" under "7 Sept, 12:41 · IST". Same size
+ * as the line above it, because it is the same kind of fact.
  */
 function TheirTime({
   at,
@@ -2366,7 +2379,7 @@ function TheirTime({
   return (
     <span
       title={`Their local time (${zone})`}
-      className={cn("text-muted-foreground/80 text-micro tabular whitespace-nowrap", block && "block w-full", className)}
+      className={cn("text-muted-foreground/80 tabular whitespace-nowrap", block && "block w-full", className)}
     >
       {text}
     </span>
