@@ -1416,6 +1416,19 @@
   }
 }
 
+/* The hero's "Watch the video" chevron: a short drop and a longer rest, so it
+   reads as a nudge rather than a bounce. */
+@keyframes cf-cue-bob {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(5px);
+  }
+}
+
 .inspect-nudge {
   border-radius: 0.625rem;
   outline: 2px solid transparent;

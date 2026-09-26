@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LaunchVideo } from "@/components/marketing/launch-video";
 import { Hero } from "@/components/marketing/hero";
 import { SpectrumStrip } from "@/components/marketing/spectrum-strip";
 import { TheMoment } from "@/components/marketing/the-moment";
@@ -152,6 +153,7 @@ export default function LandingPage() {
         ]}
       />
       <Hero />
+      <LaunchVideo />
       <HowItConverts />
       <SpectrumStrip />
       <TheDropOff />

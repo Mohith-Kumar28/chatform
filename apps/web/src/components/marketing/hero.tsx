@@ -5,6 +5,7 @@ import { ChatDemo } from "./chat-demo";
 import { HERO_SCRIPT } from "./chat-demo-scripts";
 import { GradientField } from "@/components/brand/gradient-field";
 import { ArrowMark, CircleMark, HandNote } from "./annotate";
+import { WatchVideoCue } from "./launch-video";
 
 /**
  * The published demo form, or nothing.
@@ -469,6 +470,11 @@ export function Hero() {
         </div>
 
         <ChatDemo script={HERO_SCRIPT} variant="hero" />
+      </div>
+
+      {/* The way down to the launch video, centred under both columns. */}
+      <div className="relative mt-10 flex justify-center sm:mt-12">
+        <WatchVideoCue />
       </div>
     </section>
   );
