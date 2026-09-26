@@ -477,13 +477,18 @@ export function OrganizationInvitations({
                         .getColumn("createdAt")
                         ?.getIsVisible()}
                       showRole={!accessMap && table.getColumn("role")?.getIsVisible()}
+                      // Only a pending invitation still decides anything; once
+                      // accepted or cancelled its grants are history, and the
+                      // People table above says what that person can open now.
                       access={
-                        accessMap
+                        accessMap && row.original.status === "pending"
                           ? accessSummary(
                               row.original.role ?? "",
                               accessMap.invitations[row.original.id]
                             )
-                          : undefined
+                          : accessMap
+                            ? { title: "", detail: "" }
+                            : undefined
                       }
                       showStatus={table.getColumn("status")?.getIsVisible()}
                     />

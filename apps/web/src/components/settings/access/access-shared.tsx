@@ -87,6 +87,7 @@ export function accessSummary(orgRole: string, grants: GrantOut[] | undefined): 
 
 /** The two-line cell the People tables render for `accessSummary`. */
 export function AccessCell({ access }: { access: { title: string; detail: string } }) {
+  if (!access.title) return null;
   return (
     <span className="flex min-w-0 flex-col">
       <span className="text-sm">{access.title}</span>

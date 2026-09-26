@@ -286,8 +286,10 @@ export function WorkspaceAccessDialog({
         <p className="text-muted-foreground flex items-start gap-2 text-xs">
           <Info className="mt-0.5 size-3.5 shrink-0" />
           <span>
-            {onlyAdmins && "Only owners and admins can open this workspace right now. "}
-            Owners and admins can open every workspace. Change someone&apos;s role in{" "}
+            {onlyAdmins
+              ? "Only owners and admins can open this for now. Add someone above to share it. "
+              : "Owners and admins can open every workspace. "}
+            Change someone&apos;s role in{" "}
             <Link href="/settings/people" className="text-foreground underline underline-offset-2" onClick={() => onOpenChange(false)}>
               People
             </Link>

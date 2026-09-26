@@ -138,13 +138,12 @@ function AccessForm({
       </Field>
 
       {role === "member" && (
-        <Field data-invalid={needsWorkspace}>
+        <Field>
           <FieldLabel>Workspaces</FieldLabel>
           <WorkspaceGrantsPicker workspaces={workspaces} value={grants} onChange={setGrants} disabled={save.isPending} />
+          {/* A prompt, not an error: nothing has gone wrong until they try to save. */}
           {needsWorkspace && (
-            <FieldDescription className="text-destructive">
-              Tick at least one workspace, or remove them from the organization.
-            </FieldDescription>
+            <FieldDescription>Tick the workspaces they should open.</FieldDescription>
           )}
         </Field>
       )}
@@ -155,7 +154,11 @@ function AccessForm({
         <Button type="button" variant="outline" onClick={onCancel} disabled={save.isPending}>
           Cancel
         </Button>
-        <Button type="submit" disabled={needsWorkspace || save.isPending}>
+        <Button
+          type="submit"
+          variant={needsWorkspace ? "secondary" : "default"}
+          disabled={needsWorkspace || save.isPending}
+        >
           {save.isPending && <Loader2 className="size-3.5 animate-spin" />}
           Save
         </Button>
