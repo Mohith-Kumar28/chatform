@@ -84,6 +84,8 @@ export interface BuilderState {
    */
   pickerIndex: number | null;
   designOpen: boolean;
+  /** A Design sheet field to scroll to and shake once the sheet is open, e.g. `brand`. */
+  designReveal: string | null;
   /**
    * The keyboard shortcut registry, published by the shell that owns it.
    *
@@ -168,7 +170,7 @@ export interface BuilderState {
   /** Open the picker at `index`; omit for the end of the list. */
   openPicker: (index?: number) => void;
   closePicker: () => void;
-  setDesignOpen: (open: boolean) => void;
+  setDesignOpen: (open: boolean, reveal?: string) => void;
 
   // ── block operations ──
   /**
@@ -231,6 +233,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   attentionPulse: null,
   pickerIndex: null,
   designOpen: false,
+  designReveal: null,
   shortcuts: [],
   publishForm: null,
   publishing: false,
@@ -414,7 +417,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   openPicker: (index) =>
     set((s) => ({ pickerIndex: index ?? s.doc?.blocks.length ?? 0, designOpen: false })),
   closePicker: () => set({ pickerIndex: null }),
-  setDesignOpen: (open) => set({ designOpen: open }),
+  setDesignOpen: (open, reveal) => set({ designOpen: open, designReveal: open ? (reveal ?? null) : null }),
 
   setShortcuts: (shortcuts) => set({ shortcuts }),
   setPublishForm: (publishForm, publishing) => set({ publishForm, publishing }),

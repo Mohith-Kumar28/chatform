@@ -1,7 +1,9 @@
 "use client";
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useEffect, useRef } from "react";
 import { ThemePanel } from "./theme-panel";
+import { shake } from "./inspector-reveal";
 import { useBuilderStore } from "@/stores/builder-store";
 import { useGetApiFormsById } from "@/lib/api/dashboard/dashboard";
 
@@ -21,6 +23,20 @@ export function DesignSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const doc = useBuilderStore((s) => s.doc);
+  const reveal = useBuilderStore((s) => s.designReveal);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  // Opened from the preview's logo or name: once the sheet has slid in, shake
+  // the field that edits it, so it is plain where to change it.
+  useEffect(() => {
+    if (!open || !reveal) return;
+    const t = setTimeout(() => {
+      const el = bodyRef.current?.querySelector<HTMLElement>(`[data-inspect-target="${reveal}"]`);
+      if (el) shake(el);
+      useBuilderStore.setState({ designReveal: null });
+    }, 350);
+    return () => clearTimeout(t);
+  }, [open, reveal]);
   const edit = useBuilderStore((s) => s.edit);
   // The slug seeds the `Auto` background pattern, exactly as it does in the
   // preview. It lives on the form row rather than the document, and this is the
@@ -37,7 +53,7 @@ export function DesignSheet({
           <SheetTitle>Design</SheetTitle>
         </SheetHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
+        <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
           <ThemePanel
             theme={doc.theme}
             title={doc.title}

@@ -97,7 +97,7 @@ function scrollIntoViewIfHidden(el: HTMLElement): boolean {
   return true;
 }
 
-function shake(el: HTMLElement) {
+export function shake(el: HTMLElement) {
   el.classList.remove("inspect-nudge");
   // Force a reflow so a second click restarts the animation instead of being
   // swallowed by the one still running.

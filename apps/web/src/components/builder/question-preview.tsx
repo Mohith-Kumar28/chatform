@@ -16,6 +16,7 @@ import { LogoMark } from "@/components/brand/logo";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { usePaymentAccounts } from "@/components/integrations/payment-accounts";
 import { revealInInspector } from "./inspector-reveal";
+import { useBuilderStore } from "@/stores/builder-store";
 
 
 /**
@@ -67,6 +68,7 @@ export function QuestionPreview({
   // chatform-branded chrome a respondent will actually get, not the logo that
   // is sitting in the draft waiting for an upgrade.
   const { can } = useEntitlements();
+  const setDesignOpen = useBuilderStore((s) => s.setDesignOpen);
   const branded = can("brand_logo");
   const logoUrl = branded ? doc.theme.logoUrl : null;
 
@@ -78,10 +80,12 @@ export function QuestionPreview({
       // be — so a click points them at the field that is. See `inspector-reveal`.
       onClick={(e) => {
         const hit = (e.target as HTMLElement).closest<HTMLElement>("[data-inspect]");
-        if (hit?.dataset.inspect) revealInInspector(hit.dataset.inspect);
+        // The logo and name are the Design sheet's, not the question's.
+        if (hit?.dataset.inspect === "brand") setDesignOpen(true, "brand");
+        else if (hit?.dataset.inspect) revealInInspector(hit.dataset.inspect);
       }}
     >
-      <header className="flex items-center gap-2.5 px-4 py-3">
+      <header data-inspect="brand" className="flex items-center gap-2.5 px-4 py-3">
         {logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={logoUrl} alt="" className="size-7 shrink-0 rounded-lg object-contain" />

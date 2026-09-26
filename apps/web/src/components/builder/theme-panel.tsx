@@ -137,6 +137,7 @@ export function ThemePanel({
   return (
     <div className="w-full space-y-6">
       <Section title="Brand">
+        <div data-inspect-target="brand" className="space-y-3">
         {onTitleChange && (
           <div className="space-y-1.5">
             <Label htmlFor="brand-name">Form name</Label>
@@ -155,6 +156,7 @@ export function ThemePanel({
         <LockedControl feature="brand_logo">
           <BrandField theme={theme} onChange={patch} />
         </LockedControl>
+        </div>
       </Section>
 
       <Section title="Presets">
