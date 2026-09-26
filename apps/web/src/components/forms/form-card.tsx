@@ -252,7 +252,7 @@ export function FormCard({
    * One menu, two triggers.
    *
    * The kebab and the right-click menu are the same menu — a card that offers
-   * Take offline on hover and not on right-click is a card whose menu you have
+   * Unpublish on hover and not on right-click is a card whose menu you have
    * to guess at, and two copies of this list is how that happens on the next
    * item somebody adds. So the items are written once against whichever set of
    * menu parts is rendering them: Radix's dropdown and context menus have the
@@ -311,9 +311,9 @@ export function FormCard({
             them together is how the wrong one gets clicked.
           */}
           {onUnpublish && (
-            <M.Item onSelect={onUnpublish}>
+            <M.Item variant="destructive" onSelect={onUnpublish}>
               <PowerOff className="size-3.5" />
-              Take offline
+              Unpublish
             </M.Item>
           )}
         </>
@@ -575,7 +575,7 @@ export function FormCard({
     /*
       Right-click is the same menu as the kebab.
 
-      The kebab was the only way to reach Move to, Take offline and Delete, and
+      The kebab was the only way to reach Move to, Unpublish and Delete, and
       it is three hover-revealed pixels in a corner. Everywhere else that shows
       a grid of things — a file manager, a photo library — answers a right-click
       on the thing itself, and a card that does not is a card people right-click

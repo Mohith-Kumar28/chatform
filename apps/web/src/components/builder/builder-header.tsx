@@ -352,7 +352,7 @@ export function BuilderHeader({
               published it", asked perhaps once a week — and a permanent slot
               beside Publish is expensive for a once-a-week question.
 
-              Take offline stays destructive and stays behind this menu, not
+              Unpublish stays destructive and stays behind this menu, not
               beside Publish: one is the thing you do all day and the other is
               the thing you do once, and a destructive sibling next to the
               button you press constantly is how it gets pressed by mistake.
@@ -373,7 +373,7 @@ export function BuilderHeader({
                     <DropdownMenuSeparator />
                     <DropdownMenuItem variant="destructive" onSelect={() => setConfirmOffline(true)}>
                       <PowerOff className="size-3.5" />
-                      Take offline
+                      Unpublish
                     </DropdownMenuItem>
                   </>
                 )}
@@ -390,18 +390,18 @@ export function BuilderHeader({
       <ConfirmDialog
         open={confirmOffline}
         onOpenChange={setConfirmOffline}
-        title="Take this form offline?"
+        title="Unpublish this form?"
         description={
           <>
-            The link stops working immediately and nobody new can start a response. Nothing is
-            deleted — your responses stay, and v{activeVersion ?? 1} goes straight back up when
-            you publish again.
+            From now on nobody can submit this form until you publish it again. The link stops
+            working and nobody new can start a response. Nothing is deleted: your responses stay,
+            and v{activeVersion ?? 1} goes straight back up when you publish again.
             <br />
             <br />
             Anyone part-way through right now can still finish and submit.
           </>
         }
-        confirmLabel="Take offline"
+        confirmLabel="Unpublish"
         onConfirm={() => onUnpublish?.()}
       />
     </TooltipProvider>

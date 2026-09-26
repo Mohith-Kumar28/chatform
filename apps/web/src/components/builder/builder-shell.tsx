@@ -320,12 +320,12 @@ export function BuilderShell({
         queryClient.invalidateQueries({ queryKey: getGetApiFormsByIdQueryKey(formId as never) }),
         invalidateForms(queryClient),
       ]);
-      toast.success("Form taken offline", {
+      toast.success("Form unpublished", {
         description: "The link no longer works. Publish again to put it back.",
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not take the form offline";
-      toast.error("Could not take it offline", { description: message });
+      const message = err instanceof Error ? err.message : "Could not unpublish the form";
+      toast.error("Could not unpublish it", { description: message });
     }
   }
 

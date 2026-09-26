@@ -13,7 +13,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { CheckCircle2, Clock, Eye, Gauge, TrendingDown, Users } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, Gauge, TrendingDown, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { CHANNEL_LABELS, DEVICE_LABELS, countryFlag, countryName } from "@repo/form-schema";
 import { ChartCard, ColumnChart, Donut, Empty, FinishRing, Legend } from "@/components/charts/chart-kit";
@@ -222,54 +223,7 @@ export function ResultsAnalytics({ analytics }: { analytics: AnalyticsPayload })
         </ChartCard>
       </div>
 
-      {places.length > 0 && (
-        <ChartCard
-          title="Where people are"
-          subtitle="Everyone who started. Bigger dot, more people."
-          aside={<Legend items={[
-            { label: "Finished", color: "var(--chart-1)" },
-            { label: "Didn't finish", color: "var(--chart-2)" },
-          ]} />}
-        >
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
-            <WorldMap
-              points={places.map((p) => ({
-                lat: p.lat,
-                lon: p.lon,
-                count: p.count,
-                completed: p.completed ?? 0,
-                label: placeLabel(p),
-                flag: countryFlag(p.country),
-              }))}
-            />
-            <ol className="divide-y self-start">
-              {places.slice(0, 8).map((p) => (
-                <li key={`${p.lat},${p.lon}`} className="flex items-center gap-2.5 py-2 first:pt-0">
-                  <span className="w-5 shrink-0 text-base leading-none" aria-hidden>
-                    {countryFlag(p.country) || "·"}
-                  </span>
-                  <span className="min-w-0 flex-1" title={placeLabel(p)}>
-                    <span className="block truncate text-sm">{p.city ?? p.region ?? countryName(p.country) ?? "Unknown"}</span>
-                    {p.city && p.region && p.region !== p.city && (
-                      <span className="text-muted-foreground block truncate text-xs">{p.region}</span>
-                    )}
-                  </span>
-                  {p.completed === undefined ? (
-                    <span className="tabular shrink-0 text-sm">{p.count}</span>
-                  ) : (
-                    <FinishSplit completed={p.completed} total={p.count} />
-                  )}
-                </li>
-              ))}
-            </ol>
-          </div>
-          {unplaced > 0 && (
-            <p className="text-muted-foreground text-caption mt-3">
-              {unplaced} {unplaced === 1 ? "response has" : "responses have"} no location, from before it was recorded.
-            </p>
-          )}
-        </ChartCard>
-      )}
+      {places.length > 0 && <WhereCard places={places} unplaced={unplaced} />}
 
       {(deviceTotal > 0 || browsers.length > 0 || systems.length > 0) && (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -327,30 +281,246 @@ export function ResultsAnalytics({ analytics }: { analytics: AnalyticsPayload })
   );
 }
 
+type Place = NonNullable<AnalyticsPayload["places"]>[number];
+
+/** Rows the country list shows before "Show all". */
+const COUNTRY_ROWS = 12;
+
 /**
- * "1 finished · 1 didn't", in the map's two colours, leaving out a zero.
+ * The map and, beside it, the list it is read with: countries first, and a
+ * click on either one zooms into that country and swaps the list for its
+ * regions, each with its cities. Hovering a row lights up the country (or the
+ * region's dots) on the map, and hovering the map lights up the row.
  *
- * A percentage ring said "0%" for a city whose one person had not finished,
- * which read as a place with no data rather than a partial response.
+ * Counted from `places`, the same rows the dots are drawn from, so the list
+ * and the map never disagree about a country.
  */
-function FinishSplit({ completed, total }: { completed: number; total: number }) {
-  const partial = Math.max(0, total - completed);
+function WhereCard({ places, unplaced }: { places: Place[]; unplaced: number }) {
+  const [focus, setFocus] = useState<string | null>(null);
+  const [hoverCountry, setHoverCountry] = useState<string | null>(null);
+  const [hoverRegion, setHoverRegion] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+
+  const total = places.reduce((n, p) => n + p.count, 0);
+
+  const countries = useMemo(() => {
+    const by = new Map<string, { code: string; name: string; flag: string; count: number; completed: number }>();
+    for (const p of places) {
+      if (!p.country) continue;
+      const c = by.get(p.country) ?? {
+        code: p.country,
+        name: countryName(p.country) ?? p.country,
+        flag: countryFlag(p.country),
+        count: 0,
+        completed: 0,
+      };
+      c.count += p.count;
+      c.completed += p.completed ?? 0;
+      by.set(p.country, c);
+    }
+    return [...by.values()].sort((a, b) => b.count - a.count);
+  }, [places]);
+
+  const shading = useMemo(() => Object.fromEntries(countries.map((c) => [c.code, c])), [countries]);
+  const focused = focus ? countries.find((c) => c.code === focus) : undefined;
+
+  const regions = useMemo(() => {
+    if (!focus) return [];
+    const by = new Map<string, { name: string; count: number; cities: { name: string; count: number }[] }>();
+    for (const p of places) {
+      if (p.country !== focus) continue;
+      const name = p.region ?? p.city ?? "Unknown";
+      const r = by.get(name) ?? { name, count: 0, cities: [] };
+      r.count += p.count;
+      if (p.city && p.city !== name) r.cities.push({ name: p.city, count: p.count });
+      by.set(name, r);
+    }
+    return [...by.values()]
+      .map((r) => ({ ...r, cities: r.cities.sort((a, b) => b.count - a.count) }))
+      .sort((a, b) => b.count - a.count);
+  }, [places, focus]);
+
+  const points = places.map((p) => ({
+    lat: p.lat,
+    lon: p.lon,
+    count: p.count,
+    completed: p.completed ?? 0,
+    label: placeLabel(p),
+    flag: countryFlag(p.country),
+    country: p.country,
+    highlight: hoverRegion !== null && (p.region ?? p.city ?? "Unknown") === hoverRegion,
+  }));
+
+  function select(code: string | null) {
+    setFocus(code);
+    setHoverCountry(null);
+    setHoverRegion(null);
+  }
+
+  const rows = showAll ? countries : countries.slice(0, COUNTRY_ROWS);
+
   return (
-    <span className="tabular flex shrink-0 items-center gap-2.5 text-xs" title={`${completed} finished, ${partial} didn't finish`}>
-      {completed > 0 && (
-        <span className="inline-flex items-center gap-1">
-          <span aria-hidden className="size-2 rounded-full bg-[var(--chart-1)]" />
-          {completed} finished
-        </span>
+    <ChartCard
+      title="Where people are"
+      subtitle="Everyone who started. Bigger dot, more people."
+      aside={<Legend items={[
+        { label: "Finished", color: "var(--chart-1)" },
+        { label: "Didn't finish", color: "var(--chart-2)" },
+      ]} />}
+    >
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <WorldMap
+          points={points}
+          countries={shading}
+          focus={focus}
+          hoverCountry={hoverCountry}
+          onHoverCountry={setHoverCountry}
+          onSelect={select}
+        />
+        <div className="self-start">
+          {focused ? (
+            <>
+              <Button variant="ghost" size="sm" className="-ml-2 mb-2" onClick={() => select(null)}>
+                <ChevronLeft />
+                All countries
+              </Button>
+              <div className="mb-2 flex items-center gap-2.5">
+                <span className="w-5 shrink-0 text-base leading-none" aria-hidden>{focused.flag || "·"}</span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{focused.name}</span>
+                <span className="text-muted-foreground tabular text-xs">{percent(focused.count, total)}</span>
+                <span className="tabular w-10 text-right text-sm font-medium">{focused.count}</span>
+              </div>
+              <GeoHeader label="Region" />
+              <ol>
+                {regions.map((r) => (
+                  <GeoRow
+                    key={r.name}
+                    name={r.name}
+                    sub={r.cities.map((c) => (r.cities.length > 1 ? `${c.name} ${c.count}` : c.name)).join(" · ")}
+                    count={r.count}
+                    share={r.count / focused.count}
+                    active={hoverRegion === r.name}
+                    onHover={(on) => setHoverRegion(on ? r.name : null)}
+                  />
+                ))}
+              </ol>
+            </>
+          ) : (
+            <>
+              <GeoHeader label="Country" />
+              <ol>
+                {rows.map((c) => (
+                  <GeoRow
+                    key={c.code}
+                    flag={c.flag}
+                    name={c.name}
+                    count={c.count}
+                    share={c.count / total}
+                    title={`${c.completed} finished, ${c.count - c.completed} didn't finish`}
+                    active={hoverCountry === c.code}
+                    onHover={(on) => setHoverCountry(on ? c.code : null)}
+                    onClick={() => select(c.code)}
+                  />
+                ))}
+              </ol>
+              {countries.length > COUNTRY_ROWS && (
+                <Button variant="link" size="sm" className="text-muted-foreground mt-1 px-0" onClick={() => setShowAll((v) => !v)}>
+                  {showAll ? "Show fewer" : `Show all ${countries.length}`}
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      {unplaced > 0 && (
+        <p className="text-muted-foreground text-caption mt-3">
+          {unplaced} {unplaced === 1 ? "response has" : "responses have"} no location, from before it was recorded.
+        </p>
       )}
-      {partial > 0 && (
-        <span className="text-muted-foreground inline-flex items-center gap-1">
-          <span aria-hidden className="size-2 rounded-full bg-[var(--chart-2)]" />
-          {partial} didn&apos;t
-        </span>
-      )}
-    </span>
+    </ChartCard>
   );
+}
+
+function GeoHeader({ label }: { label: string }) {
+  return (
+    <div className="text-muted-foreground text-caption flex items-center gap-2.5 px-2 pb-1.5">
+      <span className="flex-1">{label}</span>
+      <span>Share</span>
+      <span className="w-10 text-right">People</span>
+    </div>
+  );
+}
+
+/**
+ * One row of the list: a bar behind it the width of its share, like the
+ * reference analytics tools draw it, so the list reads as a chart too. With
+ * `onClick` it is a button, and the chevron and underline on hover say so.
+ */
+function GeoRow({
+  flag,
+  name,
+  sub,
+  count,
+  share,
+  title,
+  active,
+  onHover,
+  onClick,
+}: {
+  flag?: string;
+  name: string;
+  sub?: string;
+  count: number;
+  share: number;
+  title?: string;
+  active: boolean;
+  onHover: (on: boolean) => void;
+  onClick?: () => void;
+}) {
+  const body = (
+    <>
+      <span
+        aria-hidden
+        className={cn("absolute inset-y-0.5 left-0 rounded-md bg-[var(--chart-1)] transition-opacity", active ? "opacity-25" : "opacity-10")}
+        style={{ width: `${Math.max(2, share * 100)}%` }}
+      />
+      {flag !== undefined && (
+        <span className="relative w-5 shrink-0 text-base leading-none" aria-hidden>{flag || "·"}</span>
+      )}
+      <span className="relative min-w-0 flex-1">
+        <span className="flex items-center gap-1">
+          <span className={cn("truncate text-sm", onClick && "decoration-muted-foreground/50 underline-offset-2 group-hover:underline")}>{name}</span>
+          {onClick && (
+            <ChevronRight className="text-muted-foreground size-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+          )}
+        </span>
+        {sub && <span className="text-muted-foreground block truncate text-xs">{sub}</span>}
+      </span>
+      <span className="text-muted-foreground tabular relative text-xs">{sharePercent(share)}</span>
+      <span className="tabular relative w-10 text-right text-sm">{count}</span>
+    </>
+  );
+  const cls = "group relative flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left";
+  return (
+    <li title={title} onMouseEnter={() => onHover(true)} onMouseLeave={() => onHover(false)}>
+      {onClick ? (
+        <button type="button" className={cn(cls, "focus-visible:ring-ring cursor-pointer outline-none focus-visible:ring-2")} onClick={onClick}>
+          {body}
+        </button>
+      ) : (
+        <div className={cls}>{body}</div>
+      )}
+    </li>
+  );
+}
+
+function percent(n: number, of: number): string {
+  return of > 0 ? sharePercent(n / of) : "";
+}
+
+/** "<1%" rather than "0%" for a share that exists but rounds away. */
+function sharePercent(share: number): string {
+  return share > 0 && share < 0.005 ? "<1%" : `${Math.round(share * 100)}%`;
 }
 
 /** "67% finish" for a segment that knows its completions. */

@@ -313,11 +313,11 @@ export function DashboardContent() {
     mutation: {
       onSuccess: () => {
         void invalidateForms(queryClient);
-        toast.success("Form taken offline", {
+        toast.success("Form unpublished", {
           description: "The link no longer works. Publish again to put it back.",
         });
       },
-      onError: (e) => toast.error("Couldn't take it offline", { description: e.message }),
+      onError: (e) => toast.error("Couldn't unpublish it", { description: e.message }),
     },
   });
 
@@ -588,15 +588,9 @@ export function DashboardContent() {
       />
 
       {/*
-        A live form cannot be deleted from here, and this dialog is the whole
-        of that answer — no "take it offline" button on it.
-
-        Deleting the form someone is half-way through answering is the one
-        mistake on this page that cannot be walked back, and an offline button
-        sitting next to a delete button turns two decisions into one click.
-        Taking it offline is its own choice, made from the card menu, and
-        coming back afterwards is the pause that makes the second one
-        deliberate.
+        A live form cannot be deleted from here. Unpublish hands over to its
+        own confirmation rather than acting, so it is still two decisions:
+        unpublishing here, and coming back to delete afterwards.
       */}
       <Dialog
         open={deleteBlocked}
@@ -608,13 +602,23 @@ export function DashboardContent() {
               “{pendingDelete?.title}” is live
             </DialogTitle>
             <DialogDescription>
-              A published form can’t be deleted. Take it offline first — open
-              this form’s menu and choose <strong>Take offline</strong> — then
+              A published form can’t be deleted. Unpublish it first, then
               delete it.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button onClick={() => setPendingDelete(null)}>Got it</Button>
+            <Button variant="ghost" onClick={() => setPendingDelete(null)}>
+              Got it
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setPendingOffline(pendingDelete);
+                setPendingDelete(null);
+              }}
+            >
+              Unpublish form
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -651,9 +655,9 @@ export function DashboardContent() {
       <ConfirmDialog
         open={pendingOffline !== null}
         onOpenChange={(open) => !open && setPendingOffline(null)}
-        title={`Take “${pendingOffline?.title}” offline?`}
-        description="The link stops working immediately and nobody new can start a response. Nothing is deleted — your responses stay, and the live version goes straight back up when you publish again. Anyone part-way through right now can still finish."
-        confirmLabel="Take offline"
+        title={`Unpublish “${pendingOffline?.title}”?`}
+        description="From now on nobody can submit this form until you publish it again. The link stops working and nobody new can start a response. Nothing is deleted: your responses stay, and anyone part-way through right now can still finish."
+        confirmLabel="Unpublish"
         onConfirm={() => {
           if (pendingOffline) unpublish.mutate({ id: pendingOffline.id });
         }}
