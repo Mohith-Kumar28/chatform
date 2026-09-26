@@ -123,6 +123,8 @@ const SubmissionRow = z.object({
       /** `skipped` | `failed` | `cancelled`, when the sequence ended early. */
       stoppedStatus: z.string().nullable(),
       stoppedReason: z.string().nullable(),
+      /** Every step in order, and what became of it: sent, queued, scheduled, cancelled, skipped, failed. */
+      steps: z.array(z.object({ step: z.number(), status: z.string() })),
     })
     .nullable(),
   /** Why no sequence was ever scheduled. Null when one was, or when nothing tried. */
@@ -179,6 +181,19 @@ const SubmissionList = z.object({
     partial: z.number(),
   }),
 });
+
+/** "1:sent,2:cancelled" as rows, in step order. */
+function parseStepStates(raw: string | null): { step: number; status: string }[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((part) => {
+      const [step, status] = part.split(":");
+      return { step: Number(step), status: status ?? "" };
+    })
+    .filter((s) => Number.isFinite(s.step) && s.status)
+    .sort((a, b) => a.step - b.step);
+}
 
 const SegmentSchema = z.object({ label: z.string(), count: z.number(), completed: z.number() });
 
@@ -407,6 +422,7 @@ resultsRouter.get(
       last_sent_at: number | null;
       stopped_reason: string | null;
       stopped_status: string | null;
+      step_states: string | null;
     };
 
     /**
@@ -530,6 +546,10 @@ resultsRouter.get(
                 SUM(CASE WHEN status = 'scheduled' THEN 1 ELSE 0 END) AS scheduled,
                 SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
                 MAX(CASE WHEN status = 'holdout' THEN 1 ELSE 0 END) AS holdout,
+                -- Every step and what became of it, "1:sent,2:cancelled". The
+                -- counts above cannot say that step 2 existed and was cancelled,
+                -- and a ladder drawn from them silently lost it.
+                GROUP_CONCAT(step || ':' || status) AS step_states,
                 -- How many of the sent ones had their resume link opened, and when
                 -- the most recent of those was. A click is not what earns the
                 -- credit any more, but it is the one thing in the row that says
@@ -722,6 +742,7 @@ resultsRouter.get(
                 byId.get(s.id)!.scheduled + byId.get(s.id)!.queued === 0
                   ? byId.get(s.id)!.stopped_status
                   : null,
+              steps: parseStepStates(byId.get(s.id)!.step_states),
             }
           : null,
         /**

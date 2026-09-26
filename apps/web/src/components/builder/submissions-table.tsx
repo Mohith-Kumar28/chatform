@@ -219,6 +219,8 @@ export interface SubmissionRecord {
     lastSentAt: number | null;
     stoppedStatus: string | null;
     stoppedReason: string | null;
+    /** Every step in order and what became of it. Absent from older API builds. */
+    steps?: { step: number; status: string }[];
   } | null;
   /** Why no sequence was ever scheduled — set when `followUp` is null for a reason. */
   followUpSkip?: string | null;
@@ -252,6 +254,7 @@ const SKIP_COPY: Record<string, string> = {
   unsubscribed: "unsubscribed",
   completed: "they finished",
   disqualified: "screened out",
+  resumed: "they came back to the form",
 };
 
 function skipCopy(reason: string): string {
@@ -353,7 +356,7 @@ function followUpLabel(row: SubmissionRecord): FollowUpLabel | null {
     if (row.followUpSkip) {
       return {
         text: "Not sent",
-        detail: `Not sent — ${skipCopy(row.followUpSkip)}`,
+        detail: `Not sent: ${skipCopy(row.followUpSkip)}`,
         tone: "warn",
         icon: MailX,
       };
@@ -372,7 +375,7 @@ function followUpLabel(row: SubmissionRecord): FollowUpLabel | null {
       ? {
           text: "Still open",
           detail:
-            "No reminder decided yet — they may still be answering. Reminders are arranged 30 minutes after their last message.",
+            "No reminder decided yet. They may still be answering. Reminders are arranged 30 minutes after their last message.",
           tone: "pending",
           icon: Hourglass,
         }
@@ -385,7 +388,7 @@ function followUpLabel(row: SubmissionRecord): FollowUpLabel | null {
       text: "Recovered",
       detail:
         f.recoveredSentAt && f.recoveredAt
-          ? `${which} brought them back — they finished ${gapLabel(f.recoveredSentAt, f.recoveredAt)} after it was sent`
+          ? `${which} brought them back. They finished ${gapLabel(f.recoveredSentAt, f.recoveredAt)} after it was sent`
           : `${which} brought them back`,
       tone: "success",
       icon: CheckCircle2,
@@ -407,7 +410,7 @@ function followUpLabel(row: SubmissionRecord): FollowUpLabel | null {
     return {
       text: "Finished later",
       detail: gap
-        ? `They finished ${gap} after the last reminder — too long after to credit it. Reminders keep the credit for 24 hours.`
+        ? `They finished ${gap} after the last reminder, too long after to credit it. Reminders keep the credit for 24 hours.`
         : "They finished, but too long after the last reminder to credit it. Reminders keep the credit for 24 hours.",
       tone: "muted",
       icon: MailCheck,
@@ -475,6 +478,15 @@ function followUpLabel(row: SubmissionRecord): FollowUpLabel | null {
   if (f.scheduled > 0) {
     return { text: "Queued", detail: "A reminder is scheduled", tone: "pending", icon: Clock };
   }
+  if (f.sent > 0 && f.stoppedReason === "resumed") {
+    // They came back through the link, which cancels the rest: not a dead end.
+    return {
+      text: "Came back",
+      detail: `${f.sent === 1 ? "Reminder sent" : `${f.sent} reminders sent`}, then they came back to the form, so the rest were cancelled`,
+      tone: "info",
+      icon: MailCheck,
+    };
+  }
   if (f.sent > 0) {
     /*
      * Sent, and the sequence has nothing left to send. They did not open it and
@@ -494,7 +506,7 @@ function followUpLabel(row: SubmissionRecord): FollowUpLabel | null {
   if (f.stoppedReason) {
     return {
       text: f.stoppedStatus === "failed" ? "Failed" : "Not sent",
-      detail: `${f.stoppedStatus === "failed" ? "Delivery failed" : "Not sent"} — ${skipCopy(f.stoppedReason)}`,
+      detail: `${f.stoppedStatus === "failed" ? "Delivery failed" : "Not sent"}: ${skipCopy(f.stoppedReason)}`,
       tone: "warn",
       icon: MailX,
     };
@@ -651,7 +663,7 @@ function FollowUpCell({ row, empty = "dash" }: { row: SubmissionRecord; empty?: 
  */
 type FollowUpStepModel = {
   n: number;
-  state: "sent" | "sending" | "next" | "later";
+  state: "sent" | "sending" | "next" | "later" | "stopped";
   /** Absolute, and null when this particular step's time is not known. */
   at: number | null;
   /**
@@ -666,6 +678,29 @@ type FollowUpStepModel = {
 };
 
 function followUpSteps(f: NonNullable<SubmissionRecord["followUp"]>): FollowUpStepModel[] {
+  /*
+    From the steps themselves when the API sends them. The counts cannot say
+    that a step existed and was cancelled, so a sequence of two whose second
+    was cancelled used to draw as "1 of 1", with the second nowhere.
+  */
+  if (f.steps && f.steps.length > 0) {
+    let nextSeen = false;
+    const lastSent = Math.max(0, ...f.steps.filter((x) => x.status === "sent").map((x) => x.step));
+    return f.steps.map(({ step: n, status }) => {
+      const credited = f.recoveredStep === n ? { credited: true } : {};
+      if (status === "sent") {
+        const at = f.recoveredStep === n ? f.recoveredSentAt : n === lastSent ? f.lastSentAt : null;
+        return { n, state: "sent", at, ...credited };
+      }
+      if (status === "queued") return { n, state: "sending", at: null, ...credited };
+      if (status === "scheduled") {
+        const first = !nextSeen;
+        nextSeen = true;
+        return first ? { n, state: "next", at: f.nextScheduledAt, ...credited } : { n, state: "later", at: null, ...credited };
+      }
+      return { n, state: "stopped", at: null, ...credited };
+    });
+  }
   const total = f.sent + f.queued + f.scheduled;
   const steps: FollowUpStepModel[] = [];
   for (let n = 1; n <= total; n += 1) {
@@ -725,15 +760,22 @@ function FollowUpTimeline({ steps, zone }: { steps: FollowUpStepModel[]; zone: s
               // one more unscheduled step below it.
               s.state === "next" && "border-muted-foreground/60 bg-card border border-dashed",
               s.state === "later" && "border-muted-foreground/25 bg-card border",
+              s.state === "stopped" && "bg-muted",
             )}
           >
             {s.state === "sent" && <Check className="size-2.5 text-white" strokeWidth={3} />}
             {s.state === "sending" && <span className="size-1.5 animate-pulse rounded-full bg-white" />}
+            {s.state === "stopped" && <X className="text-muted-foreground size-2.5" strokeWidth={3} />}
           </span>
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
             {/* No "of 3" per rung: the ladder is three rungs long, and the
                 header above it already counts them. */}
-            <span className={cn(s.state === "later" ? "text-muted-foreground" : "text-foreground")}>
+            <span
+              className={cn(
+                s.state === "later" || s.state === "stopped" ? "text-muted-foreground" : "text-foreground",
+                s.state === "stopped" && "line-through decoration-muted-foreground/50",
+              )}
+            >
               Reminder {s.n}
             </span>
             {/*
@@ -760,6 +802,7 @@ function FollowUpTimeline({ steps, zone }: { steps: FollowUpStepModel[]; zone: s
                     : formatDateTime(s.at)
                   : "scheduled")}
               {s.state === "later" && "after that"}
+              {s.state === "stopped" && "not sent"}
               {s.at && (s.state === "sent" || s.state === "next") && <ViewerZone at={s.at} zone={zone} />}
             </span>
             {/* Reminders land on their clock, not ours: 03:00 there is a bad time to send. */}
@@ -818,7 +861,7 @@ function FollowUpDetail({ row, className }: { row: SubmissionRecord; className?:
     if (row.followUpSkip) {
       return (
         <FollowUpBlock className={className}>
-          <p className="text-muted-foreground text-xs">Nothing scheduled — {skipCopy(row.followUpSkip)}.</p>
+          <p className="text-muted-foreground text-xs">Nothing scheduled: {skipCopy(row.followUpSkip)}.</p>
         </FollowUpBlock>
       );
     }
@@ -827,7 +870,7 @@ function FollowUpDetail({ row, className }: { row: SubmissionRecord; className?:
       return (
         <FollowUpBlock className={className}>
           <p className="text-muted-foreground text-xs">
-            Not decided yet — this conversation is still open. Whether a reminder is sent is worked
+            Not decided yet. This conversation is still open. Whether a reminder is sent is worked
             out 30 minutes after their last message.
           </p>
         </FollowUpBlock>
@@ -848,8 +891,8 @@ function FollowUpDetail({ row, className }: { row: SubmissionRecord; className?:
     );
   }
 
-  const total = f.sent + f.queued + f.scheduled;
   const steps = followUpSteps(f);
+  const total = steps.length;
   /**
    * Finished, and no reminder could claim it. See the matching branch in
    * `followUpLabel`: the pill says "Finished later" and this is where the
@@ -874,9 +917,13 @@ function FollowUpDetail({ row, className }: { row: SubmissionRecord; className?:
       {hasNote && (
         <div className={cn("space-y-1.5 text-xs", steps.length > 0 && "mt-2.5 border-t pt-2.5")}>
           {f.stoppedReason && (
-            <p className="text-[var(--warning-soft-foreground)]">
-              {f.stoppedStatus === "failed" ? "Delivery failed" : "Sequence stopped"} —{" "}
-              {skipCopy(f.stoppedReason)}.
+            // Coming back is the outcome reminders are for, so it is not a warning.
+            <p className={f.stoppedReason === "resumed" ? "text-muted-foreground" : "text-[var(--warning-soft-foreground)]"}>
+              {f.stoppedStatus === "failed"
+                ? `Delivery failed: ${skipCopy(f.stoppedReason)}.`
+                : f.stoppedReason === "resumed"
+                  ? "They came back to the form, so the remaining reminders were cancelled."
+                  : `The rest were not sent: ${skipCopy(f.stoppedReason)}.`}
             </p>
           )}
           {/*
@@ -896,7 +943,7 @@ function FollowUpDetail({ row, className }: { row: SubmissionRecord; className?:
               {f.recoveredSentAt && f.recoveredAt && (
                 <p className="text-muted-foreground">
                   Sent {formatDateTime(f.recoveredSentAt)}, finished {formatDateTime(f.recoveredAt)}
-                  {" — "}
+                  {", "}
                   {gapLabel(f.recoveredSentAt, f.recoveredAt)} later, inside the 24-hour window a
                   reminder keeps the credit for.
                 </p>
@@ -904,7 +951,7 @@ function FollowUpDetail({ row, className }: { row: SubmissionRecord; className?:
               <p className="text-muted-foreground">
                 {f.recoveredClickedAt
                   ? `They opened the link in it ${formatRelative(f.recoveredClickedAt)}.`
-                  : "The link was never opened, so this is credited on timing alone — they came back within the window."}
+                  : "The link was never opened, so this is credited on timing alone: they came back within the window."}
               </p>
             </div>
           )}

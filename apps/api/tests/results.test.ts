@@ -90,6 +90,37 @@ interface ListBody {
 }
 
 describe("submissions list", () => {
+  it("lists every reminder step, including one cancelled because they came back", async () => {
+    const now = Date.now();
+    await env.DB.prepare(`DELETE FROM followups WHERE submission_id = 'sbm_done'`).run();
+    await env.DB.batch(
+      (
+        [
+          [1, "sent", null, now - 3_600_000],
+          [2, "cancelled", "resumed", null],
+        ] as const
+      ).map(([step, status, reason, sentAt]) =>
+        env.DB.prepare(
+          `INSERT INTO followups (id, submission_id, form_id, organization_id, channel, address,
+                                  address_source, step, status, reason, scheduled_at, sent_at, created_at)
+           VALUES (?, 'sbm_done', ?, ?, 'email', 'p@example.com', 'answer', ?, ?, ?, ?, ?, ?)`,
+        ).bind(`flw_steps_${step}`, t.formId, t.orgId, step, status, reason, now, sentAt, now),
+      ),
+    );
+    const res = await fetchApi(`/api/forms/${t.formId}/submissions?status=completed`, { headers: auth() });
+    const { submissions: rows } = await res.json<{
+      submissions: Array<{ id: string; followUp: { sent: number; steps: unknown; stoppedReason: string | null } | null }>;
+    }>();
+    const f = rows.find((r) => r.id === "sbm_done")?.followUp;
+    expect(f?.sent).toBe(1);
+    expect(f?.steps).toEqual([
+      { step: 1, status: "sent" },
+      { step: 2, status: "cancelled" },
+    ]);
+    expect(f?.stoppedReason).toBe("resumed");
+    await env.DB.prepare(`DELETE FROM followups WHERE id LIKE 'flw_steps_%'`).run();
+  });
+
   it("returns rows with their answers", async () => {
     const res = await fetchApi(`/api/forms/${t.formId}/submissions`, { headers: auth() });
     expect(res.status).toBe(200);
