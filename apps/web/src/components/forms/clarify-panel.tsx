@@ -33,7 +33,7 @@ export interface ClarifyQuestion {
   why: string;
   kind: "choice" | "text";
   options: string[];
-  /** A choice where several options can apply. Absent on older responses. */
+  /** Still sent by the generator; ignored here, since every choice is multi-select. */
   multiple?: boolean;
 }
 
@@ -57,8 +57,14 @@ export function ClarifyPanel({
   busy: boolean;
 }) {
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  // Picks for a multi-select choice, kept as a list and joined on submit.
+  // Picks for a choice, kept as a list and joined on submit. Every choice is
+  // multi-select: the generator's `multiple` flag guessed wrong too often
+  // ("which paths should branch?" came back pick-one), and an author who means
+  // one simply picks one.
   const [picks, setPicks] = useState<Record<number, string[]>>({});
+  // What the author typed beside the offered options. The options are a guess
+  // at the answer space; the author's own words are always allowed.
+  const [custom, setCustom] = useState<Record<number, string>>({});
   const firstBox = useRef<HTMLTextAreaElement>(null);
 
   // The first text answer takes focus, so a keyboard-first author can answer
@@ -75,7 +81,9 @@ export function ClarifyPanel({
       return { ...prev, [i]: had.includes(option) ? had.filter((o) => o !== option) : [...had, option] };
     });
   const answerFor = (q: ClarifyQuestion, i: number) =>
-    q.kind === "choice" && q.multiple ? (picks[i] ?? []).join(", ") : (answers[i] ?? "");
+    q.kind === "choice"
+      ? [...(picks[i] ?? []), (custom[i] ?? "").trim()].filter(Boolean).join(", ")
+      : (answers[i] ?? "");
   const answered = questions.filter((q, i) => answerFor(q, i).trim()).length;
 
   const submit = () => onSubmit(questions.map((q, i) => ({ question: q.question, answer: answerFor(q, i) })));
@@ -141,7 +149,7 @@ export function ClarifyPanel({
           >
             <div>
               <p className="text-foreground text-sm font-medium">{q.question}</p>
-              {q.kind === "choice" && q.multiple ? (
+              {q.kind === "choice" ? (
                 <p className="text-muted-foreground mt-0.5 text-xs">Pick any that apply.</p>
               ) : null}
               {q.why.trim() ? (
@@ -152,12 +160,12 @@ export function ClarifyPanel({
             {q.kind === "choice" ? (
               <div className="flex flex-wrap gap-2">
                 {q.options.map((option) => {
-                  const picked = q.multiple ? (picks[i] ?? []).includes(option) : answers[i] === option;
+                  const picked = (picks[i] ?? []).includes(option);
                   return (
                     <button
                       key={option}
                       type="button"
-                      onClick={() => (q.multiple ? toggle(i, option) : set(i, picked ? "" : option))}
+                      onClick={() => toggle(i, option)}
                       aria-pressed={picked}
                       className={cn(
                         "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
@@ -175,6 +183,28 @@ export function ClarifyPanel({
                     </button>
                   );
                 })}
+                {/* Always the last pill: a dashed outline reads as "yours to
+                    fill", and it is a real input, so one click is typing. */}
+                <input
+                  value={custom[i] ?? ""}
+                  onChange={(e) => setCustom((prev) => ({ ...prev, [i]: e.target.value }))}
+                  placeholder="Type your own…"
+                  aria-label={`Your own answer to: ${q.question}`}
+                  // A one-line box has no newline to protect, so Enter builds.
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey && !busy) {
+                      e.preventDefault();
+                      submit();
+                    }
+                  }}
+                  className={cn(
+                    "field-sizing-content min-w-36 max-w-full rounded-full border border-dashed bg-transparent px-3 py-1.5 text-sm transition-colors",
+                    "placeholder:text-muted-foreground text-foreground focus-visible:outline-none",
+                    (custom[i] ?? "").trim()
+                      ? "border-primary bg-primary/10"
+                      : "border-border hover:border-foreground/30 focus:border-foreground/40",
+                  )}
+                />
               </div>
             ) : (
               <Textarea
