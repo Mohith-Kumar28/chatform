@@ -30,6 +30,7 @@ import {
 import { logAiGeneration } from "../lib/ai-usage.js";
 import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL, CLARIFY_SYSTEM, withClarifications, type BuilderTurn } from "../lib/agent-prompts.js";
 import { draftToDoc, pruneOrphanEndings } from "../lib/draft-normalize.js";
+import { applySourceForm, applySourceFormToDoc, sourceFormPrompt, type SourceForm } from "../lib/form-import.js";
 import { withDefaultPaymentAccount } from "../lib/payments/default-account.js";
 import { applyEditDraft, introducedFlowProblems, describeEditChanges } from "../lib/edit-apply.js";
 import { buildEditContext, buildEditTools, type EditOutcome } from "../lib/edit-tools.js";
@@ -153,6 +154,8 @@ async function generateWithRetry(opts: {
   /** Undefined means "you decide" — see `GenerateBody`. */
   questionCount?: number;
   research: { brief: string; sources: string[] } | null;
+  /** A form read off a page the author linked, to be copied exactly. See `form-import.ts`. */
+  sourceForm?: SourceForm | null;
   /** Called for each question as it is drafted; enables the streaming path. */
   onBlock?: (b: { index: number; title: string; type: string }) => void;
   onRetry?: (reason: string) => void;
@@ -171,7 +174,8 @@ async function generateWithRetry(opts: {
   for (let attempt = 0; attempt < 2; attempt++) {
     const fixNote =
       attempt === 0 ? "" : `\n\nYour previous attempt had these problems — fix them:\n${lastError}`;
-    const prompt = buildFlowGeneratorPrompt(opts.prompt, opts.questionCount, opts.research) + fixNote;
+    const source = opts.sourceForm ? sourceFormPrompt(opts.sourceForm) : "";
+    const prompt = buildFlowGeneratorPrompt(opts.prompt, opts.questionCount, opts.research) + source + fixNote;
 
     let draft: GenerationDraft;
     try {
@@ -219,7 +223,14 @@ async function generateWithRetry(opts: {
 
     let normalized;
     try {
+      // A linked form's fields are overwritten with the source's own before
+      // anything is built from them, and named properly after.
+      if (opts.sourceForm) draft = applySourceForm(draft, opts.sourceForm);
       normalized = draftToDoc(draft);
+      if (opts.sourceForm) {
+        const doc = FormDoc.parse(applySourceFormToDoc(normalized.doc, opts.sourceForm));
+        normalized = { ...normalized, doc, issues: lintFormDoc(doc) };
+      }
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
       if (attempt === 1) throw new Error("The AI couldn't produce a usable form. Try rephrasing the request.");
@@ -302,6 +313,7 @@ export const generateFormHandler = async (c: AiCtx) => {
         prompt,
         questionCount,
         research: research.brief,
+        sourceForm: research.sourceForm,
       });
       // Consumed only now that a valid document exists. A generation that failed
       // upstream, or produced something unusable, must not spend the allowance.
@@ -449,15 +461,26 @@ async function researchFor(
   prompt: string,
   organizationId?: string | null,
   trace?: AiTrace,
-): Promise<{ brief: { brief: string; sources: string[] } | null; urls: string[]; tokens: number; usage: TokenUsage }> {
+): Promise<{
+  brief: { brief: string; sources: string[] } | null;
+  sourceForm: SourceForm | null;
+  urls: string[];
+  tokens: number;
+  usage: TokenUsage;
+}> {
   const none = NO_USAGE;
   const urls = extractUrls(prompt);
-  if (urls.length === 0) return { brief: null, urls, tokens: 0, usage: none };
+  if (urls.length === 0) return { brief: null, sourceForm: null, urls, tokens: 0, usage: none };
   const sites = await readSites(urls);
-  if (sites.length === 0) return { brief: null, urls, tokens: 0, usage: none };
+  if (sites.length === 0) return { brief: null, sourceForm: null, urls, tokens: 0, usage: none };
+  // A linked form is copied, not researched: a brief about "the product" is
+  // no use to a form whose questions are already written.
+  const sourceForm = sites.find((s) => s.form)?.form ?? null;
+  if (sourceForm) return { brief: null, sourceForm, urls, tokens: 0, usage: none };
   const brief = await researchBrief({ env, request: prompt, sites, organizationId, trace });
   return {
     brief: brief ? { brief: brief.brief, sources: brief.sources } : null,
+    sourceForm: null,
     urls,
     tokens: brief?.tokens ?? 0,
     usage: brief?.usage ?? none,
@@ -554,6 +577,7 @@ aiRouter.post(
         const startedAt = Date.now();
         const urls = extractUrls(prompt);
         let research: { brief: string; sources: string[] } | null = null;
+        let sourceForm: SourceForm | null = null;
         let researchTokens = 0;
         let researchUsage: TokenUsage = NO_USAGE;
 
@@ -562,7 +586,12 @@ aiRouter.post(
           const sites = await readSites(urls);
           await stage("reading", sites.length > 0 ? "done" : "skip");
 
-          if (sites.length > 0) {
+          sourceForm = sites.find((s) => s.form)?.form ?? null;
+          if (sourceForm) {
+            // Copied, not researched; see `researchFor`.
+            await send("sources", { pages: sites.map((s) => ({ url: s.url, title: s.title })) });
+            await stage("researching", "skip");
+          } else if (sites.length > 0) {
             await send("sources", { pages: sites.map((s) => ({ url: s.url, title: s.title })) });
             await stage("researching", "start");
             const brief = await researchBrief({ env: c.env, request: prompt, sites, organizationId: orgId, trace });
@@ -593,6 +622,7 @@ aiRouter.post(
           prompt,
           questionCount,
           research,
+          sourceForm,
           onBlock: (b) => {
             // Fire-and-forget: the model is not waiting on the socket, and an
             // author who closed the tab must not stall the generation.

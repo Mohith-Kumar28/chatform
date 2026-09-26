@@ -1,5 +1,6 @@
 import { embedFromUrl } from "@repo/form-schema";
 import { guardedFetch, isBlockedHost, readTruncatedText } from "@repo/guard";
+import { extractSourceForm, type SourceForm } from "./form-import.js";
 /**
  * Reading the web before drafting a form.
  *
@@ -15,8 +16,12 @@ import { guardedFetch, isBlockedHost, readTruncatedText } from "@repo/guard";
 
 /** How long a single page fetch may take before it is abandoned. */
 const FETCH_TIMEOUT_MS = 6000;
-/** Bytes read off the wire before the rest of the body is dropped. */
-const MAX_BYTES = 512 * 1024;
+/**
+ * Bytes read off the wire before the rest of the body is dropped. A Google
+ * Form keeps its questions in a script at the very end of a 120-200 KB page,
+ * so this has room for the long ones.
+ */
+const MAX_BYTES = 1024 * 1024;
 /** Characters of page text passed on to the model. */
 const MAX_TEXT_CHARS = 6000;
 /** Pages read per generation. Two is enough for "the site and its pricing page". */
@@ -28,6 +33,8 @@ export interface SiteReading {
   title: string | null;
   /** Tags stripped, whitespace collapsed, truncated. */
   text: string;
+  /** The form on the page, read exactly, when there is one. See `form-import.ts`. */
+  form: SourceForm | null;
 }
 
 /**
@@ -94,7 +101,7 @@ function extractTitle(html: string): string | null {
   return title || null;
 }
 
-function decodeEntities(s: string): string {
+export function decodeEntities(s: string): string {
   return s
     .replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (whole, ent: string) => {
       if (ent.startsWith("#x") || ent.startsWith("#X")) {
@@ -165,10 +172,11 @@ export async function fetchSiteText(url: string): Promise<SiteReading | null> {
     // but its first half is still worth reading.
     const html = await readTruncatedText(response, MAX_BYTES);
     const text = htmlToText(html);
+    const form = extractSourceForm(html, url);
     // A client-rendered shell yields a nav bar and nothing else. Below this it
-    // is noise that would only mislead the generator.
-    if (text.length < 200) return null;
-    return { url, title: extractTitle(html), text };
+    // is noise that would only mislead the generator, unless there is a form.
+    if (text.length < 200 && !form) return null;
+    return { url, title: extractTitle(html), text, form };
   } catch {
     return null;
   }
