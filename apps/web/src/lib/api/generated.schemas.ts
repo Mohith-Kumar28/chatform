@@ -2267,6 +2267,11 @@ export type PutApiFormsByIdDocBody = {
      * @maximum 9007199254740991
      */
   baseRevision?: number;
+  /**
+     * @maxItems 40
+     * @items.maxLength 100
+     */
+  appliedAiTurns?: string[];
   theme?: unknown;
   settings?: unknown;
 };

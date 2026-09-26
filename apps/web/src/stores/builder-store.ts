@@ -86,6 +86,8 @@ export interface BuilderState {
   designOpen: boolean;
   /** A Design sheet field to scroll to and shake once the sheet is open, e.g. `brand`. */
   designReveal: string | null;
+  /** AI bar proposals applied since the last save; the next autosave stores them as applied. */
+  appliedAiTurns: string[];
   /**
    * The keyboard shortcut registry, published by the shell that owns it.
    *
@@ -171,6 +173,7 @@ export interface BuilderState {
   openPicker: (index?: number) => void;
   closePicker: () => void;
   setDesignOpen: (open: boolean, reveal?: string) => void;
+  markAiTurnApplied: (id: string) => void;
 
   // ── block operations ──
   /**
@@ -234,6 +237,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   pickerIndex: null,
   designOpen: false,
   designReveal: null,
+  appliedAiTurns: [],
   shortcuts: [],
   publishForm: null,
   publishing: false,
@@ -266,6 +270,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       selectedEndingRef: null,
       pickerIndex: null,
       designOpen: false,
+      appliedAiTurns: [],
     }),
 
   edit: (recipe, coalesceKey) =>
@@ -417,6 +422,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   openPicker: (index) =>
     set((s) => ({ pickerIndex: index ?? s.doc?.blocks.length ?? 0, designOpen: false })),
   closePicker: () => set({ pickerIndex: null }),
+  markAiTurnApplied: (id) => set((s) => ({ appliedAiTurns: [...s.appliedAiTurns, id] })),
   setDesignOpen: (open, reveal) => set({ designOpen: open, designReveal: open ? (reveal ?? null) : null }),
 
   setShortcuts: (shortcuts) => set({ shortcuts }),

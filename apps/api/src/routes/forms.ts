@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../lib/validator.js";
 import { withOwnerNotification } from "../lib/owner-notification.js";
+import { markAiTurnsApplied } from "../lib/ai-thread.js";
 import { z } from "zod";
 import { DEFAULT_REDIRECT_DELAY_SEC, FormDoc, ThemeDoc, lintFormDoc, hasErrors, migrateFormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
@@ -236,6 +237,11 @@ const UpdateDocBody = z.object({
    * a stale tab can live, instead of a deploy that 409s everyone at once.
    */
   baseRevision: z.number().int().nonnegative().optional(),
+  /**
+   * AI bar proposals this save applied. Carried on the save that applying
+   * causes anyway, so marking them costs no request of its own.
+   */
+  appliedAiTurns: z.array(z.string().max(100)).max(40).optional(),
   theme: z.unknown().optional(),
   settings: z.unknown().optional(),
 });
@@ -597,6 +603,8 @@ formsRouter.put(
         actor: { type: "user", id: c.get("userId") ?? null },
         source: "builder",
       }).catch((err) => console.error("form_activity_failed", err)),);
+
+    if (body.appliedAiTurns?.length) await markAiTurnsApplied(c.env.DB, id, body.appliedAiTurns);
 
     // The revision this save produced. The editor holds it and states it on the
     // next one, which is what makes the next conflict detectable.

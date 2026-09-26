@@ -36,6 +36,7 @@ import { buildEditContext, buildEditTools, type EditOutcome } from "../lib/edit-
 import { extractUrls, readSites } from "../lib/research.js";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
 import { enqueueMail } from "../lib/mail.js";
+import { appendAiTurns, proposalTurn, seedAiThread, turnId, type StoredTurn } from "../lib/ai-thread.js";
 import { withOwnerNotification } from "../lib/owner-notification.js";
 
 export const aiRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
@@ -617,6 +618,8 @@ aiRouter.post(
           .bind(id, ws.orgId, ws.wsId, userId, title, formSlug(title), JSON.stringify(await withOwnerNotification(c.env.DB, userId, doc)), crypto.randomUUID().slice(0, 16), now, now)
           .run();
         await enqueueMail(c.env, { kind: "admin_new_form", formId: id, source: "ai" });
+        // The brief opens the builder's AI thread, so follow-ups amend it.
+        await seedAiThread(c.env.DB, id, rawPrompt, { title, questions, rules });
         await stage("saving", "done");
 
         // Metered after the form exists, for the same reason as the JSON route:
@@ -750,7 +753,12 @@ type EditDraftOut = Awaited<ReturnType<typeof generateEdit>>["draft"];
 type EditStage = "reading" | "editing" | "checking" | "repairing";
 
 /** One edit's outcome, before it is either serialised or streamed. */
-type EditOutcomeResult = { status: 200 | 403 | 404 | 422 | 502 | 503; body: Record<string, unknown> };
+type EditOutcomeResult = {
+  status: 200 | 403 | 404 | 422 | 502 | 503;
+  body: Record<string, unknown>;
+  /** The form as it stood, for describing a proposal against. Set on a proposal only. */
+  base?: FormDoc;
+};
 
 /**
  * The whole edit, with its progress reported rather than hidden.
@@ -1158,7 +1166,7 @@ Answer the same request again, addressing that.`,
     // answered it — a kept fallback is logged as the fallback, and the reviewer
     // is logged on its own tier rather than as whichever vendor drafted.
     await flushBilled(Date.now() - editStarted);
-    return { status: 200, body: {
+    return { status: 200, base, body: {
       doc: finalDoc,
       added: added.length,
       addedRefs: added.map((b) => b.ref),
@@ -1242,11 +1250,27 @@ aiRouter.post(
       try {
         // Stages are fired and not awaited: the edit is the thing being waited
         // on, and a slow socket must not pace the model.
-        const { status, body } = await runEdit(c, (stage) => void send("stage", { id: stage }));
-        if (status === 200) await send("done", body);
-        else {
+        const { status, body, base } = await runEdit(c, (stage) => void send("stage", { id: stage }));
+        // The server writes the conversation itself, in this request: the
+        // prompt and the reply both pass through here. The ids go back on the
+        // event so the builder's copy and the stored one agree.
+        const { formId, prompt } = validBody<z.infer<typeof EditFormBody>>(c);
+        const asked: StoredTurn = { id: turnId(), role: "user", text: prompt };
+        if (status === 200) {
+          const b = body as { question?: string; doc?: unknown; summary?: string; updatedRefs?: string[]; removedRefs?: string[]; rules?: number; rewired?: number };
+          const proposed = base && !b.question ? FormDoc.safeParse(b.doc) : null;
+          const reply: StoredTurn = proposed?.success
+            ? proposalTurn(base!, proposed.data, b)
+            : { id: turnId(), role: "assistant", text: b.question ?? b.summary ?? "Done." };
+          await send("done", { ...body, turns: [asked, reply] });
+          await appendAiTurns(c.env.DB, formId, [asked, reply]);
+        } else {
           const error = (body as { error?: { message?: string; code?: string } }).error;
-          await send("error", { message: error?.message ?? "That edit didn't work.", code: error?.code });
+          const message = error?.message ?? "That edit didn't work.";
+          const reply: StoredTurn = { id: turnId(), role: "assistant", text: message };
+          await send("error", { message, code: error?.code, turns: [asked, reply] });
+          // Only once the form was reachable and editable: a refusal is not part of its thread.
+          if (status === 422 || status === 502) await appendAiTurns(c.env.DB, formId, [asked, reply]);
         }
       } catch (err) {
         console.error("edit_stream_failed", { message: err instanceof Error ? err.message : String(err) });

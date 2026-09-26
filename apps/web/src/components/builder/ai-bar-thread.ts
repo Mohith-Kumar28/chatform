@@ -47,12 +47,13 @@ const historyKey = (formId: string) => `chatform:aibar:${formId}`;
 const MAX_TURNS = 40;
 
 /**
- * Load the thread from the server.
+ * Load the thread. The server writes it as the conversation happens (see
+ * `apps/api/src/lib/ai-thread.ts`); the builder only reads it.
  *
- * It lived only in this browser's storage, so a teammate, or a support admin
- * acting as the author, opened the bar to nothing. The server holds it now.
- * A thread still sitting in this browser from before is carried up the first
- * time the form is opened here, then the local copy is dropped.
+ * TEMPORARY: threads from before that lived in this browser's storage only.
+ * One still here is carried up the first time its form is opened, then the
+ * local copy is dropped. Remove this, `readLocal`, `clearLocal` and
+ * `PUT /api/forms/{id}/ai-thread` once those have drained.
  */
 export async function loadHistory(formId: string): Promise<Turn[]> {
   const remote = apiData<{ turns?: Turn[] }>(await getApiFormsByIdAiThread(formId)).turns ?? [];
@@ -62,18 +63,11 @@ export async function loadHistory(formId: string): Promise<Turn[]> {
   }
   const local = readLocal(formId);
   if (local.length > 0) {
-    await saveHistory(formId, local);
+    // Saved copies never held a proposal's document, so they go up as they are.
+    await putApiFormsByIdAiThread(formId, { turns: local.slice(-MAX_TURNS) as never });
     clearLocal(formId);
   }
   return local;
-}
-
-/** Proposed docs are large and only useful while the offer is live, so the saved copy drops them. */
-export async function saveHistory(formId: string, turns: Turn[]): Promise<void> {
-  const slim = turns
-    .slice(-MAX_TURNS)
-    .map(({ doc, ...rest }) => (doc ? { ...rest, applied: rest.applied ?? false, stale: true } : rest));
-  await putApiFormsByIdAiThread(formId, { turns: slim as never });
 }
 
 function readLocal(formId: string): Turn[] {
@@ -91,45 +85,5 @@ function clearLocal(formId: string) {
     localStorage.removeItem(historyKey(formId));
   } catch {
     /* nothing to clear */
-  }
-}
-
-/**
- * Seed the thread with the prompt the form was born from.
- *
- * A form generated from a prompt arrived in the builder with an empty AI bar, so
- * the one message that explains every question on the canvas — the brief — was
- * the only message not in the conversation about it. Follow-ups then landed with
- * no idea what they were amending. Written straight to storage from the create
- * dialog because the bar is not mounted yet when the form is made; it is picked
- * up on the builder's first load like any other stored thread.
- *
- * Never overwrites: a form whose thread already exists has been talked to.
- */
-export function seedAiBarThread(
-  formId: string,
-  prompt: string,
-  built: { title: string; questions: number; rules: number },
-): void {
-  try {
-    if (localStorage.getItem(historyKey(formId))) return;
-    const parts = [`${built.questions} question${built.questions === 1 ? "" : "s"}`];
-    if (built.rules) parts.push(`${built.rules} branching rule${built.rules === 1 ? "" : "s"}`);
-    const seeded: Turn[] = [
-      { id: crypto.randomUUID(), role: "user", text: prompt },
-      {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        // No `doc` and no `blocks`: this is not an offer to apply, it is what
-        // already happened. The questions are on the canvas behind the bar.
-        text: `Built “${built.title}” — ${parts.join(", ")}.`,
-      },
-    ];
-    // Local first, so the builder has it even if this request is still in
-    // flight when it loads; `loadHistory` carries it up if this one fails.
-    localStorage.setItem(historyKey(formId), JSON.stringify(seeded));
-    void saveHistory(formId, seeded).catch(() => {});
-  } catch {
-    // A blocked store costs the transcript, not the form.
   }
 }

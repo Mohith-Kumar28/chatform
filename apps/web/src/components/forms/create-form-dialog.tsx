@@ -30,7 +30,6 @@ import { invalidateForms } from "@/lib/query-keys";
 import { filterTemplates, templateCategories, useTemplates } from "@/lib/templates";
 import { cn } from "@/lib/utils";
 import { PromptTips } from "@/components/forms/prompt-tips";
-import { seedAiBarThread } from "@/components/builder/ai-bar-thread";
 import {
   AddKnowledgeButton,
   StagedKnowledgeDialog,
@@ -188,14 +187,8 @@ export function CreateFormDialog({
       { prompt: brief, workspaceId: ws, clarifications: clarifications.filter((a) => a.answer.trim()) },
       (result) => {
         void invalidateForms(queryClient);
-        // The brief starts the builder's AI thread, so the first message about
-        // this form is the one that made it — and every follow-up amends it
-        // instead of arriving out of nowhere.
-        seedAiBarThread(result.formId, brief, {
-          title: result.title,
-          questions: result.questions,
-          rules: result.rules,
-        });
+        // The builder's AI thread already opens with this brief: the server
+        // wrote it when it saved the form.
         // Fire-and-forget: ingestion is asynchronous anyway, and the Knowledge
         // tab is where its progress and any failure belong. Blocking the route
         // change on an upload would make creating a form feel slower than it is.

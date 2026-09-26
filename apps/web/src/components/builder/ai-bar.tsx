@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { useBuilderStore } from "@/stores/builder-store";
 import { blockMeta, TONE_CLASSES } from "./block-library";
-import { loadHistory, saveHistory, type Turn } from "./ai-bar-thread";
+import { loadHistory, type Turn } from "./ai-bar-thread";
 import { KEY } from "./use-builder-shortcuts";
 import { useDictation } from "@/hooks/use-dictation";
 import { cn } from "@/lib/utils";
@@ -68,9 +68,7 @@ export function AiBar() {
    */
   const [stage, setStage] = useState<EditStage | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [hydrated, setHydrated] = useState(false);
-  /** The thread as loaded, so the first settle after a load is not saved back. */
-  const loadedTurns = useRef<Turn[] | null>(null);
+  const markAiTurnApplied = useBuilderStore((s) => s.markAiTurnApplied);
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
@@ -116,32 +114,14 @@ export function AiBar() {
   useEffect(() => {
     if (!formId) return;
     let live = true;
-    setHydrated(false);
-    loadedTurns.current = null;
     loadHistory(formId)
       .then((t) => live && setTurns(t))
-      .catch(() => live && setTurns([]))
-      .finally(() => live && setHydrated(true));
+      .catch(() => live && setTurns([]));
     return () => {
       live = false;
     };
   }, [formId]);
 
-  // Saved once the thread settles, not per streamed change. Nothing is saved
-  // until the load has answered, so an empty first render never overwrites it.
-  useEffect(() => {
-    if (!formId || !hydrated) return;
-    if (loadedTurns.current === null) {
-      loadedTurns.current = turns;
-      return;
-    }
-    if (turns === loadedTurns.current) return;
-    const t = setTimeout(() => {
-      // A viewer's save is refused; their bar still works for the session.
-      void saveHistory(formId, turns).catch(() => {});
-    }, 800);
-    return () => clearTimeout(t);
-  }, [formId, turns, hydrated]);
 
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" });
@@ -174,7 +154,12 @@ export function AiBar() {
     dictation.stop();
     setPrompt("");
     setBusy(true);
-    setTurns((t) => [...t, { id: crypto.randomUUID(), role: "user", text }]);
+    // Shown at once under a local id; the server's copy replaces it when the
+    // reply lands, so the ids on screen are the stored ones.
+    const pendingId = crypto.randomUUID();
+    setTurns((t) => [...t, { id: pendingId, role: "user", text }]);
+    const settle = (stored: Turn[] | undefined, reply: Turn) =>
+      setTurns((t) => [...t.filter((x) => x.id !== pendingId), stored?.[0] ?? { id: pendingId, role: "user", text }, reply]);
 
     /**
      * The thread goes with the request.
@@ -199,6 +184,8 @@ export function AiBar() {
       question?: string;
       /** Set when a review flagged the proposal and could not fix it. */
       reviewNote?: string | null;
+      /** What the server stored for this exchange: the prompt, then the reply. */
+      turns?: Turn[];
     };
 
     try {
@@ -212,17 +199,21 @@ export function AiBar() {
        * still arrives whole, at the end, exactly as it did over JSON.
        */
       let res: EditResult | null = null;
-      let failure: { message: string } | null = null;
+      let failure: { message: string; turns?: Turn[] } | null = null;
       await streamEvents("/api/ai/edit-form/stream", {
         body: { formId, prompt: text, history },
         onEvent: ({ event, data }: SseEvent) => {
           if (event === "stage") setStage((data as { id: EditStage }).id);
           else if (event === "done") res = data as EditResult;
-          else if (event === "error") failure = data as { message: string };
+          else if (event === "error") failure = data as { message: string; turns?: Turn[] };
         },
       });
       setStage(null);
-      if (failure) throw new Error((failure as { message: string }).message);
+      if (failure) {
+        const f = failure as { message: string; turns?: Turn[] };
+        settle(f.turns, f.turns?.[1] ?? { id: crypto.randomUUID(), role: "assistant", text: f.message });
+        return;
+      }
       if (!res) throw new Error("That edit didn't finish. Try again.");
 
       /**
@@ -236,7 +227,7 @@ export function AiBar() {
        */
       const result: EditResult = res;
       if (result.question) {
-        setTurns((t) => [...t, { id: crypto.randomUUID(), role: "assistant", text: result.question! }]);
+        settle(result.turns, result.turns?.[1] ?? { id: crypto.randomUUID(), role: "assistant", text: result.question });
         return;
       }
 
@@ -268,21 +259,27 @@ export function AiBar() {
        * now refuses genuinely empty edits with a 422, so anything that arrives
        * here changed something worth describing.
        */
-      setTurns((t) => [
-        ...t,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          text: result.summary?.trim() || describeEdit(added.length, updated.length, removed.length, rules),
-          blocks: added,
-          removed,
-          updated,
-          rules,
-          rewired: result.rewired ?? 0,
-          orphaned,
-          doc: proposed.data,
-        },
-      ]);
+      // The server's reply, which is what was stored, with the proposal the
+      // browser holds attached so it can be applied. The local description is
+      // only for a reply that came back without one.
+      const stored = result.turns?.[1];
+      settle(
+        result.turns,
+        stored
+          ? { ...stored, doc: proposed.data }
+          : {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              text: result.summary?.trim() || describeEdit(added.length, updated.length, removed.length, rules),
+              blocks: added,
+              removed,
+              updated,
+              rules,
+              rewired: result.rewired ?? 0,
+              orphaned,
+              doc: proposed.data,
+            },
+      );
     } catch (err) {
       setTurns((t) => [
         ...t,
@@ -317,6 +314,8 @@ export function AiBar() {
     });
     if (added[0]) select(added[0].ref);
     setTurns((t) => t.map((x) => (x.id === turn.id ? { ...x, applied: true } : x)));
+    // Stored as applied on the autosave this edit triggers, not by a call of its own.
+    markAiTurnApplied(turn.id);
 
     const rules = turn.rules ?? 0;
     const removed = turn.removed?.length ?? 0;

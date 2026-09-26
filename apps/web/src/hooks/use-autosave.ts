@@ -188,11 +188,19 @@ export function useAutosave(formId: string, opts: { enabled?: boolean } = {}) {
       inFlight.current = true;
       markSaving();
       try {
-        const revision = useBuilderStore.getState().revision;
+        const { revision, appliedAiTurns } = useBuilderStore.getState();
         const result = (await mutateAsync({
           id: formId as never,
-          data: { doc: next, ...(revision === null ? {} : { baseRevision: revision }) } as never,
+          data: {
+            doc: next,
+            ...(revision === null ? {} : { baseRevision: revision }),
+            ...(appliedAiTurns.length ? { appliedAiTurns } : {}),
+          } as never,
         })) as { revision?: number } | undefined;
+        // Stored with this save; later ones must not send them again.
+        if (appliedAiTurns.length) {
+          useBuilderStore.setState((s) => ({ appliedAiTurns: s.appliedAiTurns.filter((id) => !appliedAiTurns.includes(id)) }));
+        }
 
         lastSentJson.current = body;
         dirtySince.current = null;
