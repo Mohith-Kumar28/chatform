@@ -10,7 +10,8 @@ import {
   backfillPlatformDaily,
   utcDay,
 } from "../src/lib/platform-rollup.js";
-import { IMPERSONATION_HEADER } from "../src/lib/impersonation.js";
+import { actingAdmin, IMPERSONATION_HEADER } from "../src/lib/impersonation.js";
+import { audit } from "../src/lib/gate-log.js";
 import { NO_MAIL, recordMailDelivery } from "../src/lib/mail.js";
 import { getEntitlements } from "../src/lib/entitlements.js";
 import { PLANS, effectivePlan } from "@repo/entitlements";
@@ -994,6 +995,24 @@ describe("impersonation", () => {
     expect(orgs.map((o) => o.id)).not.toContain(admin.orgId);
   });
 
+  /**
+   * A stopped or expired impersonation must read as signed out, not as the
+   * admin whose cookies the browser also sent, or the tab turns into the
+   * admin's account under the customer's banner.
+   */
+  it("answers no session for a dead token, even with the admin's cookie", async () => {
+    const { body } = await mint(customer.userId);
+    await fetchApi("/api/admin/impersonate/stop", {
+      method: "POST",
+      headers: { cookie: admin.cookie, "content-type": "application/json" },
+      body: JSON.stringify({ token: body!.token! }),
+    });
+    const res = await fetchApi("/api/auth/get-session", {
+      headers: { cookie: admin.cookie, [IMPERSONATION_HEADER]: body!.token! },
+    });
+    expect(await res.json()).toBeNull();
+  });
+
   it("refuses account-level changes while acting as someone", async () => {
     const { body } = await mint(customer.userId);
     const res = await fetchApi("/api/auth/revoke-other-sessions", {
@@ -1023,6 +1042,61 @@ describe("impersonation", () => {
     expect(res.status).toBe(200);
     const after = await fetchApi("/api/forms", { headers: { [IMPERSONATION_HEADER]: body!.token! } });
     expect(after.status).toBe(401);
+  });
+
+  /**
+   * The banner promises it: what an admin does while acting as someone is
+   * recorded as the admin's, in the activity log and in the form's history.
+   */
+  it("attributes work to the admin, not the customer", async () => {
+    const { body } = await mint(customer.userId);
+    const h = { "content-type": "application/json", [IMPERSONATION_HEADER]: body!.token! };
+
+    const form = (await (
+      await fetchApi("/api/forms", { method: "POST", headers: h, body: JSON.stringify({ title: "Support made this" }) })
+    ).json()) as { id: string };
+    const history = await DB()
+      .DB.prepare(`SELECT actor_id, actor_label FROM form_activity WHERE form_id = ? AND kind = 'created'`)
+      .bind(form.id)
+      .first<{ actor_id: string; actor_label: string }>();
+    expect(history?.actor_id).toBe(admin.userId);
+    expect(history?.actor_label).toBe("chatform support");
+
+    await actingAdmin.run({ adminId: admin.userId, adminEmail: "founder@example.com", userId: customer.userId }, () =>
+      audit(DB(), { orgId: customer.orgId, action: "test.acted", actorType: "user", actorId: customer.userId }),
+    );
+    const row = await DB()
+      .DB.prepare(
+        `SELECT actor_type, actor_id, actor_label, meta FROM audit_logs
+          WHERE organization_id = ? AND action = 'test.acted' ORDER BY created_at DESC LIMIT 1`,
+      )
+      .bind(customer.orgId)
+      .first<{ actor_type: string; actor_id: string; actor_label: string; meta: string }>();
+    expect(row?.actor_type).toBe("platform_admin");
+    expect(row?.actor_id).toBe(admin.userId);
+    expect(row?.actor_label).toBe("founder@example.com");
+    expect(JSON.parse(row!.meta).actingAs).toBe(customer.userId);
+  });
+
+  it("refuses to mint API keys while acting as someone", async () => {
+    const { body } = await mint(customer.userId);
+    const res = await fetchApi("/api/keys", {
+      method: "POST",
+      headers: { "content-type": "application/json", [IMPERSONATION_HEADER]: body!.token! },
+      body: JSON.stringify({ name: "sneaky" }),
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("impersonation_forbidden");
+  });
+
+  it("refuses linking a social login to their account", async () => {
+    const { body } = await mint(customer.userId);
+    const res = await fetchApi("/api/auth/link-social", {
+      method: "POST",
+      headers: { "content-type": "application/json", [IMPERSONATION_HEADER]: body!.token! },
+      body: JSON.stringify({ provider: "google" }),
+    });
+    expect(res.status).toBe(403);
   });
 
   it("does not count as the customer being seen", async () => {

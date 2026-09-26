@@ -14,6 +14,7 @@
 
 import type { GateError } from "@repo/entitlements";
 import type { Bindings } from "../env.js";
+import { actingAdmin } from "./impersonation.js";
 
 /**
  * Record a denial.
@@ -68,7 +69,7 @@ export async function markConverted(env: Bindings, orgId: string): Promise<void>
 export interface AuditEntry {
   orgId: string;
   action: string;
-  actorType?: "user" | "system" | "api_key" | "webhook";
+  actorType?: "user" | "system" | "api_key" | "webhook" | "platform_admin";
   actorId?: string | null;
   actorLabel?: string | null;
   resourceType?: string | null;
@@ -76,8 +77,23 @@ export interface AuditEntry {
   meta?: Record<string, unknown>;
 }
 
-/** Append to the audit trail. Also the read source for the Business activity log. */
+/**
+ * Append to the audit trail. Also the read source for the Business activity log.
+ *
+ * A row a person wrote while a platform admin was acting as them names the
+ * admin, not them: the customer's log must never show work they did not do.
+ */
 export async function audit(env: Bindings, entry: AuditEntry): Promise<void> {
+  const acting = actingAdmin.getStore();
+  if (acting && (entry.actorType ?? "system") === "user") {
+    entry = {
+      ...entry,
+      actorType: "platform_admin",
+      actorId: acting.adminId,
+      actorLabel: acting.adminEmail,
+      meta: { ...entry.meta, actingAs: acting.userId },
+    };
+  }
   await env.DB.prepare(
     `INSERT INTO audit_logs (id, organization_id, actor_type, actor_id, actor_label, action, resource_type, resource_id, meta, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

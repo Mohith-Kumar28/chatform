@@ -13,7 +13,7 @@ import {
 import type { KeyType } from "./apikey-config.js";
 import { LEGACY_SCOPES, type Scopes } from "./scopes.js";
 import { respondentToken } from "../routes/helpers.js";
-import { IMPERSONATION_HEADER, resolveImpersonation } from "./impersonation.js";
+import { actingAdmin, IMPERSONATION_HEADER, resolveImpersonation } from "./impersonation.js";
 import { canOpenWorkspace } from "./workspace-access.js";
 
 /**
@@ -104,7 +104,7 @@ export const requireSession: MiddlewareHandler<{ Bindings: Bindings; Variables: 
         .first<{ ok: number }>();
       if (member) c.set("orgId", acting.orgId);
     }
-    await next();
+    await actingAdmin.run({ adminId: acting.adminId, adminEmail: acting.adminEmail, userId: acting.userId }, next);
     return;
   }
 

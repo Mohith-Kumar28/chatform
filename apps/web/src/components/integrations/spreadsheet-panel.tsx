@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { LockChip } from "@/components/billing/gate";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { API_ORIGIN, customFetch } from "@/lib/api/mutator";
+import { apiDownloadClick } from "@/lib/api/download";
 
 /**
  * Spreadsheets.
@@ -82,13 +83,13 @@ export function SpreadsheetPanel({ formId }: { formId: string }) {
         <div className="flex flex-wrap gap-2">
           {/* Through the browser so the session cookie rides along. */}
           <Button variant="outline" size="sm" shape="pill" asChild>
-            <a href={`${exportBase}.xlsx`} download>
+            <a href={`${exportBase}.xlsx`} download onClick={apiDownloadClick(`${exportBase}.xlsx`)}>
               <FileSpreadsheet className="size-3.5" />
               Excel workbook
             </a>
           </Button>
           <Button variant="outline" size="sm" shape="pill" asChild>
-            <a href={exportBase} download>
+            <a href={exportBase} download onClick={apiDownloadClick(exportBase)}>
               <Download className="size-3.5" />
               CSV
             </a>

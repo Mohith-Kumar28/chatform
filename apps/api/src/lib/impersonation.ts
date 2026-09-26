@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { serializeSignedCookie } from "better-call";
@@ -42,6 +43,15 @@ export const IMPERSONATION_TTL_MS = 60 * 60 * 1000;
 export const IMPERSONATION_HEADER = "x-chatform-impersonate";
 
 /**
+ * Who is really at the keyboard, for the rest of this request.
+ *
+ * Set by `requireSession` around the handler, and read by `audit()`, so every
+ * activity-log row written while acting as someone names the admin without
+ * each of the routes that write one having to remember to ask.
+ */
+export const actingAdmin = new AsyncLocalStorage<{ adminId: string; adminEmail: string; userId: string }>();
+
+/**
  * Better Auth endpoints an admin may not reach while acting as someone.
  *
  * Each of these changes who controls the account, or who else is in the
@@ -55,7 +65,8 @@ const REFUSED_PATHS = [
   /^\/delete-user/,
   /^\/revoke-/,
   /^\/sign-out/,
-  /^\/organization\/(invite-member|delete|leave|remove-member|update-member-role)/,
+  /^\/(link-social|unlink-account)/,
+  /^\/organization\/(invite-member|delete|leave|remove-member|update-member-role|accept-invitation|reject-invitation)/,
   /^\/api-key\//,
 ];
 
@@ -195,7 +206,12 @@ export function impersonationPlugin(env: Bindings): BetterAuthPlugin {
               throw new APIError("FORBIDDEN", { message: "Not available while acting as a customer." });
             }
             const headers = new Headers(existing ?? undefined);
-            headers.delete("cookie");
+            /*
+              Set, never deleted: Better Auth merges the headers a hook returns
+              into the request's, so a removed cookie header comes back as the
+              admin's own. An empty one replaces it.
+            */
+            headers.set("cookie", "");
             if (await resolveImpersonation(env, token)) {
               const cookies = c.context.authCookies;
               const session = await serializeSignedCookie(cookies.sessionToken.name, token, c.context.secret);

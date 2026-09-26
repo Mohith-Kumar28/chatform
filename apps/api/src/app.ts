@@ -135,7 +135,9 @@ export function createApp() {
     cors({
       origin: (origin) => origin ?? "*",
       allowHeaders: ["content-type", "x-respondent-token"],
-      exposeHeaders: ["retry-after"],
+      // `content-disposition` so an export fetched as a blob (while acting as a
+      // customer, see the web's `lib/api/download.ts`) keeps its real filename.
+      exposeHeaders: ["retry-after", "content-disposition"],
       maxAge: 86400,
     }),
   );
@@ -206,7 +208,9 @@ export function createApp() {
        */
       allowHeaders: ["content-type", "authorization", "x-chatform-impersonate", "x-chatform-client"],
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      exposeHeaders: ["retry-after"],
+      // `content-disposition` so an export fetched as a blob (while acting as a
+      // customer, see the web's `lib/api/download.ts`) keeps its real filename.
+      exposeHeaders: ["retry-after", "content-disposition"],
       credentials: true,
       maxAge: 86400,
     }),

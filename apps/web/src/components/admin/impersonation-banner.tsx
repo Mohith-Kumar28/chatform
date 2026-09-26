@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Eye, X } from "lucide-react";
-import { readImpersonation, stopImpersonation, type Impersonation } from "@/lib/impersonation";
+import { impersonationLapsed, readImpersonation, stopImpersonation, type Impersonation } from "@/lib/impersonation";
 
 /**
  * The bar that says you are not yourself.
@@ -81,9 +81,25 @@ function useMinutesLeft(expiresAt: number | undefined): number {
   return minutes;
 }
 
+/**
+ * End the tab when the hour runs out, rather than letting it fall back to the
+ * admin's own session under the customer's URL.
+ */
+function useEndWhenLapsed(): void {
+  useEffect(() => {
+    const check = () => {
+      if (impersonationLapsed()) void stopImpersonation();
+    };
+    check();
+    const timer = setInterval(check, 5_000);
+    return () => clearInterval(timer);
+  }, []);
+}
+
 export function ImpersonationBanner() {
   const acting = useImpersonation();
   const minutesLeft = useMinutesLeft(acting?.expiresAt);
+  useEndWhenLapsed();
 
   if (!acting) return null;
 

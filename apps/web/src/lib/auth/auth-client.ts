@@ -3,7 +3,7 @@
 import { createAuthClient } from "better-auth/react";
 import { emailOTPClient, organizationClient } from "better-auth/client/plugins";
 import { clientContextHeader } from "./client-context";
-import { readImpersonation } from "@/lib/impersonation";
+import { readImpersonation, stopImpersonation } from "@/lib/impersonation";
 
 export const API_ORIGIN =
   process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.in";
@@ -25,6 +25,20 @@ export const authClient = createAuthClient({
         if (header) context.headers.set("x-chatform-client", header);
       }
       return context;
+    },
+    /**
+     * The server ended this impersonation (Stop from another tab, the hour, or
+     * the admin leaving the allowlist): the customer's session reads as none.
+     * End the tab instead of letting it bounce to the sign-in page.
+     */
+    onSuccess: (context) => {
+      if (
+        context.data === null &&
+        /\/get-session/.test(String(context.request.url)) &&
+        readImpersonation()
+      ) {
+        void stopImpersonation();
+      }
     },
   },
   // `emailOTPClient` is what puts `authClient.emailOtp.*` on the client. The

@@ -13,6 +13,7 @@ import {
   usePostApiFormsByIdUnpublish,
 } from "@/lib/api/dashboard/dashboard";
 import { AuthGuard } from "@/components/dashboard/auth-guard";
+import { ImpersonationBanner } from "@/components/admin/impersonation-banner";
 import { CommandPalette } from "@/components/dashboard/command-palette";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -331,6 +332,9 @@ export function BuilderShell({
   return (
     <AuthGuard>
       <div className="bg-background flex min-h-svh flex-col">
+        {/* The builder is the product too: acting as a customer here must say
+            so as loudly as it does on the dashboard. */}
+        <ImpersonationBanner />
         {/* No chrome over a form that could not be opened: a skeleton header
             above "we couldn't open this form" reads as a page still arriving,
             which is the thing the message exists to stop saying. */}

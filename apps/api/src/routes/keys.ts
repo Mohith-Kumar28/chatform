@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../lib/validator.js";
 import { z } from "zod";
@@ -40,8 +40,22 @@ keysRouter.use("/keys/*", requireOrg);
  * around by issuing more keys.
  */
 keysRouter.use("/keys", requirePermission("apikey", "read"));
-keysRouter.post("/keys", requirePermission("apikey", "create"), requireFeature("api_access", { surface: "api-keys" }));
-keysRouter.post("/keys/:id/rotate", requirePermission("apikey", "create"), requireFeature("api_access", { surface: "api-keys" }));
+/**
+ * No new keys while a platform admin is acting as the customer. Impersonation
+ * ends in an hour; a key minted during it would not, and would be a credential
+ * to their account that they never issued.
+ */
+const refuseWhileActing: MiddlewareHandler<{ Variables: Partial<GuardVars> }> = async (c, next) => {
+  if (c.get("impersonatorId")) {
+    return c.json(
+      { error: { code: "impersonation_forbidden", message: "API keys can't be created while signed in as a customer." } },
+      403,
+    );
+  }
+  await next();
+};
+keysRouter.post("/keys", refuseWhileActing, requirePermission("apikey", "create"), requireFeature("api_access", { surface: "api-keys" }));
+keysRouter.post("/keys/:id/rotate", refuseWhileActing, requirePermission("apikey", "create"), requireFeature("api_access", { surface: "api-keys" }));
 keysRouter.delete("/keys/:id", requirePermission("apikey", "revoke"));
 
 const ScopesSchema = z.record(z.string(), z.array(z.string()));

@@ -71,7 +71,13 @@ export function PlanBadge() {
 
   const { planId, planName, status, inGrace, cancelAtPeriodEnd, periodEnd } = ent.data;
   const paid = planId !== "free";
-  const lapsed = paid && (inGrace || (status !== "active" && status !== "trialing"));
+  /*
+    A cancelled subscription that still has a paid plan is running out its
+    period, not failing: it is "ends on", never "update payment". Only a
+    payment problem is lapsed.
+  */
+  const endingByChoice = status === "canceled" || status === "cancelled";
+  const lapsed = paid && (inGrace || (status !== "active" && status !== "trialing" && !endingByChoice));
 
   const ends = periodEnd ? new Date(periodEnd).toLocaleDateString() : null;
 
@@ -117,7 +123,7 @@ export function PlanBadge() {
       title={
         lapsed
           ? `Your ${planName} subscription needs attention — ${status.replace(/_/g, " ")}. Update payment to keep it.`
-          : cancelAtPeriodEnd && ends
+          : (cancelAtPeriodEnd || endingByChoice) && ends
             ? `${planName} — ends ${ends}, and does not renew.`
             : `You're on ${planName}.${ends ? ` Renews ${ends}.` : ""}`
       }

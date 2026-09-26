@@ -39,6 +39,7 @@ import { FollowUpNudge } from "./followup-nudge";
 import { FollowUpAnalytics, type FollowUpPayload } from "./followup-analytics";
 import { API_ORIGIN } from "@/lib/api/mutator";
 import { cn } from "@/lib/utils";
+import { apiDownloadClick } from "@/lib/api/download";
 
 
 interface ResultsClientProps {
@@ -648,7 +649,7 @@ function DownloadButton({
 
   return (
     <Button asChild variant="outline" size="sm" shape="pill">
-      <a href={href} download>
+      <a href={href} download onClick={apiDownloadClick(href)}>
         <Download className="size-3.5" />
         Download
       </a>

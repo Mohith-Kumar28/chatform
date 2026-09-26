@@ -28,20 +28,36 @@ export interface Impersonation {
   user: { id: string; name: string; email: string };
 }
 
-/** Reads and expires in one step: a stale token is the same as no token. */
+/**
+ * The live token, or null. An expired one reads as none, but is left in place
+ * so `impersonationLapsed` can tell "never impersonating" from "just ran out".
+ */
 export function readImpersonation(): Impersonation | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = sessionStorage.getItem(KEY);
     if (!raw) return null;
     const value = JSON.parse(raw) as Impersonation;
-    if (!value?.token || value.expiresAt < Date.now()) {
-      sessionStorage.removeItem(KEY);
-      return null;
-    }
+    if (!value?.token || value.expiresAt < Date.now()) return null;
     return value;
   } catch {
     return null;
+  }
+}
+
+/**
+ * This tab was acting as someone and that has ended on its own.
+ *
+ * Without this, a lapsed token simply stops being sent, the admin's own cookie
+ * answers instead, and the tab quietly turns into the admin's account with the
+ * banner gone. The tab must end instead, the same way Stop does.
+ */
+export function impersonationLapsed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return sessionStorage.getItem(KEY) !== null && readImpersonation() === null;
+  } catch {
+    return false;
   }
 }
 

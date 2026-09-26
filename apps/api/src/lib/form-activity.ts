@@ -9,6 +9,7 @@ import {
   type FormDoc,
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
+import { actingAdmin } from "./impersonation.js";
 
 /**
  * The history of a single form: what changed, who changed it, and which publish it
@@ -56,6 +57,18 @@ export interface Actor {
   type?: "user" | "api_key" | "system" | "ai";
   id?: string | null;
   label?: string | null;
+}
+
+/**
+ * A person's change made by a platform admin acting as them is the admin's,
+ * and the form's history says so rather than putting the customer's name on
+ * work they did not do. A separate actor id also keeps it out of the
+ * customer's own open editing sitting.
+ */
+function attributed(actor: Actor | undefined): Actor | undefined {
+  const acting = actingAdmin.getStore();
+  if (!acting || (actor?.type ?? "user") !== "user") return actor;
+  return { type: "user", id: acting.adminId, label: "chatform support" };
 }
 
 /** Which surface made the change. Shown as a badge, and worth knowing when a form drifts. */
@@ -140,6 +153,7 @@ export async function recordDocChange(
    * unreadable previous row would put "Form created" on top of an ordinary edit.
    */
   if (!args.before) return;
+  args = { ...args, actor: attributed(args.actor) };
 
   const changes = diffFormDoc(args.before, args.after);
   if (changes.length === 0) return;
@@ -212,6 +226,7 @@ export async function recordFormEvent(
     source?: ActivitySource;
   },
 ): Promise<void> {
+  args = { ...args, actor: attributed(args.actor) };
   await insertEntry(env, {
     formId: args.formId,
     orgId: args.orgId,

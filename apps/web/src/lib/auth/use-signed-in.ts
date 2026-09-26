@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { readImpersonation } from "@/lib/impersonation";
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.in";
 
@@ -13,7 +14,11 @@ const API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.i
 let probe: Promise<boolean> | null = null;
 
 function askOnce(): Promise<boolean> {
-  probe ??= fetch(`${API_ORIGIN}/api/auth/get-session`, { credentials: "include" })
+  probe ??= fetch(`${API_ORIGIN}/api/auth/get-session`, {
+    credentials: "include",
+    // The same question the app asks, as the customer when acting as one.
+    headers: readImpersonation() ? { "x-chatform-impersonate": readImpersonation()!.token } : undefined,
+  })
     .then((r) => (r.ok ? r.json() : null))
     .then((s) => Boolean(s))
     .catch(() => false);
