@@ -5867,15 +5867,77 @@ export type PostV1Webhooks201 = {
   secretPreview: string;
 };
 
+export type GetV1WebhooksStats200Total = {
+  pending: number;
+  failed: number;
+  delivered24h: number;
+  lastDeliveredAt: number | null;
+};
+
+export type GetV1WebhooksStats200EndpointsItem = {
+  pending: number;
+  failed: number;
+  delivered24h: number;
+  lastDeliveredAt: number | null;
+  webhookId: string;
+};
+
+export type GetV1WebhooksStats200 = {
+  total: GetV1WebhooksStats200Total;
+  endpoints: GetV1WebhooksStats200EndpointsItem[];
+};
+
+export type PatchV1WebhooksByIdBody = {
+  active: boolean;
+};
+
+export type PatchV1WebhooksById200 = {
+  id: string;
+  url: string;
+  events: string[];
+  formId: string | null;
+  active: boolean;
+  consecutiveFailures: number;
+  createdAt: number;
+  secretPreview: string;
+};
+
 export type DeleteV1WebhooksById200 = {
   ok: boolean;
   deleted: boolean;
 };
 
+export type GetV1WebhooksByIdDeliveries200DataItemStatus = typeof GetV1WebhooksByIdDeliveries200DataItemStatus[keyof typeof GetV1WebhooksByIdDeliveries200DataItemStatus];
+
+
+export const GetV1WebhooksByIdDeliveries200DataItemStatus = {
+  pending: 'pending',
+  success: 'success',
+  failed: 'failed',
+} as const;
+
+export type GetV1WebhooksByIdDeliveries200DataItemAttemptsItem = {
+  attempt: number;
+  status: number | null;
+  error: string | null;
+  responseBody: string | null;
+  durationMs: number | null;
+  at: number;
+};
+
 export type GetV1WebhooksByIdDeliveries200DataItem = {
   id: string;
-  event?: string;
-  status?: string;
+  eventId: string | null;
+  event: string;
+  status: GetV1WebhooksByIdDeliveries200DataItemStatus;
+  attempt: number;
+  maxAttempts: number;
+  responseStatus: number | null;
+  lastError: string | null;
+  nextAttemptAt: number | null;
+  deliveredAt: number | null;
+  createdAt: number;
+  attempts: GetV1WebhooksByIdDeliveries200DataItemAttemptsItem[];
   [key: string]: unknown;
 };
 
@@ -5887,6 +5949,11 @@ export type GetV1WebhooksByIdDeliveries200 = {
 
 export type PostV1WebhooksByIdDeliveriesByDeliveryIdReplay200 = {
   ok: boolean;
+};
+
+export type PostV1WebhooksByIdRetryFailed200 = {
+  ok: boolean;
+  queued: number;
 };
 
 export type PostV1FormsByIdExportsBodyFormat = typeof PostV1FormsByIdExportsBodyFormat[keyof typeof PostV1FormsByIdExportsBodyFormat];
@@ -7030,6 +7097,45 @@ export type PostApiWebhooks200 = {
 
 export type DeleteApiWebhooksById200 = {
   ok: boolean;
+};
+
+export type PatchApiWebhooksByIdBody = {
+  active: boolean;
+};
+
+export type PatchApiWebhooksById200 = {
+  ok: boolean;
+  active: boolean;
+};
+
+export type GetApiWebhooksStats200Total = {
+  pending: number;
+  failed: number;
+  delivered24h: number;
+  lastDeliveredAt: number | null;
+};
+
+export type GetApiWebhooksStats200EndpointsItem = {
+  pending: number;
+  failed: number;
+  delivered24h: number;
+  lastDeliveredAt: number | null;
+  webhookId: string;
+};
+
+export type GetApiWebhooksStats200 = {
+  total: GetApiWebhooksStats200Total;
+  endpoints: GetApiWebhooksStats200EndpointsItem[];
+};
+
+export type PostApiWebhooksByIdDeliveriesByDeliveryIdRetry200 = {
+  ok: boolean;
+  queued: boolean;
+};
+
+export type PostApiWebhooksByIdRetryFailed200 = {
+  ok: boolean;
+  queued: number;
 };
 
 export type PostApiWebhooksByIdTest200 = {

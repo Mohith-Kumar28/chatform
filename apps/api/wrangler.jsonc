@@ -105,6 +105,14 @@
         "dead_letter_queue": "q-webhooks-dlq"
       },
       {
+        // Webhook messages that crashed the consumer ten times. HTTP failures
+        // never land here (they retry on their own and end as `dead` rows);
+        // this parks the crashes in the same failed list.
+        "queue": "q-webhooks-dlq",
+        "max_batch_size": 10,
+        "max_retries": 3
+      },
+      {
         "queue": "q-exports",
         "max_batch_size": 1,
         "max_retries": 3

@@ -127,7 +127,8 @@ ChatForm sends an HTTP POST with a JSON body to my endpoint for these events: ${
 Headers on every request:
 - \`content-type: application/json\`
 - \`x-chatform-event\`: the event name, e.g. \`response.completed\`
-- \`x-chatform-delivery\`: a unique delivery id (\`whd_...\`). Use it to ignore duplicates.
+- \`webhook-id\`: the event id (\`evt_...\`), the same on every retry. Use it to ignore duplicates.
+- \`x-chatform-delivery\`: the delivery id (\`whd_...\`), one per endpoint.
 - \`x-chatform-signature\`: \`t=<unix seconds>, v1=<hex>\`
 
 Example body (values are samples; the shape is exact):
@@ -159,9 +160,9 @@ ${questions || "- (this form has no answerable questions yet)"}
    - Reject requests where \`t\` is more than 5 minutes from the current time, to stop replays.
 4. Read the secret from an environment variable named \`CHATFORM_WEBHOOK_SECRET\`. Add it to the project's env example file and config/validation if one exists. Never hardcode it.
 5. Parse the JSON body, switch on \`event\`, and map the answers into a typed object keyed by the refs above. Write TypeScript types (or the language's equivalent) for the payload.
-6. The "Test connection" button in ChatForm sends \`{ "event": "test", "timestamp": ..., "formId": null }\` with the same \`x-chatform-signature\` header (no \`x-chatform-delivery\`), and no answers. Verify it, then respond 200 without running business logic.
-7. Make the handler idempotent: store processed \`x-chatform-delivery\` ids (or \`submission.id\` + \`event\`) and skip repeats. ChatForm retries failed deliveries for up to two hours (after 1m, 5m, 30m, 2h), so the same event can arrive more than once.
-8. Respond with a 2xx within 10 seconds. Any non-2xx or timeout counts as a failure and is retried. Do slow work (emails, CRM calls) after responding or in a background job. After 20 consecutive failures ChatForm switches the endpoint off.
+6. The "Test connection" button in ChatForm sends \`{ "event": "test", "timestamp": ..., "formId": null }\` with the same headers, and no answers. Verify it, then respond 200 without running business logic.
+7. Make the handler idempotent: store processed \`webhook-id\` values and skip repeats. ChatForm retries failed deliveries for about ten hours (after roughly 1m, 5m, 30m, 2h and 8h), so the same event can arrive more than once.
+8. Respond with a 2xx within 15 seconds. Any other status, a redirect or a timeout counts as a failure and is retried. Do slow work (emails, CRM calls) after responding or in a background job. Respond 410 only if ChatForm should stop sending to this endpoint for good. After 20 consecutive failures ChatForm switches the endpoint off.
 9. Put a clear TODO where my business logic goes (save to the database, notify, etc.). If the project already has a database layer, save the response there.
 10. Add a test that signs a sample body with a test secret and asserts the handler accepts it, and rejects a wrong signature.
 11. Tell me the final public URL path to paste into ChatForm (Integrate tab, Webhooks, Payload URL). It must be a public https URL; for local testing suggest a tunnel such as ngrok or cloudflared. ChatForm's "Test connection" button can then be used to check it.`;

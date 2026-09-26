@@ -710,16 +710,45 @@ export const webhookDeliveries = sqliteTable(
      */
     messageJson: text("message_json"),
     attempt: integer("attempt").notNull().default(0),
+    /** `pending` (queued or waiting to retry) · `sending` · `success` · `dead` (gave up: the failed list). */
     status: text("status").notNull().default("pending"),
     responseStatus: integer("response_status"),
     lastError: text("last_error"),
+    /** When the next attempt is due, while `status` is `pending`. */
     nextRetryAt: ts("next_retry_at"),
+    /**
+     * The event this delivery carries. Shared by every endpoint the event went
+     * to and sent as `webhook-id`, so a receiver can drop a duplicate.
+     */
+    eventId: text("event_id"),
+    /** While `status` is `sending`: past this, the attempt is presumed lost and the sweep re-queues it. */
+    leaseUntil: ts("lease_until"),
+    deliveredAt: ts("delivered_at"),
+    updatedAt: ts("updated_at"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
   },
   (t) => [
     index("idx_wh_deliveries_webhook").on(t.webhookId, t.createdAt),
     index("idx_wh_deliveries_retry").on(t.status, t.nextRetryAt),
+    index("idx_wh_deliveries_status").on(t.webhookId, t.status),
   ],
+);
+
+/** Every HTTP attempt a delivery made, oldest first. */
+export const webhookAttempts = sqliteTable(
+  "webhook_attempts",
+  {
+    id: text("id").primaryKey(),
+    deliveryId: text("delivery_id").notNull().references(() => webhookDeliveries.id, { onDelete: "cascade" }),
+    attempt: integer("attempt").notNull(),
+    responseStatus: integer("response_status"),
+    error: text("error"),
+    /** The first KB of what the endpoint said back. */
+    responseBody: text("response_body"),
+    durationMs: integer("duration_ms"),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [index("idx_wh_attempts_delivery").on(t.deliveryId, t.attempt)],
 );
 
 export const integrations = sqliteTable(

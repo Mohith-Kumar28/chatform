@@ -1,11 +1,10 @@
 ---
-title: Recent deliveries with every attempt, for working out why an endpoint is
-  quiet. Filter with ?status=pending|failed|success
+title: Send every failed delivery of an endpoint again (up to 500)
 full: true
 _openapi:
   preload:
     - chatform
-  method: GET
+  method: POST
   webhook: false
   toc: []
   structuredData:
@@ -23,7 +22,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="chatform" operations={[{"path":"/v1/webhooks/{id}/deliveries","method":"get"}]} />
+      <Comp document="chatform" operations={[{"path":"/v1/webhooks/{id}/retry-failed","method":"post"}]} />
     </>
   );
 }

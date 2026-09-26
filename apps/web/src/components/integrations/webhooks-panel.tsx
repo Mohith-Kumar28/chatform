@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Plus,
   RefreshCw,
+  RotateCcw,
   Send,
   Trash2,
   Webhook,
@@ -43,12 +44,24 @@ const EVENTS: { name: string; label: string; blurb: string }[] = [
   { name: "response.partial", label: "Partial response", blurb: "Someone stopped part-way, with answers worth keeping." },
   { name: "response.disqualified", label: "Disqualified", blurb: "Someone reached a “can’t submit” ending." },
   { name: "response.abandoned", label: "Abandoned", blurb: "A session timed out with nothing more coming." },
-  { name: "response.answer_recorded", label: "Each answer", blurb: "Every individual answer, as it lands." },
-  { name: "session.started", label: "Session started", blurb: "Someone opened the form and began." },
-  { name: "form.published", label: "Form published", blurb: "A new version of this form went live." },
 ];
 
-const eventLabel = (name: string) => EVENTS.find((e) => e.name === name)?.label ?? name;
+/**
+ * Names an existing endpoint may still carry. The three events at the bottom
+ * were offered here once but nothing ever sends them, so they are no longer
+ * offered; the API still accepts them, so old subscriptions keep their label.
+ */
+const OTHER_LABELS: Record<string, string> = {
+  "response.resumed": "Resumed",
+  "followup.sent": "Follow-up sent",
+  "submission.completed": "Response completed",
+  "submission.abandoned": "Abandoned",
+  "response.answer_recorded": "Each answer",
+  "session.started": "Session started",
+  "form.published": "Form published",
+};
+
+const eventLabel = (name: string) => EVENTS.find((e) => e.name === name)?.label ?? OTHER_LABELS[name] ?? name;
 
 interface WebhookRow {
   id: string;
@@ -64,16 +77,52 @@ interface WebhookRow {
   active: boolean;
 }
 
+interface Attempt {
+  attempt: number;
+  status: number | null;
+  error: string | null;
+  responseBody: string | null;
+  durationMs: number | null;
+  at: number;
+}
+
 interface Delivery {
   id: string;
-  event_type: string;
-  /** `success`, `failed` (retry pending) or `dead`. */
-  status: string;
-  response_status: number | null;
-  last_error: string | null;
+  event: string;
+  /** `pending` (queued or waiting to retry), `success`, or `failed` (out of retries). */
+  status: "pending" | "success" | "failed";
   attempt: number;
-  created_at: number;
+  maxAttempts: number;
+  responseStatus: number | null;
+  lastError: string | null;
+  nextAttemptAt: number | null;
+  createdAt: number;
+  attempts: Attempt[];
   payload?: string | null;
+}
+
+interface QueueCounts {
+  pending: number;
+  failed: number;
+  delivered24h: number;
+  lastDeliveredAt: number | null;
+}
+
+interface QueueStats {
+  total: QueueCounts;
+  endpoints: (QueueCounts & { webhookId: string })[];
+}
+
+/**
+ * The queue's numbers for this form's endpoints. Polls while anything is
+ * pending, so a retry landing shows up without a refresh.
+ */
+function useQueueStats(formId: string) {
+  return useQuery({
+    queryKey: ["webhook-stats", formId],
+    queryFn: () => customFetch<QueueStats>(`/api/webhooks/stats?formId=${encodeURIComponent(formId)}`),
+    refetchInterval: (q) => ((q.state.data?.total.pending ?? 0) > 0 ? 15_000 : false),
+  });
 }
 
 type TestResult = { ok: boolean; text: string };
@@ -96,6 +145,8 @@ export function WebhooksPanel({
     queryFn: () => customFetch<WebhookRow[]>("/api/webhooks"),
   });
   const hooks = (Array.isArray(raw) ? raw : []).filter((h) => !h.formId || h.formId === formId);
+  const { data: stats } = useQueueStats(formId);
+  const countsFor = (id: string) => stats?.endpoints.find((e) => e.webhookId === id);
 
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -104,7 +155,7 @@ export function WebhooksPanel({
 
   const open = hooks.find((h) => h.id === openId);
   if (open) {
-    return <EndpointDetail hook={open} formId={formId} onBack={() => setOpenId(null)} />;
+    return <EndpointDetail hook={open} formId={formId} counts={countsFor(open.id)} onBack={() => setOpenId(null)} />;
   }
 
   const showForm = adding || (!isLoading && hooks.length === 0);
@@ -121,6 +172,8 @@ export function WebhooksPanel({
             </Button>
           )}
         </div>
+
+        {hooks.length > 0 && stats && <QueueStrip counts={stats.total} />}
 
         {created && (
           <div className="border-primary/30 bg-primary-soft/40 space-y-2 rounded-xl border p-4">
@@ -162,7 +215,7 @@ export function WebhooksPanel({
               compact
               icon={Webhook}
               title="No endpoints yet"
-              description="Add one and every matching event is sent to it, signed, with retries for two hours."
+              description="Add one and every matching event is sent to it, signed, and retried for about ten hours if your server is down."
             />
           )
         ) : (
@@ -178,9 +231,12 @@ export function WebhooksPanel({
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{hook.url}</span>
                     <span className="text-muted-foreground text-caption block truncate">
-                      {hook.events.map(eventLabel).join(", ")}
+                      {hook.active ? hook.events.map(eventLabel).join(", ") : "Off"}
                     </span>
                   </span>
+                  {(countsFor(hook.id)?.failed ?? 0) > 0 && (
+                    <Badge variant="destructive">{countsFor(hook.id)!.failed} failed</Badge>
+                  )}
                   <ChevronRight className="text-muted-foreground size-4 shrink-0" />
                 </button>
               </li>
@@ -208,6 +264,32 @@ function StatusDot({ active }: { active: boolean }) {
       )}
       aria-label={active ? "Active" : "Off"}
     />
+  );
+}
+
+/** Pending, failed and delivered, each labelled. */
+function QueueStrip({ counts }: { counts: QueueCounts }) {
+  const items = [
+    { label: "Pending", value: counts.pending, hint: "Queued or waiting for a retry" },
+    { label: "Failed", value: counts.failed, hint: "Out of retries. Open the endpoint to retry them" },
+    { label: "Delivered (24h)", value: counts.delivered24h, hint: "Accepted by your server in the last 24 hours" },
+  ];
+  return (
+    <dl className="grid grid-cols-3 divide-x overflow-hidden rounded-xl border">
+      {items.map((item) => (
+        <div key={item.label} className="px-3 py-2.5" title={item.hint}>
+          <dt className="text-muted-foreground text-caption">{item.label}</dt>
+          <dd
+            className={cn(
+              "text-sm font-medium tabular-nums",
+              item.label === "Failed" && item.value > 0 && "text-destructive",
+            )}
+          >
+            {item.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -320,16 +402,24 @@ function AddEndpointForm({
 function EndpointDetail({
   hook,
   formId,
+  counts,
   onBack,
 }: {
   hook: WebhookRow;
   formId: string;
+  counts: QueueCounts | undefined;
   onBack: () => void;
 }) {
   const queryClient = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [result, setResult] = useState<TestResult | null>(null);
   const deliveriesKey = ["webhook-deliveries", hook.id];
+
+  const turnOn = useMutation({
+    mutationFn: () =>
+      customFetch(`/api/webhooks/${hook.id}`, { method: "PATCH", body: JSON.stringify({ active: true }) }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["webhooks", formId] }),
+  });
 
   const test = useMutation({
     mutationFn: () =>
@@ -383,9 +473,14 @@ function EndpointDetail({
 
         <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-3 text-sm">
           <dt className="text-muted-foreground">Status</dt>
-          <dd className="flex items-center gap-2">
+          <dd className="flex flex-wrap items-center gap-2">
             <StatusDot active={hook.active} />
             {hook.active ? "Active" : "Off after repeated failures"}
+            {!hook.active && (
+              <Button variant="outline" size="xs" disabled={turnOn.isPending} onClick={() => turnOn.mutate()}>
+                {turnOn.isPending ? "Turning on…" : "Turn back on"}
+              </Button>
+            )}
           </dd>
           <dt className="text-muted-foreground">Events</dt>
           <dd className="flex flex-wrap gap-1.5">
@@ -434,30 +529,65 @@ function EndpointDetail({
         </div>
       </section>
 
-      <Deliveries webhookId={hook.id} queryKey={deliveriesKey} />
+      {counts && <QueueStrip counts={counts} />}
+
+      <Deliveries webhookId={hook.id} formId={formId} queryKey={deliveriesKey} />
       {dialog}
     </div>
   );
 }
 
+type Filter = "all" | "pending" | "failed";
+
 /**
- * The delivery log.
+ * The delivery log: every event sent to this endpoint, each with its attempts.
  *
- * The endpoint has existed since webhooks shipped and nothing ever called it,
- * which meant "my webhook isn't firing" had no answer inside the product.
+ * "Failed" is the dead-letter list: deliveries that ran out of retries. They
+ * stay there until someone retries them or they age out after 30 days.
  */
-function Deliveries({ webhookId, queryKey }: { webhookId: string; queryKey: string[] }) {
+function Deliveries({ webhookId, formId, queryKey }: { webhookId: string; formId: string; queryKey: string[] }) {
+  const queryClient = useQueryClient();
+  const [filter, setFilter] = useState<Filter>("all");
   const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey,
-    queryFn: () => customFetch<Delivery[]>(`/api/webhooks/${webhookId}/deliveries`),
+    queryKey: [...queryKey, filter],
+    queryFn: () =>
+      customFetch<Delivery[]>(
+        `/api/webhooks/${webhookId}/deliveries${filter === "all" ? "" : `?status=${filter}`}`,
+      ),
+    refetchInterval: (q) => (q.state.data?.some((d) => d.status === "pending") ? 15_000 : false),
   });
   const rows = Array.isArray(data) ? data : [];
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey });
+    void queryClient.invalidateQueries({ queryKey: ["webhook-stats", formId] });
+  };
+  const retryOne = useMutation({
+    mutationFn: (deliveryId: string) =>
+      customFetch(`/api/webhooks/${webhookId}/deliveries/${deliveryId}/retry`, { method: "POST" }),
+    onSuccess: refresh,
+  });
+  const retryAll = useMutation({
+    mutationFn: () => customFetch<{ queued: number }>(`/api/webhooks/${webhookId}/retry-failed`, { method: "POST" }),
+    onSuccess: refresh,
+  });
+
   return (
     <section className="space-y-2">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-h3 flex-1">Deliveries</h3>
+        <SegmentedControl
+          options={[
+            { value: "all", label: "All" },
+            { value: "pending", label: "Pending" },
+            { value: "failed", label: "Failed" },
+          ]}
+          value={filter}
+          onChange={setFilter}
+          size="sm"
+          ariaLabel="Show"
+        />
         <Button
           variant="ghost"
           size="icon-sm"
@@ -469,11 +599,22 @@ function Deliveries({ webhookId, queryKey }: { webhookId: string; queryKey: stri
         </Button>
       </div>
 
+      {filter === "failed" && rows.some((r) => r.event !== "test") && (
+        <Button variant="outline" size="sm" disabled={retryAll.isPending} onClick={() => retryAll.mutate()}>
+          <RotateCcw className="size-3.5" />
+          {retryAll.isPending ? "Retrying…" : "Retry all failed"}
+        </Button>
+      )}
+
       {isLoading ? (
         <div className="bg-muted h-12 animate-pulse rounded-xl" />
       ) : rows.length === 0 ? (
         <p className="text-muted-foreground text-caption rounded-xl border border-dashed p-4">
-          Nothing sent yet. Press Test connection, or submit a response to this form.
+          {filter === "failed"
+            ? "Nothing failed."
+            : filter === "pending"
+              ? "Nothing waiting to be sent."
+              : "Nothing sent yet. Press Test connection, or submit a response to this form."}
         </p>
       ) : (
         <ul className="divide-y overflow-hidden rounded-xl border">
@@ -492,24 +633,24 @@ function Deliveries({ webhookId, queryKey }: { webhookId: string; queryKey: stri
                       "size-1.5 shrink-0 rounded-full",
                       ok
                         ? "bg-[var(--success)]"
-                        : row.status === "failed"
+                        : row.status === "pending"
                           ? "bg-[var(--warning)]"
                           : "bg-destructive",
                     )}
                   />
                   <span className="min-w-[8rem] flex-1">
-                    {row.event_type === "test" ? "Test" : eventLabel(row.event_type)}
+                    {row.event === "test" ? "Test" : eventLabel(row.event)}
                   </span>
                   <span
                     className={cn(
                       "text-caption shrink-0",
-                      ok ? "text-muted-foreground" : "text-destructive",
+                      ok ? "text-muted-foreground" : row.status === "pending" ? "text-[var(--warning)]" : "text-destructive",
                     )}
                   >
-                    {row.response_status ?? (ok ? "OK" : "Error")}
+                    {ok ? "Delivered" : row.status === "pending" ? "Pending" : "Failed"}
                   </span>
                   <span className="text-muted-foreground text-caption shrink-0">
-                    {formatDateTime(row.created_at)}
+                    {formatDateTime(row.createdAt)}
                   </span>
                   <ChevronDown
                     className={cn(
@@ -519,14 +660,32 @@ function Deliveries({ webhookId, queryKey }: { webhookId: string; queryKey: stri
                   />
                 </button>
                 {isOpen && (
-                  <div className="space-y-2 px-3 pb-3">
+                  <div className="space-y-3 px-3 pb-3">
                     <p className="text-caption text-muted-foreground">
                       {ok
                         ? "Delivered."
-                        : row.status === "failed"
-                          ? `Failed (${row.last_error ?? "error"}). Attempt ${row.attempt}, retrying.`
-                          : `Failed (${row.last_error ?? "error"}). Gave up after ${row.attempt} attempts.`}
+                        : row.status === "pending"
+                          ? row.attempt === 0
+                            ? "Queued."
+                            : `Attempt ${row.attempt} of ${row.maxAttempts} failed (${row.lastError ?? "error"}).${
+                                row.nextAttemptAt ? ` Next try ${formatDateTime(row.nextAttemptAt)}.` : ""
+                              }`
+                          : `Failed (${row.lastError ?? "error"}). Gave up after ${row.attempt} ${
+                              row.attempt === 1 ? "attempt" : "attempts"
+                            }.`}
                     </p>
+                    {row.attempts.length > 0 && <Attempts attempts={row.attempts} />}
+                    {row.event !== "test" && row.status !== "pending" && (
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        disabled={retryOne.isPending && retryOne.variables === row.id}
+                        onClick={() => retryOne.mutate(row.id)}
+                      >
+                        <RotateCcw className="size-3" />
+                        {ok ? "Send again" : "Retry"}
+                      </Button>
+                    )}
                     {row.payload && <JsonBlock json={prettyJson(row.payload)} />}
                   </div>
                 )}
@@ -536,6 +695,37 @@ function Deliveries({ webhookId, queryKey }: { webhookId: string; queryKey: stri
         </ul>
       )}
     </section>
+  );
+}
+
+/** Each attempt: when, what the endpoint said, how long it took. */
+function Attempts({ attempts }: { attempts: Attempt[] }) {
+  return (
+    <ol className="text-caption space-y-1.5">
+      {attempts.map((a, i) => {
+        const ok = a.status != null && a.status >= 200 && a.status < 300;
+        return (
+          <li key={i} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-2">
+            <span className="text-muted-foreground">Attempt {a.attempt}</span>
+            <span className="min-w-0">
+              <span className={cn(ok ? "text-foreground" : "text-destructive")}>
+                {a.status != null ? `HTTP ${a.status}` : (a.error ?? "No response")}
+              </span>
+              <span className="text-muted-foreground">
+                {" · "}
+                {formatDateTime(a.at)}
+                {a.durationMs != null && ` · ${a.durationMs} ms`}
+              </span>
+              {a.responseBody && !ok && (
+                <span className="text-muted-foreground block truncate font-mono" title={a.responseBody}>
+                  {a.responseBody}
+                </span>
+              )}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -626,8 +816,12 @@ function DeveloperSection({
           <dl className="text-caption grid grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-[auto_1fr]">
             <dt className="font-mono">x-chatform-event</dt>
             <dd className="text-muted-foreground">The event name</dd>
-            <dt className="font-mono">x-chatform-delivery</dt>
-            <dd className="text-muted-foreground">Unique id, for skipping repeats</dd>
+            <dt className="font-mono">webhook-id</dt>
+            <dd className="text-muted-foreground">The event id, the same on every retry, for skipping repeats</dd>
+            <dt className="font-mono">webhook-signature</dt>
+            <dd className="text-muted-foreground">
+              Standard Webhooks signature of <code>id.timestamp.body</code>
+            </dd>
             <dt className="font-mono">x-chatform-signature</dt>
             <dd className="text-muted-foreground">
               <code>t=…, v1=…</code>, HMAC-SHA256 of <code>t.body</code> with your secret

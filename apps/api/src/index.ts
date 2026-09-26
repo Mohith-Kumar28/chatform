@@ -1,7 +1,14 @@
 import type { Bindings } from "./env.js";
 import { createApp } from "./app.js";
 import { SessionDO } from "./do/session-do.js";
-import { deliverWebhookEvent, retryFailedDeliveries, type WebhookEvent } from "./lib/webhooks.js";
+import {
+  deliverOne,
+  fanOutEvent,
+  isDeliveryMessage,
+  markDeadFromDlq,
+  sweepWebhookDeliveries,
+  type WebhookMessage,
+} from "./lib/webhooks.js";
 import { pruneOtpChallenges } from "./lib/respondent-auth.js";
 import { pruneGateLog } from "./lib/gate-log.js";
 import { pruneFormActivity } from "./lib/form-activity.js";
@@ -41,17 +48,40 @@ export default {
     return app.fetch(request, env, ctx);
   },
   async queue(batch: MessageBatch, env: Bindings, _ctx: ExecutionContext): Promise<void> {
+    /**
+     * Webhooks, side by side rather than in turn: each message is one endpoint
+     * (or one event's fan-out), and a slow endpoint must not hold up the rest
+     * of the batch. An HTTP failure is not a throw; `deliverOne` schedules its
+     * own retry. A throw here is our fault (D1, a bug), and the queue's own
+     * retries and then `q-webhooks-dlq` handle it.
+     */
+    if (batch.queue === "q-webhooks") {
+      await Promise.all(
+        batch.messages.map(async (msg) => {
+          const body = msg.body as WebhookMessage;
+          try {
+            if (isDeliveryMessage(body)) await deliverOne(env, body.deliveryId);
+            else if (body.event) await fanOutEvent(env, body, msg.id);
+            msg.ack();
+          } catch (err) {
+            console.error("webhook_message_failed", { error: err instanceof Error ? err.message : String(err) });
+            msg.retry();
+          }
+        }),
+      );
+      return;
+    }
+    if (batch.queue === "q-webhooks-dlq") {
+      for (const msg of batch.messages) {
+        await markDeadFromDlq(env, msg.body).catch((err: unknown) =>
+          console.error("webhook_dlq_mark_failed", { error: err instanceof Error ? err.message : String(err) }),
+        );
+        msg.ack();
+      }
+      return;
+    }
     for (const msg of batch.messages) {
-      const body = msg.body as WebhookEvent & { retryOfDeliveryId?: string };
-      if (batch.queue === "q-webhooks" && body.event) {
-        try {
-          await deliverWebhookEvent(env, body);
-          msg.ack();
-        } catch (err) {
-          console.error("webhook_delivery_failed", err);
-          msg.retry();
-        }
-      } else if (batch.queue === "q-exports") {
+      if (batch.queue === "q-exports") {
         /**
          * The producer half lives in `lib/exports.ts`. This consumer has been
          * declared since the beginning and acked everything it was handed —
@@ -169,8 +199,11 @@ export default {
   },
   async scheduled(controller: ScheduledController, env: Bindings, _ctx: ExecutionContext): Promise<void> {
     if (controller.cron === "*/5 * * * *") {
-      const n = await retryFailedDeliveries(env);
-      if (n > 0) console.log(`webhook_retries_requeued: ${n}`);
+      const n = await sweepWebhookDeliveries(env).catch((err: unknown) => {
+        console.error("webhook_sweep_failed", { error: err instanceof Error ? err.message : String(err) });
+        return 0;
+      });
+      if (n > 0) console.log(`webhook_deliveries_requeued: ${n}`);
       // Spent and expired OTP rows have no reason to be kept; they are only
       // ever read by the challenge that created them.
       await pruneOtpChallenges(env).catch((err) => console.error("otp_prune_failed", err));

@@ -145,6 +145,9 @@ export class HttpClient {
   put<T>(path: string, body?: unknown, options?: RequestOptions) {
     return this.request<T>("PUT", path, { body, options });
   }
+  patch<T>(path: string, body?: unknown, options?: RequestOptions) {
+    return this.request<T>("PATCH", path, { body, options });
+  }
   /** A multipart POST. See `form` on `request` for why the header is not set. */
   postForm<T>(path: string, form: FormData, options?: RequestOptions) {
     return this.request<T>("POST", path, { form, options });

@@ -13,6 +13,39 @@ export interface WebhookEndpoint {
   secretPreview: string;
 }
 
+export interface WebhookAttempt {
+  attempt: number;
+  status: number | null;
+  error: string | null;
+  responseBody: string | null;
+  durationMs: number | null;
+  at: number;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  /** Sent as `webhook-id`; the same on every retry. */
+  eventId: string | null;
+  event: string;
+  /** `pending` (queued or waiting to retry), `success`, or `failed` (out of retries). */
+  status: "pending" | "success" | "failed";
+  attempt: number;
+  maxAttempts: number;
+  responseStatus: number | null;
+  lastError: string | null;
+  nextAttemptAt: number | null;
+  deliveredAt: number | null;
+  createdAt: number;
+  attempts: WebhookAttempt[];
+}
+
+export interface WebhookQueueCounts {
+  pending: number;
+  failed: number;
+  delivered24h: number;
+  lastDeliveredAt: number | null;
+}
+
 export class WebhookEndpoints {
   constructor(private readonly http: HttpClient) {}
 
@@ -36,17 +69,35 @@ export class WebhookEndpoints {
     return this.http.delete<{ ok: boolean; deleted: boolean }>(`/v1/webhooks/${id}`, request);
   }
 
-  /** Recent attempts, for working out why an endpoint is not hearing anything. */
-  deliveries(id: string, request?: RequestOptions) {
-    return this.http.get<{ data: unknown[] }>(`/v1/webhooks/${id}/deliveries`, undefined, request);
+  /** Turn an endpoint on or off. Turning it on clears its failure count. */
+  update(id: string, input: { active: boolean }, request?: RequestOptions) {
+    return this.http.patch<WebhookEndpoint>(`/v1/webhooks/${id}`, input, request);
+  }
+
+  /** Recent deliveries with every attempt, for working out why an endpoint is not hearing anything. */
+  deliveries(id: string, options: { status?: "pending" | "failed" | "success" } = {}, request?: RequestOptions) {
+    return this.http.get<{ data: WebhookDelivery[] }>(`/v1/webhooks/${id}/deliveries`, options, request);
+  }
+
+  /** How many deliveries are pending, failed, and delivered in the last 24 hours. */
+  stats(options: { formId?: string } = {}, request?: RequestOptions) {
+    return this.http.get<{ total: WebhookQueueCounts; endpoints: (WebhookQueueCounts & { webhookId: string })[] }>(
+      "/v1/webhooks/stats",
+      options,
+      request,
+    );
+  }
+
+  /** Send every failed delivery of an endpoint again. */
+  retryFailed(id: string, request?: RequestOptions) {
+    return this.http.post<{ ok: boolean; queued: number }>(`/v1/webhooks/${id}/retry-failed`, undefined, request);
   }
 
   /**
    * Send one delivery again.
    *
-   * The retry schedule runs out at two hours; after a deploy that fixed the
-   * endpoint, waiting for a sweep that will never come again is not a recovery
-   * path.
+   * Automatic retries give up after about ten hours; after a deploy that fixed
+   * the endpoint, this is the recovery path.
    */
   replay(webhookId: string, deliveryId: string, request?: RequestOptions) {
     return this.http.post<{ ok: boolean; queued: boolean }>(

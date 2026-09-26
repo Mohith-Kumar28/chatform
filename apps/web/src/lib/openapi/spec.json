@@ -10468,7 +10468,215 @@
         ]
       }
     },
+    "/v1/webhooks/stats": {
+      "get": {
+        "operationId": "getV1WebhooksStats",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Delivery queue status: pending, failed and delivered in the last 24 hours, per endpoint",
+        "responses": {
+          "200": {
+            "description": "Counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total": {
+                      "type": "object",
+                      "properties": {
+                        "pending": {
+                          "type": "number"
+                        },
+                        "failed": {
+                          "type": "number"
+                        },
+                        "delivered24h": {
+                          "type": "number"
+                        },
+                        "lastDeliveredAt": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "pending",
+                        "failed",
+                        "delivered24h",
+                        "lastDeliveredAt"
+                      ]
+                    },
+                    "endpoints": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "pending": {
+                            "type": "number"
+                          },
+                          "failed": {
+                            "type": "number"
+                          },
+                          "delivered24h": {
+                            "type": "number"
+                          },
+                          "lastDeliveredAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "webhookId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pending",
+                          "failed",
+                          "delivered24h",
+                          "lastDeliveredAt",
+                          "webhookId"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "total",
+                    "endpoints"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "webhook:read",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
     "/v1/webhooks/{id}": {
+      "patch": {
+        "operationId": "patchV1WebhooksById",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "active": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "active"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Turn an endpoint on or off. Turning it on clears its failure count",
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "formId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "consecutiveFailures": {
+                      "type": "number"
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "secretPreview": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "url",
+                    "events",
+                    "formId",
+                    "active",
+                    "consecutiveFailures",
+                    "createdAt",
+                    "secretPreview"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-required-scope": "webhook:write",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      },
       "delete": {
         "operationId": "deleteV1WebhooksById",
         "tags": [
@@ -10529,7 +10737,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "Recent delivery attempts, for working out why an endpoint is quiet",
+        "summary": "Recent deliveries with every attempt, for working out why an endpoint is quiet. Filter with ?status=pending|failed|success",
         "responses": {
           "200": {
             "description": "Deliveries",
@@ -10546,15 +10754,152 @@
                           "id": {
                             "type": "string"
                           },
+                          "eventId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "event": {
                             "type": "string"
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "success",
+                              "failed"
+                            ]
+                          },
+                          "attempt": {
+                            "type": "number"
+                          },
+                          "maxAttempts": {
+                            "type": "number"
+                          },
+                          "responseStatus": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "lastError": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "nextAttemptAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "deliveredAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "number"
+                          },
+                          "attempts": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "attempt": {
+                                  "type": "number"
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "error": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "responseBody": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "durationMs": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "at": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "attempt",
+                                "status",
+                                "error",
+                                "responseBody",
+                                "durationMs",
+                                "at"
+                              ]
+                            }
                           }
                         },
                         "required": [
-                          "id"
+                          "id",
+                          "eventId",
+                          "event",
+                          "status",
+                          "attempt",
+                          "maxAttempts",
+                          "responseStatus",
+                          "lastError",
+                          "nextAttemptAt",
+                          "deliveredAt",
+                          "createdAt",
+                          "attempts"
                         ],
                         "additionalProperties": {}
                       }
@@ -10655,6 +11000,61 @@
             },
             "in": "path",
             "name": "deliveryId",
+            "required": true
+          }
+        ],
+        "x-required-scope": "webhook:write",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/webhooks/{id}/retry-failed": {
+      "post": {
+        "operationId": "postV1WebhooksByIdRetryFailed",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Send every failed delivery of an endpoint again (up to 500)",
+        "responses": {
+          "200": {
+            "description": "Queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "queued": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "queued"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
             "required": true
           }
         ],

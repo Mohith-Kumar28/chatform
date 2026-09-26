@@ -356,9 +356,48 @@ export const WebhookView = z
   })
   .loose();
 
+export const WebhookAttemptView = z.object({
+  attempt: z.number(),
+  status: z.number().nullable(),
+  error: z.string().nullable(),
+  /** The first KB of what the endpoint answered. */
+  responseBody: z.string().nullable(),
+  durationMs: z.number().nullable(),
+  at: z.number(),
+});
+
 export const WebhookDeliveryView = z
-  .object({ id: z.string(), event: z.string().optional(), status: z.string().optional() })
+  .object({
+    id: z.string(),
+    /** Sent as `webhook-id`; the same on every retry, for de-duplicating. */
+    eventId: z.string().nullable(),
+    event: z.string(),
+    /** `pending` (queued or waiting to retry), `success` or `failed` (gave up). */
+    status: z.enum(["pending", "success", "failed"]),
+    attempt: z.number(),
+    maxAttempts: z.number(),
+    responseStatus: z.number().nullable(),
+    lastError: z.string().nullable(),
+    nextAttemptAt: z.number().nullable(),
+    deliveredAt: z.number().nullable(),
+    createdAt: z.number(),
+    attempts: z.array(WebhookAttemptView),
+  })
   .loose();
+
+export const WebhookQueueCountsView = z.object({
+  /** Queued, in flight, or waiting for a retry. */
+  pending: z.number(),
+  /** Out of retries: the failed list. */
+  failed: z.number(),
+  delivered24h: z.number(),
+  lastDeliveredAt: z.number().nullable(),
+});
+
+export const WebhookQueueStatsView = z.object({
+  total: WebhookQueueCountsView,
+  endpoints: z.array(WebhookQueueCountsView.extend({ webhookId: z.string() })),
+});
 
 export const AiDocumentView = z
   .object({ doc: z.unknown(), issues: z.array(LintIssueView).optional() })

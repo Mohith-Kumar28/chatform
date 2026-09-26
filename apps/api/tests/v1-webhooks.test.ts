@@ -175,7 +175,7 @@ describe("deliveries", () => {
     expect((await api(`/v1/webhooks/${created.id}/deliveries/whd_v1/replay`, { method: "POST" })).status).toBe(200);
   });
 
-  it("refuses to replay a delivery whose message was never stored", async () => {
+  it("replays a delivery from before the message was stored, from the payload it sent", async () => {
     const created = (await (
       await api("/v1/webhooks", {
         method: "POST",
@@ -184,15 +184,71 @@ describe("deliveries", () => {
     ).json()) as { id: string };
     await env.DB.prepare(
       `INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, attempt, status, created_at)
-       VALUES ('whd_old', ?, 'response.completed', '{}', 1, 'failed', ?)`,
+       VALUES ('whd_old', ?, 'response.completed', '{"event":"response.completed"}', 6, 'dead', ?)`,
     )
       .bind(created.id, Date.now())
       .run();
 
-    const res = await api(`/v1/webhooks/${created.id}/deliveries/whd_old/replay`, { method: "POST" });
-    // Its event cannot be reconstructed honestly, and guessing is worse than
-    // refusing.
+    // The payload is on the row; the event does not have to be reconstructed.
+    expect((await api(`/v1/webhooks/${created.id}/deliveries/whd_old/replay`, { method: "POST" })).status).toBe(200);
+    const row = await env.DB.prepare(`SELECT status, attempt, event_id FROM webhook_deliveries WHERE id = 'whd_old'`).first<{
+      status: string;
+      attempt: number;
+      event_id: string;
+    }>();
+    expect(row?.status === "pending" || row?.status === "sending" || row?.status === "success" || row?.status === "dead").toBe(true);
+    expect(row?.event_id).toBe("whd_old");
+  });
+
+  it("refuses to replay a test send", async () => {
+    const created = (await (
+      await api("/v1/webhooks", {
+        method: "POST",
+        body: JSON.stringify({ url: "https://acme.example/test-row", events: ["response.completed"] }),
+      })
+    ).json()) as { id: string };
+    await env.DB.prepare(
+      `INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, attempt, status, created_at)
+       VALUES ('whd_testrow', ?, 'test', '{}', 1, 'dead', ?)`,
+    )
+      .bind(created.id, Date.now())
+      .run();
+    const res = await api(`/v1/webhooks/${created.id}/deliveries/whd_testrow/replay`, { method: "POST" });
     expect(res.status).toBe(422);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("not_replayable");
+  });
+
+  it("reports queue status and turns an endpoint back on", async () => {
+    const created = (await (
+      await api("/v1/webhooks", {
+        method: "POST",
+        body: JSON.stringify({ url: "https://acme.example/stats", events: ["response.completed"] }),
+      })
+    ).json()) as { id: string };
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, attempt, status, delivered_at, created_at)
+         VALUES ('whd_s1', ?1, 'response.completed', '{}', 1, 'success', ?2, ?2),
+                ('whd_s2', ?1, 'response.completed', '{}', 6, 'dead', NULL, ?2),
+                ('whd_s3', ?1, 'response.completed', '{}', 2, 'pending', NULL, ?2),
+                ('whd_s4', ?1, 'test', '{}', 1, 'dead', NULL, ?2)`,
+      ).bind(created.id, now),
+      env.DB.prepare(`UPDATE webhooks SET active = 0, consecutive_failures = 20 WHERE id = ?`).bind(created.id),
+    ]);
+
+    const stats = (await (await api(`/v1/webhooks/stats`)).json()) as {
+      endpoints: { webhookId: string; pending: number; failed: number; delivered24h: number }[];
+    };
+    // The test send is not part of the queue.
+    expect(stats.endpoints.find((e) => e.webhookId === created.id)).toMatchObject({ pending: 1, failed: 1, delivered24h: 1 });
+
+    const failed = (await (await api(`/v1/webhooks/${created.id}/deliveries?status=failed`)).json()) as { data: { id: string; status: string }[] };
+    expect(failed.data.map((d) => d.id).sort()).toEqual(["whd_s2", "whd_s4"]);
+    expect(failed.data.every((d) => d.status === "failed")).toBe(true);
+
+    const on = await api(`/v1/webhooks/${created.id}`, { method: "PATCH", body: JSON.stringify({ active: true }) });
+    expect(on.status).toBe(200);
+    expect((await on.json()) as { active: boolean; consecutiveFailures: number }).toMatchObject({ active: true, consecutiveFailures: 0 });
   });
 });

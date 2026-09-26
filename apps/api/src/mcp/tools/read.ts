@@ -258,7 +258,7 @@ export function registerReadTools(server: McpServer, ctx: () => McpCtx): void {
       annotations: READ_ONLY,
     },
     async ({ form_id }) => {
-      const res = await callApi(ctx(), "GET", "/v1/webhooks", { query: { form_id } });
+      const res = await callApi(ctx(), "GET", "/v1/webhooks", { query: { formId: form_id } });
       if (res.status !== 200) return errorResult(describeFailure(res));
       return jsonResult(res.body);
     },
@@ -333,8 +333,8 @@ export function registerReadTools(server: McpServer, ctx: () => McpCtx): void {
     {
       title: "Why is a webhook quiet",
       description:
-        "The 50 most recent delivery attempts for one webhook — event type, attempt number, response status, " +
-        "the last error and when it will retry. This is the tool for 'my webhook is not firing'.",
+        "The 50 most recent deliveries for one webhook: event type, status (pending, success, failed), every " +
+        "attempt with its response status and error, and when the next retry is. This is the tool for 'my webhook is not firing'.",
       inputSchema: { webhook_id: z.string().describe("The webhook id.") },
       annotations: READ_ONLY,
     },

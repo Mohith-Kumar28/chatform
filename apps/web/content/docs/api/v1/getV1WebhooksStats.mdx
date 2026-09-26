@@ -1,6 +1,6 @@
 ---
-title: Recent deliveries with every attempt, for working out why an endpoint is
-  quiet. Filter with ?status=pending|failed|success
+title: 'Delivery queue status: pending, failed and delivered in the last 24
+  hours, per endpoint'
 full: true
 _openapi:
   preload:
@@ -23,7 +23,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="chatform" operations={[{"path":"/v1/webhooks/{id}/deliveries","method":"get"}]} />
+      <Comp document="chatform" operations={[{"path":"/v1/webhooks/stats","method":"get"}]} />
     </>
   );
 }

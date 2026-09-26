@@ -117,9 +117,9 @@ healthRouter.get(
       mailFailures,
     ] = await Promise.all([
       c.env.DB.prepare(
-        `SELECT COALESCE(SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END), 0) AS delivered,
-                COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
-                COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS pending
+        `SELECT COALESCE(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END), 0) AS delivered,
+                COALESCE(SUM(CASE WHEN status = 'dead' THEN 1 ELSE 0 END), 0) AS failed,
+                COALESCE(SUM(CASE WHEN status IN ('pending', 'sending') THEN 1 ELSE 0 END), 0) AS pending
            FROM webhook_deliveries WHERE created_at >= ?`,
       )
         .bind(since)

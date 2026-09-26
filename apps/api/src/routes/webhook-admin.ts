@@ -5,7 +5,14 @@ import { z } from "zod";
 import { BAD_WEBHOOK_URL, deliverableUrl } from "../lib/webhook-url.js";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
-import { hmac, EVENT_ALIASES } from "../lib/webhooks.js";
+import {
+  EVENT_ALIASES,
+  listDeliveries,
+  redeliver,
+  retryAllFailed,
+  sendSigned,
+  webhookQueueStats,
+} from "../lib/webhooks.js";
 import { requirePermission, type AuthzVars } from "../lib/authorize.js";
 import { getEntitlements, countWebhooks } from "../lib/entitlements.js";
 import { limitReached } from "@repo/entitlements";
@@ -35,6 +42,9 @@ webhooksRouter.use("/webhooks", requireOrg);
 webhooksRouter.use("/webhooks", requirePermission("webhook", "read"));
 webhooksRouter.post("/webhooks", requirePermission("webhook", "create"));
 webhooksRouter.delete("/webhooks/:id", requirePermission("webhook", "delete"));
+webhooksRouter.patch("/webhooks/:id", requirePermission("webhook", "update"));
+webhooksRouter.post("/webhooks/:id/*", requirePermission("webhook", "update"));
+webhooksRouter.get("/webhooks/*", requirePermission("webhook", "read"));
 
 const WebhookRow = z.object({
   id: z.string(),
@@ -135,21 +145,80 @@ webhooksRouter.delete(
   },
 );
 
+const QueueCounts = z.object({
+  pending: z.number(),
+  failed: z.number(),
+  delivered24h: z.number(),
+  lastDeliveredAt: z.number().nullable(),
+});
+const QueueStats = z.object({
+  total: QueueCounts,
+  endpoints: z.array(QueueCounts.extend({ webhookId: z.string() })),
+});
+
+webhooksRouter.get(
+  "/webhooks/stats",
+  describeRoute({ tags: ["dashboard"], summary: "Delivery queue status: pending, failed, delivered in 24h", responses: { 200: { description: "Counts", content: { "application/json": { schema: resolver(QueueStats) } } } } }),
+  async (c) => {
+    const orgId = c.get("orgId");
+    if (!orgId) return c.json({ total: { pending: 0, failed: 0, delivered24h: 0, lastDeliveredAt: null }, endpoints: [] });
+    return c.json(await webhookQueueStats(c.env, orgId, c.req.query("formId") ?? null));
+  },
+);
+
+webhooksRouter.patch(
+  "/webhooks/:id",
+  validator("json", z.object({ active: z.boolean() })),
+  describeRoute({ tags: ["dashboard"], summary: "Turn a webhook on or off", responses: { 200: { description: "Updated", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean(), active: z.boolean() })) } } } } }),
+  async (c) => {
+    const orgId = c.get("orgId");
+    const { active } = c.req.valid("json");
+    // Back on means a clean slate: the old failures are why it was off.
+    const res = await c.env.DB.prepare(
+      `UPDATE webhooks SET active = ?, consecutive_failures = CASE WHEN ? = 1 THEN 0 ELSE consecutive_failures END
+        WHERE id = ? AND organization_id = ?`,
+    )
+      .bind(active ? 1 : 0, active ? 1 : 0, c.req.param("id"), orgId ?? "")
+      .run();
+    if (!res.meta.changes) return c.json({ error: { code: "not_found", message: "Webhook not found" } }, 404);
+    return c.json({ ok: true, active });
+  },
+);
+
 webhooksRouter.get(
   "/webhooks/:id/deliveries",
-  describeRoute({ tags: ["dashboard"], summary: "Recent deliveries for a webhook", responses: { 200: { description: "Deliveries", content: { "application/json": { schema: resolver(z.array(z.any())) } } } } }),
+  describeRoute({ tags: ["dashboard"], summary: "Recent deliveries for a webhook, with every attempt", responses: { 200: { description: "Deliveries", content: { "application/json": { schema: resolver(z.array(z.any())) } } } } }),
   async (c) => {
-    const id = c.req.param("id");
-    const orgId = c.get("orgId");
-    const rows = await c.env.DB.prepare(
-      `SELECT d.id, d.event_type, d.status, d.response_status, d.last_error, d.attempt, d.created_at, d.payload
-         FROM webhook_deliveries d
-         JOIN webhooks w ON w.id = d.webhook_id AND w.organization_id = ?
-        WHERE d.webhook_id = ? ORDER BY d.created_at DESC LIMIT 25`,
-    )
-      .bind(orgId ?? "", id)
-      .all();
-    return c.json(rows.results ?? []);
+    const status = c.req.query("status");
+    const rows = await listDeliveries(c.env, c.get("orgId") ?? "", c.req.param("id"), {
+      status: status === "pending" || status === "failed" || status === "success" ? status : undefined,
+      limit: 25,
+      withPayload: true,
+    });
+    if (!rows) return c.json({ error: { code: "not_found", message: "Webhook not found" } }, 404);
+    return c.json(rows);
+  },
+);
+
+webhooksRouter.post(
+  "/webhooks/:id/deliveries/:deliveryId/retry",
+  describeRoute({ tags: ["dashboard"], summary: "Send one delivery again, now", responses: { 200: { description: "Queued", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean(), queued: z.boolean() })) } } } } }),
+  async (c) => {
+    const result = await redeliver(c.env, c.get("orgId") ?? "", c.req.param("id"), c.req.param("deliveryId"));
+    if (result === "not_found") return c.json({ error: { code: "not_found", message: "Delivery not found" } }, 404);
+    if (result === "not_replayable") {
+      return c.json({ error: { code: "not_replayable", message: "A test send cannot be retried. Use Test connection." } }, 422);
+    }
+    return c.json({ ok: true, queued: true });
+  },
+);
+
+webhooksRouter.post(
+  "/webhooks/:id/retry-failed",
+  describeRoute({ tags: ["dashboard"], summary: "Send every failed delivery again", responses: { 200: { description: "Queued", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean(), queued: z.number() })) } } } } }),
+  async (c) => {
+    const queued = await retryAllFailed(c.env, c.get("orgId") ?? "", c.req.param("id"));
+    return c.json({ ok: true, queued });
   },
 );
 
@@ -163,48 +232,32 @@ webhooksRouter.post(
       .bind(id, orgId ?? "")
       .first<{ url: string; secret: string }>();
     if (!hook) return c.json({ error: { code: "not_found", message: "Webhook not found" } }, 404);
-    const body = JSON.stringify({ event: "test", timestamp: Date.now(), formId: null });
-    const timestamp = Math.floor(Date.now() / 1000);
-    const signature = await hmac(hook.secret, `${timestamp}.${body}`);
-    let ok = false;
-    // What the endpoint said, so "didn't accept it" can say how.
-    let status: number | null = null;
-    let error: string | null = null;
-    try {
-      const res = await fetch(hook.url, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-chatform-event": "test",
-          "x-chatform-signature": `t=${timestamp}, v1=${signature}`,
-        },
-        body,
-        signal: AbortSignal.timeout(8000),
-      });
-      ok = res.status < 400;
-      status = res.status;
-    } catch (err) {
-      ok = false;
-      error = err instanceof Error && err.name === "TimeoutError" ? "Timed out after 8s" : "Could not reach the URL";
-    }
+    const eventId = `evt_test_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    const deliveryId = `whd_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+    const body = JSON.stringify({ id: eventId, event: "test", timestamp: Date.now(), formId: null });
+    // The same signed request a real delivery makes, headers and all.
+    const result = await sendSigned(hook, { eventId, deliveryId, eventType: "test", body });
     /**
-     * Logged like any delivery, so the endpoint's history shows the test.
-     * No message and no retry time: the retry sweep never picks it up.
+     * Logged like any delivery, so the endpoint's history shows the test. It
+     * is never retried and never counted in the queue status.
      */
-    await c.env.DB.prepare(
-      `INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, message_json, attempt, status, response_status, last_error, next_retry_at, created_at)
-       VALUES (?, ?, 'test', ?, NULL, 1, ?, ?, ?, NULL, ?)`,
-    )
-      .bind(
-        `whd_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
-        id,
-        body,
-        ok ? "success" : "failed",
-        status,
-        ok ? null : (error ?? `HTTP ${status}`),
-        Date.now(),
-      )
-      .run();
-    return c.json({ ok, status, error, signature: `t=${timestamp}, v1=${signature.slice(0, 16)}…` });
+    const now = Date.now();
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO webhook_deliveries (id, webhook_id, event_id, event_type, payload, message_json, attempt, status, response_status, last_error, delivered_at, created_at, updated_at)
+         VALUES (?, ?, ?, 'test', ?, NULL, 1, ?, ?, ?, ?, ?, ?)`,
+      ).bind(deliveryId, id, eventId, body, result.ok ? "success" : "dead", result.status, result.error, result.ok ? now : null, now, now),
+      c.env.DB.prepare(
+        `INSERT INTO webhook_attempts (id, delivery_id, attempt, response_status, error, response_body, duration_ms, created_at)
+         VALUES (?, ?, 1, ?, ?, ?, ?, ?)`,
+      ).bind(`wha_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`, deliveryId, result.status, result.error, result.responseBody, result.durationMs, now),
+    ]);
+    return c.json({
+      ok: result.ok,
+      status: result.status,
+      // Only when nothing answered; a status code already says what went wrong.
+      error: result.status == null ? result.error : null,
+      signature: "v1 (Standard Webhooks) and x-chatform-signature",
+    });
   },
 );

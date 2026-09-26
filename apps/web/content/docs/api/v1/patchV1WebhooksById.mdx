@@ -1,11 +1,10 @@
 ---
-title: Recent deliveries with every attempt, for working out why an endpoint is
-  quiet. Filter with ?status=pending|failed|success
+title: Turn an endpoint on or off. Turning it on clears its failure count
 full: true
 _openapi:
   preload:
     - chatform
-  method: GET
+  method: PATCH
   webhook: false
   toc: []
   structuredData:
@@ -23,7 +22,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="chatform" operations={[{"path":"/v1/webhooks/{id}/deliveries","method":"get"}]} />
+      <Comp document="chatform" operations={[{"path":"/v1/webhooks/{id}","method":"patch"}]} />
     </>
   );
 }

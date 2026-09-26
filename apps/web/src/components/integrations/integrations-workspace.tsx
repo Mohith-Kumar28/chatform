@@ -199,7 +199,7 @@ export function IntegrationsWorkspace({
                 ? PAYMENT_SHEET_COPY[paymentProvider].description
                 : panel === "spreadsheet"
                   ? "Download the responses, or keep a sheet pointed at them."
-                  : "Signed HTTP callbacks, retried for two hours before they're given up on."}
+                  : "Signed HTTP callbacks from a delivery queue, retried for about ten hours."}
             </SheetDescription>
           </SheetHeader>
           <div className="px-4 pb-8">

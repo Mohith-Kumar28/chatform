@@ -57,6 +57,7 @@ import type {
   GetApiTemplatesBySlug200,
   GetApiTemplatesBySlug404,
   GetApiWebhooks200Item,
+  GetApiWebhooksStats200,
   GetApiWorkspaces200Item,
   PatchApiFormsByIdWorkspace200,
   PatchApiFormsByIdWorkspace404,
@@ -64,6 +65,8 @@ import type {
   PatchApiPaymentAccountsById200,
   PatchApiPaymentAccountsById404,
   PatchApiPaymentAccountsByIdBody,
+  PatchApiWebhooksById200,
+  PatchApiWebhooksByIdBody,
   PatchApiWorkspacesById200,
   PatchApiWorkspacesByIdBody,
   PostApiAiAddBlocks200,
@@ -126,6 +129,8 @@ import type {
   PostApiTemplatesBySlugUseParams,
   PostApiWebhooks200,
   PostApiWebhooksBody,
+  PostApiWebhooksByIdDeliveriesByDeliveryIdRetry200,
+  PostApiWebhooksByIdRetryFailed200,
   PostApiWebhooksByIdTest200,
   PostApiWorkspaces200,
   PostApiWorkspacesBody,
@@ -4174,7 +4179,185 @@ export const useDeleteApiWebhooksById = <TError = unknown,
       > => {
       return useMutation(getDeleteApiWebhooksByIdMutationOptions(options));
     }
-    export type getApiWebhooksByIdDeliveriesResponse200 = {
+    export type patchApiWebhooksByIdResponse200 = {
+  data: PatchApiWebhooksById200
+  status: 200
+}
+
+export type patchApiWebhooksByIdResponseSuccess = (patchApiWebhooksByIdResponse200) & {
+  headers: Headers;
+};
+;
+
+export type patchApiWebhooksByIdResponse = (patchApiWebhooksByIdResponseSuccess)
+
+export const getPatchApiWebhooksByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/webhooks/${id}`
+}
+
+/**
+ * @summary Turn a webhook on or off
+ */
+export const patchApiWebhooksById = async (id: string,
+    patchApiWebhooksByIdBody: PatchApiWebhooksByIdBody, options?: Parameters<typeof customFetch>[1]): Promise<patchApiWebhooksByIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<patchApiWebhooksByIdResponse>(getPatchApiWebhooksByIdUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(patchApiWebhooksByIdBody)
+  }
+);}
+
+
+
+
+
+export const getPatchApiWebhooksByIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiWebhooksById>>, TError,PatchApiWebhooksByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiWebhooksById>>, TError,PatchApiWebhooksByIdMutationVariables, TContext> => {
+
+const mutationKey = ['patchApiWebhooksById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiWebhooksById>>, PatchApiWebhooksByIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  patchApiWebhooksById(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchApiWebhooksByIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiWebhooksById>>>
+    export type PatchApiWebhooksByIdMutationBody = PatchApiWebhooksByIdBody
+    export type PatchApiWebhooksByIdMutationError = unknown
+    export type PatchApiWebhooksByIdMutationVariables = {id: string;data: PatchApiWebhooksByIdBody}
+
+    /**
+ * @summary Turn a webhook on or off
+ */
+export const usePatchApiWebhooksById = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiWebhooksById>>, TError,PatchApiWebhooksByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchApiWebhooksById>>,
+        TError,
+        PatchApiWebhooksByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchApiWebhooksByIdMutationOptions(options));
+    }
+    export type getApiWebhooksStatsResponse200 = {
+  data: GetApiWebhooksStats200
+  status: 200
+}
+
+export type getApiWebhooksStatsResponseSuccess = (getApiWebhooksStatsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiWebhooksStatsResponse = (getApiWebhooksStatsResponseSuccess)
+
+export const getGetApiWebhooksStatsUrl = () => {
+
+
+
+
+  return `/api/webhooks/stats`
+}
+
+/**
+ * @summary Delivery queue status: pending, failed, delivered in 24h
+ */
+export const getApiWebhooksStats = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiWebhooksStatsResponse> => {
+
+  return customFetch<getApiWebhooksStatsResponse>(getGetApiWebhooksStatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiWebhooksStatsQueryKey = () => {
+    return [
+    `/api/webhooks/stats`
+    ] as const;
+    }
+
+
+export const getGetApiWebhooksStatsQueryOptions = <TData = Awaited<ReturnType<typeof getApiWebhooksStats>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiWebhooksStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiWebhooksStatsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiWebhooksStats>>> = ({ signal }) => getApiWebhooksStats({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiWebhooksStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiWebhooksStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiWebhooksStats>>>
+export type GetApiWebhooksStatsQueryError = unknown
+
+
+/**
+ * @summary Delivery queue status: pending, failed, delivered in 24h
+ */
+
+export function useGetApiWebhooksStats<TData = Awaited<ReturnType<typeof getApiWebhooksStats>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiWebhooksStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiWebhooksStatsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiWebhooksByIdDeliveriesResponse200 = {
   data: unknown[]
   status: 200
 }
@@ -4195,7 +4378,7 @@ export const getGetApiWebhooksByIdDeliveriesUrl = (id: string,) => {
 }
 
 /**
- * @summary Recent deliveries for a webhook
+ * @summary Recent deliveries for a webhook, with every attempt
  */
 export const getApiWebhooksByIdDeliveries = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiWebhooksByIdDeliveriesResponse> => {
 
@@ -4242,7 +4425,7 @@ export type GetApiWebhooksByIdDeliveriesQueryError = unknown
 
 
 /**
- * @summary Recent deliveries for a webhook
+ * @summary Recent deliveries for a webhook, with every attempt
  */
 
 export function useGetApiWebhooksByIdDeliveries<TData = Awaited<ReturnType<typeof getApiWebhooksByIdDeliveries>>, TError = unknown>(
@@ -4262,7 +4445,175 @@ export function useGetApiWebhooksByIdDeliveries<TData = Awaited<ReturnType<typeo
 
 
 
-export type postApiWebhooksByIdTestResponse200 = {
+export type postApiWebhooksByIdDeliveriesByDeliveryIdRetryResponse200 = {
+  data: PostApiWebhooksByIdDeliveriesByDeliveryIdRetry200
+  status: 200
+}
+
+export type postApiWebhooksByIdDeliveriesByDeliveryIdRetryResponseSuccess = (postApiWebhooksByIdDeliveriesByDeliveryIdRetryResponse200) & {
+  headers: Headers;
+};
+;
+
+export type postApiWebhooksByIdDeliveriesByDeliveryIdRetryResponse = (postApiWebhooksByIdDeliveriesByDeliveryIdRetryResponseSuccess)
+
+export const getPostApiWebhooksByIdDeliveriesByDeliveryIdRetryUrl = (id: string,
+    deliveryId: string,) => {
+
+
+
+
+  return `/api/webhooks/${id}/deliveries/${deliveryId}/retry`
+}
+
+/**
+ * @summary Send one delivery again, now
+ */
+export const postApiWebhooksByIdDeliveriesByDeliveryIdRetry = async (id: string,
+    deliveryId: string, options?: Parameters<typeof customFetch>[1]): Promise<postApiWebhooksByIdDeliveriesByDeliveryIdRetryResponse> => {
+
+  return customFetch<postApiWebhooksByIdDeliveriesByDeliveryIdRetryResponse>(getPostApiWebhooksByIdDeliveriesByDeliveryIdRetryUrl(id,deliveryId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiWebhooksByIdDeliveriesByDeliveryIdRetryMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiWebhooksByIdDeliveriesByDeliveryIdRetry>>, TError,PostApiWebhooksByIdDeliveriesByDeliveryIdRetryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiWebhooksByIdDeliveriesByDeliveryIdRetry>>, TError,PostApiWebhooksByIdDeliveriesByDeliveryIdRetryMutationVariables, TContext> => {
+
+const mutationKey = ['postApiWebhooksByIdDeliveriesByDeliveryIdRetry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiWebhooksByIdDeliveriesByDeliveryIdRetry>>, PostApiWebhooksByIdDeliveriesByDeliveryIdRetryMutationVariables> = (props) => {
+          const {id,deliveryId} = props ?? {};
+
+          return  postApiWebhooksByIdDeliveriesByDeliveryIdRetry(id,deliveryId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiWebhooksByIdDeliveriesByDeliveryIdRetryMutationResult = NonNullable<Awaited<ReturnType<typeof postApiWebhooksByIdDeliveriesByDeliveryIdRetry>>>
+
+    export type PostApiWebhooksByIdDeliveriesByDeliveryIdRetryMutationError = unknown
+    export type PostApiWebhooksByIdDeliveriesByDeliveryIdRetryMutationVariables = {id: string;deliveryId: string}
+
+    /**
+ * @summary Send one delivery again, now
+ */
+export const usePostApiWebhooksByIdDeliveriesByDeliveryIdRetry = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiWebhooksByIdDeliveriesByDeliveryIdRetry>>, TError,PostApiWebhooksByIdDeliveriesByDeliveryIdRetryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiWebhooksByIdDeliveriesByDeliveryIdRetry>>,
+        TError,
+        PostApiWebhooksByIdDeliveriesByDeliveryIdRetryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiWebhooksByIdDeliveriesByDeliveryIdRetryMutationOptions(options));
+    }
+    export type postApiWebhooksByIdRetryFailedResponse200 = {
+  data: PostApiWebhooksByIdRetryFailed200
+  status: 200
+}
+
+export type postApiWebhooksByIdRetryFailedResponseSuccess = (postApiWebhooksByIdRetryFailedResponse200) & {
+  headers: Headers;
+};
+;
+
+export type postApiWebhooksByIdRetryFailedResponse = (postApiWebhooksByIdRetryFailedResponseSuccess)
+
+export const getPostApiWebhooksByIdRetryFailedUrl = (id: string,) => {
+
+
+
+
+  return `/api/webhooks/${id}/retry-failed`
+}
+
+/**
+ * @summary Send every failed delivery again
+ */
+export const postApiWebhooksByIdRetryFailed = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postApiWebhooksByIdRetryFailedResponse> => {
+
+  return customFetch<postApiWebhooksByIdRetryFailedResponse>(getPostApiWebhooksByIdRetryFailedUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiWebhooksByIdRetryFailedMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiWebhooksByIdRetryFailed>>, TError,PostApiWebhooksByIdRetryFailedMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiWebhooksByIdRetryFailed>>, TError,PostApiWebhooksByIdRetryFailedMutationVariables, TContext> => {
+
+const mutationKey = ['postApiWebhooksByIdRetryFailed'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiWebhooksByIdRetryFailed>>, PostApiWebhooksByIdRetryFailedMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postApiWebhooksByIdRetryFailed(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiWebhooksByIdRetryFailedMutationResult = NonNullable<Awaited<ReturnType<typeof postApiWebhooksByIdRetryFailed>>>
+
+    export type PostApiWebhooksByIdRetryFailedMutationError = unknown
+    export type PostApiWebhooksByIdRetryFailedMutationVariables = {id: string}
+
+    /**
+ * @summary Send every failed delivery again
+ */
+export const usePostApiWebhooksByIdRetryFailed = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiWebhooksByIdRetryFailed>>, TError,PostApiWebhooksByIdRetryFailedMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiWebhooksByIdRetryFailed>>,
+        TError,
+        PostApiWebhooksByIdRetryFailedMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiWebhooksByIdRetryFailedMutationOptions(options));
+    }
+    export type postApiWebhooksByIdTestResponse200 = {
   data: PostApiWebhooksByIdTest200
   status: 200
 }

@@ -59,7 +59,7 @@ API that writes to your database.
 Headers follow the [Standard Webhooks](https://www.standardwebhooks.com) spec:
 
 ```
-webhook-id: whd_…
+webhook-id: evt_…
 webhook-timestamp: 1788505749
 webhook-signature: v1,<base64 HMAC-SHA256>
 ```
@@ -141,17 +141,26 @@ and the signature is over the bytes.
 
 ## Retries
 
-A delivery that fails is retried after 1 minute, 5 minutes, 30 minutes and 2
-hours, then marked dead. Any 2xx counts as success.
+Every event goes into a delivery queue, with one delivery per endpoint. A
+delivery that fails is retried on its own, after about 1 minute, 5 minutes, 30
+minutes, 2 hours and 8 hours (each with a little random jitter), so six attempts
+over roughly ten hours. Only a 2xx counts as success. Redirects are not followed.
 
-Endpoints that fail twenty times in a row are switched off. That is a courtesy —
-an endpoint gone that long is not coming back on its own, and retrying every
-event forever turns a dead integration into an incident.
+- A `429` or `503` with a `Retry-After` header waits as long as it asks, up to a day.
+- A `410 Gone` stops at once and switches the endpoint off.
+- After the last retry the delivery moves to the **Failed** list in the
+  Integrate tab, where you can retry it, or all of them, once your server is
+  fixed. Failed and delivered deliveries are kept for 30 days.
+
+Endpoints that fail twenty attempts in a row are switched off. Their pending
+deliveries move to the Failed list, so turning the endpoint back on and pressing
+**Retry all** recovers everything it missed.
 
 ## Handling them well
 
-- **Be idempotent.** Deliveries are at-least-once. `webhook-id` is unique per
-  delivery; recording the ones you have processed is the simplest way.
-- **Answer quickly.** We wait ten seconds. Acknowledge, then do the work.
+- **Be idempotent.** Deliveries are at-least-once. `webhook-id` is the event's
+  id, the same on every retry and on a manual retry; recording the ones you
+  have processed is the simplest way. `x-chatform-delivery` names the delivery.
+- **Answer quickly.** We wait fifteen seconds. Acknowledge, then do the work.
 - **Do not infer order.** A retried event can arrive after a newer one. Use
   `timestamp`, or re-read the response.

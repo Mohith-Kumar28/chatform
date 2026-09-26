@@ -69,9 +69,12 @@ import type {
   GetV1TemplatesBySlug404,
   GetV1Webhooks200,
   GetV1WebhooksByIdDeliveries200,
+  GetV1WebhooksStats200,
   PatchV1PaymentAccountsById200,
   PatchV1PaymentAccountsById404,
   PatchV1PaymentAccountsByIdBody,
+  PatchV1WebhooksById200,
+  PatchV1WebhooksByIdBody,
   PostPSessionsByIdAuthGoogle200,
   PostPSessionsByIdAuthPhoneToken200,
   PostPSessionsByIdVerifyPhoneToken200,
@@ -159,6 +162,7 @@ import type {
   PostV1Webhooks201,
   PostV1WebhooksBody,
   PostV1WebhooksByIdDeliveriesByDeliveryIdReplay200,
+  PostV1WebhooksByIdRetryFailed200,
   PutV1FormsByIdDoc200,
   PutV1FormsByIdDocBody,
   PutV1FormsByIdIntegrationsSpreadsheet200,
@@ -4644,6 +4648,191 @@ export const usePostV1Webhooks = <TError = void,
       > => {
       return useMutation(getPostV1WebhooksMutationOptions(options));
     }
+    export type getV1WebhooksStatsResponse200 = {
+  data: GetV1WebhooksStats200
+  status: 200
+}
+
+export type getV1WebhooksStatsResponseSuccess = (getV1WebhooksStatsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getV1WebhooksStatsResponse = (getV1WebhooksStatsResponseSuccess)
+
+export const getGetV1WebhooksStatsUrl = () => {
+
+
+
+
+  return `/v1/webhooks/stats`
+}
+
+/**
+ * @summary Delivery queue status: pending, failed and delivered in the last 24 hours, per endpoint
+ */
+export const getV1WebhooksStats = async ( options?: Parameters<typeof customFetch>[1]): Promise<getV1WebhooksStatsResponse> => {
+
+  return customFetch<getV1WebhooksStatsResponse>(getGetV1WebhooksStatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1WebhooksStatsQueryKey = () => {
+    return [
+    `/v1/webhooks/stats`
+    ] as const;
+    }
+
+
+export const getGetV1WebhooksStatsQueryOptions = <TData = Awaited<ReturnType<typeof getV1WebhooksStats>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1WebhooksStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1WebhooksStatsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1WebhooksStats>>> = ({ signal }) => getV1WebhooksStats({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1WebhooksStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1WebhooksStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getV1WebhooksStats>>>
+export type GetV1WebhooksStatsQueryError = unknown
+
+
+/**
+ * @summary Delivery queue status: pending, failed and delivered in the last 24 hours, per endpoint
+ */
+
+export function useGetV1WebhooksStats<TData = Awaited<ReturnType<typeof getV1WebhooksStats>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1WebhooksStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1WebhooksStatsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type patchV1WebhooksByIdResponse200 = {
+  data: PatchV1WebhooksById200
+  status: 200
+}
+
+export type patchV1WebhooksByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type patchV1WebhooksByIdResponseSuccess = (patchV1WebhooksByIdResponse200) & {
+  headers: Headers;
+};
+export type patchV1WebhooksByIdResponseError = (patchV1WebhooksByIdResponse404) & {
+  headers: Headers;
+};
+
+export type patchV1WebhooksByIdResponse = (patchV1WebhooksByIdResponseSuccess | patchV1WebhooksByIdResponseError)
+
+export const getPatchV1WebhooksByIdUrl = (id: string,) => {
+
+
+
+
+  return `/v1/webhooks/${id}`
+}
+
+/**
+ * @summary Turn an endpoint on or off. Turning it on clears its failure count
+ */
+export const patchV1WebhooksById = async (id: string,
+    patchV1WebhooksByIdBody: PatchV1WebhooksByIdBody, options?: Parameters<typeof customFetch>[1]): Promise<patchV1WebhooksByIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<patchV1WebhooksByIdResponse>(getPatchV1WebhooksByIdUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(patchV1WebhooksByIdBody)
+  }
+);}
+
+
+
+
+
+export const getPatchV1WebhooksByIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchV1WebhooksById>>, TError,PatchV1WebhooksByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchV1WebhooksById>>, TError,PatchV1WebhooksByIdMutationVariables, TContext> => {
+
+const mutationKey = ['patchV1WebhooksById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchV1WebhooksById>>, PatchV1WebhooksByIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  patchV1WebhooksById(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchV1WebhooksByIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchV1WebhooksById>>>
+    export type PatchV1WebhooksByIdMutationBody = PatchV1WebhooksByIdBody
+    export type PatchV1WebhooksByIdMutationError = void
+    export type PatchV1WebhooksByIdMutationVariables = {id: string;data: PatchV1WebhooksByIdBody}
+
+    /**
+ * @summary Turn an endpoint on or off. Turning it on clears its failure count
+ */
+export const usePatchV1WebhooksById = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchV1WebhooksById>>, TError,PatchV1WebhooksByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchV1WebhooksById>>,
+        TError,
+        PatchV1WebhooksByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchV1WebhooksByIdMutationOptions(options));
+    }
     export type deleteV1WebhooksByIdResponse200 = {
   data: DeleteV1WebhooksById200
   status: 200
@@ -4762,7 +4951,7 @@ export const getGetV1WebhooksByIdDeliveriesUrl = (id: string,) => {
 }
 
 /**
- * @summary Recent delivery attempts, for working out why an endpoint is quiet
+ * @summary Recent deliveries with every attempt, for working out why an endpoint is quiet. Filter with ?status=pending|failed|success
  */
 export const getV1WebhooksByIdDeliveries = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1WebhooksByIdDeliveriesResponse> => {
 
@@ -4809,7 +4998,7 @@ export type GetV1WebhooksByIdDeliveriesQueryError = void
 
 
 /**
- * @summary Recent delivery attempts, for working out why an endpoint is quiet
+ * @summary Recent deliveries with every attempt, for working out why an endpoint is quiet. Filter with ?status=pending|failed|success
  */
 
 export function useGetV1WebhooksByIdDeliveries<TData = Awaited<ReturnType<typeof getV1WebhooksByIdDeliveries>>, TError = void>(
@@ -4925,6 +5114,96 @@ export const usePostV1WebhooksByIdDeliveriesByDeliveryIdReplay = <TError = void,
         TContext
       > => {
       return useMutation(getPostV1WebhooksByIdDeliveriesByDeliveryIdReplayMutationOptions(options));
+    }
+    export type postV1WebhooksByIdRetryFailedResponse200 = {
+  data: PostV1WebhooksByIdRetryFailed200
+  status: 200
+}
+
+export type postV1WebhooksByIdRetryFailedResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postV1WebhooksByIdRetryFailedResponseSuccess = (postV1WebhooksByIdRetryFailedResponse200) & {
+  headers: Headers;
+};
+export type postV1WebhooksByIdRetryFailedResponseError = (postV1WebhooksByIdRetryFailedResponse404) & {
+  headers: Headers;
+};
+
+export type postV1WebhooksByIdRetryFailedResponse = (postV1WebhooksByIdRetryFailedResponseSuccess | postV1WebhooksByIdRetryFailedResponseError)
+
+export const getPostV1WebhooksByIdRetryFailedUrl = (id: string,) => {
+
+
+
+
+  return `/v1/webhooks/${id}/retry-failed`
+}
+
+/**
+ * @summary Send every failed delivery of an endpoint again (up to 500)
+ */
+export const postV1WebhooksByIdRetryFailed = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1WebhooksByIdRetryFailedResponse> => {
+
+  return customFetch<postV1WebhooksByIdRetryFailedResponse>(getPostV1WebhooksByIdRetryFailedUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1WebhooksByIdRetryFailedMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1WebhooksByIdRetryFailed>>, TError,PostV1WebhooksByIdRetryFailedMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1WebhooksByIdRetryFailed>>, TError,PostV1WebhooksByIdRetryFailedMutationVariables, TContext> => {
+
+const mutationKey = ['postV1WebhooksByIdRetryFailed'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1WebhooksByIdRetryFailed>>, PostV1WebhooksByIdRetryFailedMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postV1WebhooksByIdRetryFailed(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1WebhooksByIdRetryFailedMutationResult = NonNullable<Awaited<ReturnType<typeof postV1WebhooksByIdRetryFailed>>>
+
+    export type PostV1WebhooksByIdRetryFailedMutationError = void
+    export type PostV1WebhooksByIdRetryFailedMutationVariables = {id: string}
+
+    /**
+ * @summary Send every failed delivery of an endpoint again (up to 500)
+ */
+export const usePostV1WebhooksByIdRetryFailed = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1WebhooksByIdRetryFailed>>, TError,PostV1WebhooksByIdRetryFailedMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1WebhooksByIdRetryFailed>>,
+        TError,
+        PostV1WebhooksByIdRetryFailedMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1WebhooksByIdRetryFailedMutationOptions(options));
     }
     export type postV1FormsByIdExportsResponse202 = {
   data: PostV1FormsByIdExports202

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { DeletedView, OkView, Paged, WebhookDeliveryView } from "../../lib/v1-schemas.js";
+import { DeletedView, OkView, Paged, WebhookDeliveryView, WebhookQueueStatsView } from "../../lib/v1-schemas.js";
 import { page } from "../../lib/api-page.js";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../../lib/validator.js";
@@ -9,7 +9,7 @@ import type { Bindings } from "../../env.js";
 import { keyOwnsForm, type GuardVars } from "../../lib/guards.js";
 import { requireScope, requireGauge, type AuthzVars } from "../../lib/authorize.js";
 import { idempotent } from "../../lib/idempotency.js";
-import { EVENT_ALIASES } from "../../lib/webhooks.js";
+import { EVENT_ALIASES, listDeliveries, redeliver, retryAllFailed, webhookQueueStats } from "../../lib/webhooks.js";
 import { audit } from "../../lib/gate-log.js";
 
 /**
@@ -89,6 +89,54 @@ webhooksV1Router.get(
       .bind(...(formId ? [orgId, formId] : [orgId]))
       .all<WebhookRow>();
     return c.json(page((rows.results ?? []).map(project)));
+  },
+);
+
+webhooksV1Router.get(
+  "/webhooks/stats",
+  requireScope("webhook", "read"),
+  describeRoute({
+    tags: ["v1"],
+    summary: "Delivery queue status: pending, failed and delivered in the last 24 hours, per endpoint",
+    responses: { 200: { description: "Counts", content: { "application/json": { schema: resolver(WebhookQueueStatsView) } } } },
+  }),
+  async (c) => c.json(await webhookQueueStats(c.env, c.get("orgId")!, c.req.query("formId") ?? null)),
+);
+
+webhooksV1Router.patch(
+  "/webhooks/:id",
+  requireScope("webhook", "write"),
+  validator("json", z.object({ active: z.boolean() })),
+  describeRoute({
+    tags: ["v1"],
+    summary: "Turn an endpoint on or off. Turning it on clears its failure count",
+    responses: {
+      200: { description: "Updated", content: { "application/json": { schema: resolver(WebhookView) } } },
+      404: { description: "Not found" },
+    },
+  }),
+  async (c) => {
+    const orgId = c.get("orgId")!;
+    const id = c.req.param("id");
+    const { active } = c.req.valid("json");
+    const res = await c.env.DB.prepare(
+      `UPDATE webhooks SET active = ?, consecutive_failures = CASE WHEN ? = 1 THEN 0 ELSE consecutive_failures END
+        WHERE id = ? AND organization_id = ?`,
+    )
+      .bind(active ? 1 : 0, active ? 1 : 0, id, orgId)
+      .run();
+    if ((res.meta?.changes ?? 0) === 0) return c.json({ error: { code: "not_found", message: "Webhook not found" } }, 404);
+    await audit(c.env, {
+      orgId,
+      actorType: "api_key",
+      actorId: c.get("keyId") ?? null,
+      action: "webhook.update",
+      resourceType: "webhook",
+      resourceId: id,
+      meta: { active },
+    });
+    const row = await c.env.DB.prepare(`SELECT ${COLUMNS} FROM webhooks WHERE id = ?`).bind(id).first<WebhookRow>();
+    return c.json(project(row!));
   },
 );
 
@@ -233,7 +281,7 @@ webhooksV1Router.get(
   requireScope("webhook", "read"),
   describeRoute({
     tags: ["v1"],
-    summary: "Recent delivery attempts, for working out why an endpoint is quiet",
+    summary: "Recent deliveries with every attempt, for working out why an endpoint is quiet. Filter with ?status=pending|failed|success",
     responses: {
       200: { description: "Deliveries", content: { "application/json": { schema: resolver(Paged(WebhookDeliveryView)) } } },
       404: { description: "Not found" },
@@ -242,27 +290,22 @@ webhooksV1Router.get(
   async (c) => {
     const orgId = c.get("orgId")!;
     const id = c.req.param("id");
-    const owned = await c.env.DB.prepare(`SELECT id FROM webhooks WHERE id = ? AND organization_id = ?`)
-      .bind(id, orgId)
-      .first();
-    if (!owned) return c.json({ error: { code: "not_found", message: "Webhook not found" } }, 404);
-
-    const rows = await c.env.DB.prepare(
-      `SELECT id, event_type, attempt, status, response_status, last_error, next_retry_at, created_at
-         FROM webhook_deliveries WHERE webhook_id = ? ORDER BY created_at DESC LIMIT 50`,
-    )
-      .bind(id)
-      .all();
-    return c.json(page(rows.results ?? []));
+    const status = c.req.query("status");
+    const rows = await listDeliveries(c.env, orgId, id, {
+      status: status === "pending" || status === "failed" || status === "success" ? status : undefined,
+      limit: 50,
+    });
+    if (!rows) return c.json({ error: { code: "not_found", message: "Webhook not found" } }, 404);
+    return c.json(page(rows));
   },
 );
 
 /**
- * Send the last failed delivery again, now.
+ * Send one delivery again, now.
  *
- * The retry schedule runs out at two hours; after a deploy that fixed the
- * endpoint, waiting for a sweep that will never come again is not a recovery
- * path.
+ * Automatic retries give up after about ten hours; after a deploy that fixed
+ * the endpoint, the failed list is the recovery path. A failed delivery gets a
+ * fresh round of retries; a delivered one is sent again as a copy.
  */
 webhooksV1Router.post(
   "/webhooks/:id/deliveries/:deliveryId/replay",
@@ -277,25 +320,33 @@ webhooksV1Router.post(
     },
   }),
   async (c) => {
-    const orgId = c.get("orgId")!;
-    const row = await c.env.DB.prepare(
-      `SELECT d.message_json FROM webhook_deliveries d
-         JOIN webhooks w ON w.id = d.webhook_id
-        WHERE d.id = ? AND d.webhook_id = ? AND w.organization_id = ?`,
-    )
-      .bind(c.req.param("deliveryId"), c.req.param("id"), orgId)
-      .first<{ message_json: string | null }>();
-    if (!row) return c.json({ error: { code: "not_found", message: "Delivery not found" } }, 404);
-    if (!row.message_json) {
-      // Deliveries from before the message was stored cannot be replayed
-      // honestly — the event would have to be guessed at.
-      return c.json(
-        { error: { code: "not_replayable", message: "This delivery predates replay support." } },
-        422,
-      );
+    const result = await redeliver(c.env, c.get("orgId")!, c.req.param("id"), c.req.param("deliveryId"));
+    if (result === "not_found") return c.json({ error: { code: "not_found", message: "Delivery not found" } }, 404);
+    if (result === "not_replayable") {
+      return c.json({ error: { code: "not_replayable", message: "A test send cannot be replayed." } }, 422);
     }
-    await c.env.Q_WEBHOOKS.send({ ...JSON.parse(row.message_json), attempt: 0 });
     return c.json({ ok: true, queued: true });
+  },
+);
+
+webhooksV1Router.post(
+  "/webhooks/:id/retry-failed",
+  requireScope("webhook", "write"),
+  describeRoute({
+    tags: ["v1"],
+    summary: "Send every failed delivery of an endpoint again (up to 500)",
+    responses: {
+      200: { description: "Queued", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean(), queued: z.number() })) } } },
+      404: { description: "Not found" },
+    },
+  }),
+  async (c) => {
+    const orgId = c.get("orgId")!;
+    const owned = await c.env.DB.prepare(`SELECT id FROM webhooks WHERE id = ? AND organization_id = ?`)
+      .bind(c.req.param("id"), orgId)
+      .first();
+    if (!owned) return c.json({ error: { code: "not_found", message: "Webhook not found" } }, 404);
+    return c.json({ ok: true, queued: await retryAllFailed(c.env, orgId, c.req.param("id")) });
   },
 );
 
