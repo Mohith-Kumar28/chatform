@@ -46,6 +46,7 @@ export async function invalidateEntitlements(env: Bindings, orgId: string): Prom
 }
 
 interface SubscriptionRow {
+  id: string;
   plan_id: string;
   status: string;
   cycle: string | null;
@@ -63,9 +64,9 @@ interface SubscriptionRow {
  * `getPlanLimits`, which only looked at `active`/`trialing` rows and therefore dropped a
  * `past_due` customer straight to Free with no grace window at all.
  */
-async function loadSubscription(env: Bindings, orgId: string): Promise<SubscriptionRow | null> {
+export async function loadSubscription(env: Bindings, orgId: string): Promise<SubscriptionRow | null> {
   const row = await env.DB.prepare(
-    `SELECT plan_id, status, cycle, current_period_start, current_period_end,
+    `SELECT id, plan_id, status, cycle, current_period_start, current_period_end,
             cancel_at_period_end, grace_until, seats
        FROM subscriptions
       WHERE organization_id = ?
@@ -125,6 +126,15 @@ export async function getEntitlements(env: Bindings, orgId: string): Promise<Ent
     /* a failed cache write just costs a query next time */
   });
   return ent;
+}
+
+/**
+ * What the organization is left with once its paid plan stops applying: Free, plus
+ * whatever overrides are still running at `at`. What the plan emails compare a live
+ * form against, so a feature the team granted separately is not listed as lost.
+ */
+export async function entitlementsOnFree(env: Bindings, orgId: string, at: number): Promise<Entitlements> {
+  return resolve({ planId: "free", status: "none", overrides: await loadOverrides(env, orgId), now: at });
 }
 
 /** Entitlements for a caller with no organization — everything locked, nothing crashes. */

@@ -569,13 +569,19 @@ describe("pressing Pay", () => {
     expect((await recordRow(started.body.recordId))?.amount_minor).toBe(25000);
   });
 
-  it("refuses a plan without collect_payments", async () => {
-    const s = await openHosted(freeForm.slug);
-    // Free cannot keep a sign-in gate, so the clamp has already switched it off.
-    await answerName(s);
-    const started = await startPay(s);
-    expect(started.status).toBe(402);
-    expect(started.body.error.code).toBe("plan_required");
+  it("closes a form whose plan no longer includes collect_payments", async () => {
+    // Walking a respondent through the whole conversation to a Pay button that refuses
+    // them is the dead end; the form reads as closed instead, in the owner's own words,
+    // and never mentions a plan. The Pay-time refusal stays for sessions already open.
+    const config = await fetchApi(`/p/forms/${freeForm.slug}/config`);
+    expect(((await config.json()) as { closed?: boolean }).closed).toBe(true);
+    const res = await fetchApi(`/p/forms/${freeForm.slug}/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("form_closed");
   });
 
   it("refuses when gateway payments are switched off", async () => {

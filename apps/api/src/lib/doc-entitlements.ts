@@ -408,29 +408,15 @@ export async function checkGatewayPayments(
  * and then failing. Deriving it on read means a downgrade takes effect without anyone
  * republishing, and an upgrade restores the authored behaviour without re-authoring.
  *
+ * Every gated setting `stripForPublish` removes is removed here too, on every read. It
+ * used to be only the sign-in gate, verified answers and the model, so a form published
+ * on Pro kept its logo, fonts, persona, guardrails, redirect and link preview after the
+ * plan ended, for as long as nobody republished it.
+ *
  * Mutates a clone; the stored version row is never rewritten.
  */
 export function clampForRuntime(input: FormDoc, ent: Entitlements): FormDoc {
-  const doc = structuredClone(input) as FormDoc;
-
-  // Respondent verification, re-derived per method. A respondent must never meet a
-  // sign-in step the plan cannot complete, so losing every method turns the gate off
-  // rather than leaving it up.
-  const gate = doc.settings.requireAuth;
-  if (gate?.enabled) {
-    const granted = gate.method === "phone" ? can(ent, "respondent_auth_phone") : can(ent, "respondent_auth_google");
-    if (!granted) gate.enabled = false;
-  }
-  /*
-   * Answer verification, re-derived per read for the same reason the gate is: a form
-   * published on Business and then downgraded must stop texting codes rather than start
-   * failing at the send. The answer is simply recorded as given from then on.
-   */
-  if (!can(ent, "verified_answers")) {
-    for (const b of doc.blocks) {
-      if ((b.type === "email" || b.type === "phone") && b.verify) b.verify = false;
-    }
-  }
+  const { doc } = stripForPublish(input, ent);
 
   const agent = doc.settings.agent;
   if (!agent) return doc;
@@ -460,8 +446,34 @@ export function clampForRuntime(input: FormDoc, ent: Entitlements): FormDoc {
   if (agent.guardrails && turns != null) agent.guardrails.maxTurns = turns;
   const budget = limitOf(ent, "agent_token_budget");
   if (budget != null) agent.sessionTokenBudget = budget;
-  if (agent.model && !can(ent, "agent_model_picker")) agent.model = undefined;
   return doc;
+}
+
+/**
+ * Whether a published form asks for a verified payment the plan no longer takes.
+ *
+ * Such a form is closed to new respondents rather than left open. A payment question
+ * cannot be skipped without giving away whatever it sells, and leaving it in place walks
+ * every respondent through the whole conversation to a Pay button that refuses them.
+ * Closed reads like any other close, in the owner's own words: a respondent is never told
+ * about somebody's plan. Payment links and UPI QR questions are not gated and stay open.
+ */
+export function gatewayPaymentsLapsed(doc: FormDoc, ent: Entitlements): boolean {
+  if (can(ent, "collect_payments")) return false;
+  return doc.blocks.some((b) => b.type === "payment" && b.method === "gateway");
+}
+
+/**
+ * The paid features a published form uses that `ent` does not include.
+ *
+ * What the plan emails list against each live form: everything `clampForRuntime` would
+ * switch off, plus verified payments, which close the form instead. Deduplicated, in the
+ * order the builder's publish notice would name them.
+ */
+export function paidFeaturesLost(doc: FormDoc, ent: Entitlements): FeatureKey[] {
+  const lost = new Set<FeatureKey>(stripForPublish(doc, ent).stripped.map((s) => s.feature));
+  if (gatewayPaymentsLapsed(doc, ent)) lost.add("collect_payments");
+  return [...lost];
 }
 
 /**

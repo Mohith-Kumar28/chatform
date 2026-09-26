@@ -22,7 +22,7 @@ import { reopenAbandonedResponse } from "../lib/submissions.js";
 import { mountRespondentAuth } from "./respondent-auth.js";
 import { sessionStartLimit, respondentAuthLimit, respondentPaymentLimit } from "../lib/ratelimit.js";
 import { getEntitlements, meter, checkQuota } from "../lib/entitlements.js";
-import { brandingHiddenFor, clampForRuntime } from "../lib/doc-entitlements.js";
+import { brandingHiddenFor, clampForRuntime, gatewayPaymentsLapsed } from "../lib/doc-entitlements.js";
 import { verifyEmailToken } from "../lib/signed-url.js";
 import { captureRequestContext, ClientContextInput } from "../lib/respondent-context.js";
 import { cancelFollowUps, cancelFollowUpsForAddress, recordFollowUpClick, suppress } from "../lib/followups.js";
@@ -306,7 +306,10 @@ sessionsRouter.get(
   const capacityClosed = !!maxSubmissions && (taken ?? 0) >= maxSubmissions;
   const closedReason = scheduleClosed ? ("schedule" as const) : capacityClosed ? ("capacity" as const) : undefined;
   const closed =
-    scheduleClosed || capacityClosed || (await ceilingReached(c.env, formRow.organization_id, ent));
+    scheduleClosed ||
+    capacityClosed ||
+    gatewayPaymentsLapsed(stored, ent) ||
+    (await ceilingReached(c.env, formRow.organization_id, ent));
   const config = toPublicConfig(doc, {
     slug: formRow.slug,
     submissionsTaken,

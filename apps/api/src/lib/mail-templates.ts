@@ -1345,3 +1345,135 @@ function describeGrant(g: AccessGrant): { label: string; blurb?: string } | null
   const per = meta.kind === "monthly" ? " a month" : "";
   return { label: `${meta.label}: ${n === null ? "Unlimited" : `${n.toLocaleString("en-US")}${unit}${per}`}` };
 }
+
+// ─────────────────────────── plan lapsing ───────────────────────────
+
+/** A live form, and what it loses (or lost) when the plan ends. */
+export interface LapsedForm {
+  title: string;
+  url: string;
+  /** Feature labels, as the catalogue names them. */
+  losing: string[];
+  /** A verified payment question closes the form to new responses. */
+  closes: boolean;
+}
+
+/** The forms a lapse touches, one row each, the form's name linking to its builder. */
+function lapsedFormList(forms: LapsedForm[], past: boolean, more: number): string {
+  const rows = forms
+    .map((f) => {
+      const lines: string[] = [];
+      if (f.closes) lines.push(past ? "Closed to new responses: verified payments" : "Will close to new responses: verified payments");
+      const rest = f.losing.map(plainDash);
+      if (rest.length > 0) lines.push(`${past ? "Lost" : "Loses"}: ${rest.join(", ")}`);
+      return `<tr>
+    <td valign="top" style="padding:12px 16px;border-top:1px solid ${BORDER};font-family:${FONT};">
+      <a href="${escapeHtml(f.url)}" style="font-size:15px;line-height:20px;font-weight:600;color:${INK};text-decoration:none;">${escapeHtml(f.title)}</a>
+      ${lines.map((l) => `<div style="margin-top:2px;font-size:13px;line-height:1.5;color:${MUTED};">${escapeHtml(l)}</div>`).join("")}
+    </td>
+  </tr>`;
+    })
+    .join("\n");
+  const tail = more > 0 ? `<p style="margin:8px 0 0 0;font-size:13px;color:${MUTED};">And ${more} more.</p>` : "";
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 4px 0;background-color:${GROUND};border:1px solid ${BORDER};border-top:0;border-radius:12px;">
+${rows}
+</table>${tail}`;
+}
+
+/**
+ * A paid plan is about to stop applying, or just did.
+ *
+ * Three stages share one card so a gift running out, a cancellation and a card
+ * that keeps declining all read the same way: when it happens, what it does to
+ * the forms people are answering right now, and the one button that stops it.
+ */
+export function planLapseEmail(a: {
+  organizationName: string;
+  recipientName: string | null;
+  stage: "payment_failed" | "ending" | "ended";
+  reason: "payment" | "cancelled" | "gift";
+  planId: PlanId;
+  endsAt: number;
+  forms: LapsedForm[];
+  moreForms: number;
+  planUrl: string;
+}): Omit<MailMessage, "to"> {
+  const plan = PLANS[a.planId].name;
+  const org = a.organizationName;
+  const date = longDate(a.endsAt);
+  const hi = a.recipientName?.trim() ? `${a.recipientName.trim().split(/\s+/)[0]!}, ` : "";
+  const past = a.stage === "ended";
+
+  const copy =
+    a.stage === "payment_failed"
+      ? {
+          subject: `Your chatform ${plan} payment didn't go through`,
+          eyebrow: "Payment failed",
+          title: "We couldn't take your payment",
+          lead: `${hi}the renewal for ${org} on ${plan} was declined. Everything keeps working while we retry. If it still fails, ${org} moves to Free on ${date}.`,
+          cta: "Update payment",
+        }
+      : a.stage === "ending"
+        ? {
+            subject:
+              a.reason === "payment"
+                ? `chatform ${plan} ends on ${date} unless payment goes through`
+                : a.reason === "gift"
+                  ? `Your gifted chatform ${plan} ends on ${date}`
+                  : `Your chatform ${plan} plan ends on ${date}`,
+            eyebrow: `${plan} ends soon`,
+            title: `${plan} ends on ${date}`,
+            lead:
+              a.reason === "payment"
+                ? `${hi}we still can't charge the card for ${org}. Unless a payment goes through, it moves to Free on ${date}.`
+                : a.reason === "gift"
+                  ? `${hi}the ${plan} plan the chatform team gave ${org} ends on ${date}, and ${org} moves to Free.`
+                  : `${hi}${org} is set to move to Free on ${date}, when the ${plan} plan you cancelled runs out.`,
+            cta: a.reason === "payment" ? "Update payment" : `Keep ${plan}`,
+          }
+        : {
+            subject: `${org} is now on chatform Free`,
+            eyebrow: "Now on Free",
+            title: `${plan} has ended`,
+            lead: `${hi}${org} moved to Free on ${date}. Nothing was deleted: your forms, responses and settings are all still there, and upgrading again puts every setting back.`,
+            cta: `Get ${plan} back`,
+          };
+
+  const formsIntro =
+    a.forms.length === 0
+      ? `None of your live forms use ${plan} features, so they ${past ? "carry on" : "will carry on"} as they are.`
+      : past
+        ? `These live forms changed:`
+        : `These live forms use ${plan} features and will change:`;
+
+  const body = [
+    hero({ eyebrow: copy.eyebrow, title: copy.title, subtitle: escapeHtml(copy.lead) }),
+    p(escapeHtml(formsIntro)),
+    a.forms.length > 0 ? lapsedFormList(a.forms, past, a.moreForms) : "",
+    button(a.planUrl, copy.cta),
+  ].join("\n");
+
+  return {
+    subject: copy.subject,
+    html: layout({
+      preheader: copy.lead,
+      body,
+      footer: `You received this because you own ${escapeHtml(org)} on chatform.`,
+    }),
+    text: [
+      copy.lead,
+      ``,
+      formsIntro,
+      ...a.forms.map((f) => {
+        const bits = [
+          ...(f.closes ? [past ? "closed to new responses (verified payments)" : "will close to new responses (verified payments)"] : []),
+          ...(f.losing.length > 0 ? [`${past ? "lost" : "loses"} ${f.losing.map(plainDash).join(", ")}`] : []),
+        ];
+        return `- ${f.title}: ${bits.join("; ")} (${f.url})`;
+      }),
+      ...(a.moreForms > 0 ? [`And ${a.moreForms} more.`] : []),
+      ``,
+      `${copy.cta}: ${a.planUrl}`,
+    ].join("\n"),
+  };
+}

@@ -710,6 +710,9 @@ async function applyEvent(env: Bindings, evt: DodoWebhookEvent): Promise<string>
                 -- product" and gave the next handler a reason to disagree with this one.
                 dodo_product_id = COALESCE(?, dodo_product_id),
                 cycle = COALESCE(?, cycle),
+                -- Back in good standing closes any grace window, so the next failure
+                -- opens a fresh one instead of inheriting an expired date.
+                grace_until = CASE WHEN ? IN ('active', 'trialing') THEN NULL ELSE grace_until END,
                 updated_at = ?
           WHERE dodo_subscription_id = ?`,
       )
@@ -722,6 +725,7 @@ async function applyEvent(env: Bindings, evt: DodoWebhookEvent): Promise<string>
           fromProduct?.planId ?? (target.planId && isPlanId(target.planId) ? target.planId : null),
           evt.data?.product_id ?? null,
           fromProduct?.cycle ?? null,
+          status,
           Date.now(),
           subscriptionId,
         )
@@ -736,9 +740,13 @@ async function applyEvent(env: Bindings, evt: DodoWebhookEvent): Promise<string>
       // Open the grace window rather than revoking. Dodo's dunning is retrying the card;
       // taking a paying customer's analytics away over a temporary decline is how churn
       // gets manufactured. `resolve()` honours paid entitlements until grace_until.
+      //
+      // The window opens on the first failure and is not pushed back by the retries after
+      // it: Dodo fires `failed` again on every declined attempt, and each one used to hand
+      // out a fresh seven days, so a card that never worked kept Pro indefinitely.
       const graceUntil = Date.now() + 7 * 24 * 60 * 60 * 1000;
       await env.DB.prepare(
-        `UPDATE subscriptions SET status = 'on_hold', grace_until = ?, updated_at = ?
+        `UPDATE subscriptions SET status = 'on_hold', grace_until = COALESCE(grace_until, ?), updated_at = ?
           WHERE dodo_subscription_id = ? AND organization_id = ?`,
       )
         .bind(graceUntil, Date.now(), subscriptionId, orgId)

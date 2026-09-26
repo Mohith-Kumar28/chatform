@@ -1,7 +1,7 @@
 import { readFormDoc, sha256Hex, type FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { getEntitlements, meter, checkQuota } from "./entitlements.js";
-import { clampForRuntime, brandingHiddenFor } from "./doc-entitlements.js";
+import { clampForRuntime, brandingHiddenFor, gatewayPaymentsLapsed } from "./doc-entitlements.js";
 import { respondentKey, type RespondentKey } from "./respondent-key.js";
 import { deviceKeyFor } from "./respondents.js";
 import { can } from "@repo/entitlements";
@@ -270,7 +270,9 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
    * not theirs — so an exhausted ceiling presents as the form being closed, in
    * the owner's own words.
    */
-  if (await ceilingReached(env, form.organization_id, ent)) {
+  // A verified payment the plan no longer takes closes the form the same quiet way.
+  // See `gatewayPaymentsLapsed`.
+  if (gatewayPaymentsLapsed(doc, ent) || (await ceilingReached(env, form.organization_id, ent))) {
     return {
       ok: false,
       status: 403,

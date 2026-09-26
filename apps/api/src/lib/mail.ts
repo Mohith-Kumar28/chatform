@@ -453,6 +453,22 @@ export type MailJob =
       expiresAt: number | null;
     }
   | {
+      /**
+       * A paid plan is lapsing, or has lapsed. Mailed to the owner by `sweepPlanNotices`,
+       * with every live form that uses what the plan is taking away.
+       *
+       * One kind for every way a plan ends: a payment that failed, a cancellation, a
+       * gift that runs out. `reason` only changes the wording.
+       */
+      kind: "plan_lapse";
+      organizationId: string;
+      stage: "payment_failed" | "ending" | "ended";
+      reason: "payment" | "cancelled" | "gift";
+      planId: PlanId;
+      /** When the paid plan stops (or stopped) applying. */
+      endsAt: number;
+    }
+  | {
       /** A form was created, by any route. Mailed to `PLATFORM_ADMIN_EMAILS`. */
       kind: "admin_new_form";
       formId: string;

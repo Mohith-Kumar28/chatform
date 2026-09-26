@@ -34,6 +34,7 @@ import {
   sweepStuckKnowledgeIngest,
   sweepPaymentTokens,
 } from "./lib/sweeps.js";
+import { sweepPlanNotices } from "./lib/plan-notices.js";
 import { rollupPlatformDaily, rollupFormStructure, backfillPlatformDaily } from "./lib/platform-rollup.js";
 
 export { SessionDO };
@@ -246,6 +247,9 @@ export default {
        * simply picked up on the next one.
        */
       await sweepFollowUps(env).catch((err) => console.error("followup_sweep_failed", err));
+      // Plan emails: a failed payment, a plan ending within the week, and the switch to
+      // Free. Gifts and cancellations lapse the same way, so they are one sweep.
+      await sweepPlanNotices(env).catch((err) => console.error("plan_notice_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
       await pruneIdempotencyKeys(env).catch((err) => console.error("idempotency_prune_failed", err));
       /**
        * Gateway OAuth tokens on accounts nobody has charged on lately. A Cashfree access token

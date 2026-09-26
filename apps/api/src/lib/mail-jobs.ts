@@ -35,6 +35,7 @@ import {
   invitationEmail,
   otpEmail,
   passwordResetEmail,
+  planLapseEmail,
   planUpgradedEmail,
   platformEventEmail,
   stamp,
@@ -43,6 +44,7 @@ import {
   type InvitationWorkspace,
 } from "./mail-templates.js";
 import { webOrigins } from "./origins.js";
+import { lapsedForms } from "./plan-notices.js";
 import { platformAdminEmails } from "./platform-admin.js";
 import { tagFeedback } from "./feedback-tags.js";
 import { PLANS, type PlanId } from "@repo/entitlements";
@@ -135,6 +137,24 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOu
         endsAt: job.endsAt,
         gifted: job.gifted,
         dashboardUrl: `${webOrigins(env)[0]!}/dashboard`,
+      });
+      return oneMessage(who.email, await sendMail(env, { to: who.email, ...msg }));
+    }
+
+    case "plan_lapse": {
+      const who = await ownerOf(env, job.organizationId);
+      if (!who) return NO_MAIL;
+      const { forms, more } = await lapsedForms(env, job.organizationId);
+      const msg = planLapseEmail({
+        organizationName: who.orgName,
+        recipientName: who.name,
+        stage: job.stage,
+        reason: job.reason,
+        planId: job.planId,
+        endsAt: job.endsAt,
+        forms,
+        moreForms: more,
+        planUrl: `${webOrigins(env)[0]!}/usage`,
       });
       return oneMessage(who.email, await sendMail(env, { to: who.email, ...msg }));
     }
