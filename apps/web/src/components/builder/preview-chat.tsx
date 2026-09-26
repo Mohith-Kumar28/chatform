@@ -125,7 +125,13 @@ export function PreviewChat({
         </div>
       )}
 
-      <div className="bg-card shadow-md flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl">
+      {/*
+        The chat surface wears the corners itself as well as being clipped by
+        them. Chrome does not always clip a composited child to a parent's
+        radius, and the corners showed a grey square behind the rounded card.
+        `isolate` gives the clip its own stacking context for the same reason.
+      */}
+      <div className="bg-card shadow-md isolate flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl [&_.chat-surface]:rounded-2xl">
         {loading && (
           <div className="flex flex-1 flex-col justify-end gap-2 p-4">
             <div className="shimmer h-9 w-3/5 rounded-2xl" />

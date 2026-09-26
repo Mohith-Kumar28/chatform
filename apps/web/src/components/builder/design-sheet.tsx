@@ -48,7 +48,13 @@ export function DesignSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-sm">
+      {/*
+        No scrim. The point of editing the design in a sheet is watching the
+        form change beside it, and the default dimming turned that preview into
+        a grey guess at the colours being picked. Clicking outside still
+        closes it; there is just nothing painted over the form any more.
+      */}
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-sm" overlayClassName="bg-transparent backdrop-blur-none">
         <SheetHeader className="shrink-0 px-5 pt-5 pb-3">
           <SheetTitle>Design</SheetTitle>
         </SheetHeader>

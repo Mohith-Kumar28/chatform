@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { FormDoc, ThemeDoc } from "@repo/form-schema";
 import { Check } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { InfoHint } from "@/components/ui/info-hint";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -250,7 +251,13 @@ export function ThemePanel({
 
       <Section title="Shape">
         <div className="space-y-1.5">
-          <Label>Corners</Label>
+          <div className="flex items-center gap-1">
+            <Label>Corners</Label>
+            <InfoHint label="About corners">
+              How round the chat bubbles, answer options, buttons, answer box and cards are. Square is sharp; Pill makes
+              every option and button fully round.
+            </InfoHint>
+          </div>
           <Select value={theme.radius} onValueChange={(v) => patch({ radius: v as Theme["radius"] })}>
             <SelectTrigger className="w-full">
               <SelectValue />
@@ -259,7 +266,13 @@ export function ThemePanel({
               <SelectItem value="none">Square</SelectItem>
               <SelectItem value="sm">Small</SelectItem>
               <SelectItem value="md">Medium</SelectItem>
-              <SelectItem value="lg">Large</SelectItem>
+              <SelectItem value="lg">
+                Large
+                <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+                  <span className="size-1 rounded-full bg-current" aria-hidden />
+                  Default
+                </span>
+              </SelectItem>
               <SelectItem value="full">Pill</SelectItem>
             </SelectContent>
           </Select>

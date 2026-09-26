@@ -74,12 +74,18 @@ export function FontPicker({ id, value, onChange }: { id?: string; value: string
   }, [value]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    // Modal because it opens inside the Design sheet, whose scroll lock ate
+    // every wheel event aimed at a list portalled outside it: 600 fonts and no
+    // way to scroll to the ninth. A modal popover carries its own lock, with
+    // the list inside it.
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <button
           id={id}
           type="button"
-          className="border-input hover:bg-muted/40 flex h-9 w-full items-center gap-2 rounded-md border px-3 text-left text-sm transition-colors"
+          // The Select trigger's own surface, so it sits in the panel like the
+          // Corners and Pattern pickers beside it rather than as a hole in it.
+          className="border-input dark:bg-input/30 dark:hover:bg-input/50 hover:bg-muted/40 flex h-9 w-full items-center gap-2 rounded-md border bg-transparent px-3 text-left text-sm shadow-xs transition-colors outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <span className="min-w-0 flex-1 truncate" style={{ fontFamily: fontStack(value) }}>
             {value || "Choose a font"}

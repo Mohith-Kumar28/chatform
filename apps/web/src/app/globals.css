@@ -1468,6 +1468,8 @@
   --cf-chip-bg: var(--card);
   --cf-chip-border: var(--border);
   --cf-radius: var(--radius);
+  --cf-radius-card: 1rem;
+  --cf-radius-control: 9999px;
   --cf-pattern: none;
   --cf-pattern-size: auto;
 

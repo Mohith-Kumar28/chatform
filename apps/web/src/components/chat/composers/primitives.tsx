@@ -118,7 +118,7 @@ export function Chip({
       disabled={disabled}
       aria-pressed={selected}
       className={cn(
-        "group inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm",
+        "group inline-flex items-center gap-1.5 rounded-[var(--cf-radius-control)] border px-3.5 py-2 text-sm",
         "transition-[background-color,border-color,transform] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
         "active:scale-[0.97] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-50",
         // Minimum 44px touch target on coarse pointers.
@@ -184,7 +184,7 @@ export function SkipButton({ onSkip }: { onSkip: () => void }) {
       onClick={onSkip}
       onMouseDown={keepFocus}
       className={cn(
-        "inline-flex h-11 w-full shrink-0 items-center justify-center gap-1.5 rounded-full border px-3.5 text-sm font-medium sm:w-auto",
+        "inline-flex h-11 w-full shrink-0 items-center justify-center gap-1.5 rounded-[var(--cf-radius-control)] border px-3.5 text-sm font-medium sm:w-auto",
         "border-[var(--cf-accent)] bg-[color-mix(in_oklch,var(--cf-accent)_8%,transparent)] text-[var(--cf-accent)]",
         "transition-[background-color,transform] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
         "hover:bg-[color-mix(in_oklch,var(--cf-accent)_16%,transparent)]",
@@ -266,7 +266,7 @@ export function SendRow({
           aria-label={label}
           title={`${label} (Enter)`}
           className={cn(
-            "inline-flex size-11 shrink-0 items-center justify-center self-end rounded-full",
+            "inline-flex size-11 shrink-0 items-center justify-center self-end rounded-[var(--cf-radius-control)]",
             "bg-[var(--cf-accent)] text-[var(--cf-accent-text)]",
             "transition-transform duration-[var(--duration-micro)] active:scale-[0.94]",
             "motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40",
@@ -365,7 +365,7 @@ export function TextInput({
 }) {
   const growRef = useAutoGrow(multiline ? value : null);
   const shared = cn(
-    "w-full rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 py-3 text-[0.9375rem] outline-none transition-colors placeholder:opacity-50 focus:border-[var(--cf-accent)]",
+    "w-full rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 py-3 text-[0.9375rem] outline-none transition-colors placeholder:opacity-50 focus:border-[var(--cf-accent)]",
     // Room for the trailing control, so text never runs underneath it. Wider
     // exactly where `kbd-hint` draws the key beside the mic.
     trailing && "pr-12",

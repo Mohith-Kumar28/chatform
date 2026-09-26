@@ -336,7 +336,7 @@ function PaymentCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="animate-message-in w-full max-w-md space-y-3 rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] p-4">
+    <div className="animate-message-in w-full max-w-md space-y-3 rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] p-4">
       {note && <p className="text-xs font-medium opacity-60">{note}</p>}
       {price && (
         <div>
@@ -378,7 +378,7 @@ function PayButton({
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[var(--cf-accent)] px-6 text-base font-semibold text-[var(--cf-accent-text)] shadow-sm transition-[transform,filter] hover:brightness-105 active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-60"
+      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] px-6 text-base font-semibold text-[var(--cf-accent-text)] shadow-sm transition-[transform,filter] hover:brightness-105 active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-60"
     >
       {children}
     </button>

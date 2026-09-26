@@ -21,6 +21,11 @@ import { fontStack } from "@/lib/theme-fonts";
  * it once and both move together — never fork it.
  */
 
+/** Cards and the answer box. Capped short of a pill, which a tall box cannot wear. */
+const CARD_RADIUS: Record<ThemeDoc["radius"], string> = { none: "0px", sm: "6px", md: "12px", lg: "16px", full: "24px" };
+/** Chips and buttons: one line tall, so Large and Pill are both fully round, as they always were. */
+const CONTROL_RADIUS: Record<ThemeDoc["radius"], string> = { none: "0px", sm: "6px", md: "10px", lg: "9999px", full: "9999px" };
+
 export const RADIUS_PX: Record<ThemeDoc["radius"], string> = {
   none: "0px",
   sm: "6px",
@@ -115,20 +120,35 @@ function inkFor(fill: string, stored: string): string {
  *     over a dark fill loses contrast faster than the same ink over a light
  *     one, and 3% on near-black is indistinguishable from no pattern.
  *
- * Both edges of the band are real, and the lower one is closer than it looks.
- * Below about 6% on a light page the tile stops being a texture and becomes a
- * rumour — findable if you go looking for it, which is not the same as the
- * page having a surface, and it was the complaint about the 5.5% this first
- * shipped with. Past about 11% it is a pattern drawn on the page rather than
- * the grain of it, and the eye keeps going back to it while trying to read an
- * answer. 8% and 9.5% sit where the texture is plainly there at a glance and
- * still never competes with a question.
+ * How strongly is `patternAlpha`'s question, and the answer depends on the
+ * ink: a fixed 8% made a dark accent's pattern the loudest thing on the page.
  */
 export function patternInk(theme: ThemeDoc, pattern: PatternDef): string {
-  const dark = isDarkColor(theme.background);
   const usable = contrast(theme.background, theme.accent) >= 1.3;
-  const alpha = (dark ? 0.095 : 0.08) * patternWeight(pattern);
-  return rgbaFromHex(usable ? theme.accent : theme.text, Number(alpha.toFixed(4)));
+  const ink = usable ? theme.accent : theme.text;
+  return rgbaFromHex(ink, patternAlpha(theme.background, ink, patternWeight(pattern)));
+}
+
+/**
+ * How much alpha a tile gets, so that it looks equally faint in any colour.
+ *
+ * A fixed alpha is not a fixed strength. 8% of a pale orange on white is a
+ * whisper; 8% of navy or black on the same page is a drawn grid, because what
+ * the eye sees is the ink's contrast with the page times its alpha. Dark
+ * accents made the pattern loud enough to be the first thing anyone noticed.
+ *
+ * So the alpha is divided by the square root of that contrast (the square root
+ * because perceived lightness is itself roughly a root of luminance), which
+ * keeps an orange accent near 5% and brings navy or black down to about 1.5%.
+ * The clamp keeps a low-contrast ink from spending more than 6% and a
+ * high-contrast one from vanishing entirely. `strength` scales the whole
+ * thing: the tile's `weight`, and anything that wants it quieter still.
+ */
+export function patternAlpha(background: string, ink: string, strength = 1): number {
+  const dark = isDarkColor(background);
+  const lift = Math.sqrt(Math.max(contrast(background, ink) - 1, 0.25));
+  const alpha = Math.min(0.06, Math.max(0.012, (dark ? 0.08 : 0.07) / lift)) * strength;
+  return Number(alpha.toFixed(4));
 }
 
 /**
@@ -202,6 +222,11 @@ export function chatThemeVars(theme: ThemeDoc, seed?: string | null): CSSPropert
      */
     "--cf-sunken": shift(theme.surface, 0.045, darkSurface ? "light" : "dark"),
     "--cf-radius": RADIUS_PX[theme.radius],
+    // The Corners setting reached the bubbles and nothing else: chips, buttons,
+    // the answer box and the cards were all hard-coded round, so "Square" left
+    // most of the chat exactly as it was. These two carry it the rest of the way.
+    "--cf-radius-card": CARD_RADIUS[theme.radius],
+    "--cf-radius-control": CONTROL_RADIUS[theme.radius],
     /*
      * The background tile, as two variables `.chat-surface` paints.
      *

@@ -3,7 +3,7 @@
 import { safeHref } from "@repo/guard";
 import { memo, useCallback, useMemo, useState } from "react";
 import { CornerDownLeft } from "lucide-react";
-import { isMeetingRoom, schedulingLabel, type PublicBlock } from "@repo/form-schema";
+import { type PublicBlock } from "@repo/form-schema";
 import { Chip, KeyHint } from "./composers/primitives";
 import { OtherOption } from "./composers/other-option";
 import { useChoiceKeys, type Choice } from "./composers/choice-keys";
@@ -11,6 +11,7 @@ import { RatingComposer, ScaleComposer } from "./composers/rating";
 import { DateComposer } from "./composers/date";
 import { SignatureComposer } from "./composers/signature";
 import { FieldsComposer, GroupComposer, MatrixComposer, RankingComposer } from "./composers/structured";
+import { BookingCard } from "./booking-card";
 import { FileUploadControl } from "./file-upload";
 import { PaymentAffordance, type GatewayPaymentActions } from "./payment-affordance";
 import { PollBallot } from "./poll-result";
@@ -538,31 +539,15 @@ function AffordanceControls({
       // `scheduling.url` is `z.string().url()`, and zod's `.url()` accepts
       // `javascript:` — it is `new URL()` with no scheme constraint.
       const url = safeHref(block.url) ?? "";
-      // Whatever the builder pasted decides the copy: "I've booked" is wrong
-      // under a bare Zoom room, where there was never a slot to pick.
-      const room = url ? isMeetingRoom(url) : false;
       return (
-        <Affordance>
-          <a
-            href={url || "#"}
-            target="_blank"
-            rel="noreferrer"
-            className="flex h-10 items-center rounded-full bg-[var(--cf-accent)] px-5 text-sm font-medium text-[var(--cf-accent-text)]"
-          >
-            {schedulingLabel(url, block.buttonLabel)}
-          </a>
-          <Chip
-            disabled={disabled}
-            onClick={() =>
-              onStructured(
-                { provider: "external", url, confirmedAt: Date.now() },
-                room ? "Joined" : "Booked",
-              )
-            }
-          >
-            {room ? "I’ve got the link" : "I’ve booked"}
-          </Chip>
-        </Affordance>
+        <BookingCard
+          url={url}
+          buttonLabel={block.buttonLabel}
+          disabled={disabled}
+          onConfirm={(room) =>
+            onStructured({ provider: "external", url, confirmedAt: Date.now() }, room ? "Joined" : "Booked")
+          }
+        />
       );
     }
 

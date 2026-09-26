@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/context-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { contrast, isDarkColor, readableInk } from "@/lib/chat-theme";
+import { contrast, isDarkColor, patternAlpha, readableInk } from "@/lib/chat-theme";
 import { patternImage, patternSize, patternWeight, resolvePattern, rgbaFromHex } from "@/lib/background-patterns";
 
 /**
@@ -1107,10 +1107,8 @@ function thumbSurface(
      */
     if (!tile) return { backgroundColor: theme.background };
     const usable = contrast(theme.background, theme.accent) >= 1.3;
-    const ink = rgbaFromHex(
-      usable ? theme.accent : theme.userBubbleText,
-      (isDarkColor(theme.background) ? 0.085 : 0.07) * patternWeight(tile),
-    );
+    const color = usable ? theme.accent : theme.userBubbleText;
+    const ink = rgbaFromHex(color, patternAlpha(theme.background, color, 0.9 * patternWeight(tile)));
     return {
       backgroundColor: theme.background,
       backgroundImage: patternImage(tile, ink),
