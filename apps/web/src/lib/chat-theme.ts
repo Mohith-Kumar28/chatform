@@ -103,6 +103,25 @@ export function readableInk(fill: string): string {
  * on the fill it now sits on, and is overridden if it is not: a theme cannot be
  * edited into a state where the answer is unreadable.
  */
+/**
+ * The label on a filled button: send, book, pay, submit.
+ *
+ * Not `inkFor`'s maximum-contrast rule. That picks whichever of dark and
+ * light wins by any margin, so a mid-tone action colour (a gold, a teal) got
+ * a black label that read as heavy and wrong on it. A button label is short,
+ * bold UI text, so light is preferred whenever it clears 2.8:1: just under
+ * the 3:1 UI bar, which is where a gold like #B8902A sits, and white on it
+ * reads plainly at button size. A colour the author picked is kept down to 2.5:1: it is their
+ * brand's button, and a label that clears that is still read at a glance.
+ */
+function buttonInk(fill: string, stored: string): string {
+  const light = shift(fill, 0.96, "light");
+  if (stored.trim().toLowerCase() === THEME_DEFAULT_INK.toLowerCase()) {
+    return contrast(fill, light) >= 2.8 ? light : readableInk(fill);
+  }
+  return contrast(fill, stored) >= 2.5 ? stored : readableInk(fill);
+}
+
 function inkFor(fill: string, stored: string): string {
   if (stored.trim().toLowerCase() === THEME_DEFAULT_INK.toLowerCase()) return readableInk(fill);
   return contrast(fill, stored) >= AA_BODY ? stored : readableInk(fill);
@@ -195,7 +214,7 @@ export function chatThemeVars(theme: ThemeDoc, seed?: string | null): CSSPropert
     "--cf-text": theme.text,
     "--cf-muted": shift(theme.text, 0.4, darkSurface ? "dark" : "light"),
     "--cf-accent": theme.accent,
-    "--cf-accent-text": inkFor(theme.accent, theme.accentText),
+    "--cf-accent-text": buttonInk(theme.accent, theme.accentText),
     "--cf-bot-bubble": theme.botBubble,
     "--cf-bot-bubble-text": contrast(theme.botBubble, theme.text) >= AA_BODY ? theme.text : readableInk(theme.botBubble),
     "--cf-bot-bubble-border": botBorder,

@@ -554,7 +554,8 @@ ${form.description ? `Description: ${JSON.stringify(form.description)}\n` : ""}$
 
 The author wants THIS form. Rules for it, which override the sizing guidance:
 - Include every field above as its own question, in this order, with ref exactly as given (src_1, src_2, ...).
-- Copy each title, description, placeholder and option letter for letter, including capitals, punctuation and typos. Do not reword, shorten, merge, split or translate them.
+- This is a conversation, so every title must read as a question. A title that is already a question is copied letter for letter. A bare field label ("Name", "Firm Website", "Current Stage") becomes a short, natural question built from its own words ("What's your name?", "What's your firm's website?", "What stage is your company at?"): same meaning, nothing added.
+- Copy each description, placeholder and option letter for letter, including capitals, punctuation and typos. Do not reword, shorten, merge, split or translate them.
 - A type with no "?" is what the page uses: keep it. A type ending in "?" is only our guess, because the page used a plain text box or its own buttons: choose the best block for the question (email, url, phone, number, date, single_select or multi_select with sensible options, and so on), keeping the words.
 - "required" and "optional" are the page's own; keep them. "required?" means the page does not say: decide as you would for any form.
 - Where several forms are listed, each is its own path: follow the author's request for how respondents reach each one.
@@ -592,7 +593,7 @@ export function applySourceForm(draft: GenerationDraft, form: SourceForm): Gener
         break;
       }
     }
-    blocks.splice(Math.min(at, blocks.length), 0, { ref, ...draftFields(f) });
+    blocks.splice(Math.min(at, blocks.length), 0, { ref, ...draftFields(f), title: titleFor(f) });
     present.add(ref);
   });
   // The first block always becomes the welcome, so a source question there
@@ -624,7 +625,7 @@ const CHOICE_TYPES = new Set(["single_select", "multi_select", "dropdown", "poll
  * required flag is the source's only when the page marked any.
  */
 function mergeField(model: GenerationDraft["blocks"][number], f: SourceField): Omit<GenerationDraft["blocks"][number], "ref"> {
-  const exact = draftFields(f);
+  const exact = { ...draftFields(f), title: titleFor(f, model.title) };
   const type = f.typeKnown
     ? f.type
     : f.options.length > 0
@@ -641,6 +642,48 @@ function mergeField(model: GenerationDraft["blocks"][number], f: SourceField): O
     scale: keepModelShape ? model.scale : exact.scale,
     config: keepModelShape ? model.config : exact.config,
   };
+}
+
+/**
+ * The field's label as a question.
+ *
+ * Copied word for word, "Name" and "Firm Website" sat in the chat as bare
+ * labels, which reads like a web form pasted into a conversation. A source
+ * title that is already a question, or a sentence, is kept exactly; a label
+ * takes the generator's phrasing of it, and failing that a plain "What's
+ * your …?".
+ */
+export function askedTitle(source: string, model?: string): string {
+  const label = source.trim();
+  if (isQuestion(label)) return label;
+  const proposed = (model ?? "").trim();
+  if (proposed && proposed.toLowerCase() !== label.toLowerCase() && isQuestion(proposed)) return proposed;
+  // "Firm Website" and "FULL NAME" read as "firm website" and "full name"
+  // mid-sentence; a short acronym ("MRR", "URL") keeps its capitals.
+  const words = label
+    .replace(/[:*\s]+$/, "")
+    .split(/\s+/)
+    .map((w) => (/^[A-Z0-9]{2,4}$/.test(w) ? w : w.toLowerCase()))
+    .join(" ");
+  return `What's your ${words}?`;
+}
+
+/**
+ * Already reads right in a chat: a question, a sentence, or a statement in
+ * the first person ("I agree to the terms"), which is what a consent box says.
+ */
+function isQuestion(text: string): boolean {
+  return (
+    /\?\s*$/.test(text) ||
+    text.split(/\s+/).length > 7 ||
+    /[.!]\s*$/.test(text) ||
+    /^(i|i'm|i’m|i've|i’ve|yes|please)\b/i.test(text)
+  );
+}
+
+/** Words for the respondent (a statement) are shown as written; everything else is asked. */
+function titleFor(f: SourceField, model?: string): string {
+  return f.type === "statement" ? f.title : askedTitle(f.title, model);
 }
 
 function draftFields(f: SourceField): Omit<GenerationDraft["blocks"][number], "ref"> {
@@ -672,7 +715,7 @@ export function applySourceFormToDoc(doc: FormDoc, form: SourceForm): FormDoc {
   const blocks = doc.blocks.map((block) => {
     const f = byRef.get(block.ref);
     if (!f) return block;
-    let next = { ...block, title: f.title, description: f.description || undefined } as Block;
+    let next = { ...block, title: titleFor(f, block.title), description: f.description || undefined } as Block;
     if (f.requiredKnown && block.type !== "welcome" && block.type !== "statement" && block.type !== "legal_consent") {
       next = { ...next, required: f.required } as Block;
     }

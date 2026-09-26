@@ -1650,7 +1650,7 @@ function ReviewCard({
             <button
               type="button"
               onClick={onCancelAutoSubmit}
-              className="relative flex h-11 w-full items-center justify-center overflow-hidden rounded-full border border-[var(--cf-chip-border)] text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
+              className="relative flex h-11 w-full items-center justify-center overflow-hidden rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
             >
               {/*
                 The bar is the countdown, not decoration: it says how much of
@@ -1706,7 +1706,7 @@ function ReviewCard({
             type="button"
             disabled={busy}
             onClick={onSubmit}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-60"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-[var(--cf-radius-control)] text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-60"
             style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
           >
             {busy ? "Submitting…" : "Submit form"}
@@ -1976,7 +1976,7 @@ function EndingCard({
             <button
               type="button"
               onClick={onUndoScreenOut}
-              className="mt-6 inline-flex h-11 items-center gap-2 rounded-full px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
+              className="mt-6 inline-flex h-11 items-center gap-2 rounded-[var(--cf-radius-control)] px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
               style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
             >
               <Undo2 className="size-4" strokeWidth={2} />
@@ -1999,7 +1999,7 @@ function EndingCard({
             */
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-6 inline-flex h-11 items-center rounded-full px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
+            className="mt-6 inline-flex h-11 items-center rounded-[var(--cf-radius-control)] px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
             style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
           >
             {ending.ctaLabel}
@@ -2018,7 +2018,7 @@ function EndingCard({
               href={endingRedirect}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-6 inline-flex h-11 items-center gap-2 rounded-full px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
+              className="mt-6 inline-flex h-11 items-center gap-2 rounded-[var(--cf-radius-control)] px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
               style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
             >
               Continue to the next step

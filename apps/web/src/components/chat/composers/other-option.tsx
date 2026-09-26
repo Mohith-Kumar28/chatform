@@ -50,7 +50,7 @@ export function OtherOption({
   return (
     <div
       data-own-keys
-      className="inline-flex min-h-[2.75rem] w-full max-w-sm items-center gap-1 rounded-full border border-[var(--cf-accent)] bg-[var(--cf-chip-bg)] py-1 pr-1 pl-3.5 sm:min-h-0"
+      className="inline-flex min-h-[2.75rem] w-full max-w-sm items-center gap-1 rounded-[var(--cf-radius-control)] border border-[var(--cf-accent)] bg-[var(--cf-chip-bg)] py-1 pr-1 pl-3.5 sm:min-h-0"
     >
       <input
         ref={input}
@@ -76,7 +76,7 @@ export function OtherOption({
           disabled={disabled || !text}
           aria-label={submitLabel ?? "Send"}
           onClick={() => onSubmit(text)}
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--cf-accent)] text-[var(--cf-accent-text)] disabled:opacity-40"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] text-[var(--cf-accent-text)] disabled:opacity-40"
         >
           <ArrowUp className="size-4" aria-hidden />
         </button>

@@ -274,7 +274,7 @@ function AffordanceControls({
             type="button"
             disabled={disabled}
             onClick={() => onStructured(true, "")}
-            className="h-10 rounded-full bg-[var(--cf-accent)] px-5 text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
+            className="h-10 rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] px-5 text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
           >
             {block.buttonLabel || "Continue"}
           </button>
@@ -378,7 +378,7 @@ function AffordanceControls({
               type="button"
               disabled={disabled || picked < minSelections}
               onClick={submitMulti}
-              className="inline-flex h-9 items-center gap-2 rounded-full bg-[var(--cf-accent)] px-4 text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
+              className="inline-flex h-9 items-center gap-2 rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] px-4 text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
             >
               Continue{picked > 0 ? ` · ${picked}` : ""}
               {/* The shortcut was already live and completely invisible. */}

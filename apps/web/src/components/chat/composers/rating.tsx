@@ -117,7 +117,7 @@ export function ScaleComposer({
             aria-checked={false}
             onClick={() => onPick(n, String(n))}
             className={cn(
-              "min-w-11 rounded-xl border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3 py-2.5 text-sm font-medium",
+              "min-w-11 rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3 py-2.5 text-sm font-medium",
               "transition-[background-color,border-color,transform] duration-[var(--duration-micro)]",
               "hover:border-[var(--cf-accent)] hover:bg-[var(--cf-accent)] hover:text-[var(--cf-accent-text)]",
               "active:scale-95 motion-reduce:active:scale-100",

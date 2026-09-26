@@ -157,15 +157,26 @@ describe("extractSourceForm: a React form with plain text boxes and button choic
     const fixed = applySourceForm(draft, form).blocks;
     expect(fixed.map((b) => [b.title, b.type, b.required, b.options])).toEqual([
       ["Hi", "welcome", false, []],
-      ["Name", "short_text", true, []],
-      ["Email", "email", true, []],
-      ["Firm Website", "url", false, []],
-      ["Portfolio company type you're investing in", "single_select", true, ["B2B SaaS", "Fintech"]],
+      ["What's your name?", "short_text", true, []],
+      ["What's your email?", "email", true, []],
+      ["What's your firm website?", "url", false, []],
+      ["What's your portfolio company type you're investing in?", "single_select", true, ["B2B SaaS", "Fintech"]],
       ["Where did you hear about us?", "single_select", false, ["LinkedIn", "Referral"]],
     ]);
     const doc = applySourceFormToDoc(draftToDoc(applySourceForm(draft, form)).doc, form);
-    const name = doc.blocks.find((b) => b.title === "Name")!;
+    const name = doc.blocks.find((b) => b.title === "What's your name?")!;
     expect(name.type === "short_text" && name.placeholder).toBe("your full name");
+  });
+});
+
+describe("askedTitle", () => {
+  it("asks a bare label, keeps a question, a sentence or a first-person statement", async () => {
+    const { askedTitle } = await import("../src/lib/form-import.js");
+    expect(askedTitle("Name")).toBe("What's your name?");
+    expect(askedTitle("Current MRR")).toBe("What's your current MRR?");
+    expect(askedTitle("Firm Website", "What's your firm's website?")).toBe("What's your firm's website?");
+    expect(askedTitle("Where did you hear about us?", "Source?")).toBe("Where did you hear about us?");
+    expect(askedTitle("I agree to the terms")).toBe("I agree to the terms");
   });
 });
 
@@ -213,8 +224,9 @@ describe("applySourceForm", () => {
       "welcome", "src_1", "src_2", "src_3", "src_4", "src_5", "src_6", "src_7", "src_8", "q_extra",
     ]);
     const pronouns = fixed.blocks.find((b) => b.ref === "src_3")!;
+    // A bare label is asked as a question; its options stay exactly as written.
     expect([pronouns.title, pronouns.type, pronouns.options, pronouns.required]).toEqual([
-      "PRONOUNS", "single_select", ["She/Her", "He/Him"], true,
+      "What's your pronouns?", "single_select", ["She/Her", "He/Him"], true,
     ]);
     expect(fixed.blocks.find((b) => b.ref === "q_extra")!.title).toBe("Your Discord?");
   });
@@ -223,11 +235,12 @@ describe("applySourceForm", () => {
     const { doc } = draftToDoc(applySourceForm(draft, form));
     const out = applySourceFormToDoc(doc, form);
     const byTitle = Object.fromEntries(out.blocks.map((b) => [b.title, b]));
-    expect(byTitle["FULL NAME"]!.ref).toBe("full_name");
-    expect(byTitle["Email Address"]!.type).toBe("email");
-    const pronouns = byTitle["PRONOUNS"]!;
+    expect(byTitle["What's your full name?"]!.ref).toBe("full_name");
+    expect(byTitle["What's your email address?"]!.type).toBe("email");
+    const pronouns = byTitle["What's your pronouns?"]!;
     expect(pronouns.type === "single_select" && pronouns.allowOther).toBe(true);
     const scale = byTitle["How sure are you?"]!;
+    // Already a question: kept exactly.
     expect(scale.type === "opinion_scale" && [scale.steps, scale.labelLow, scale.labelHigh]).toEqual([5, "Not at all", "Very"]);
     const brackets = byTitle["Interested in running brackets?"]!;
     expect(out.logic.some((r) => r.action_kind === "goto" && r.from === brackets.ref && r.target === "end_thanks")).toBe(true);

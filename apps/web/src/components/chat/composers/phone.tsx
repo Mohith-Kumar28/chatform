@@ -160,7 +160,7 @@ export function PhoneInput({
           // The plain composer's shell, to the pixel: see `TextInput`.
           "flex h-11 w-full items-stretch overflow-hidden border bg-[var(--cf-composer-bg)] text-[0.9375rem] transition-colors",
           // A cell matches the boxes beside it, not the message box below it.
-          cell ? "rounded-xl" : "rounded-2xl",
+          cell ? "rounded-xl" : "rounded-[var(--cf-radius-card)]",
           problem
             ? "border-[var(--cf-warning)] focus-within:border-[var(--cf-warning)]"
             : "border-[var(--cf-chip-border)] focus-within:border-[var(--cf-accent)]",

@@ -65,7 +65,7 @@ export function UrlInput({
   );
 
   return (
-    <div className="flex h-11 w-full items-stretch overflow-hidden rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] text-[0.9375rem] transition-colors focus-within:border-[var(--cf-accent)]">
+    <div className="flex h-11 w-full items-stretch overflow-hidden rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] text-[0.9375rem] transition-colors focus-within:border-[var(--cf-accent)]">
       {httpsOnly ? (
         <span className="flex shrink-0 items-center gap-1.5 pr-2.5 pl-3.5">{prefix}</span>
       ) : (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import { FormDoc, ThemeDoc } from "@repo/form-schema";
+import { FormDoc, ThemeDoc, THEME_DEFAULT_INK } from "@repo/form-schema";
 import { Check } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { InfoHint } from "@/components/ui/info-hint";
@@ -35,6 +35,9 @@ const COLOR_FIELDS: { key: keyof Theme; label: string }[] = [
   { key: "text", label: "Text" },
   { key: "botBubble", label: "Agent bubble" },
   { key: "userBubble", label: "Their bubble" },
+  // The label on send, book, pay and submit. Stored as the schema's default
+  // ink until someone picks one, which the runtime reads as "choose for me".
+  { key: "accentText", label: "Button text" },
 ];
 
 /**
@@ -201,7 +204,10 @@ export function ThemePanel({
         </div>
         <div className="grid grid-cols-2 gap-3">
           {COLOR_FIELDS.map(({ key, label }) => {
-            const value = (theme[key] as string | undefined) ?? "";
+            const stored = (theme[key] as string | undefined) ?? "";
+            // Button text on the default ink is "Auto": shown empty, cleared back to it.
+            const auto = key === "accentText" && stored.toLowerCase() === THEME_DEFAULT_INK.toLowerCase();
+            const value = auto ? "" : stored;
             return (
               <div key={key} className="space-y-1.5">
                 <Label htmlFor={`theme-${key}`}>{label}</Label>
@@ -230,8 +236,8 @@ export function ThemePanel({
                   />
                   <BufferedInput
                     value={value}
-                    onCommit={(v) => setColor(key, v)}
-                    placeholder="#FD6F29"
+                    onCommit={(v) => setColor(key, key === "accentText" && !v.trim() ? THEME_DEFAULT_INK : v)}
+                    placeholder={key === "accentText" ? "Auto" : "#FD6F29"}
                     className="font-mono text-xs"
                   />
                 </div>
@@ -268,8 +274,8 @@ export function ThemePanel({
           )}
         </div>
         <p className="text-muted-foreground text-xs">
-          Text on the accent and on their bubble is chosen for you, so an answer stays readable
-          whatever colour you pick.
+          Text on their bubble is chosen for you, and so is Button text until you set it, so
+          everything stays readable whatever colour you pick.
         </p>
       </Section>
 

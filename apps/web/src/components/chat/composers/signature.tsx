@@ -103,7 +103,7 @@ export function SignatureComposer({
           onPointerUp={up}
           onPointerLeave={up}
           // touch-none stops the browser scrolling the page while signing.
-          className="h-36 w-full touch-none rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)]"
+          className="h-36 w-full touch-none rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)]"
           aria-label="Signature pad"
         />
         {!hasInk && (
@@ -128,7 +128,7 @@ export function SignatureComposer({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Type your full name"
-          className="h-11 w-full rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 text-[0.9375rem] outline-none focus:border-[var(--cf-accent)]"
+          className="h-11 w-full rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 text-[0.9375rem] outline-none focus:border-[var(--cf-accent)]"
         />
       )}
 
@@ -139,7 +139,7 @@ export function SignatureComposer({
         disabled={busy || !hasInk || !uploadBase || !respondentToken || (requireName && !name.trim())}
         onClick={() => void confirm()}
         className={cn(
-          "flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)]",
+          "flex h-11 w-full items-center justify-center gap-2 rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)]",
           "transition-transform duration-[var(--duration-micro)] active:scale-[0.98]",
           "motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40",
         )}

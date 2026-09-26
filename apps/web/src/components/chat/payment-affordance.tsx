@@ -456,7 +456,7 @@ export function ManualPaymentAffordance({
   // being previewed can still reach here.
   if (!target) {
     return (
-      <div className="rounded-2xl border border-dashed border-[var(--cf-chip-border)] px-4 py-4 text-center text-sm">
+      <div className="rounded-[var(--cf-radius-card)] border border-dashed border-[var(--cf-chip-border)] px-4 py-4 text-center text-sm">
         <p>This payment step isn&apos;t set up yet.</p>
         <button type="button" onClick={onSkip} className="mt-1.5 text-xs underline opacity-60">
           Continue without paying
@@ -468,7 +468,7 @@ export function ManualPaymentAffordance({
   return (
     <div className="flex flex-col gap-3">
       {block.paymentMethod === "upi" && qrDataUrl ? (
-        <div className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--cf-chip-border)] p-4">
+        <div className="flex flex-col items-center gap-2 rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] p-4">
           {priceLabel ? <p className="text-lg font-semibold">{priceLabel}</p> : null}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -491,7 +491,7 @@ export function ManualPaymentAffordance({
           {...(block.paymentMethod === "upi" ? {} : { target: "_blank", rel: "noreferrer" })}
           onClick={() => setOpened(true)}
           aria-disabled={disabled}
-          className="flex h-10 items-center rounded-full bg-[var(--cf-accent)] px-5 text-sm font-medium text-[var(--cf-accent-text)]"
+          className="flex h-10 items-center rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] px-5 text-sm font-medium text-[var(--cf-accent-text)]"
         >
           {block.paymentMethod === "upi"
             ? "Pay with a UPI app"

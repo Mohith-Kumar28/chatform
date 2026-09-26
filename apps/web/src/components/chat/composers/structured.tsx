@@ -185,7 +185,7 @@ export function FieldsComposer({
         type="button"
         disabled={!canSubmit}
         onClick={submit}
-        className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
+        className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
       >
         Continue
         <KeyHint tone="inverse">↵</KeyHint>
@@ -222,7 +222,7 @@ function FieldCell({
         autoComplete={meta?.autoComplete ?? "off"}
         autoCapitalize={meta?.autoCapitalize ?? "sentences"}
         onChange={(e) => onChange(e.target.value)}
-        className="h-11 w-full rounded-xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-3 text-[0.9375rem] outline-none focus:border-[var(--cf-accent)]"
+        className="h-11 w-full rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-3 text-[0.9375rem] outline-none focus:border-[var(--cf-accent)]"
       />
     </label>
   );
@@ -324,7 +324,7 @@ export function RankingComposer({
               disabled={disabled}
               onClick={() => place(item.id)}
               className={cn(
-                "group flex min-h-[2.75rem] items-center gap-1.5 rounded-full border border-[var(--cf-chip-border)]",
+                "group flex min-h-[2.75rem] items-center gap-1.5 rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)]",
                 "bg-[var(--cf-chip-bg)] px-3.5 py-2 text-sm transition-colors hover:border-[var(--cf-accent)]",
                 "disabled:pointer-events-none disabled:opacity-50 sm:min-h-0",
               )}
@@ -352,7 +352,7 @@ export function RankingComposer({
         type="button"
         disabled={disabled || remaining.length > 0}
         onClick={submit}
-        className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
+        className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
       >
         Confirm ranking
         <KeyHint tone="inverse">↵</KeyHint>
@@ -403,7 +403,7 @@ function RankedRow({
       ) : (
         <span className="size-3.5 shrink-0 p-1" aria-hidden />
       )}
-      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[var(--cf-accent)] text-[0.625rem] font-semibold text-[var(--cf-accent-text)]">
+      <span className="grid size-5 shrink-0 place-items-center rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] text-[0.625rem] font-semibold text-[var(--cf-accent-text)]">
         {position}
       </span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -466,7 +466,7 @@ export function MatrixComposer({
                   onClick={() => toggle(row.id, col.id)}
                   aria-pressed={isOn(row.id, col.id)}
                   className={cn(
-                    "rounded-full border px-3 py-1.5 text-xs transition-colors",
+                    "rounded-[var(--cf-radius-control)] border px-3 py-1.5 text-xs transition-colors",
                     isOn(row.id, col.id)
                       ? "border-transparent bg-[var(--cf-accent)] text-[var(--cf-accent-text)]"
                       : "border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] hover:border-[var(--cf-accent)]",
@@ -496,7 +496,7 @@ export function MatrixComposer({
               .join(" · "),
           )
         }
-        className="h-11 w-full rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
+        className="h-11 w-full rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
       >
         Continue
       </button>
@@ -658,11 +658,11 @@ export function GroupComposer({
         {entries.map((row, i) => (
           <div
             key={i}
-            className="space-y-2.5 rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-sunken)] p-3"
+            className="space-y-2.5 rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-sunken)] p-3"
           >
             <div className="flex items-center justify-between gap-2">
               <p className="flex min-w-0 items-center gap-2 text-xs font-medium">
-                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[var(--cf-accent)] text-[0.625rem] font-semibold text-[var(--cf-accent-text)]">
+                <span className="grid size-5 shrink-0 place-items-center rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] text-[0.625rem] font-semibold text-[var(--cf-accent-text)]">
                   {i + 1}
                 </span>
                 <span className="truncate opacity-70">{itemLabel}</span>
@@ -701,7 +701,7 @@ export function GroupComposer({
             <button
               type="button"
               onClick={() => setEntries((rows) => [...rows, {}])}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3.5 text-sm transition-colors hover:border-[var(--cf-accent)]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3.5 text-sm transition-colors hover:border-[var(--cf-accent)]"
             >
               <Plus className="size-3.5" />
               Add {itemLabel.toLowerCase()}
@@ -719,7 +719,7 @@ export function GroupComposer({
         type="button"
         disabled={!canSubmit}
         onClick={submit}
-        className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
+        className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
       >
         Continue
         <KeyHint tone="inverse">↵</KeyHint>
@@ -773,7 +773,7 @@ function GroupFieldInput({
     required: field.required,
   } as PublicBlock);
   const inputClass = cn(
-    "h-11 w-full rounded-xl border bg-[var(--cf-composer-bg)] px-3 text-[0.9375rem] outline-none",
+    "h-11 w-full rounded-[var(--cf-radius-card)] border bg-[var(--cf-composer-bg)] px-3 text-[0.9375rem] outline-none",
     showError
       ? "border-[var(--cf-warning)] focus:border-[var(--cf-warning)]"
       : "border-[var(--cf-chip-border)] focus:border-[var(--cf-accent)]",
@@ -798,7 +798,7 @@ function GroupFieldInput({
               aria-pressed={value === v}
               onClick={() => onChange(value === v ? "" : v)}
               className={cn(
-                "h-9 flex-1 rounded-full border text-sm transition-colors",
+                "h-9 flex-1 rounded-[var(--cf-radius-control)] border text-sm transition-colors",
                 value === v
                   ? "border-transparent bg-[var(--cf-accent)] text-[var(--cf-accent-text)]"
                   : "border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] hover:border-[var(--cf-accent)]",

@@ -116,7 +116,7 @@ export function DateComposer({
   if (includeTime && chosenDay) {
     const open = slots.filter((t) => !slotPassed(chosenDay, t));
     return (
-      <div className="w-full max-w-[19rem] rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] p-3">
+      <div className="w-full max-w-[19rem] rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] p-3">
         <div className="mb-2 flex items-center justify-between">
           <button
             type="button"
@@ -160,7 +160,7 @@ export function DateComposer({
   }
 
   return (
-    <div className="w-full max-w-[19rem] rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] p-3">
+    <div className="w-full max-w-[19rem] rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] p-3">
       <div className="mb-2 flex items-center justify-between">
         <button
           type="button"

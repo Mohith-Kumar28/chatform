@@ -136,7 +136,7 @@ export function FileUploadControl({
           void upload(Array.from(e.dataTransfer.files));
         }}
         className={cn(
-          "group rounded-2xl border border-dashed",
+          "group rounded-[var(--cf-radius-card)] border border-dashed",
           "transition-[background-color,border-color] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
           dragging
             ? "border-solid border-[var(--cf-accent)] bg-[color-mix(in_oklch,var(--cf-accent)_10%,transparent)]"
@@ -236,7 +236,7 @@ export function FileUploadControl({
           disabled={busy}
           onClick={() => onSubmit(done.map((i) => i.file!), done.map((i) => i.name).join(", "))}
           className={cn(
-            "h-11 w-full rounded-full bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)]",
+            "h-11 w-full rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)]",
             "transition-transform duration-[var(--duration-micro)] active:scale-[0.98]",
             "motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40",
           )}
