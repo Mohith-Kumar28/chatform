@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 /**
- * `/team` is now `/settings/people`.
+ * `/team` is now `/settings/team`.
  *
  * A redirect rather than a deletion: this was a top-level nav item for the whole
  * life of the product, so it is in bookmarks, in the command palette's muscle
@@ -9,5 +9,5 @@ import { redirect } from "next/navigation";
  * shape, as `/billing → /usage`.
  */
 export default function TeamPage() {
-  redirect("/settings/people");
+  redirect("/settings/team");
 }

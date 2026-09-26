@@ -99,7 +99,7 @@ const GAUGES: { limit: LimitKey; gauge: string; href?: string; hint?: string }[]
   {
     limit: "seats",
     gauge: "seats",
-    href: "/settings/people",
+    href: "/settings/team",
     hint: "A pending invitation holds a seat until it is accepted or expires.",
   },
   { limit: "workspaces_count", gauge: "workspaces_count" },

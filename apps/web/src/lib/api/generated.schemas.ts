@@ -2414,6 +2414,74 @@ export type PostApiFormsByIdPublish422 = {
   error: PostApiFormsByIdPublish422Error;
 };
 
+export type GetApiFormsByIdAiThread200TurnsItemRole = typeof GetApiFormsByIdAiThread200TurnsItemRole[keyof typeof GetApiFormsByIdAiThread200TurnsItemRole];
+
+
+export const GetApiFormsByIdAiThread200TurnsItemRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export type GetApiFormsByIdAiThread200TurnsItem = {
+  /** @maxLength 100 */
+  id: string;
+  role: GetApiFormsByIdAiThread200TurnsItemRole;
+  /** @maxLength 20000 */
+  text: string;
+  [key: string]: unknown;
+};
+
+export type GetApiFormsByIdAiThread200 = {
+  /** @maxItems 40 */
+  turns: GetApiFormsByIdAiThread200TurnsItem[];
+};
+
+export type PutApiFormsByIdAiThreadBodyTurnsItemRole = typeof PutApiFormsByIdAiThreadBodyTurnsItemRole[keyof typeof PutApiFormsByIdAiThreadBodyTurnsItemRole];
+
+
+export const PutApiFormsByIdAiThreadBodyTurnsItemRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export type PutApiFormsByIdAiThreadBodyTurnsItem = {
+  /** @maxLength 100 */
+  id: string;
+  role: PutApiFormsByIdAiThreadBodyTurnsItemRole;
+  /** @maxLength 20000 */
+  text: string;
+  [key: string]: unknown;
+};
+
+export type PutApiFormsByIdAiThreadBody = {
+  /** @maxItems 40 */
+  turns: PutApiFormsByIdAiThreadBodyTurnsItem[];
+};
+
+export type PutApiFormsByIdAiThread200 = {
+  ok: boolean;
+};
+
+export type PutApiFormsByIdAiThread413ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PutApiFormsByIdAiThread413Error = {
+  code: string;
+  message: string;
+  issues?: PutApiFormsByIdAiThread413ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PutApiFormsByIdAiThread413 = {
+  error: PutApiFormsByIdAiThread413Error;
+};
+
 export type GetApiFormsByIdKnowledge200SourcesItem = {
   id: string;
   kind: string;
@@ -2987,6 +3055,7 @@ export type PostApiAiClarifyForm200QuestionsItem = {
   why: string;
   kind: PostApiAiClarifyForm200QuestionsItemKind;
   options: string[];
+  multiple: boolean;
 };
 
 export type PostApiAiClarifyForm200 = {

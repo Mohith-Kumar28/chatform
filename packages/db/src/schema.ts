@@ -981,6 +981,15 @@ export const formTemplates = sqliteTable("form_templates", {
   createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
 });
 
+/** The builder AI bar's conversation about one form, shared by everyone who can open it. */
+export const formAiThreads = sqliteTable("form_ai_threads", {
+  formId: text("form_id")
+    .primaryKey()
+    .references(() => forms.id, { onDelete: "cascade" }),
+  turnsJson: text("turns_json").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 export const aiGenerations = sqliteTable(
   "ai_generations",
   {

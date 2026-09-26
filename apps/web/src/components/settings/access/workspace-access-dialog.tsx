@@ -290,7 +290,7 @@ export function WorkspaceAccessDialog({
               ? "Only owners and admins can open this for now. Add someone above to share it. "
               : "Owners and admins can open every workspace. "}
             Change someone&apos;s role in{" "}
-            <Link href="/settings/people" className="text-foreground underline underline-offset-2" onClick={() => onOpenChange(false)}>
+            <Link href="/settings/team" className="text-foreground underline underline-offset-2" onClick={() => onOpenChange(false)}>
               People
             </Link>
             .

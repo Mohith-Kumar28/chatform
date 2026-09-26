@@ -55,7 +55,7 @@ import { CreateOrganizationDialog } from "@/components/auth/organization/create-
  *
  * The menu opens on the reader's own role, because this is the one control in
  * the product that already names the organization they are in, and "what can I
- * do here" had no answer anywhere outside `/settings/people` — a page an editor
+ * do here" had no answer anywhere outside `/settings/team` — a page an editor
  * or a viewer has no other reason to open, and which a viewer reads as a roster
  * of other people. Somebody who cannot publish a form should be able to find
  * out why without being told.

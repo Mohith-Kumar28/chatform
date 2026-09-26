@@ -10,8 +10,8 @@ import { redirect } from "next/navigation";
 const SECTIONS: Record<string, string> = {
   settings: "/settings/general",
   general: "/settings/general",
-  people: "/settings/people",
-  members: "/settings/people",
+  people: "/settings/team",
+  members: "/settings/team",
 };
 
 export default async function OrganizationPage({ params }: { params: Promise<{ path?: string[] }> }) {

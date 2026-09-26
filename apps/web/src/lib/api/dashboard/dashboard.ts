@@ -37,6 +37,7 @@ import type {
   GetApiForms200Item,
   GetApiFormsById200,
   GetApiFormsById404,
+  GetApiFormsByIdAiThread200,
   GetApiFormsByIdAnalytics200,
   GetApiFormsByIdFollowupAnalytics200,
   GetApiFormsByIdHistory200,
@@ -143,6 +144,9 @@ import type {
   PostApiWebhooksByIdTest200,
   PostApiWorkspaces200,
   PostApiWorkspacesBody,
+  PutApiFormsByIdAiThread200,
+  PutApiFormsByIdAiThread413,
+  PutApiFormsByIdAiThreadBody,
   PutApiFormsByIdDoc200,
   PutApiFormsByIdDoc409,
   PutApiFormsByIdDoc429,
@@ -1289,6 +1293,191 @@ export const usePostApiFormsByIdPublish = <TError = PostApiFormsByIdPublish402 |
         TContext
       > => {
       return useMutation(getPostApiFormsByIdPublishMutationOptions(options));
+    }
+    export type getApiFormsByIdAiThreadResponse200 = {
+  data: GetApiFormsByIdAiThread200
+  status: 200
+}
+
+export type getApiFormsByIdAiThreadResponseSuccess = (getApiFormsByIdAiThreadResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiFormsByIdAiThreadResponse = (getApiFormsByIdAiThreadResponseSuccess)
+
+export const getGetApiFormsByIdAiThreadUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/ai-thread`
+}
+
+/**
+ * @summary Get the builder AI conversation for a form
+ */
+export const getApiFormsByIdAiThread = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdAiThreadResponse> => {
+
+  return customFetch<getApiFormsByIdAiThreadResponse>(getGetApiFormsByIdAiThreadUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiFormsByIdAiThreadQueryKey = (id: string,) => {
+    return [
+    `/api/forms/${id}/ai-thread`
+    ] as const;
+    }
+
+
+export const getGetApiFormsByIdAiThreadQueryOptions = <TData = Awaited<ReturnType<typeof getApiFormsByIdAiThread>>, TError = unknown>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdAiThread>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsByIdAiThreadQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFormsByIdAiThread>>> = ({ signal }) => getApiFormsByIdAiThread(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdAiThread>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiFormsByIdAiThreadQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFormsByIdAiThread>>>
+export type GetApiFormsByIdAiThreadQueryError = unknown
+
+
+/**
+ * @summary Get the builder AI conversation for a form
+ */
+
+export function useGetApiFormsByIdAiThread<TData = Awaited<ReturnType<typeof getApiFormsByIdAiThread>>, TError = unknown>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdAiThread>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiFormsByIdAiThreadQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type putApiFormsByIdAiThreadResponse200 = {
+  data: PutApiFormsByIdAiThread200
+  status: 200
+}
+
+export type putApiFormsByIdAiThreadResponse413 = {
+  data: PutApiFormsByIdAiThread413
+  status: 413
+}
+
+export type putApiFormsByIdAiThreadResponseSuccess = (putApiFormsByIdAiThreadResponse200) & {
+  headers: Headers;
+};
+export type putApiFormsByIdAiThreadResponseError = (putApiFormsByIdAiThreadResponse413) & {
+  headers: Headers;
+};
+
+export type putApiFormsByIdAiThreadResponse = (putApiFormsByIdAiThreadResponseSuccess | putApiFormsByIdAiThreadResponseError)
+
+export const getPutApiFormsByIdAiThreadUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/ai-thread`
+}
+
+/**
+ * @summary Replace the builder AI conversation for a form
+ */
+export const putApiFormsByIdAiThread = async (id: string,
+    putApiFormsByIdAiThreadBody: PutApiFormsByIdAiThreadBody, options?: Parameters<typeof customFetch>[1]): Promise<putApiFormsByIdAiThreadResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<putApiFormsByIdAiThreadResponse>(getPutApiFormsByIdAiThreadUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(putApiFormsByIdAiThreadBody)
+  }
+);}
+
+
+
+
+
+export const getPutApiFormsByIdAiThreadMutationOptions = <TError = PutApiFormsByIdAiThread413,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdAiThread>>, TError,PutApiFormsByIdAiThreadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdAiThread>>, TError,PutApiFormsByIdAiThreadMutationVariables, TContext> => {
+
+const mutationKey = ['putApiFormsByIdAiThread'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiFormsByIdAiThread>>, PutApiFormsByIdAiThreadMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putApiFormsByIdAiThread(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiFormsByIdAiThreadMutationResult = NonNullable<Awaited<ReturnType<typeof putApiFormsByIdAiThread>>>
+    export type PutApiFormsByIdAiThreadMutationBody = PutApiFormsByIdAiThreadBody
+    export type PutApiFormsByIdAiThreadMutationError = PutApiFormsByIdAiThread413
+    export type PutApiFormsByIdAiThreadMutationVariables = {id: string;data: PutApiFormsByIdAiThreadBody}
+
+    /**
+ * @summary Replace the builder AI conversation for a form
+ */
+export const usePutApiFormsByIdAiThread = <TError = PutApiFormsByIdAiThread413,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdAiThread>>, TError,PutApiFormsByIdAiThreadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof putApiFormsByIdAiThread>>,
+        TError,
+        PutApiFormsByIdAiThreadMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiFormsByIdAiThreadMutationOptions(options));
     }
     export type getApiFormsByIdKnowledgeResponse200 = {
   data: GetApiFormsByIdKnowledge200

@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 /**
  * "Invite team", beside the organization switcher.
  *
- * Inviting somebody was reachable only from `/settings/people` — a page you
+ * Inviting somebody was reachable only from `/settings/team` — a page you
  * open on purpose, which is the wrong shape for the one action a new
  * organization is most likely to want on its first day and least likely to go
  * looking for. It belongs next to the control that names the organization,

@@ -45,7 +45,7 @@ export function SettingsNav() {
           <div key={group.id}>
             <div className="px-3 pb-1.5">
               {/* The first group is named after the organization itself, which
-                  is what makes "General" and "People" unambiguously *this*
+                  is what makes "General" and "Team" unambiguously *this*
                   organization's — and "Workspaces" under it the folders it
                   holds, not the accounts you belong to. */}
               {group.label === null ? (

@@ -69,6 +69,8 @@ export function AiBar() {
   const [stage, setStage] = useState<EditStage | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  /** The thread as loaded, so the first settle after a load is not saved back. */
+  const loadedTurns = useRef<Turn[] | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
@@ -113,13 +115,32 @@ export function AiBar() {
 
   useEffect(() => {
     if (!formId) return;
-    setTurns(loadHistory(formId));
-    setHydrated(true);
+    let live = true;
+    setHydrated(false);
+    loadedTurns.current = null;
+    loadHistory(formId)
+      .then((t) => live && setTurns(t))
+      .catch(() => live && setTurns([]))
+      .finally(() => live && setHydrated(true));
+    return () => {
+      live = false;
+    };
   }, [formId]);
 
+  // Saved once the thread settles, not per streamed change. Nothing is saved
+  // until the load has answered, so an empty first render never overwrites it.
   useEffect(() => {
     if (!formId || !hydrated) return;
-    saveHistory(formId, turns);
+    if (loadedTurns.current === null) {
+      loadedTurns.current = turns;
+      return;
+    }
+    if (turns === loadedTurns.current) return;
+    const t = setTimeout(() => {
+      // A viewer's save is refused; their bar still works for the session.
+      void saveHistory(formId, turns).catch(() => {});
+    }, 800);
+    return () => clearTimeout(t);
   }, [formId, turns, hydrated]);
 
   useEffect(() => {

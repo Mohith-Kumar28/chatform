@@ -64,9 +64,9 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         keywords: "workspaces folders create rename delete move forms organize",
       },
       {
-        id: "people",
-        label: "People",
-        href: "/settings/people",
+        id: "team",
+        label: "Team",
+        href: "/settings/team",
         icon: Users,
         keywords: "people team members invite invitation seats roles permissions remove",
       },

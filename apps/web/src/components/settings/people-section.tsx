@@ -66,7 +66,7 @@ export function PeopleSection() {
   if (isPending) {
     return (
       <>
-        <SettingsSectionHeader title="People" />
+        <SettingsSectionHeader title="Team" />
         <div className="space-y-6">
           <Skeleton className="h-64 w-full rounded-xl" />
           <Skeleton className="h-40 w-full rounded-xl" />
@@ -78,7 +78,7 @@ export function PeopleSection() {
   if (!org) {
     return (
       <>
-        <SettingsSectionHeader title="People" />
+        <SettingsSectionHeader title="Team" />
         <EmptyState
           icon={Building2}
           title="You're not in an organization yet"
@@ -93,7 +93,7 @@ export function PeopleSection() {
       {/* The organization's name is not repeated here — the rail beside this pane
           is headed with it, and saying it twice on one screen is the duplication
           this consolidation exists to remove. */}
-      <SettingsSectionHeader title="People" />
+      <SettingsSectionHeader title="Team" />
 
       <div className="flex flex-col gap-8">
         <OrganizationMembers />

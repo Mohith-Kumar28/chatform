@@ -55,6 +55,7 @@ formsRouter.post("/forms/:id/publish", requirePermission("form", "publish"));
 formsRouter.post("/forms/:id/unpublish", requirePermission("form", "publish"));
 formsRouter.delete("/forms/:id", requirePermission("form", "delete"));
 formsRouter.patch("/forms/:id/workspace", requirePermission("form", "update"));
+formsRouter.put("/forms/:id/ai-thread", requirePermission("form", "update"));
 
 const FormSummary = z.object({
   id: z.string(),
@@ -799,5 +800,66 @@ formsRouter.post(
       ]),);
 
     return c.json({ ok: true, version, stripped });
+  },
+);
+
+/**
+ * The builder AI bar's conversation about this form.
+ *
+ * It used to live only in the author's browser storage, so a teammate, or a
+ * support admin acting as them, opened the bar to an empty thread. Stored
+ * whole, one row per form, and replaced on every save: the builder already
+ * trims it to the last 40 turns and drops proposed documents before saving.
+ */
+const AiThreadTurn = z
+  .object({ id: z.string().max(100), role: z.enum(["user", "assistant"]), text: z.string().max(20_000) })
+  .passthrough();
+const AiThread = z.object({ turns: z.array(AiThreadTurn).max(40) });
+/** Well past 40 slim turns; a runaway client cannot fill a row with megabytes. */
+const AI_THREAD_MAX_BYTES = 400_000;
+
+formsRouter.get(
+  "/forms/:id/ai-thread",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Get the builder AI conversation for a form",
+    responses: { 200: { description: "Thread", content: { "application/json": { schema: resolver(AiThread) } } } },
+  }),
+  async (c) => {
+    const row = await c.env.DB.prepare(`SELECT turns_json FROM form_ai_threads WHERE form_id = ?`)
+      .bind(c.get("form")!.id)
+      .first<{ turns_json: string }>();
+    let turns: unknown[] = [];
+    try {
+      const parsed = row ? JSON.parse(row.turns_json) : [];
+      if (Array.isArray(parsed)) turns = parsed;
+    } catch {
+      /* a damaged row reads as an empty thread */
+    }
+    return c.json({ turns } as z.infer<typeof AiThread>);
+  },
+);
+
+formsRouter.put(
+  "/forms/:id/ai-thread",
+  validator("json", AiThread),
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Replace the builder AI conversation for a form",
+    responses: {
+      200: { description: "Saved", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } },
+      413: { description: "Too large", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
+    },
+  }),
+  async (c) => {
+    const json = JSON.stringify(c.req.valid("json").turns);
+    if (json.length > AI_THREAD_MAX_BYTES) return apiError(c, 413, "too_large", "This conversation is too long to save.");
+    await c.env.DB.prepare(
+      `INSERT INTO form_ai_threads (form_id, turns_json, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(form_id) DO UPDATE SET turns_json = excluded.turns_json, updated_at = excluded.updated_at`,
+    )
+      .bind(c.get("form")!.id, json, Date.now())
+      .run();
+    return c.json({ ok: true });
   },
 );

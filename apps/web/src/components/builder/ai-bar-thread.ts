@@ -1,4 +1,6 @@
 import type { Block, FormDoc } from "@repo/form-schema";
+import { getApiFormsByIdAiThread, putApiFormsByIdAiThread } from "@/lib/api/dashboard/dashboard";
+import { apiData } from "@/lib/api/payload";
 
 export interface Turn {
   id: string;
@@ -38,30 +40,57 @@ export interface Turn {
  * It used to live in component state, so clicking away — which is how the bar
  * collapses — erased what you had asked and what it answered. Kept per form,
  * because the conversation is about this form's questions and means nothing
- * next to another one.
+ * next to another one, and on the server, so everyone who opens the form
+ * sees the same one.
  */
 const historyKey = (formId: string) => `chatform:aibar:${formId}`;
 const MAX_TURNS = 40;
 
-export function loadHistory(formId: string): Turn[] {
+/**
+ * Load the thread from the server.
+ *
+ * It lived only in this browser's storage, so a teammate, or a support admin
+ * acting as the author, opened the bar to nothing. The server holds it now.
+ * A thread still sitting in this browser from before is carried up the first
+ * time the form is opened here, then the local copy is dropped.
+ */
+export async function loadHistory(formId: string): Promise<Turn[]> {
+  const remote = apiData<{ turns?: Turn[] }>(await getApiFormsByIdAiThread(formId)).turns ?? [];
+  if (remote.length > 0) {
+    clearLocal(formId);
+    return remote;
+  }
+  const local = readLocal(formId);
+  if (local.length > 0) {
+    await saveHistory(formId, local);
+    clearLocal(formId);
+  }
+  return local;
+}
+
+/** Proposed docs are large and only useful while the offer is live, so the saved copy drops them. */
+export async function saveHistory(formId: string, turns: Turn[]): Promise<void> {
+  const slim = turns
+    .slice(-MAX_TURNS)
+    .map(({ doc, ...rest }) => (doc ? { ...rest, applied: rest.applied ?? false, stale: true } : rest));
+  await putApiFormsByIdAiThread(formId, { turns: slim as never });
+}
+
+function readLocal(formId: string): Turn[] {
   try {
     const raw = localStorage.getItem(historyKey(formId));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Turn[];
+    const parsed = raw ? (JSON.parse(raw) as Turn[]) : [];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
 }
 
-export function saveHistory(formId: string, turns: Turn[]) {
+function clearLocal(formId: string) {
   try {
-    // Proposed docs are large and only useful while the offer is live, so the
-    // stored copy keeps the conversation and drops the payloads.
-    const slim = turns.slice(-MAX_TURNS).map(({ doc, ...rest }) => (doc ? { ...rest, applied: rest.applied ?? false, stale: true } : rest));
-    localStorage.setItem(historyKey(formId), JSON.stringify(slim));
+    localStorage.removeItem(historyKey(formId));
   } catch {
-    // A full or blocked store is not worth failing a suggestion over.
+    /* nothing to clear */
   }
 }
 
@@ -96,7 +125,10 @@ export function seedAiBarThread(
         text: `Built “${built.title}” — ${parts.join(", ")}.`,
       },
     ];
+    // Local first, so the builder has it even if this request is still in
+    // flight when it loads; `loadHistory` carries it up if this one fails.
     localStorage.setItem(historyKey(formId), JSON.stringify(seeded));
+    void saveHistory(formId, seeded).catch(() => {});
   } catch {
     // A blocked store costs the transcript, not the form.
   }
