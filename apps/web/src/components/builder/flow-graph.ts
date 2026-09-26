@@ -54,6 +54,7 @@ function wire(
   label?: string,
   sourceHandle?: string,
   color?: string,
+  deletable = true,
 ): Edge {
   return {
     id,
@@ -61,7 +62,7 @@ function wire(
     target,
     sourceHandle,
     label,
-    deletable: true,
+    deletable,
     style: { stroke: color ?? "var(--border)", strokeWidth: 1.5 },
     labelStyle: { fontSize: 10, fill: "var(--muted-foreground)" },
     labelBgStyle: { fill: "var(--card)" },
@@ -133,6 +134,18 @@ export interface BranchData {
 export const OTHERWISE = "__otherwise";
 
 /**
+ * Where a respondent who runs out of questions finishes.
+ *
+ * `resolveEnding` falls back to the first ending that ACCEPTS the response, not
+ * simply the first ending, so this does too. Drawing the last question's wire
+ * to `endings[0]` showed every form whose first ending is a screen-out as
+ * turning everybody away at the end, which it does not do.
+ */
+export function finishRef(doc: Pick<FormDoc, "endings">): string | undefined {
+  return (doc.endings.find((e) => e.kind !== "screen_out") ?? doc.endings[0])?.ref;
+}
+
+/**
  * A branch node's payload, typed.
  *
  * React Flow types `node.data` as `Record<string, unknown>`, so every reader
@@ -162,6 +175,7 @@ export function deriveGraph(
   const nodes: Node[] = [];
   const edges: Edge[] = [];
   const endingRefs = new Set(doc.endings.map((e) => e.ref));
+  const finish = finishRef(doc);
 
   const ruleById = new Map(gotoRules.map((r) => [r.id, r]));
   // Conditional rules, grouped by the question they hang off.
@@ -246,7 +260,7 @@ export function deriveGraph(
        * destination — it is just one nobody typed. Naming it is the difference
        * between a branch that looks abandoned and one that reads as finished.
        */
-      const fallbackRef = exhaustive ? undefined : (always?.target ?? next?.ref ?? doc.endings[0]?.ref);
+      const fallbackRef = exhaustive ? undefined : (always?.target ?? next?.ref ?? finish);
       const fallback: BranchFallback | null = fallbackRef
         ? {
             ref: fallbackRef,
@@ -274,7 +288,8 @@ export function deriveGraph(
         } satisfies BranchData,
         deletable: true,
       });
-      edges.push(wire(`into_${b.ref}`, b.ref, branchId));
+      // Part of the drawing, not a route: a branch is fed by its own question.
+      edges.push(wire(`into_${b.ref}`, b.ref, branchId, undefined, undefined, undefined, false));
       for (const [row, c] of cases.entries()) {
         // A case whose destination is gone gets no wire, which is what makes
         // the unconnected handle on the node the honest picture.
@@ -304,7 +319,7 @@ export function deriveGraph(
     // Past the last question the flow reaches the ending, and that wire was
     // never drawn — so the ending had nothing pointing at it and the layout
     // stranded it back at the start, beside the welcome block.
-    const onward = next?.ref ?? doc.endings[0]?.ref;
+    const onward = next?.ref ?? finish;
     if (onward) {
       // Unlabelled: "default" on every single wire in the form was a word
       // repeated until it stopped meaning anything. A plain line already says
@@ -359,4 +374,63 @@ export function deriveGraph(
   }
 
   return { nodes, edges };
+}
+
+/**
+ * The rules after cutting some of the canvas's wires, by edge id.
+ *
+ * A conditional route is removed, so its answers go wherever "otherwise"
+ * goes. Any other wire is a question's one way onward, and cutting it sends
+ * that question to the finish (`finishRef`) with an explicit jump, because a
+ * respondent cannot be left at a question with nowhere to go. A wire that
+ * already goes there cannot be cut further: `refused` says so, and the rules
+ * for it are left alone. `logic` is `doc.logic` itself when nothing changed.
+ */
+export function cutConnections(
+  doc: Pick<FormDoc, "blocks" | "endings" | "logic">,
+  edgeIds: readonly string[],
+  newId: () => string,
+): { logic: LogicRule[]; refused: boolean } {
+  let logic = [...doc.logic];
+  let changed = false;
+  let refused = false;
+  const finish = finishRef(doc);
+  const isJump = (r: LogicRule, from: string) => isGoto(r) && r.from === from && !condOf(r);
+  const fallThrough = (from: string) => {
+    const i = doc.blocks.findIndex((b) => b.ref === from);
+    return i < 0 ? undefined : (doc.blocks[i + 1]?.ref ?? finish);
+  };
+  const endHere = (from: string, target: string | undefined) => {
+    if (!finish || target === finish) {
+      refused = true;
+      return;
+    }
+    changed = true;
+    logic = logic.filter((r) => !isJump(r, from));
+    if (fallThrough(from) === finish) return; // falling through already finishes
+    logic.push({ id: newId(), action_kind: "goto", from, when: null, target: finish, targetKind: "ending" });
+  };
+
+  for (const id of edgeIds) {
+    if (id.startsWith("case_")) {
+      const before = logic.length;
+      logic = logic.filter((r) => r.id !== id.slice("case_".length));
+      changed ||= logic.length !== before;
+      continue;
+    }
+    if (id.startsWith("into_")) continue; // part of the branch drawing, not a route
+    if (id.startsWith("else_") || id.startsWith("seq-")) {
+      const from = id.startsWith("else_") ? id.slice("else_".length) : id.slice("seq-".length);
+      const jump = logic.find((r): r is GotoRule => isGoto(r) && isJump(r, from));
+      endHere(from, jump?.target ?? fallThrough(from));
+      continue;
+    }
+    const rule = logic.find((r): r is GotoRule => isGoto(r) && r.id === id);
+    if (!rule?.from) continue;
+    if (condOf(rule)) {
+      logic = logic.filter((r) => r.id !== rule.id);
+      changed = true;
+    } else endHere(rule.from, rule.target);
+  }
+  return { logic: changed ? logic : doc.logic, refused };
 }

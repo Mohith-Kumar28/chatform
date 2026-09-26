@@ -8,6 +8,7 @@ import type { Block, FormDoc } from "@repo/form-schema";
 import { blockMeta, TONE_ACCENT, TONE_CLASSES } from "@/components/builder/block-library";
 import { BRANCH_HEADER, BRANCH_ROW, nodeSize } from "@/components/builder/flow-layout";
 import { branchData, deriveGraph, isGoto, OTHERWISE, routeColor } from "@/components/builder/flow-graph";
+import { assignLanes, routeWire } from "@/components/builder/flow-route";
 import { cn } from "@/lib/utils";
 
 /**
@@ -44,6 +45,8 @@ interface Wire {
   id: string;
   from: Anchor;
   to: Anchor;
+  /** The drawn route, from `routeWire`: the same square turns as the canvas. */
+  path: string;
   label?: string;
   /** Where the label sits — see `labelAt`. */
   at?: Anchor;
@@ -56,18 +59,6 @@ const PAD = 16;
 
 /** A route label's plate, and therefore the step between two of them. */
 const LABEL_H = 15;
-
-/**
- * A wire, leaving the bottom of one node and arriving at the top of the next.
- *
- * The control points are pulled straight down and straight up, by half the
- * vertical gap, so a route that steps sideways leaves and lands square instead
- * of slicing diagonally across whatever is between them.
- */
-function path(from: Anchor, to: Anchor): string {
-  const d = Math.max(16, Math.abs(to.y - from.y) / 2);
-  return `M ${from.x} ${from.y} C ${from.x} ${from.y + d}, ${to.x} ${to.y - d}, ${to.x} ${to.y}`;
-}
 
 export function TemplateFlow({
   doc,
@@ -379,7 +370,7 @@ function FlowDrawing({ placed, wires, width, height }: { placed: Placed[]; wires
         {wires.map((w) => (
           <g key={w.id}>
             <path
-              d={path(w.from, w.to)}
+              d={w.path}
               fill="none"
               stroke={w.color ?? "var(--border)"}
               strokeWidth={1.5}
@@ -574,17 +565,25 @@ function measure(
   const width = Math.max(...all.map((b) => b.x + b.width)) + PAD;
   const height = Math.max(...all.map((b) => b.y + b.height)) + PAD;
 
-  const wires: Wire[] = [];
-  for (const edge of edges) {
+  const obstacles = all.map((b) => ({ id: b.node.id, x: b.x, y: b.y, width: b.width, height: b.height }));
+  const ends = edges.flatMap((edge) => {
     const from = boxes.get(edge.source);
     const to = boxes.get(edge.target);
-    if (!from || !to) continue;
+    if (!from || !to) return [];
+    return [{ edge, from, to, exit: exitX(from, edge.sourceHandle ?? undefined), entry: to.x + to.width / 2 }];
+  });
+  const lanes = assignLanes(ends.map((w) => ({ id: w.edge.id, target: w.edge.target, fromX: w.exit, toX: w.entry })));
+
+  const wires: Wire[] = [];
+  for (const { edge, from, to, exit, entry } of ends) {
     const label = typeof edge.label === "string" ? edge.label : undefined;
-    const at = { x: exitX(from, edge.sourceHandle ?? undefined), y: from.y + from.height };
+    const at = { x: exit, y: from.y + from.height };
+    const toAt = { x: entry, y: to.y };
     wires.push({
       id: edge.id,
       from: at,
-      to: { x: to.x + to.width / 2, y: to.y },
+      to: toAt,
+      path: routeWire(at, toAt, obstacles, { exclude: [edge.source, edge.target], lane: lanes.get(edge.id) ?? 0 }).path,
       label,
       at: label ? labelAt(from, at, edge.sourceHandle ?? undefined) : undefined,
       color: edge.style?.stroke === "var(--border)" ? undefined : edge.style?.stroke,
@@ -601,7 +600,7 @@ function measure(
  * see which answer goes where. Running vertically the rows cannot each have
  * their own exit — they are stacked down the card, and every wire leaves the
  * bottom — so the order is carried instead: the first row leaves furthest
- * left, and `alignArmsWithTheirRows` has already put the first arm there. Four
+ * left, and `orderArmsLikeTheirRows` has already put the first arm there. Four
  * routes fanning out of one point would leave the rows above as decoration.
  */
 function exitX(box: Placed, handle?: string): number {

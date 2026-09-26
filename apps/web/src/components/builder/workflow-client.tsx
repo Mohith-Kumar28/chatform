@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   BackgroundVariant,
+  BaseEdge,
   Controls,
   Handle,
   MarkerType,
@@ -13,9 +14,13 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
+  SelectionMode,
   useReactFlow,
   type Connection,
   type Edge,
+  type EdgeChange,
+  type EdgeProps,
+  type EdgeTypes,
   type Node,
   type NodeChange,
   type NodeProps,
@@ -31,13 +36,16 @@ import { BlockInspector as SharedBlockInspector } from "./inspector/block-inspec
 import { EndingInspector } from "./inspector/ending-inspector";
 import { blockMeta, TONE_ACCENT, TONE_CLASSES } from "./block-library";
 import { NodeCatalog } from "./node-catalog";
-import { layoutGraph, tagVertical } from "./flow-layout";
+import { layoutGraph, nodeSize, tagVertical } from "./flow-layout";
+import { assignLanes, routeWire, type Obstacle } from "./flow-route";
 import { opInverse, opsValueNeeded, type Op } from "./branch-layout";
 import { ConditionsEditor, type WhenGroup } from "./condition-editor";
 import { FlowTargetCombobox } from "./flow-target-combobox";
 import {
   condOf,
+  cutConnections,
   deriveGraph,
+  finishRef,
   isGoto,
   OTHERWISE,
   OTHERWISE_COLOR,
@@ -45,7 +53,7 @@ import {
   type BranchCase,
   type GotoRule,
 } from "./flow-graph";
-import { CanvasMenuProvider, NodeMenu, PaneMenu, type CanvasMenuActions } from "./node-menu";
+import { CanvasMenuProvider, NodeMenu, PaneMenu, type CanvasMenuActions, type MenuEdge } from "./node-menu";
 import { toast } from "sonner";
 import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
@@ -233,8 +241,15 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
   const [edges, setEdges] = useState<Edge[]>(derived.edges);
   if (syncedGraph !== derived) {
     setSyncedGraph(derived);
-    setNodes(derived.nodes);
-    setEdges(derived.edges);
+    // Keep what was selected. Every edit re-derives the graph, and a fresh
+    // node is an unselected one: dragging three boxes together saved their
+    // positions and then dropped the selection, so the next drag moved one.
+    const picked = new Set(nodes.filter((n) => n.selected).map((n) => n.id));
+    const pickedEdges = new Set(edges.filter((e) => e.selected).map((e) => e.id));
+    setNodes(picked.size ? derived.nodes.map((n) => (picked.has(n.id) ? { ...n, selected: true } : n)) : derived.nodes);
+    setEdges(
+      pickedEdges.size ? derived.edges.map((e) => (pickedEdges.has(e.id) ? { ...e, selected: true } : e)) : derived.edges,
+    );
   }
 
   /**
@@ -248,31 +263,69 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
    * a description of this graph rather than of every graph it has ever been.
    */
   const updateLayout = useCallback(
-    (id: string, pos: { x: number; y: number }) => {
+    (moved: Pick<Node, "id" | "position">[]) => {
+      // Every node that moved, not just the one under the pointer: a
+      // selection is dragged as a group.
+      const at = new Map(moved.map((n) => [n.id, n.position]));
       const layout: FormDoc["layout"] = {};
-      for (const n of nodes) layout[n.id] = n.id === id ? pos : n.position;
+      for (const n of nodes) layout[n.id] = at.get(n.id) ?? n.position;
       onChange({ ...doc, layout: tagVertical(layout) });
     },
     [doc, nodes, onChange],
   );
+
+  /** Every box on the canvas, for wires to route around. */
+  const obstacles = useMemo<Obstacle[]>(
+    () =>
+      nodes.map((n) => {
+        const size = nodeSize(n);
+        return { id: n.id, x: n.position.x, y: n.position.y, width: size.width, height: size.height };
+      }),
+    [nodes],
+  );
+
+  /** Wires arriving at one node from one side each get their own turn height. */
+  const lanes = useMemo(() => {
+    const box = new Map(obstacles.map((o) => [o.id, o]));
+    const branchSockets = new Map(
+      nodes
+        .filter((n) => n.type === "branch")
+        .map((n) => {
+          const data = n.data as { cases: BranchCase[]; fallback: unknown };
+          return [n.id, [...data.cases.map((c) => c.ruleId), ...(data.fallback ? [OTHERWISE] : [])]] as const;
+        }),
+    );
+    return assignLanes(
+      edges.flatMap((e) => {
+        const from = box.get(e.source);
+        const to = box.get(e.target);
+        if (!from || !to) return [];
+        const sockets = branchSockets.get(e.source);
+        const at = sockets && e.sourceHandle ? sockets.indexOf(e.sourceHandle) : -1;
+        const share = at >= 0 && sockets ? (at + 1) / (sockets.length + 1) : 0.5;
+        return [{ id: e.id, target: e.target, fromX: from.x + from.width * share, toX: to.x + to.width / 2 }];
+      }),
+    );
+  }, [edges, nodes, obstacles]);
 
   // Clicking a wire already selected it and opened its editor, but the wire
   // itself looked exactly as it had a moment before — so there was no way to
   // tell which one the panel was talking about.
   const shownEdges = useMemo(
     () =>
-      edges.map((e) =>
-        e.id === selectedEdgeId
+      edges.map((e): Edge => {
+        const routed = { ...e, type: "route", data: { ...e.data, lane: lanes.get(e.id) ?? 0 } };
+        return e.selected || e.id === selectedEdgeId
           ? {
-              ...e,
+              ...routed,
               style: { ...e.style, stroke: "var(--primary)", strokeWidth: 2.5 },
               labelStyle: { ...e.labelStyle, fill: "var(--primary)" },
               markerEnd: { type: MarkerType.ArrowClosed, color: "var(--primary)" },
               zIndex: 10,
             }
-          : e,
-      ),
-    [edges, selectedEdgeId],
+          : routed;
+      }),
+    [edges, lanes, selectedEdgeId],
   );
 
   // real-time drag/selection: apply RF changes to local state immediately
@@ -280,15 +333,50 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
     setNodes((prev) => applyNodeChangesShallow(prev, changes));
   }, []);
 
+  /**
+   * Wire selection, kept on the wires themselves.
+   *
+   * Edges had no change handler, so React Flow's own selection never landed
+   * on them: a clicked wire was highlighted by the panel's state alone, and
+   * the Delete key, which deletes what React Flow thinks is selected, found
+   * nothing to delete. Removal is not applied here; `onDelete` turns it into
+   * a change to the rules, and the wires are re-derived from those.
+   */
+  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    const picked = new Map<string, boolean>();
+    for (const c of changes) if (c.type === "select") picked.set(c.id, c.selected);
+    if (picked.size === 0) return;
+    setEdges((prev) => prev.map((e) => (picked.has(e.id) ? { ...e, selected: picked.get(e.id) } : e)));
+  }, []);
+
   // ── mutations ──────────────────────────────────────────────────────────
+  /**
+   * The layout with one new node placed where it was dropped.
+   *
+   * The saved layout is honoured only while it covers every node (see
+   * `placeNodes`), and a form that has never been dragged has none. Adding
+   * the dropped node to that alone left the layout incomplete, so the drop
+   * point was thrown away and the new node landed wherever a fresh layout
+   * put it. Everything on screen is written down with it instead.
+   */
+  const layoutWith = useCallback(
+    (id: string, position: { x: number; y: number }): FormDoc["layout"] => {
+      const layout: FormDoc["layout"] = {};
+      for (const n of nodes) layout[n.id] = n.position;
+      layout[id] = position;
+      return tagVertical(layout);
+    },
+    [nodes],
+  );
+
   const addBlockAt = useCallback(
     (type: BlockType, position: { x: number; y: number }) => {
       const b = defaultBlock(type);
-      onChange({ ...doc, blocks: [...doc.blocks, b], layout: { ...doc.layout, [b.ref]: position } });
+      onChange({ ...doc, blocks: [...doc.blocks, b], layout: layoutWith(b.ref, position) });
       setSelectedNodeId(b.ref);
       setSelectedEdgeId(null);
     },
-    [doc, onChange, setSelectedNodeId],
+    [doc, layoutWith, onChange, setSelectedNodeId],
   );
 
   const addConditionAt = useCallback(
@@ -300,18 +388,18 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
         action_kind: "goto",
         from: firstQ.ref,
         when: { op: "and", conditions: [{ left: { kind: "ref", ref: firstQ.ref }, op: "is_not_empty" }], groups: [] },
-        target: doc.endings[0]?.ref ?? doc.blocks[doc.blocks.length - 1]?.ref ?? firstQ.ref,
+        target: finishRef(doc) ?? doc.blocks[doc.blocks.length - 1]?.ref ?? firstQ.ref,
         targetKind: "ending",
         branch: "true",
       };
       // Cases live on the question they branch from, so the node id follows
       // the question rather than the rule — dropping a second case onto the
       // same question grows that node instead of adding another one.
-      onChange({ ...doc, logic: [...doc.logic, rule], layout: { ...doc.layout, [`branch_${firstQ.ref}`]: position } });
+      onChange({ ...doc, logic: [...doc.logic, rule], layout: layoutWith(`branch_${firstQ.ref}`, position) });
       setSelectedNodeId(`branch_${firstQ.ref}`);
       setSelectedEdgeId(null);
     },
-    [doc, onChange, answerableBlocks, setSelectedNodeId],
+    [doc, layoutWith, onChange, answerableBlocks, setSelectedNodeId],
   );
 
   /** Add another route out of a question that already branches. */
@@ -339,8 +427,8 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
           ],
           groups: [],
         },
-        target: doc.endings[0]?.ref ?? fromRef,
-        targetKind: doc.endings[0] ? "ending" : "block",
+        target: finishRef(doc) ?? fromRef,
+        targetKind: doc.endings.length ? "ending" : "block",
         branch: "true",
       };
       /**
@@ -424,6 +512,16 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
   const menuAt = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   /**
+   * The wire under the last right-click, if it was a wire.
+   *
+   * The canvas has one context menu, on the pane, and React Flow's edge
+   * handler runs before the event reaches it. So the wire is noted on the
+   * way up, and the pane handler turns the note into what the menu shows.
+   */
+  const edgeUnderPointer = useRef<MenuEdge | null>(null);
+  const [menuEdge, setMenuEdge] = useState<MenuEdge | null>(null);
+
+  /**
    * Aim the "everything else" route by hand.
    *
    * Opt-in, and that is the whole point of it being a button. An unmatched
@@ -445,7 +543,8 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
       // Defaults to where the leftovers were already going, so adding the route
       // changes nothing until it is pointed somewhere else. Adding a control
       // must not quietly re-route anybody.
-      const current = doc.blocks[sourceIndex + 1]?.ref ?? doc.endings[0]?.ref;
+      // The accepting ending past the last question, as the runtime does.
+      const current = doc.blocks[sourceIndex + 1]?.ref ?? finishRef(doc);
       if (!current) return;
       setRules([
         ...doc.logic,
@@ -475,11 +574,11 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
         kind: "success",
         requirements: [],
       };
-      onChange({ ...doc, endings: [...doc.endings, e], layout: { ...doc.layout, [e.ref]: position } });
+      onChange({ ...doc, endings: [...doc.endings, e], layout: layoutWith(e.ref, position) });
       setSelectedNodeId(e.ref);
       setSelectedEdgeId(null);
     },
-    [doc, onChange, setSelectedNodeId],
+    [doc, layoutWith, onChange, setSelectedNodeId],
   );
 
   const onConnect = useCallback(
@@ -529,7 +628,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
             target: conn.target,
             targetKind,
           };
-          setRules([...doc.logic.filter((r) => r.id !== rule.id), rule]);
+          setRules([...doc.logic.filter((r) => !(isGoto(r) && r.from === from && !condOf(r))), rule]);
           return;
         }
         setRules(doc.logic.map((r) => (isGoto(r) && r.id === handle ? { ...r, target: conn.target!, targetKind } : r)));
@@ -542,7 +641,11 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
       const duplicate = gotoRules.some((r) => !condOf(r) && r.from === conn.source && r.target === conn.target);
       if (duplicate) return;
       const rule: GotoRule = { id: uid("rl"), action_kind: "goto", from: conn.source, when: null, target: conn.target!, targetKind };
-      setRules([...doc.logic, rule]);
+      // A question has one onward route, so a new wire from it REPLACES the
+      // old jump. Appending left the old one first in the list, and the first
+      // matching goto wins: the canvas drew the new wire while respondents
+      // still followed the old one.
+      setRules([...doc.logic.filter((r) => !(isGoto(r) && r.from === conn.source && !condOf(r))), rule]);
     },
     [doc, gotoRules, setRules],
   );
@@ -563,7 +666,11 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
           continue;
         }
         if (doc.endings.some((e) => e.ref === n.id)) {
-          endings = endings.filter((e) => e.ref !== n.id);
+          // A box selection can take in every ending at once. The form still
+          // needs somewhere to finish that accepts the response.
+          const left = endings.filter((e) => e.ref !== n.id);
+          if (!left.some((e) => e.kind !== "screen_out")) continue;
+          endings = left;
           logic = logic.filter((r) => !(isGoto(r) && r.target === n.id));
           delete layout[n.id];
           continue;
@@ -592,47 +699,53 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
     [doc, onChange, setSelectedNodeId],
   );
 
+  /**
+   * Cut connections, and have the cut stay cut. See `cutConnections`.
+   *
+   * A conditional route is a rule an author wrote, so cutting it removes the
+   * rule: that answer now goes wherever "otherwise" goes, and the branch
+   * node's rows say so.
+   *
+   * Every other wire is a question's one way onward, and a respondent cannot
+   * be left standing at a question with nowhere to go. This used to handle
+   * that by re-aiming the question at the one two places below it, or by
+   * deleting its jump so it fell through to the one below. Either way the
+   * wire was redrawn to the nearest node the moment it was cut, which reads
+   * as the delete not working. What a cut means on a flow canvas is
+   * "unconnected", and on a form the only honest version of unconnected is
+   * "finishes here": an explicit jump to the ending a respondent who runs out
+   * of questions would get anyway. The canvas draws that jump, so the cut is
+   * visible, and a new wire dragged from the question replaces it.
+   *
+   * A wire that already ends the form there cannot be cut any further, and
+   * says so instead of silently snapping back.
+   */
   const onEdgesDelete = useCallback(
-    (deleted: Edge[]) => {
-      let logic = [...doc.logic];
-      for (const e of deleted) {
-        if (e.id.startsWith("case_")) {
-          logic = logic.filter((r) => r.id !== e.id.slice("case_".length));
-          continue;
-        }
-        if (e.id.startsWith("else_")) {
-          const from = e.id.slice("else_".length);
-          logic = logic.filter((r) => !(isGoto(r) && r.from === from && !condOf(r)));
-          continue;
-        }
-        if (e.id.startsWith("seq-") || e.id.startsWith("into_")) {
-          // A wire drawn from the block order had no rule behind it, so
-          // deleting it did nothing and it came straight back — the canvas
-          // said "you can't delete this" about a line that looked like every
-          // other line. Cutting it means the question stops leading to the
-          // one below it, which is a jump past it.
-          const from = e.id.startsWith("seq-") ? e.id.slice(4) : e.id.slice("into_".length);
-          const i = doc.blocks.findIndex((b) => b.ref === from);
-          const skipped = doc.blocks[i + 1];
-          const after = doc.blocks[i + 2]?.ref ?? doc.endings[0]?.ref;
-          if (i < 0 || !skipped || !after) continue;
-          logic = logic.filter((r) => !(isGoto(r) && r.from === from && !condOf(r)));
-          logic.push({
-            id: uid("rl"),
-            action_kind: "goto",
-            from,
-            when: null,
-            target: after,
-            targetKind: doc.endings.some((x) => x.ref === after) ? "ending" : "block",
-          } as LogicRule);
-          continue;
-        }
-        logic = logic.filter((r) => r.id !== e.id);
+    (deleted: Pick<Edge, "id">[]) => {
+      const { logic, refused } = cutConnections(doc, deleted.map((e) => e.id), () => uid("rl"));
+      if (refused) {
+        toast("This already ends the form", { description: "Drag from its dot to send it somewhere else." });
       }
-      setRules(logic);
+      if (logic !== doc.logic) setRules(logic);
       setSelectedEdgeId(null);
     },
     [doc, setRules],
+  );
+
+  /**
+   * What the Delete key removes: the selected nodes, or else the selected wires.
+   *
+   * React Flow hands over a deleted node's wires along with it. Those are
+   * the node's to clean up (`bridgeDeletedBlocks` re-aims routes into a
+   * deleted question), and treating them as cut wires as well wrote a second
+   * edit from the same stale document over the first.
+   */
+  const onDelete = useCallback(
+    ({ nodes: goneNodes, edges: goneEdges }: { nodes: Node[]; edges: Edge[] }) => {
+      if (goneNodes.length) onNodesDelete(goneNodes);
+      else if (goneEdges.length) onEdgesDelete(goneEdges);
+    },
+    [onNodesDelete, onEdgesDelete],
   );
 
   /**
@@ -674,8 +787,14 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
       addEndingHere: () => addEndingAt(menuAt.current),
       autoArrange,
       fitToScreen: () => frame(300),
+      openEdge: (id) => {
+        setSelectedEdgeId(id);
+        setSelectedNodeId(null);
+      },
+      deleteEdge: (id) => onEdgesDelete([{ id }]),
     }),
     [
+      onEdgesDelete,
       doc.blocks,
       addBlock,
       addBlockAt,
@@ -839,7 +958,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
         */}
         <ProblemsBanner />
         <CanvasMenuProvider actions={menuActions}>
-          <PaneMenu>
+          <PaneMenu edge={menuEdge}>
             {/*
               `onContextMenu` records where the pointer was before the menu
               opens, so "add a question" puts it there rather than at the
@@ -854,8 +973,11 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
               onWheel={showMap}
               onContextMenu={(e) => {
                 menuAt.current = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+                setMenuEdge(edgeUnderPointer.current);
+                edgeUnderPointer.current = null;
               }}
             >
+              <ObstacleContext.Provider value={obstacles}>
               <ReactFlow
                 nodes={nodes}
                 edges={shownEdges}
@@ -870,10 +992,13 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
                   setSelectedEdgeId(e.id);
                   setSelectedNodeId(null);
                 }}
+                onEdgesChange={onEdgesChange}
+                onEdgeContextMenu={(_, e) => {
+                  edgeUnderPointer.current = { id: e.id, deletable: e.deletable !== false };
+                }}
                 onConnect={onConnect}
-                onNodesDelete={onNodesDelete}
-                onEdgesDelete={onEdgesDelete}
-                onNodeDragStop={(_, node) => updateLayout(node.id, node.position)}
+                onDelete={onDelete}
+                onNodeDragStop={(_, node, dragged) => updateLayout(dragged.length ? dragged : [node])}
                 onDragOver={(e) => {
                   e.preventDefault();
                   e.dataTransfer.dropEffect = "move";
@@ -888,16 +1013,23 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
                   else if (kind.kind === "ending") addEndingAt(pos);
                   dragType.current = null;
                 }}
-                // Delete only. Backspace over a canvas whose nodes are the form's
-                // actual questions means one stray keystroke — after typing in a
-                // field and clicking away, say — silently destroys a question and
-                // everything wired to it.
-                deleteKeyCode={["Delete"]}
+                edgeTypes={edgeTypes}
+                // Both keys, as in every canvas tool. React Flow ignores them
+                // while a field has focus, and a deleted question says so with
+                // an undo hint.
+                deleteKeyCode={["Delete", "Backspace"]}
+                // Figma's canvas: dragging on empty space draws a selection
+                // box, and the selection moves and deletes as one. Panning is
+                // the trackpad's two-finger scroll, space+drag, or the middle
+                // button. Not the right button: that opens the menu.
+                selectionOnDrag
+                selectionMode={SelectionMode.Partial}
+                panOnDrag={[1]}
+                multiSelectionKeyCode={["Meta", "Control", "Shift"]}
                 // Two-finger trackpad scroll pans the canvas, and pinch (which
                 // macOS reports as ctrl+wheel) zooms — the way every other canvas
                 // tool behaves. Without this the library's default turns a scroll
-                // into a zoom, so the only way to move around is to grab the pane
-                // and drag it. Dragging still works; Cmd/Ctrl+scroll still zooms.
+                // into a zoom. Cmd/Ctrl+scroll still zooms.
                 panOnScroll
                 minZoom={0.25}
                 // Framing is done by `frame()`, which anchors the left edge instead
@@ -921,6 +1053,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
                     )}
                   />
               </ReactFlow>
+              </ObstacleContext.Provider>
             </div>
           </PaneMenu>
         </CanvasMenuProvider>
@@ -946,7 +1079,11 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
         <div className="flex-1">
           {selEdge && !selEdgeRule ? (
             <div className="px-4 py-4">
-              <EdgeInfo edgeId={selEdge.id} doc={doc} onDelete={() => onEdgesDelete([selEdge])} />
+              <EdgeInfo
+                edge={selEdge}
+                doc={doc}
+                onDelete={selEdge.deletable === false ? undefined : () => onEdgesDelete([selEdge])}
+              />
             </div>
           ) : selEdgeRule ? (
             <div className="px-4 py-4">
@@ -997,6 +1134,52 @@ const nodeTypes: NodeTypes = {
   ending: EndingNode,
   branch: BranchNode,
 };
+
+/** The boxes on the canvas, for wires to route around. See `routeWire`. */
+const ObstacleContext = createContext<Obstacle[]>([]);
+
+/** A wire with square, rounded turns that steers clear of the nodes between its ends. */
+function RouteEdge({
+  id,
+  source,
+  target,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  data,
+  style,
+  markerEnd,
+  label,
+  labelStyle,
+  labelBgStyle,
+  labelBgPadding,
+  interactionWidth,
+}: EdgeProps) {
+  const obstacles = useContext(ObstacleContext);
+  const lane = (data as { lane?: number } | undefined)?.lane ?? 0;
+  const route = routeWire({ x: sourceX, y: sourceY }, { x: targetX, y: targetY }, obstacles, {
+    exclude: [source, target],
+    lane,
+  });
+  return (
+    <BaseEdge
+      id={id}
+      path={route.path}
+      style={style}
+      markerEnd={markerEnd}
+      label={label}
+      labelX={route.labelX}
+      labelY={route.labelY}
+      labelStyle={labelStyle}
+      labelBgStyle={labelBgStyle}
+      labelBgPadding={labelBgPadding}
+      interactionWidth={interactionWidth}
+    />
+  );
+}
+
+const edgeTypes: EdgeTypes = { route: RouteEdge };
 
 function StartNode({ id, data, selected }: NodeProps) {
   const { block, index } = data as { block: Block; index: number };
@@ -1703,17 +1886,13 @@ function EdgeRuleEditor({
 }
 
 /** A wire with no condition on it: what it connects, and a way to cut it. */
-function EdgeInfo({ edgeId, doc, onDelete }: { edgeId: string; doc: FormDoc; onDelete: () => void }) {
-  const fromRef = edgeId.startsWith("seq-")
-    ? edgeId.slice(4)
-    : edgeId.startsWith("into_")
-      ? edgeId.slice("into_".length)
-      : edgeId.startsWith("else_")
-        ? edgeId.slice("else_".length)
-        : "";
-  const from = doc.blocks.find((b) => b.ref === fromRef);
-  const i = doc.blocks.findIndex((b) => b.ref === fromRef);
-  const to = doc.blocks[i + 1];
+function EdgeInfo({ edge, doc, onDelete }: { edge: Edge; doc: FormDoc; onDelete?: () => void }) {
+  const from = doc.blocks.find((b) => b.ref === edge.source.replace(/^branch_/, ""));
+  // The wire's own end, not the block below: a jump or an "otherwise" goes
+  // wherever it was aimed, which is often not the next question.
+  const to = edge.target.startsWith("branch_")
+    ? { title: "its branch" }
+    : (doc.blocks.find((b) => b.ref === edge.target) ?? doc.endings.find((e) => e.ref === edge.target));
 
   return (
     <div className="space-y-4">
@@ -1722,10 +1901,12 @@ function EdgeInfo({ edgeId, doc, onDelete }: { edgeId: string; doc: FormDoc; onD
         {from ? <span className="text-foreground font-medium">{from.title}</span> : "This question"} leads to{" "}
         {to ? <span className="text-foreground font-medium">{to.title}</span> : "the ending"}.
       </p>
-      <Button variant="outline" size="sm" className="w-full" onClick={onDelete}>
-        <Trash2 className="size-3.5" />
-        Delete connection
-      </Button>
+      {onDelete && (
+        <Button variant="outline" size="sm" className="w-full" onClick={onDelete}>
+          <Trash2 className="size-3.5" />
+          Delete connection
+        </Button>
+      )}
     </div>
   );
 }
@@ -1803,7 +1984,10 @@ function applyNodeChangesShallow(nodes: Node[], changes: NodeChange[]): Node[] {
         break;
       }
       case "select": {
-        next = next.map((n) => (change.id === n.id ? { ...n, selected: change.selected } : change.selected ? { ...n, selected: false } : n));
+        // Only the node named. Clearing every other node whenever one was
+        // selected made a box selection, or a shift-click, collapse back to a
+        // single node; React Flow sends its own deselect changes.
+        next = next.map((n) => (change.id === n.id ? { ...n, selected: change.selected } : n));
         break;
       }
       case "remove": {

@@ -62,7 +62,12 @@ export function branchNodeHeight(cases: number, exhaustive = false): number {
  * Flow to ask, and a wire drawn to a box of the wrong size is a wire that
  * misses the node it points at.
  */
-export function nodeSize(node: Pick<Node, "type" | "data">): { width: number; height: number } {
+export function nodeSize(node: Pick<Node, "type" | "data" | "measured">): { width: number; height: number } {
+  // On the canvas React Flow has measured the real box, which is what a
+  // question with a problem note or a two-line title actually occupies.
+  if (node.measured?.width && node.measured.height) {
+    return { width: node.measured.width, height: node.measured.height };
+  }
   const size = SIZES[node.type ?? ""] ?? DEFAULT_SIZE;
   const data = node.data as { cases?: unknown[]; exhaustive?: boolean };
   return {
@@ -121,12 +126,23 @@ export function layoutGraph(
     marginy: 40,
   });
 
+  const forward = forwardEdges(nodes, edges);
+  const rank = rankNodes(nodes, forward);
+
   for (const node of nodes) g.setNode(node.id, nodeSize(node));
-  for (const edge of edges) {
-    if (g.hasNode(edge.source) && g.hasNode(edge.target)) g.setEdge(edge.source, edge.target);
+  for (const edge of forward) {
+    // `minlen` pins every node to the rank `rankNodes` chose. Left to its own
+    // ranker dagre shortens edges wherever it can, and a question that sits
+    // between two long arms can be placed anywhere along them at the same
+    // cost: it put the one-question arm of a three-way split level with the
+    // LAST question of the longest arm, so the arms no longer started side by
+    // side under the question that decides them, and an ending reached from
+    // the middle of the form floated up into the middle of the picture.
+    const minlen = Math.max(1, (rank.get(edge.target) ?? 1) - (rank.get(edge.source) ?? 0));
+    g.setEdge(edge.source, edge.target, { minlen });
   }
 
-  dagre.layout(g);
+  dagre.layout(g, { constraints: armOrderConstraints(nodes, forward, rank) });
 
   const out = new Map<string, { x: number; y: number }>();
   for (const node of nodes) {
@@ -135,78 +151,251 @@ export function layoutGraph(
     // dagre centres its boxes; React Flow positions by the top-left corner.
     out.set(node.id, { x: placed.x - placed.width / 2, y: placed.y - placed.height / 2 });
   }
-  alignArmsWithTheirRows(nodes, edges, out, g, rankdir);
+  orderArmsLikeTheirRows(nodes, forward, out, rankdir);
   return out;
 }
 
 /**
- * Put a branch's follow-ups in the order its rows are listed.
+ * The wires that run down the flow, without the ones that loop back up it.
+ *
+ * The canvas refuses a backwards route, but a form can still arrive with one
+ * (an old document, an import). A cycle has no longest path, so the ranking
+ * below would never settle; the edge is simply left out of the layout. It is
+ * still drawn.
+ */
+function forwardEdges(nodes: Node[], edges: Edge[]): Edge[] {
+  const ids = new Set(nodes.map((n) => n.id));
+  const out = new Map<string, Edge[]>();
+  for (const e of edges) {
+    if (!ids.has(e.source) || !ids.has(e.target) || e.source === e.target) continue;
+    const list = out.get(e.source);
+    if (list) list.push(e);
+    else out.set(e.source, [e]);
+  }
+  const state = new Map<string, "open" | "done">();
+  const keep: Edge[] = [];
+  const visit = (id: string) => {
+    state.set(id, "open");
+    for (const e of out.get(id) ?? []) {
+      const s = state.get(e.target);
+      if (s === "open") continue; // back up the flow
+      keep.push(e);
+      if (!s) visit(e.target);
+    }
+    state.set(id, "done");
+  };
+  // Document order, so the start is visited first and "back" means back up the form.
+  for (const n of nodes) if (!state.has(n.id)) visit(n.id);
+  return keep;
+}
+
+/**
+ * Which row each node sits on.
+ *
+ * A node goes on the row below the lowest thing that leads to it, so the
+ * first question of every arm sits directly under its branch, however long
+ * its siblings are. Endings all go on one row at the bottom: they are where
+ * the form stops, and a screen-out reached from question two drawn level with
+ * question three read as a step in the middle of the form.
+ *
+ * Something nothing leads to (a question just dropped on the canvas, cut off
+ * from the flow) sits just above whatever it leads to, rather than up beside
+ * the start.
+ */
+function rankNodes(nodes: Node[], forward: Edge[]): Map<string, number> {
+  const isEnding = new Set(nodes.filter((n) => n.type === "ending").map((n) => n.id));
+  const preds = new Map<string, string[]>();
+  const succs = new Map<string, string[]>();
+  for (const e of forward) {
+    preds.set(e.target, [...(preds.get(e.target) ?? []), e.source]);
+    succs.set(e.source, [...(succs.get(e.source) ?? []), e.target]);
+  }
+
+  // Topological order: `forward` has no cycles, so Kahn's algorithm drains it.
+  const indegree = new Map(nodes.map((n) => [n.id, preds.get(n.id)?.length ?? 0]));
+  const queue = nodes.filter((n) => indegree.get(n.id) === 0).map((n) => n.id);
+  const order: string[] = [];
+  while (queue.length) {
+    const id = queue.shift()!;
+    order.push(id);
+    for (const t of succs.get(id) ?? []) {
+      indegree.set(t, indegree.get(t)! - 1);
+      if (indegree.get(t) === 0) queue.push(t);
+    }
+  }
+
+  const rank = new Map<string, number>();
+  for (const id of order) {
+    if (isEnding.has(id)) continue;
+    const from = (preds.get(id) ?? []).filter((p) => !isEnding.has(p));
+    rank.set(id, from.length ? Math.max(...from.map((p) => rank.get(p)! + 1)) : 0);
+  }
+  const bottom = Math.max(0, ...[...rank.values()].map((r) => r + 1));
+  for (const id of isEnding) rank.set(id, bottom);
+
+  // Pull loose roots down to just above what they lead to.
+  const start = nodes.find((n) => n.type === "start")?.id ?? nodes[0]?.id;
+  for (const id of [...order].reverse()) {
+    if (isEnding.has(id) || id === start || (preds.get(id)?.length ?? 0) > 0) continue;
+    const next = succs.get(id) ?? [];
+    if (next.length) rank.set(id, Math.min(...next.map((t) => rank.get(t)!)) - 1);
+  }
+  return rank;
+}
+
+/**
+ * The first question of each arm, in the order the branch lists its rows.
+ *
+ * Only the destinations this branch alone leads to: one that something else
+ * also reaches is where arms meet, not an arm.
+ */
+function armHeads(branch: Node, preds: Map<string, string[]>): string[] {
+  const data = branch.data as { cases?: { target: string; missing?: boolean }[]; fallback?: { ref: string } | null };
+  const heads: string[] = [];
+  for (const c of data.cases ?? []) if (!c.missing && !heads.includes(c.target)) heads.push(c.target);
+  if (data.fallback && !heads.includes(data.fallback.ref)) heads.push(data.fallback.ref);
+  return heads.filter((h) => (preds.get(h) ?? []).every((p) => p === branch.id));
+}
+
+/**
+ * Tell dagre which way round each branch's arms go.
+ *
+ * Its crossing reduction otherwise chooses, and it will happily put the first
+ * row's arm on the right to save a crossing further down, which leaves the
+ * wires out of the branch itself crossed: the one crossing an author reads a
+ * branch for. A left-of constraint between neighbouring arm heads on the same
+ * row keeps the order and lets dagre arrange everything else around it.
+ */
+function armOrderConstraints(
+  nodes: Node[],
+  forward: Edge[],
+  rank: Map<string, number>,
+): { left: string; right: string }[] {
+  const preds = new Map<string, string[]>();
+  for (const e of forward) preds.set(e.target, [...(preds.get(e.target) ?? []), e.source]);
+  const out: { left: string; right: string }[] = [];
+  for (const branch of nodes) {
+    if (branch.type !== "branch") continue;
+    const heads = armHeads(branch, preds);
+    const row = rank.get(branch.id)! + 1;
+    const level = heads.filter((h) => rank.get(h) === row);
+    for (let i = 1; i < level.length; i++) out.push({ left: level[i - 1]!, right: level[i]! });
+  }
+  return out;
+}
+
+/**
+ * Put each branch's arms in the order its rows are listed, left to right.
  *
  * dagre minimises edge crossings over the whole graph, which is the right
  * global objective and says nothing about the one thing an author reads a
- * branch node for: iPhone is the first row, so the iPhone question should be
- * the top box. When it is not, two wires cross between a node and its own
- * children — the graph is drawn correctly and looks like a mistake, and it is
- * the complaint the canvas gets most.
+ * branch node for: iPhone is the first row, so the iPhone arm should be the
+ * leftmost. When it is not, the wires cross between a node and its own
+ * children, and the graph is drawn correctly and looks like a mistake.
  *
- * dagre has no way to be told "this parent's children are ordered", so the
- * ordering is imposed afterwards, and imposed as narrowly as it can be: the
- * arm heads are permuted among the vertical slots they were ALREADY given.
- * Nothing else moves, no slot is invented, and every node keeps a position
- * dagre chose — so the spacing, the ranks and the rest of the layout are
- * exactly what they were. Only which box sits in which slot changes.
+ * dagre cannot be told "this parent's children are ordered", so the order is
+ * imposed afterwards. An arm here is everything only that arm leads to: its
+ * first question, the questions after it, and an ending only it reaches. Each
+ * arm moves as one block, so a three-question arm keeps its column, and the
+ * arms are laid back into the same span they already occupied, with the same
+ * gaps, in row order. If the arms overlap one another, or the result would
+ * put a box on top of anything else, the branch is left as dagre drew it.
  *
- * Restricted to arms of equal size sharing a rank, which is the case that
- * matters (a run of question nodes) and the only one where swapping two boxes
- * cannot make them overlap.
- *
- * "Down the page" and "across the page" swap with the direction: laid out
- * left to right the arms are stacked vertically and it is their `y` that is
- * permuted; top to bottom they sit side by side and it is their `x`. The
- * argument is the same either way, so the axis is a variable rather than a
- * second copy of the function.
+ * Branches are taken top to bottom, so a branch inside an arm is ordered
+ * after the arm it sits in has moved.
  */
-function alignArmsWithTheirRows(
+function orderArmsLikeTheirRows(
   nodes: Node[],
-  edges: Edge[],
+  forward: Edge[],
   out: Map<string, { x: number; y: number }>,
-  g: InstanceType<typeof dagre.graphlib.Graph>,
   rankdir: Rankdir,
 ): void {
-  /** The axis arms are spread along, and the one that says which rank they landed in. */
   const along = rankdir === "LR" ? "y" : "x";
-  const rank = rankdir === "LR" ? "x" : "y";
   const extent = rankdir === "LR" ? "height" : "width";
+  const across = rankdir === "LR" ? "x" : "y";
+  const depth = rankdir === "LR" ? "width" : "height";
+  const size = new Map(nodes.map((n) => [n.id, nodeSize(n)]));
+  const preds = new Map<string, string[]>();
+  const succs = new Map<string, string[]>();
+  for (const e of forward) {
+    preds.set(e.target, [...(preds.get(e.target) ?? []), e.source]);
+    succs.set(e.source, [...(succs.get(e.source) ?? []), e.target]);
+  }
 
-  /** How many wires arrive at each node — an arm two questions share is not this branch's to move. */
-  const incoming = new Map<string, number>();
-  for (const edge of edges) incoming.set(edge.target, (incoming.get(edge.target) ?? 0) + 1);
+  const branches = nodes
+    .filter((n) => n.type === "branch" && out.has(n.id))
+    .sort((a, b) => out.get(a.id)![across] - out.get(b.id)![across]);
 
-  for (const node of nodes) {
-    if (node.type !== "branch") continue;
-    const data = node.data as { cases?: { target: string }[] };
-    const wanted = (data.cases ?? []).map((c) => c.target);
-    if (wanted.length < 2) continue;
+  for (const branch of branches) {
+    const own = armHeads(branch, preds).filter((h) => out.has(h));
+    if (own.length < 2) continue;
 
-    /** The arms this branch alone owns, grouped by the rank and the size they landed at. */
-    const slots = new Map<string, { ref: string; at: { x: number; y: number } }[]>();
-    for (const ref of wanted) {
-      const at = out.get(ref);
-      const box = g.node(ref) as { height?: number; width?: number } | undefined;
-      if (!at || box?.[extent] === undefined || (incoming.get(ref) ?? 0) !== 1) continue;
-      const key = `${Math.round(at[rank])} ${Math.round(box[extent]!)}`;
-      const group = slots.get(key);
-      if (group) group.push({ ref, at });
-      else slots.set(key, [{ ref, at }]);
-    }
+    // Each arm: its head, then anything every one of whose arrivals is already in the arm.
+    const headSet = new Set(own);
+    const arms = own.map((head) => {
+      const members = new Set([head]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const m of [...members]) {
+          for (const t of succs.get(m) ?? []) {
+            if (members.has(t) || headSet.has(t)) continue;
+            if ((preds.get(t) ?? []).every((p) => members.has(p))) {
+              members.add(t);
+              grew = true;
+            }
+          }
+        }
+      }
+      return members;
+    });
 
-    for (const group of slots.values()) {
-      if (group.length < 2) continue;
-      // The slots, in reading order, handed back out in row order — `group` is
-      // already in row order, because `wanted` is.
-      const places = group.map((m) => m.at[along]).sort((a, b) => a - b);
-      group.forEach((member, i) => out.set(member.ref, { ...member.at, [along]: places[i]! }));
-    }
+    const span = (members: Set<string>) => {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (const id of members) {
+        const at = out.get(id)![along];
+        lo = Math.min(lo, at);
+        hi = Math.max(hi, at + size.get(id)![extent]);
+      }
+      return { lo, hi };
+    };
+    const spans = arms.map(span);
+    const current = arms.map((_, i) => i).sort((a, b) => spans[a]!.lo - spans[b]!.lo);
+    if (current.every((armIndex, slot) => armIndex === slot)) continue; // already in row order
+    // Arms that overlap cannot be swapped without colliding.
+    if (current.some((a, k) => k > 0 && spans[a]!.lo < spans[current[k - 1]!]!.hi)) continue;
+
+    // Same span, same gaps, new order.
+    const gaps = current.slice(1).map((a, k) => spans[a]!.lo - spans[current[k]!]!.hi);
+    const moved = new Map<string, { x: number; y: number }>();
+    let cursor = spans[current[0]!]!.lo;
+    arms.forEach((members, i) => {
+      const delta = cursor - spans[i]!.lo;
+      for (const id of members) {
+        const at = out.get(id)!;
+        moved.set(id, { ...at, [along]: at[along] + delta });
+      }
+      cursor += spans[i]!.hi - spans[i]!.lo + (gaps[i] ?? 0);
+    });
+
+    // Anything else in the way means the swap would draw one box over another.
+    const box = (id: string, at: { x: number; y: number }) => ({
+      lo: at[along],
+      hi: at[along] + size.get(id)![extent],
+      top: at[across],
+      bottom: at[across] + size.get(id)![depth],
+    });
+    const clash = [...moved].some(([id, at]) => {
+      const a = box(id, at);
+      return nodes.some((other) => {
+        if (moved.has(other.id) || !out.has(other.id)) return false;
+        const b = box(other.id, out.get(other.id)!);
+        return a.lo < b.hi && b.lo < a.hi && a.top < b.bottom && b.top < a.bottom;
+      });
+    });
+    if (clash) continue;
+    for (const [id, at] of moved) out.set(id, at);
   }
 }
 

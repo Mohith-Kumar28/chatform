@@ -66,6 +66,15 @@ export interface CanvasMenuActions {
   addEndingHere: () => void;
   autoArrange: () => void;
   fitToScreen: () => void;
+  /** Select a wire, which opens its details. */
+  openEdge: (id: string) => void;
+  deleteEdge: (id: string) => void;
+}
+
+/** The wire a right-click landed on. */
+export interface MenuEdge {
+  id: string;
+  deletable: boolean;
 }
 
 const CanvasMenuContext = createContext<CanvasMenuActions | null>(null);
@@ -187,42 +196,73 @@ export function NodeMenu({
  * point that was right-clicked, and the two framing controls are here too
  * because they are what you reach for after adding anything.
  */
-export function PaneMenu({ children }: { children: ReactNode }) {
+export function PaneMenu({
+  children,
+  /**
+   * Set when the right-click landed on a wire. The pane owns the canvas's one
+   * context menu (a wire is SVG inside it, with no element of its own to hang
+   * a trigger on), so it shows the wire's items instead of its own.
+   */
+  edge = null,
+}: {
+  children: ReactNode;
+  edge?: MenuEdge | null;
+}) {
   const actions = useContext(CanvasMenuContext);
   if (!actions) return <>{children}</>;
 
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
-        <ContextMenuLabel>Add here</ContextMenuLabel>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <Plus />
-            Question
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="max-h-80 w-52 overflow-y-auto">
-            <BlockTypeItems onPick={actions.addBlockHere} />
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuItem onSelect={() => actions.addBranchHere()}>
-          <GitBranch />
-          Branch
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => actions.addEndingHere()}>
-          <Flag />
-          Ending
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => actions.autoArrange()}>
-          <LayoutGrid />
-          Auto arrange
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => actions.fitToScreen()}>
-          <Maximize2 />
-          Fit to screen
-        </ContextMenuItem>
-      </ContextMenuContent>
+      {/* One menu with two bodies, not two menus: swapping the trigger's
+          wrapper would remount the whole canvas inside it. */}
+      {edge ? (
+        <ContextMenuContent className="w-48">
+          <ContextMenuItem onSelect={() => actions.openEdge(edge.id)}>
+            <SquarePen />
+            Open in details
+          </ContextMenuItem>
+          {edge.deletable && (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem variant="destructive" onSelect={() => actions.deleteEdge(edge.id)}>
+                <Trash2 />
+                Delete
+              </ContextMenuItem>
+            </>
+          )}
+        </ContextMenuContent>
+      ) : (
+        <ContextMenuContent className="w-48">
+          <ContextMenuLabel>Add here</ContextMenuLabel>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Plus />
+              Question
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="max-h-80 w-52 overflow-y-auto">
+              <BlockTypeItems onPick={actions.addBlockHere} />
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuItem onSelect={() => actions.addBranchHere()}>
+            <GitBranch />
+            Branch
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => actions.addEndingHere()}>
+            <Flag />
+            Ending
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={() => actions.autoArrange()}>
+            <LayoutGrid />
+            Auto arrange
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => actions.fitToScreen()}>
+            <Maximize2 />
+            Fit to screen
+          </ContextMenuItem>
+        </ContextMenuContent>
+      )}
     </ContextMenu>
   );
 }
