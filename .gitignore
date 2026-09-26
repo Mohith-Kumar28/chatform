@@ -16,3 +16,6 @@ drizzle/meta/_journal.json.bak
 
 # Generated knowledge graph — rebuilt by `graphify update .`
 graphify-out/
+
+# Launch video (Remotion project, kept out of the repo)
+launch-video/
