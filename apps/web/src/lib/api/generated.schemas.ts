@@ -2140,6 +2140,7 @@ export type GetApiForms200ItemTheme = {
   accent: string;
   logoUrl: string | null;
   backgroundPattern: string;
+  backgroundPatternOpacity?: number;
 } | null;
 
 export type GetApiForms200Item = {

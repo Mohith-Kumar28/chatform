@@ -104,8 +104,9 @@ export function PatternField({
   const isNone = value === PATTERN_NONE;
 
   return (
-    <div className="space-y-1.5">
+    <div className="grid grid-cols-[minmax(0,1fr)_5.5rem] items-end gap-x-2 gap-y-1.5">
       <Label htmlFor="theme-pattern">Background pattern</Label>
+      <Label htmlFor="theme-pattern-opacity">Opacity</Label>
       <Select value={value} onValueChange={(v) => onChange({ backgroundPattern: v })}>
         <SelectTrigger id="theme-pattern" className="h-auto w-full py-1.5">
           <span className="flex min-w-0 items-center gap-2.5">
@@ -156,6 +157,30 @@ export function PatternField({
           ))}
         </SelectContent>
       </Select>
+      {/*
+        How visible the tile is, as a share of the strength picked for the
+        colour (`patternAlpha`): 100% is that, 0% is none. Committed on every
+        keystroke that parses, clamped, so the preview follows the number.
+      */}
+      <div className="relative h-full">
+        <input
+          id="theme-pattern-opacity"
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={100}
+          step={5}
+          disabled={isNone}
+          value={theme.backgroundPatternOpacity ?? 100}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            if (e.target.value === "" || !Number.isFinite(n)) return;
+            onChange({ backgroundPatternOpacity: Math.round(Math.min(100, Math.max(0, n))) });
+          }}
+          className="border-input dark:bg-input/30 h-full w-full rounded-md border bg-transparent py-1.5 pr-7 pl-3 text-sm tabular-nums shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+        <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm">%</span>
+      </div>
     </div>
   );
 }

@@ -597,6 +597,13 @@ export const ThemeDoc = z.object({
    * built before this field existed already showed its hashed tile.
    */
   backgroundPattern: boundedString(40).default("auto"),
+  /**
+   * How visible the tile is, 0–100% of the strength `patternAlpha` picks for
+   * it. Absent means 100: no default, so the saved docs and the seeded
+   * templates did not change shape when it arrived, and a stray value is
+   * dropped rather than refusing the whole document.
+   */
+  backgroundPatternOpacity: z.number().int().min(0).max(100).optional().catch(undefined),
 
   /**
    * Optional branding. Both are opt-in: a form with neither still looks

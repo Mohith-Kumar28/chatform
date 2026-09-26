@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/context-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { contrast, isDarkColor, patternAlpha, readableInk } from "@/lib/chat-theme";
+import { contrast, isDarkColor, patternAlpha, patternOpacity, readableInk } from "@/lib/chat-theme";
 import { patternImage, patternSize, patternWeight, resolvePattern, rgbaFromHex } from "@/lib/background-patterns";
 
 /**
@@ -124,6 +124,7 @@ export interface FormRow {
      * payload still draws — `resolvePattern` reads a missing value as `auto`.
      */
     backgroundPattern?: string;
+    backgroundPatternOpacity?: number;
   } | null;
 }
 
@@ -1108,7 +1109,7 @@ function thumbSurface(
     if (!tile) return { backgroundColor: theme.background };
     const usable = contrast(theme.background, theme.accent) >= 1.3;
     const color = usable ? theme.accent : theme.userBubbleText;
-    const ink = rgbaFromHex(color, patternAlpha(theme.background, color, 0.9 * patternWeight(tile)));
+    const ink = rgbaFromHex(color, patternAlpha(theme.background, color, 0.9 * patternWeight(tile) * patternOpacity(theme)));
     return {
       backgroundColor: theme.background,
       backgroundImage: patternImage(tile, ink),

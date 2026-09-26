@@ -9066,6 +9066,9 @@
                               },
                               "backgroundPattern": {
                                 "type": "string"
+                              },
+                              "backgroundPatternOpacity": {
+                                "type": "number"
                               }
                             },
                             "required": [

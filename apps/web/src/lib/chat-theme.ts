@@ -126,7 +126,7 @@ function inkFor(fill: string, stored: string): string {
 export function patternInk(theme: ThemeDoc, pattern: PatternDef): string {
   const usable = contrast(theme.background, theme.accent) >= 1.3;
   const ink = usable ? theme.accent : theme.text;
-  return rgbaFromHex(ink, patternAlpha(theme.background, ink, patternWeight(pattern)));
+  return rgbaFromHex(ink, patternAlpha(theme.background, ink, patternWeight(pattern) * patternOpacity(theme)));
 }
 
 /**
@@ -144,6 +144,11 @@ export function patternInk(theme: ThemeDoc, pattern: PatternDef): string {
  * high-contrast one from vanishing entirely. `strength` scales the whole
  * thing: the tile's `weight`, and anything that wants it quieter still.
  */
+/** The author's Opacity setting as a multiplier: 1 when they never touched it. */
+export function patternOpacity(theme: Pick<ThemeDoc, "backgroundPatternOpacity">): number {
+  return (theme.backgroundPatternOpacity ?? 100) / 100;
+}
+
 export function patternAlpha(background: string, ink: string, strength = 1): number {
   const dark = isDarkColor(background);
   const lift = Math.sqrt(Math.max(contrast(background, ink) - 1, 0.25));
