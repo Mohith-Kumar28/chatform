@@ -665,7 +665,9 @@ export function askedTitle(source: string, model?: string): string {
     .split(/\s+/)
     .map((w) => (/^[A-Z0-9]{2,4}$/.test(w) ? w : w.toLowerCase()))
     .join(" ");
-  return `What's your ${words}?`;
+  // A label that already speaks to them ("… you're investing in") takes
+  // "the", or it reads "What's your portfolio company type you're investing in?".
+  return /\byou(r|'re|’re|'ve|’ve)?\b/i.test(words) ? `What's the ${words}?` : `What's your ${words}?`;
 }
 
 /**

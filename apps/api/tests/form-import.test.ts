@@ -160,7 +160,7 @@ describe("extractSourceForm: a React form with plain text boxes and button choic
       ["What's your name?", "short_text", true, []],
       ["What's your email?", "email", true, []],
       ["What's your firm website?", "url", false, []],
-      ["What's your portfolio company type you're investing in?", "single_select", true, ["B2B SaaS", "Fintech"]],
+      ["What's the portfolio company type you're investing in?", "single_select", true, ["B2B SaaS", "Fintech"]],
       ["Where did you hear about us?", "single_select", false, ["LinkedIn", "Referral"]],
     ]);
     const doc = applySourceFormToDoc(draftToDoc(applySourceForm(draft, form)).doc, form);
