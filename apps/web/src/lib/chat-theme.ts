@@ -125,7 +125,7 @@ function inkFor(fill: string, stored: string): string {
  */
 export function patternInk(theme: ThemeDoc, pattern: PatternDef): string {
   const usable = contrast(theme.background, theme.accent) >= 1.3;
-  const ink = usable ? theme.accent : theme.text;
+  const ink = theme.backgroundPatternColor || (usable ? theme.accent : theme.text);
   return rgbaFromHex(ink, patternAlpha(theme.background, ink, patternWeight(pattern) * patternOpacity(theme)));
 }
 
@@ -144,16 +144,25 @@ export function patternInk(theme: ThemeDoc, pattern: PatternDef): string {
  * high-contrast one from vanishing entirely. `strength` scales the whole
  * thing: the tile's `weight`, and anything that wants it quieter still.
  */
-/** The author's Opacity setting as a multiplier: 1 when they never touched it. */
+/** Where the Opacity box starts: the quiet texture every form already had. */
+export const DEFAULT_PATTERN_OPACITY = 25;
+
+/**
+ * The author's Opacity setting as a multiplier on that quiet texture: 1 at the
+ * default 25%, about 2.8 at 50% and 8 at 100%. Curved rather than linear
+ * because a sparse tile (scattered dots) at four times the quiet level was
+ * still hard to find, and 100% has to mean plainly there. 100% used to mean
+ * the quiet texture itself, which left no way to make a pattern visible.
+ */
 export function patternOpacity(theme: Pick<ThemeDoc, "backgroundPatternOpacity">): number {
-  return (theme.backgroundPatternOpacity ?? 100) / 100;
+  return ((theme.backgroundPatternOpacity ?? DEFAULT_PATTERN_OPACITY) / DEFAULT_PATTERN_OPACITY) ** 1.5;
 }
 
 export function patternAlpha(background: string, ink: string, strength = 1): number {
   const dark = isDarkColor(background);
   const lift = Math.sqrt(Math.max(contrast(background, ink) - 1, 0.25));
   const alpha = Math.min(0.06, Math.max(0.012, (dark ? 0.08 : 0.07) / lift)) * strength;
-  return Number(alpha.toFixed(4));
+  return Number(Math.min(0.6, alpha).toFixed(4));
 }
 
 /**

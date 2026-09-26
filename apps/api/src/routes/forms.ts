@@ -112,8 +112,10 @@ const FormCardTheme = z.object({
    * the texture off used to keep showing it on the dashboard.
    */
   backgroundPattern: z.string(),
-  /** 0–100, how visible the tile is; absent means 100. */
+  /** 0–100, how visible the tile is; absent means 25. */
   backgroundPatternOpacity: z.number().optional(),
+  /** The tile's ink; absent means the accent. */
+  backgroundPatternColor: z.string().optional(),
 });
 
 const FormListItem = FormSummary.extend({
@@ -216,6 +218,7 @@ function summariseDoc(raw: string | null): {
       logoUrl: typeof t.logoUrl === "string" && t.logoUrl.trim() ? t.logoUrl : null,
       backgroundPattern: pick(t.backgroundPattern, DEFAULT_CARD_THEME.backgroundPattern),
       ...(typeof t.backgroundPatternOpacity === "number" ? { backgroundPatternOpacity: t.backgroundPatternOpacity } : {}),
+      ...(typeof t.backgroundPatternColor === "string" && t.backgroundPatternColor ? { backgroundPatternColor: t.backgroundPatternColor } : {}),
     };
     return { questionCount: questions.length, preview, theme };
   } catch {

@@ -2141,6 +2141,7 @@ export type GetApiForms200ItemTheme = {
   logoUrl: string | null;
   backgroundPattern: string;
   backgroundPatternOpacity?: number;
+  backgroundPatternColor?: string;
 } | null;
 
 export type GetApiForms200Item = {

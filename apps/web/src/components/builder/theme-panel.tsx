@@ -238,6 +238,34 @@ export function ThemePanel({
               </div>
             );
           })}
+          {/* Only while there is a pattern to colour. Empty follows the primary colour. */}
+          {theme.backgroundPattern !== "none" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="theme-backgroundPatternColor">Pattern</Label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="theme-backgroundPatternColor"
+                  type="color"
+                  value={
+                    /^#[0-9a-fA-F]{6}$/.test(theme.backgroundPatternColor ?? "")
+                      ? theme.backgroundPatternColor!
+                      : /^#[0-9a-fA-F]{6}$/.test(theme.accent)
+                        ? theme.accent
+                        : "#000000"
+                  }
+                  onChange={(e) => patch({ backgroundPatternColor: e.target.value }, "theme:backgroundPatternColor")}
+                  className="size-8 shrink-0 cursor-pointer rounded-md border"
+                  aria-label="Pattern colour"
+                />
+                <BufferedInput
+                  value={theme.backgroundPatternColor ?? ""}
+                  onCommit={(v) => patch({ backgroundPatternColor: v.trim() || undefined })}
+                  placeholder="Primary"
+                  className="font-mono text-xs"
+                />
+              </div>
+            </div>
+          )}
         </div>
         <p className="text-muted-foreground text-xs">
           Text on the accent and on their bubble is chosen for you, so an answer stays readable

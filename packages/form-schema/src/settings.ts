@@ -598,12 +598,14 @@ export const ThemeDoc = z.object({
    */
   backgroundPattern: boundedString(40).default("auto"),
   /**
-   * How visible the tile is, 0–100% of the strength `patternAlpha` picks for
-   * it. Absent means 100: no default, so the saved docs and the seeded
-   * templates did not change shape when it arrived, and a stray value is
-   * dropped rather than refusing the whole document.
+   * How visible the tile is, 0–100. Absent means 25, the quiet texture every
+   * form had before this existed; 100 is four times that. No default, so the
+   * saved docs and the seeded templates did not change shape when it arrived,
+   * and a stray value is dropped rather than refusing the whole document.
    */
   backgroundPatternOpacity: z.number().int().min(0).max(100).optional().catch(undefined),
+  /** The tile's ink. Absent means the primary colour (or the text colour when that is too pale to show). */
+  backgroundPatternColor: boundedString(40).regex(CSS_COLOR).optional().catch(undefined),
 
   /**
    * Optional branding. Both are opt-in: a form with neither still looks

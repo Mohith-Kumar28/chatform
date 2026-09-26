@@ -9069,6 +9069,9 @@
                               },
                               "backgroundPatternOpacity": {
                                 "type": "number"
+                              },
+                              "backgroundPatternColor": {
+                                "type": "string"
                               }
                             },
                             "required": [

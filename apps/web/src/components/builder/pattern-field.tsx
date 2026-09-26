@@ -15,7 +15,7 @@ import {
   resolvePattern,
   rgbaFromHex,
 } from "@/lib/background-patterns";
-import { contrast } from "@/lib/chat-theme";
+import { contrast, DEFAULT_PATTERN_OPACITY } from "@/lib/chat-theme";
 import { cn } from "@/lib/utils";
 
 type Theme = FormDoc["theme"];
@@ -39,7 +39,7 @@ function swatchStyle(theme: Theme, pattern: PatternDef) {
   // The runtime's rule for which colour the tile is drawn in, so a form whose
   // accent is too pale to register shows its fallback ink here as well.
   const usable = contrast(theme.background, theme.accent) >= 1.3;
-  const ink = rgbaFromHex(usable ? theme.accent : theme.text, SWATCH_ALPHA * patternWeight(pattern));
+  const ink = rgbaFromHex(theme.backgroundPatternColor || (usable ? theme.accent : theme.text), SWATCH_ALPHA * patternWeight(pattern));
   return {
     backgroundColor: theme.background,
     backgroundImage: patternImage(pattern, ink),
@@ -158,9 +158,9 @@ export function PatternField({
         </SelectContent>
       </Select>
       {/*
-        How visible the tile is, as a share of the strength picked for the
-        colour (`patternAlpha`): 100% is that, 0% is none. Committed on every
-        keystroke that parses, clamped, so the preview follows the number.
+        How visible the tile is. 25% is the quiet default, 100% is plainly
+        there, 0% is none (see `patternOpacity`). Committed on every keystroke
+        that parses, clamped, so the preview follows the number.
       */}
       <div className="relative h-full">
         <input
@@ -171,7 +171,7 @@ export function PatternField({
           max={100}
           step={5}
           disabled={isNone}
-          value={theme.backgroundPatternOpacity ?? 100}
+          value={theme.backgroundPatternOpacity ?? DEFAULT_PATTERN_OPACITY}
           onChange={(e) => {
             const n = Number(e.target.value);
             if (e.target.value === "" || !Number.isFinite(n)) return;

@@ -125,6 +125,7 @@ export interface FormRow {
      */
     backgroundPattern?: string;
     backgroundPatternOpacity?: number;
+    backgroundPatternColor?: string;
   } | null;
 }
 
@@ -1108,7 +1109,7 @@ function thumbSurface(
      */
     if (!tile) return { backgroundColor: theme.background };
     const usable = contrast(theme.background, theme.accent) >= 1.3;
-    const color = usable ? theme.accent : theme.userBubbleText;
+    const color = theme.backgroundPatternColor || (usable ? theme.accent : theme.userBubbleText);
     const ink = rgbaFromHex(color, patternAlpha(theme.background, color, 0.9 * patternWeight(tile) * patternOpacity(theme)));
     return {
       backgroundColor: theme.background,
