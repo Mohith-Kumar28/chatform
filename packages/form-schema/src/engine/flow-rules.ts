@@ -70,6 +70,21 @@ export type DraftBranchOp = (typeof DRAFT_BRANCH_OPS)[number];
 export interface DraftBranch {
   when: { ref: string; op: Op; value: string | number | boolean | null };
   then: string;
+  /**
+   * Where this question's arms meet again: the first question everyone answers
+   * after all of them, or an ending when they never meet.
+   *
+   * Optional, because without it the rejoin can usually be inferred: two
+   * answers naming the same question say where the trunk is. What cannot be
+   * inferred is a form with no trunk at all. An intake asking "book a call, VC
+   * firm, or founder?" gave each answer a whole arm of its own and ran every
+   * arm to the end, and the only evidence of where the last arm stopped was
+   * where it stopped being decided from inside. Its first question was a
+   * contact card nothing branched from, so the founder arm was read as one
+   * question long and the VC and booking arms were both joined into the middle
+   * of it, asking investors for the company they were building.
+   */
+  rejoin?: string;
 }
 
 const ruleId = () => `rl_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
@@ -96,7 +111,15 @@ function gotoRule(from: string, cond: DraftBranch["when"], target: string, targe
   };
 }
 
-/** An unconditional jump, used to close an arm off. */
+/**
+ * An unconditional jump, used to close an arm off.
+ *
+ * `branch: "true"` is what marks it as derived: `repairFlow` throws those away
+ * and works them out again from the block order. An unconditional jump WITHOUT
+ * the marker is somebody's decision (a wire drawn on the canvas, a question
+ * cut off to end the form, "after paying, go to X") and is kept. See
+ * `intentJump`.
+ */
 function alwaysRule(from: string, target: string, targetKind: "block" | "ending"): LogicRuleInput {
   return {
     id: ruleId(),
@@ -107,6 +130,23 @@ function alwaysRule(from: string, target: string, targetKind: "block" | "ending"
     targetKind,
     branch: "true",
   };
+}
+
+/** An unconditional jump somebody asked for, which `repairFlow` must keep. */
+function intentJump(from: string, target: string, targetKind: "block" | "ending"): LogicRuleInput {
+  return {
+    id: ruleId(),
+    action_kind: "goto",
+    from,
+    when: { op: "and", conditions: [], groups: [] },
+    target,
+    targetKind,
+  };
+}
+
+/** An unconditional goto that is intent rather than mechanism. See `alwaysRule`. */
+export function isAuthoredJump(r: LogicRuleInput): boolean {
+  return r.action_kind === "goto" && isUnconditional(r) && (r as { branch?: string }).branch !== "true";
 }
 
 /**
@@ -183,7 +223,7 @@ export function buildFlowRules(
       const key = `${br.when.ref}\u0000${br.then}`;
       if (!collapsedAt.has(key)) {
         collapsedAt.add(key);
-        rules.push(alwaysRule(br.when.ref, br.then, isEnding ? "ending" : "block"));
+        rules.push(intentJump(br.when.ref, br.then, isEnding ? "ending" : "block"));
         routed.add(br.when.ref);
       }
       continue;
@@ -205,7 +245,7 @@ export function buildFlowRules(
     if (conditionIsAlwaysFalse(condition, sourceBlock)) continue;
     const unconditional = conditionIsAlwaysTrue(condition, sourceBlock);
     if (unconditional) {
-      rules.push(alwaysRule(br.when.ref, br.then, isEnding ? "ending" : "block"));
+      rules.push(intentJump(br.when.ref, br.then, isEnding ? "ending" : "block"));
       routed.add(br.when.ref);
       continue;
     }
@@ -256,7 +296,13 @@ export function buildFlowRules(
       // nothing. What the flow meant is "skip this when the condition fails".
       if (target === sourceIndex + 1 && sourceBlock && !rulesAreExhaustive(sourceBlock, siblings)) {
         // Skip the whole arm, not just its first question — see `armExtent`.
-        const dest = destinationAfter(armExtent(target, branches, blocks), blocks, endingRefs);
+        // Or to exactly where the author said the arm rejoins, when that is a
+        // question below it.
+        const said = group.find((b) => b.rejoin)?.rejoin;
+        const dest =
+          said && index.has(said) && index.get(said)! > target
+            ? { ref: said, kind: "block" as const }
+            : destinationAfter(armExtent(target, branches, blocks), blocks, endingRefs);
         if (dest) {
           const w = arms[0]!.when;
           rules.push(gotoRule(source, { ...w, op: NEGATE[w.op] }, dest.ref, dest.kind));
@@ -283,9 +329,22 @@ export function buildFlowRules(
       .map(([ref]) => ref)
       .sort((a, b) => index.get(a)! - index.get(b)!)[0];
 
-    const trueArms = shared
-      ? arms.filter((a) => a.then !== shared && index.get(a.then)! < index.get(shared)!)
-      : dedupeByTarget(arms);
+    // A rejoin the author (or model) declared outright beats any inference.
+    // Only honoured when it is somewhere the arms can actually meet: an ending,
+    // or a question below the start of every arm.
+    const lastArmStart = Math.max(...arms.map((a) => index.get(a.then)!));
+    const declared = group
+      .map((b) => b.rejoin)
+      .find(
+        (r): r is string =>
+          !!r && (endings.has(r) || (index.has(r) && index.get(r)! > lastArmStart && index.get(r)! > sourceIndex)),
+      );
+
+    const trueArms = declared
+      ? dedupeByTarget(arms.filter((a) => a.then !== declared))
+      : shared
+        ? arms.filter((a) => a.then !== shared && index.get(a.then)! < index.get(shared)!)
+        : dedupeByTarget(arms);
     if (trueArms.length === 0) continue;
 
     // Without a shared target the trunk has to be inferred, and the only
@@ -298,7 +357,9 @@ export function buildFlowRules(
     // trunk: two answers pointing at the same question say "this is where we
     // all meet again" outright, which is why both prompts ask for a branch per
     // answer including the ones that need no follow-up.
-    const rejoin = shared
+    const rejoin = declared
+      ? { ref: declared, kind: endings.has(declared) ? ("ending" as const) : ("block" as const) }
+      : shared
       ? { ref: shared, kind: "block" as const }
       : destinationAfter(
           armExtent(index.get(trueArms[trueArms.length - 1]!.then)!, branches, blocks),
@@ -325,6 +386,18 @@ export function buildFlowRules(
       const owners = armOf.get(tail.ref);
       if (owners && !owners.has(source)) continue;
       rules.push(alwaysRule(tail.ref, rejoin.ref, rejoin.kind));
+    }
+
+    // The last arm has no next arm to stop at, so it runs until the rejoin.
+    // When that is an ending, "until" is the end of the form, and falling off
+    // the end lands on the FIRST ending, which is not necessarily the one
+    // declared. Close it explicitly then.
+    if (declared && rejoin.kind === "ending") {
+      const tail = blocks[blocks.length - 1];
+      const lastStart = index.get(trueArms[trueArms.length - 1]!.then)!;
+      if (tail && blocks.length - 1 >= lastStart && endingRefs[0] !== rejoin.ref && !routed.has(tail.ref)) {
+        rules.push(alwaysRule(tail.ref, rejoin.ref, "ending"));
+      }
     }
   }
 
@@ -383,6 +456,11 @@ function dedupeRules(
     if (s.conditions > 0 && unconditional.has(`${s.from}\u0000${s.target}`)) return false;
     return true;
   });
+}
+
+function isUnconditional(r: LogicRuleInput): boolean {
+  const when = (r as { when?: { conditions?: unknown[]; groups?: unknown[] } | null }).when;
+  return (when?.conditions?.length ?? 0) === 0 && (when?.groups?.length ?? 0) === 0;
 }
 
 /** Two conditions sending answers to the same follow-up are still one arm. */
@@ -476,6 +554,9 @@ export function repairFlow<T extends { blocks: Block[]; endings: { ref: string }
   const untouched: LogicRuleInput[] = [];
   /** Multi-condition or grouped rules: kept verbatim, and respected. */
   const complex: Extract<LogicRuleInput, { action_kind: "goto" }>[] = [];
+  /** Unconditional jumps an author made. See `alwaysRule`. */
+  const authored: Extract<LogicRuleInput, { action_kind: "goto" }>[] = [];
+  const blockIndex = (ref: string) => doc.blocks.findIndex((b) => b.ref === ref);
   const branches: DraftBranch[] = [];
 
   for (const rule of doc.logic) {
@@ -487,8 +568,18 @@ export function repairFlow<T extends { blocks: Block[]; endings: { ref: string }
     const conditions = when?.conditions ?? [];
     const groups = when?.groups ?? [];
 
-    // Mechanism. Dropped, then derived again below.
-    if (conditions.length === 0 && groups.length === 0) continue;
+    if (conditions.length === 0 && groups.length === 0) {
+      // Mechanism: dropped, then derived again below.
+      if (!isAuthoredJump(rule) || rule.action_kind !== "goto") continue;
+      // Intent: an author's own jump, kept while it still makes sense. Cutting
+      // a wire used to "reconnect" it, because the jump that ended the question
+      // was thrown away here and the fall-through came back on the next edit.
+      const from = rule.from;
+      if (!from || !refs.has(from)) continue;
+      const lands = endingRefs.includes(rule.target) || blockIndex(rule.target) > blockIndex(from);
+      if (lands && !authored.some((a) => a.from === from)) authored.push(rule);
+      continue;
+    }
 
     if (conditions.length !== 1 || groups.length > 0) {
       complex.push(rule);
@@ -518,8 +609,55 @@ export function repairFlow<T extends { blocks: Block[]; endings: { ref: string }
     });
   }
 
-  const derived = buildFlowRules(branches, doc.blocks, endingRefs, complex);
-  return { ...doc, logic: [...untouched, ...complex, ...derived] };
+  // The arm-closing jumps are about to be thrown away and derived again, but
+  // they are also the only record of where the arms met. With a trunk that can
+  // be re-inferred; without one (every arm running to an ending) it cannot, and
+  // re-inferring it joined every arm into the middle of the last one. So read
+  // the rejoin back out of the jumps that closed the earlier arms first.
+  const index = new Map(doc.blocks.map((b, i) => [b.ref, i]));
+  const bySource = new Map<string, DraftBranch[]>();
+  for (const br of branches) {
+    if (!index.has(br.then)) continue;
+    const list = bySource.get(br.when.ref);
+    if (list) list.push(br);
+    else bySource.set(br.when.ref, [br]);
+  }
+  for (const group of bySource.values()) {
+    const starts = [...new Set(group.map((b) => index.get(b.then)!))].sort((a, b) => a - b);
+    if (starts.length < 2) continue;
+    const last = starts[starts.length - 1]!;
+    // One vote per earlier arm: where its last block jumps to.
+    const votes: string[] = [];
+    for (let i = 0; i < starts.length - 1; i++) {
+      const tail = doc.blocks[starts[i + 1]! - 1];
+      const jump = tail && doc.logic.find((r) => r.action_kind === "goto" && r.from === tail.ref && isUnconditional(r));
+      if (!jump || jump.action_kind !== "goto") continue;
+      if (endingRefs.includes(jump.target) || (index.get(jump.target) ?? -1) > last) votes.push(jump.target);
+    }
+    // A question below every arm is a trunk, and the likeliest one wins. An
+    // ending only counts when every earlier arm goes there and it accepts the
+    // response: one arm that ends in a screen-out is that arm refusing people,
+    // not the whole question deciding the form has no trunk.
+    const blockVotes = votes.filter((v) => index.has(v));
+    const counts = new Map<string, number>();
+    for (const v of blockVotes) counts.set(v, (counts.get(v) ?? 0) + 1);
+    const trunk = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const onlyEnding =
+      votes.length === starts.length - 1 &&
+      votes.every((v) => v === votes[0]) &&
+      !index.has(votes[0]!) &&
+      (doc.endings.find((e) => e.ref === votes[0]) as { kind?: string } | undefined)?.kind !== "screen_out"
+        ? votes[0]
+        : undefined;
+    const rejoin = trunk ?? onlyEnding;
+    if (rejoin) for (const br of group) br.rejoin = rejoin;
+  }
+
+  const derived = buildFlowRules(branches, doc.blocks, endingRefs, [...complex, ...authored]);
+  // Authored jumps go LAST: the first matching goto wins, and an unconditional
+  // one matches everything, so ahead of a question's branches it would be the
+  // only route out of it.
+  return { ...doc, logic: [...untouched, ...complex, ...derived, ...authored] };
 }
 
 /**

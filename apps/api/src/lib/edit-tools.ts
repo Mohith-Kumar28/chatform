@@ -426,8 +426,16 @@ export function buildEditTools(
           .string()
           .describe("For a choice question, the option's LABEL exactly as it is listed. Otherwise the literal value."),
         then: z.string().describe("A question ref BELOW whenRef, or an ending ref."),
+        rejoin: z
+          .string()
+          .describe(
+            "When whenRef splits people into several arms: where the arms meet again. The first question everyone answers " +
+              "after ALL the arms, or an ending ref if the arms never meet (each runs to the end). Same value on every " +
+              'branch of this question. "" when there is only one arm, or the answer ends the form.',
+          )
+          .optional(),
       }),
-      execute: async ({ whenRef, op, value, then }) => {
+      execute: async ({ whenRef, op, value, then, rejoin }) => {
         const stop = blocked("set_branch");
         if (stop) return stop;
 
@@ -472,7 +480,11 @@ export function buildEditTools(
           return reject("set_branch", `an edit may set at most ${LIMITS.branches} routes.`);
         }
 
-        ctx.draft.branches.push({ whenRef, op, value, then });
+        const meets = (rejoin ?? "").trim();
+        if (meets && !ctx.endings.has(meets) && !ctx.blocks.has(meets)) {
+          return reject("set_branch", `rejoin "${meets}" is not a question or ending in this form. Use "" if the arms need no rejoin.`);
+        }
+        ctx.draft.branches.push({ whenRef, op, value, then, ...(meets ? { rejoin: meets } : {}) });
         return accept("set_branch", `Routed ${whenRef} ${op} "${value}" → ${then}.`);
       },
     }),

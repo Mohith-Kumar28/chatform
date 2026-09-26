@@ -1131,6 +1131,8 @@ export interface LooseBranch {
   op: DraftBranch["when"]["op"];
   value: string;
   then: string;
+  /** Where this question's arms meet again, or "" to let the flow infer it. See `DraftBranch.rejoin`. */
+  rejoin?: string;
 }
 
 /**
@@ -1243,7 +1245,8 @@ export function resolveBranches(
       value = raw;
     }
 
-    out.push({ when: { ref: br.whenRef, op: br.op, value }, then: br.then });
+    const rejoin = br.rejoin?.trim();
+    out.push({ when: { ref: br.whenRef, op: br.op, value }, then: br.then, ...(rejoin ? { rejoin } : {}) });
   }
 
   return out;
@@ -1384,6 +1387,7 @@ export function draftToDoc(draft: GenerationDraft): NormalizedDraft {
     ...br,
     whenRef: refAlias.get(br.whenRef) ?? br.whenRef,
     then: alias(br.then),
+    rejoin: br.rejoin ? alias(br.rejoin) : "",
   }));
 
   const branches = resolveBranches(draftBranches, blocks, optionIdsByRef);

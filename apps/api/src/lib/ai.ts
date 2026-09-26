@@ -462,6 +462,14 @@ export const GenerationDraft = z.object({
         value: z.string(),
         /** Target question ref or ending ref. */
         then: z.string(),
+        /**
+         * Where this question's arms meet again: the first question everyone
+         * answers after all of them, or an ending ref when they never meet.
+         * "" on a branch that has no arms to join (a screen-out, say). Without
+         * it a form whose arms each run to the end had its earlier arms joined
+         * into the middle of the last one. See `DraftBranch.rejoin`.
+         */
+        rejoin: z.string(),
       }),
     ),
 });
@@ -601,6 +609,8 @@ export const EditDraft = z.object({
         /** Option label for a choice question, or the literal value; "" when the op needs none. */
         value: z.string(),
         then: z.string(),
+        /** Where this question's arms meet again, or "". See `DraftBranch.rejoin`. */
+        rejoin: z.string().optional(),
       }),
     ),
   /** One sentence on what changed, shown to the builder. */

@@ -426,6 +426,7 @@ When you branch, you branch completely:
 - EVERY option of the deciding question gets its own branch entry, including the ones that need no follow-up at all. Point those at the first question everyone answers. This is not paperwork: two or more answers naming the same question is what says "this is where the paths meet again", and without it the flow has to guess where the last arm ends. A deciding question with four options and two branches also routes the other two answers by falling through to whatever block happens to sit next, which is almost never what you meant.
 - The arms go immediately below the deciding question, one whole arm after another, in the SAME ORDER as that question's options. Everything the respondent answers regardless of the branch goes below all of the arms.
 - A branch may only point DOWNWARDS: at a question below the deciding one, or at an ending. A branch pointing upwards is a loop and is discarded, taking your design with it.
+- Say where the arms meet again, as "rejoin" on every branch of the deciding question: the first question everyone answers below all the arms, or an ending when the arms never meet and each one runs to the end of the form. Nothing else can tell the flow where the LAST arm stops. An intake that asked "book a call, VC firm, or founder?" gave each answer its own questions and ran them all to the end, left rejoin out, and the flow guessed the founder arm was one question long: investors and people booking a call were then asked what company they were building.
 
 ANTI-PATTERNS. Every one of these has shipped to a real author, and each is worse than no branch at all:
 
@@ -538,7 +539,7 @@ ${renderBlockCatalog()}
   - "redirectUrl": a full https:// address to send them to after this ending, ONLY when the author named one. Each ending has its own, which is how authors describe it: "accepted teams go to the WhatsApp group, everyone else back to the site". Never guess a destination, never reuse the URL the form was built from, and leave "" when none was asked for: a redirect nobody asked for takes the respondent off the page before they have read it.
 
 BRANCHING. Write it as "branches", and follow the doctrine you were given:
-  [{ "whenRef": "<the ref of the question that decides it>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains>", "value": "<the option's LABEL, exactly as you wrote it in options, or a number>", "then": "<the ref of the question or ending to jump to>" }]
+  [{ "whenRef": "<the ref of the question that decides it>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains>", "value": "<the option's LABEL, exactly as you wrote it in options, or a number>", "then": "<the ref of the question or ending to jump to>", "rejoin": "<where this question's arms meet again: the first question everyone answers after all of them, or an ending ref if they never meet; \"\" when the branch opens no arm, e.g. it goes straight to an ending>" }]
 
 Worked example: "a waitlist, and ask iOS, Android and extension users different things":
 
@@ -554,11 +555,27 @@ Worked example: "a waitlist, and ask iOS, Android and extension users different 
     q_referral       single_select (everyone)
 
   branches:
-    { "whenRef": "q_platform", "op": "eq", "value": "iPhone (iOS)",     "then": "q_ios_version" }
-    { "whenRef": "q_platform", "op": "eq", "value": "Android",          "then": "q_android_device" }
-    { "whenRef": "q_platform", "op": "eq", "value": "Chrome extension", "then": "q_ext_browser" }
+    { "whenRef": "q_platform", "op": "eq", "value": "iPhone (iOS)",     "then": "q_ios_version",    "rejoin": "q_use_case" }
+    { "whenRef": "q_platform", "op": "eq", "value": "Android",          "then": "q_android_device", "rejoin": "q_use_case" }
+    { "whenRef": "q_platform", "op": "eq", "value": "Chrome extension", "then": "q_ext_browser",    "rejoin": "q_use_case" }
 
-Three options, three branches, three contiguous arms in the same order as the options, and the questions everyone answers sitting below all of them. Note what is NOT there: no branch off q_ios_testflight carrying the iOS arm back to the trunk, no branch off q_ext_browser at all. The ends of the arms are joined back to q_use_case automatically. You do not write those, and writing them is the mistake.
+Three options, three branches, three contiguous arms in the same order as the options, and the questions everyone answers sitting below all of them. "rejoin" names q_use_case, the first of those. Note what is NOT there: no branch off q_ios_testflight carrying the iOS arm back to the trunk, no branch off q_ext_browser at all. The ends of the arms are joined to the rejoin automatically. You do not write those, and writing them is the mistake.
+
+When the arms never meet, "rejoin" is the ending. "Book a call, or tell us about yourself as an investor or a founder":
+
+  q_path           single_select  options ["Book an intro call", "I'm an investor", "I'm a founder"]
+  q_book           scheduling    ← call arm
+  q_inv_contact    contact_info  ← investor arm
+  q_inv_firm       short_text    ← investor arm
+  q_fnd_contact    contact_info  ← founder arm
+  q_fnd_company    short_text    ← founder arm
+  q_fnd_stage      single_select ← founder arm
+  (nothing below: every arm runs to the end)
+
+  branches:
+    { "whenRef": "q_path", "op": "eq", "value": "Book an intro call", "then": "q_book",        "rejoin": "end_thanks" }
+    { "whenRef": "q_path", "op": "eq", "value": "I'm an investor",    "then": "q_inv_contact", "rejoin": "end_thanks" }
+    { "whenRef": "q_path", "op": "eq", "value": "I'm a founder",      "then": "q_fnd_contact", "rejoin": "end_thanks" }
 
 Second example: when some answers need no follow-up, say where they go:
 
@@ -568,10 +585,10 @@ Second example: when some answers need no follow-up, say where they go:
   q_why        long_text    (everyone)
 
   branches:
-    { "whenRef": "q_role", "op": "eq", "value": "Engineer",       "then": "q_languages" }
-    { "whenRef": "q_role", "op": "eq", "value": "Designer",       "then": "q_portfolio" }
-    { "whenRef": "q_role", "op": "eq", "value": "Product",        "then": "q_why" }
-    { "whenRef": "q_role", "op": "eq", "value": "Something else", "then": "q_why" }
+    { "whenRef": "q_role", "op": "eq", "value": "Engineer",       "then": "q_languages", "rejoin": "q_why" }
+    { "whenRef": "q_role", "op": "eq", "value": "Designer",       "then": "q_portfolio", "rejoin": "q_why" }
+    { "whenRef": "q_role", "op": "eq", "value": "Product",        "then": "q_why",       "rejoin": "q_why" }
+    { "whenRef": "q_role", "op": "eq", "value": "Something else", "then": "q_why",       "rejoin": "q_why" }
 
 The last two look redundant and are the most important ones: two answers naming q_why is what says q_why is where the arms meet again. Leave them out and the engineer's arm has no way to know where it stops.
 
@@ -587,9 +604,9 @@ Third example: a requirement on who may submit at all, which is where the screen
       "requirements": "A team of 2 to 5 people | Agreement to the code of conduct" }
 
   branches:
-    { "whenRef": "q_team_size", "op": "gt",  "value": "5",     "then": "end_ineligible" }
-    { "whenRef": "q_team_size", "op": "lt",  "value": "2",     "then": "end_ineligible" }
-    { "whenRef": "q_conduct",   "op": "eq",  "value": "declined", "then": "end_ineligible" }
+    { "whenRef": "q_team_size", "op": "gt",  "value": "5",        "then": "end_ineligible", "rejoin": "" }
+    { "whenRef": "q_team_size", "op": "lt",  "value": "2",        "then": "end_ineligible", "rejoin": "" }
+    { "whenRef": "q_conduct",   "op": "eq",  "value": "declined", "then": "end_ineligible", "rejoin": "" }
 
 Note the consent: it carries \`decline=true\` because the form has to be able to route a refusal, and a branch reads it as "agreed" or "declined". Without that flag the question is a turnstile (the respondent simply cannot move past it), which is right only when the form genuinely has nothing to say about a no. Note also that the eligible path is not branched at all: it falls through, as always.
 
@@ -841,7 +858,7 @@ WORK OUT WHAT KIND OF EDIT THIS IS FIRST. Most requests about a working form cha
   This is the answer to a whole family of requests, and the one the form could not express before: "if they say no, don't let them submit", "they shouldn't be able to submit if they don't meet the requirements", "tell them why they can't apply", "what happens if they don't agree?". Each of those needs a "screen_out" ending, with "requirements" listing what they had to meet as " | "-separated lines, and a branch in the same edit pointing the failing answer at its ref. Do not point a failing answer at a success ending; that is what makes a form say "Submitted Successfully" to somebody it has just turned away.
   A form must keep at least one success ending. Never convert its only ending to a screen_out.
 
-Rules for "branches": [{ "whenRef": "<question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains>", "value": "<for a choice question, the option's LABEL exactly as listed above; otherwise the literal value>", "then": "<question ref or ending ref>" }].
+Rules for "branches": [{ "whenRef": "<question ref>", "op": "<eq|neq|gt|gte|lt|lte|contains|not_contains>", "value": "<for a choice question, the option's LABEL exactly as listed above; otherwise the literal value>", "then": "<question ref or ending ref>", "rejoin": "<when this question splits people into several arms: the first question everyone answers after all of them, or an ending ref if the arms never meet; otherwise \"\">" }].
 
 Where a branch can point: a question BELOW the deciding one, or an ending. A branch pointing at a question above it would loop, and is dropped. So if the request needs a question asked only for some answers, that question has to sit below the one that decides it. Say so by adding it with "insertAfter", or by rewiring around where it already is.
 

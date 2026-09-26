@@ -179,6 +179,7 @@ export function applyEditDraft(base: FormDoc, draft: EditDraft): EditApplication
       ...br,
       whenRef: renamed.get(br.whenRef) ?? br.whenRef,
       then: renamed.get(br.then) ?? br.then,
+      rejoin: br.rejoin ? (renamed.get(br.rejoin) ?? br.rejoin) : "",
     })),
     doc.blocks,
     optionIdsByRef,
