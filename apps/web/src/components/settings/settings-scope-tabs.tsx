@@ -1,8 +1,9 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { Building2, User } from "lucide-react";
 import { SCOPE_HOME, settingsScope } from "@/components/settings/sections";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 
 /**
  * The settings title and the switch between its two halves.
@@ -14,18 +15,20 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
  */
 export function SettingsScopeTabs() {
   const pathname = usePathname();
-  const router = useRouter();
   const scope = settingsScope(pathname);
 
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
       <h1 className="text-h1">{scope === "account" ? "Profile settings" : "Organization settings"}</h1>
-      <Tabs value={scope} onValueChange={(v) => router.push(SCOPE_HOME[v as keyof typeof SCOPE_HOME])}>
-        <TabsList>
-          <TabsTrigger value="organization">Organization</TabsTrigger>
-          <TabsTrigger value="account">Profile</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      {/* The product's one segmented control, so it looks and moves like every other. */}
+      <SegmentedControl
+        ariaLabel="Settings for"
+        value={scope}
+        options={[
+          { value: "organization", label: "Organization", icon: Building2, href: SCOPE_HOME.organization },
+          { value: "account", label: "Profile", icon: User, href: SCOPE_HOME.account },
+        ]}
+      />
     </div>
   );
 }
