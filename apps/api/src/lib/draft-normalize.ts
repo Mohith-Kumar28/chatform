@@ -494,6 +494,9 @@ export interface NormalizedBlock {
   optionIds: Map<string, string>;
 }
 
+/** "Other", "Others", "Other (please specify)", "Something else". Not "None of the above": that is an answer. */
+const OTHER_LABEL = /^\s*(others?|something else|anything else)\b.*$/i;
+
 /**
  * Map one loose block onto the strict Block schema.
  *
@@ -523,6 +526,24 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
     });
 
   const done = (block: Block): NormalizedBlock => ({ block, optionIds });
+
+  /*
+   * A trailing "Other" is the Allow "Other" switch, not an option. As an option
+   * it is a dead end: picked, it records the word "Other" and never asks what.
+   * The switch keeps the escape hatch and adds the box to type into. Only the
+   * last option, and only when two real ones remain, so a list that is all
+   * "other" categories is left alone.
+   */
+  const last = options.at(-1);
+  const trailingOther =
+    (type === "single_select" || type === "multi_select") &&
+    options.length > 2 &&
+    !!last &&
+    OTHER_LABEL.test(last.label);
+  if (trailingOther) {
+    options.pop();
+    optionIds.delete(last!.label.toLowerCase());
+  }
 
   try {
     // Whatever the model called the first block, it is the greeting.
@@ -651,7 +672,7 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
               options,
               minSelections: base.required ? 1 : 0,
               maxSelections: options.length,
-              allowOther: false,
+              allowOther: trailingOther,
             }),
           );
         }
@@ -668,7 +689,7 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
         if (type === "poll") {
           return done(BlockSchema.parse({ ...base, type, options }));
         }
-        return done(BlockSchema.parse({ ...base, type, options, allowOther: false }));
+        return done(BlockSchema.parse({ ...base, type, options, allowOther: trailingOther }));
       }
       case "rating":
         return done(

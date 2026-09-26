@@ -35,6 +35,34 @@ const ending = (over: Partial<GenerationDraft["endings"][number]>): GenerationDr
 });
 
 describe("draftToDoc", () => {
+  it("turns a trailing Other option into the Allow Other switch", () => {
+    const { doc } = draftToDoc(
+      draft({
+        blocks: [
+          block({ ref: "welcome", type: "welcome" }),
+          block({ ref: "q_source", type: "single_select", options: ["Google", "A friend", "Other (please specify)"] }),
+          block({ ref: "q_tools", type: "multi_select", options: ["Figma", "Linear", "Others"] }),
+          block({ ref: "q_pick", type: "single_select", options: ["Yes", "Other"] }),
+          block({ ref: "q_none", type: "single_select", options: ["Red", "Blue", "None of the above"] }),
+        ],
+      }),
+    );
+    const byRef = Object.fromEntries(doc.blocks.map((b) => [b.ref, b]));
+    for (const ref of ["q_source", "q_tools"]) {
+      const b = byRef[ref];
+      if (b?.type !== "single_select" && b?.type !== "multi_select") throw new Error("not a choice");
+      expect(b.allowOther).toBe(true);
+      expect(b.options.map((o) => o.label)).not.toContain("Others");
+      expect(b.options).toHaveLength(2);
+    }
+    // Too few real options left, and "None of the above" is an answer: both untouched.
+    for (const ref of ["q_pick", "q_none"]) {
+      const b = byRef[ref];
+      if (b?.type !== "single_select") throw new Error("not a choice");
+      expect(b.allowOther).toBe(false);
+    }
+  });
+
   it("keeps a question whose type the model got wrong", () => {
     // The model reliably writes `single_choice` and `multiple_choice`, neither
     // of which is a block type. These used to be dropped silently, so a draft

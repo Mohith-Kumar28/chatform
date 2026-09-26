@@ -443,6 +443,7 @@ export function ListEditor({
   minItems = 1,
   addLabel = "Add option",
   inspect,
+  addon,
 }: {
   label: string;
   items: { id: string; label: string }[];
@@ -451,6 +452,8 @@ export function ListEditor({
   minItems?: number;
   addLabel?: string;
   inspect?: string;
+  /** A small control on the far side of the "Add option" row, e.g. Allow "Other". */
+  addon?: React.ReactNode;
 }) {
   return (
     <Field label={label} inspect={inspect}>
@@ -479,15 +482,18 @@ export function ListEditor({
             />
           ))}
         </SortableList>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onChange([...items, makeItem()])}
-          className="text-muted-foreground hover:text-foreground -ml-2 justify-start"
-        >
-          <Plus className="size-3.5" />
-          {addLabel}
-        </Button>
+        <div className="flex items-center justify-between gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onChange([...items, makeItem()])}
+            className="text-muted-foreground hover:text-foreground -ml-2 justify-start"
+          >
+            <Plus className="size-3.5" />
+            {addLabel}
+          </Button>
+          {addon}
+        </div>
       </div>
     </Field>
   );

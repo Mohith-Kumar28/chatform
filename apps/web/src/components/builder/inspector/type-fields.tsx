@@ -25,6 +25,7 @@ import {
 import { ProviderLogo } from "@/components/integrations/provider-logo";
 import { useBuilderStore } from "@/stores/builder-store";
 import { DomainsHelp, GroupFieldsEditor, PatternHelp, patternIsValid } from "./group-fields";
+import { Switch } from "@/components/ui/switch";
 import {
   CheckboxGroup,
   Field,
@@ -302,14 +303,18 @@ export function TypeFields({
               } as Partial<Block>)
             }
             makeItem={() => ({ id: uid("opt"), label: "" })}
+            addon={
+              (block.type === "single_select" || block.type === "multi_select") && (
+                <label className="text-muted-foreground flex items-center gap-2 text-sm">
+                  Allow &ldquo;Other&rdquo;
+                  <Switch
+                    checked={block.allowOther}
+                    onCheckedChange={(v) => patch({ allowOther: v } as Partial<Block>)}
+                  />
+                </label>
+              )
+            }
           />
-          {(block.type === "single_select" || block.type === "multi_select") && (
-            <SwitchField
-              label={'Allow "Other"'}
-              checked={block.allowOther}
-              onChange={(v) => patch({ allowOther: v } as Partial<Block>)}
-            />
-          )}
           {block.type === "poll" && (
             <>
               <SwitchField
