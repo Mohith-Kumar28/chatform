@@ -126,12 +126,7 @@ export function BrandField({
           )}
         </button>
 
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">{theme.logoUrl ? "Your logo" : "Upload your logo"}</p>
-          <p className="text-muted-foreground text-xs">
-            {theme.logoUrl ? "Shown at the top of your form." : "PNG, JPG or WebP. We match the colours to it."}
-          </p>
-        </div>
+        <p className="min-w-0 flex-1 text-sm font-medium">{theme.logoUrl ? "Your logo" : "Upload your logo"}</p>
 
         <div className="flex shrink-0 items-center gap-1">
           <Button variant="outline" size="sm" disabled={busy} onClick={() => inputRef.current?.click()}>

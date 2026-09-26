@@ -12,7 +12,6 @@ import {
   PanelRightClose,
   PanelRightOpen,
   RotateCcw,
-  ShieldCheck,
   Smartphone,
 } from "lucide-react";
 import type { Block, ThemeDoc } from "@repo/form-schema";
@@ -98,23 +97,11 @@ function toEmbedDoc(c: EmbedConfig): EmbedDoc {
   };
 }
 
-const TRIGGERS: { value: EmbedConfig["openOn"]; label: string; hint: string }[] = [
-  {
-    value: "scroll:50",
-    label: "After scrolling halfway down the page",
-    hint: "Opens once the visitor has scrolled past the middle of the page they are on, measured from the top to the bottom of that page. On a phone the button shakes instead of the form covering the screen.",
-  },
-  { value: "load", label: "As soon as the page loads", hint: "Opens by itself when the page loads. On a phone the button shakes instead." },
-  {
-    value: "exit-intent",
-    label: "When the visitor is about to leave",
-    hint: "Opens when the mouse moves up out of the page, toward the tabs or the close button. Desktop only.",
-  },
-  {
-    value: "click",
-    label: "Off, only when a button is clicked",
-    hint: "Opens only when a visitor clicks the corner button or your own button.",
-  },
+const TRIGGERS: { value: EmbedConfig["openOn"]; label: string }[] = [
+  { value: "scroll:50", label: "Halfway down the page" },
+  { value: "load", label: "On page load" },
+  { value: "exit-intent", label: "When they're about to leave" },
+  { value: "click", label: "Off" },
 ];
 
 export function EmbedStudio({
@@ -218,11 +205,6 @@ export function EmbedStudio({
               }}
               ariaLabel="Preview size"
             />
-            <p className="text-muted-foreground text-micro ml-auto hidden truncate sm:block">
-              {overlay && device === "mobile"
-                ? "Below 520px the panel takes the whole screen."
-                : modeBlurb}
-            </p>
             {overlay && (
               <Button
                 variant="ghost"
@@ -301,14 +283,7 @@ export function EmbedStudio({
               <>
                 <Section
                   title="Auto open"
-                  hint="Open the form by itself. Clicking a button always opens it too."
-                  action={
-                    <InfoHint label="How often it opens">
-                      It opens by itself only once per visitor. If they close it, it will not open again on
-                      any page of your site, and on a phone the button shakes only once. After they submit,
-                      it never opens by itself again. Clicking a button always opens it.
-                    </InfoHint>
-                  }
+                  hint="Opens by itself once per visitor. Closed, it won't open again on any page of your site, and on a phone the button shakes once instead. Clicking a button always opens it."
                 >
                   <Select
                     value={config.openOn}
@@ -326,9 +301,6 @@ export function EmbedStudio({
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-muted-foreground text-micro">
-                    {TRIGGERS.find((t) => t.value === config.openOn)?.hint}
-                  </p>
                 </Section>
 
                 <Section
@@ -390,9 +362,7 @@ export function EmbedStudio({
                       </div>
                     </>
                   ) : (
-                    <p className="text-muted-foreground text-caption">
-                      Hidden. The form opens only from a button on your own site (see below).
-                    </p>
+                    <p className="text-muted-foreground text-caption">No corner button.</p>
                   )}
                 </Section>
 
@@ -435,9 +405,6 @@ export function EmbedStudio({
                       <CopyButton value={ownButtonHtml} />
                     </div>
                   </div>
-                  <p className="text-muted-foreground text-micro">
-                    Works on links too. Keep the script above on the same page.
-                  </p>
                 </Section>
               </>
             )}
@@ -462,21 +429,9 @@ export function EmbedStudio({
                     onChange={(v) => set("height", v)}
                   />
                 )}
-                <p className="text-muted-foreground text-micro">
-                  {config.autoHeight
-                    ? "Starts at 620px and follows the conversation as it grows."
-                    : "A plain iframe with no script, so it works on sites that block scripts."}
-                </p>
               </Section>
             )}
 
-            {config.mode === "fullpage" && (
-              <Section title="Nothing to set">
-                <p className="text-muted-foreground text-caption">
-                  The form takes over the whole window. Its look comes from the form&apos;s theme.
-                </p>
-              </Section>
-            )}
           </div>
         </div>
       </div>
@@ -505,25 +460,6 @@ export function EmbedStudio({
         <pre className="bg-muted text-caption max-h-64 overflow-auto rounded-xl p-4 font-mono">
           <code>{snippet}</code>
         </pre>
-
-        {/* Kept only where it explains something the snippet cannot: an email
-            "embed" that is visibly a link owes a reason. The other half of this
-            line answered a question about keys and packages that a single
-            script tag had already answered. */}
-        {target === "email" && (
-          <p className="text-muted-foreground text-micro flex items-start gap-1.5">
-            <ShieldCheck className="mt-0.5 size-3 shrink-0" />
-            Email clients block iframes and scripts, so this is a styled link to the hosted form.
-          </p>
-        )}
-
-        {target === "ai" && (
-          <p className="text-muted-foreground text-micro flex items-start gap-1.5">
-            <Sparkles className="mt-0.5 size-3 shrink-0" />
-            Paste this into Cursor, Claude Code, Lovable or any AI coding tool. It asks you a few
-            questions first, then adds the form to your site.
-          </p>
-        )}
 
         {(target === "html" || target === "react") && (
           <details className="group">
@@ -557,9 +493,10 @@ function Section({
   return (
     <section className="space-y-4 px-5 py-5">
       <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
+        {/* Explanations live behind the icon; the rail is titles and controls. */}
+        <div className="flex items-center gap-1">
           <h3 className="text-sm font-semibold">{title}</h3>
-          {hint && <p className="text-muted-foreground text-micro">{hint}</p>}
+          {hint && <InfoHint label={`About ${title.toLowerCase()}`} align="start">{hint}</InfoHint>}
         </div>
         {action}
       </div>
@@ -579,9 +516,9 @@ function Field({
 }) {
   return (
     <div className="space-y-2">
-      <div className="space-y-0.5">
+      <div className="flex items-center gap-1">
         <p className="text-caption font-medium">{label}</p>
-        {hint && <p className="text-muted-foreground text-micro">{hint}</p>}
+        {hint && <InfoHint label={`About ${label.toLowerCase()}`} align="start">{hint}</InfoHint>}
       </div>
       {children}
     </div>

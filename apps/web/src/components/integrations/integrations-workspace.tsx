@@ -101,12 +101,7 @@ export function IntegrationsWorkspace({
     // Room below, so "Collect payments" (the last section) can scroll to the top when linked to.
     <div className="space-y-10 pb-[75vh]">
       <section className="space-y-3">
-        <div>
-          <h2 className="text-h2">Put it on your site</h2>
-          <p className="text-muted-foreground text-body">
-            One tag on your page. The preview is what a visitor gets.
-          </p>
-        </div>
+        <h2 className="text-h2">Put it on your site</h2>
         <EmbedStudio
           slug={slug}
           formTitle={formTitle}
