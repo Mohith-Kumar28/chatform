@@ -30,11 +30,29 @@ export interface SourceField {
   description: string;
   /** A generation draft block type. */
   type: string;
+  /**
+   * Whether the source actually said what kind of answer this is.
+   *
+   * A `<select>`, radio buttons, `type="email"` or a Google dropdown do. A bare
+   * text box does not: "Email" on a plain `<input type="text">` is still an
+   * email question, and copying "text" literally turned every such field into
+   * Short text. When this is false the type here is our best guess from the
+   * name, placeholder and label, and the generator's own choice wins.
+   */
+  typeKnown: boolean;
   /** Exactly as the source wrote them, in its order. */
   options: string[];
   /** The source offered a free-text "Other". */
   allowOther: boolean;
   required: boolean;
+  /**
+   * Whether the page marked required fields at all. A form that validates in
+   * JavaScript marks none, and "optional" on every field would be a guess
+   * dressed up as a copy; the generator decides those.
+   */
+  requiredKnown: boolean;
+  /** The box's placeholder text, as the source wrote it. */
+  placeholder?: string;
   /** Draft `config`, for the types that need one (matrix rows). */
   config: string;
   /** Draft `scale`: stars, or the number of steps on a linear scale. */
@@ -45,6 +63,8 @@ export interface SourceField {
   section?: string;
   /** Option label → where the source sends that answer ("section: X" or "submit"). */
   jumps?: Record<string, string>;
+  /** Which linked form it came from, when the author linked more than one. */
+  form?: string;
 }
 
 export interface SourceForm {
@@ -58,6 +78,40 @@ export interface SourceForm {
 /** Every reader, most specific first. Null when the page has no form worth copying. */
 export function extractSourceForm(html: string, url: string): SourceForm | null {
   return extractGoogleForm(html, url) ?? extractHtmlForm(html, url);
+}
+
+/**
+ * Several linked forms as one list of fields, each tagged with the form it
+ * came from. An author who links a VC form and a founder form wants both,
+ * usually as two paths; using only the first one found dropped the other.
+ */
+export function mergeSourceForms(forms: SourceForm[]): SourceForm | null {
+  if (forms.length === 0) return null;
+  if (forms.length === 1) return forms[0]!;
+  return {
+    url: forms.map((f) => f.url).join(" and "),
+    provider: forms[0]!.provider,
+    title: forms[0]!.title,
+    description: "",
+    fields: forms.flatMap((f) => f.fields.map((field) => ({ ...field, form: `${f.title || "Form"} (${f.url})` }))),
+  };
+}
+
+/**
+ * The answer a plain text box is really asking for, from what the page says
+ * about it: its name, autocomplete hint, placeholder and label. Null when
+ * nothing points anywhere, and the generator decides.
+ */
+export function inferTextType(hints: { name?: string | null; autocomplete?: string | null; placeholder?: string | null; label?: string | null }): string | null {
+  const name = `${hints.name ?? ""} ${hints.autocomplete ?? ""}`.toLowerCase();
+  const placeholder = (hints.placeholder ?? "").toLowerCase();
+  const label = (hints.label ?? "").toLowerCase();
+  const all = `${name} ${label}`;
+  if (/e-?mail/.test(all) || /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/.test(placeholder.trim())) return "email";
+  if (/\b(phone|mobile|tel|whatsapp|contact number)\b/.test(all) || /^\+?[\d\s()-]{7,}$/.test(placeholder.trim())) return "phone";
+  if (/(website|\burl\b|homepage|linkedin|site\b|link\b)/.test(all) || /^(https?:\/\/|www\.)/.test(placeholder.trim())) return "url";
+  if (/\b(date of birth|dob|birthday|date)\b/.test(all) || /^(dd|mm|yyyy)[/-]/.test(placeholder.trim())) return "date";
+  return null;
 }
 
 // ─── Google Forms ───
@@ -122,7 +176,18 @@ function extractGoogleForm(html: string, url: string): SourceForm | null {
     const options = rawOptions.map((o) => str(o[0])).filter((l) => l.length > 0);
     // An option with an empty label and the "other" flag is Google's "Other:" box.
     const allowOther = rawOptions.some((o) => str(o[0]) === "" && o[4] === 1);
-    const base = { title, description, options: [] as string[], allowOther: false, required, config: "", scale: 0, section };
+    const base = {
+      title,
+      description,
+      options: [] as string[],
+      allowOther: false,
+      required,
+      requiredKnown: true,
+      typeKnown: true,
+      config: "",
+      scale: 0,
+      section,
+    };
 
     const jumps: Record<string, string> = {};
     for (const o of rawOptions) {
@@ -138,8 +203,10 @@ function extractGoogleForm(html: string, url: string): SourceForm | null {
         // Response validation: [[2, 102]] is "text is an email", [[2, 103]] a
         // URL, and category 1 is a number rule. Nothing else changes the type.
         const rule = arr(arr(entry[4])[0]);
-        const kind = rule[0] === 2 && rule[1] === 102 ? "email" : rule[0] === 2 && rule[1] === 103 ? "url" : rule[0] === 1 ? "number" : "short_text";
-        if (title) fields.push({ ...base, type: kind });
+        const kind = rule[0] === 2 && rule[1] === 102 ? "email" : rule[0] === 2 && rule[1] === 103 ? "url" : rule[0] === 1 ? "number" : null;
+        // No rule: "Email Address" on a short answer is still an email question.
+        const guess = kind ?? inferTextType({ label: title });
+        if (title) fields.push({ ...base, type: guess ?? "short_text", typeKnown: guess !== null });
         break;
       }
       case G.paragraph:
@@ -194,7 +261,7 @@ function extractGoogleForm(html: string, url: string): SourceForm | null {
         break;
       case G.time:
         // No time block; a short answer keeps the question and its wording.
-        if (title) fields.push({ ...base, type: "short_text" });
+        if (title) fields.push({ ...base, type: "short_text", typeKnown: false });
         break;
       case G.upload:
         if (title) fields.push({ ...base, type: "file_upload" });
@@ -335,12 +402,18 @@ function parseHtmlForm(markup: string, url: string, page: string): SourceForm | 
     return last || humanize(name);
   };
 
-  const fields: SourceField[] = [];
+  // Found in markup order; button groups are found separately, so each field
+  // keeps where it sat and the list is sorted at the end.
+  const found: { at: number; field: SourceField }[] = [];
+  const push = (at: number, f: SourceField) => found.push({ at, field: f });
   const seenGroups = new Set<string>();
   for (const c of controls) {
     const type = (attr(c.tag, "type") ?? "text").toLowerCase();
     if (c.kind === "input" && SKIP_INPUTS.has(type)) continue;
+    // A honeypot: a field hidden from people so only bots fill it in. Never a question.
+    if (attr(c.tag, "aria-hidden") === "true" || attr(c.tag, "tabindex") === "-1" || /display\s*:\s*none|visibility\s*:\s*hidden/i.test(attr(c.tag, "style") ?? "")) continue;
     const required = attr(c.tag, "required") !== null || attr(c.tag, "aria-required") === "true";
+    const placeholder = attr(c.tag, "placeholder")?.trim() || undefined;
 
     if (c.kind === "input" && (type === "radio" || type === "checkbox")) {
       const name = attr(c.tag, "name") ?? "";
@@ -350,7 +423,7 @@ function parseHtmlForm(markup: string, url: string, page: string): SourceForm | 
       if (type === "checkbox" && (group.length === 1 || !name)) {
         // A lone checkbox is agreement: "I accept the terms".
         const { label } = cleanLabel(labelOf(c));
-        if (label) fields.push(field({ title: label, type: "yes_no", required }));
+        if (label) push(c.at, field({ title: label, type: "yes_no", required }));
         continue;
       }
       if (seenGroups.has(`${type}:${name}`)) continue;
@@ -358,7 +431,8 @@ function parseHtmlForm(markup: string, url: string, page: string): SourceForm | 
       const options = group.map((o) => labelOf(o) || attr(o.tag, "value") || "").filter(Boolean);
       const { label, starred } = cleanLabel(groupQuestion(group[0]!, name));
       if (!label || options.length < 2) continue;
-      fields.push(
+      push(
+        c.at,
         field({
           title: label,
           type: type === "radio" ? "single_select" : "multi_select",
@@ -374,22 +448,66 @@ function parseHtmlForm(markup: string, url: string, page: string): SourceForm | 
     if (c.kind === "select") {
       if ((c.options ?? []).length < 2) continue;
       const multiple = attr(c.tag, "multiple") !== null;
-      fields.push(field({ title: label, type: multiple ? "multi_select" : "dropdown", options: c.options!, required: required || starred }));
+      push(c.at, field({ title: label, type: multiple ? "multi_select" : "dropdown", options: c.options!, required: required || starred }));
       continue;
     }
-    const kind = c.kind === "textarea" ? "long_text" : (INPUT_TYPE[type] ?? "short_text");
-    fields.push(field({ title: label, type: kind, required: required || starred }));
+    if (c.kind === "textarea") {
+      push(c.at, field({ title: label, type: "long_text", required: required || starred, placeholder }));
+      continue;
+    }
+    // `type="email"` says so. `type="text"` says nothing, so read the rest.
+    const declared = INPUT_TYPE[type];
+    const guessed = declared ?? inferTextType({ name: attr(c.tag, "name"), autocomplete: attr(c.tag, "autocomplete"), placeholder, label });
+    push(
+      c.at,
+      field({ title: label, type: guessed ?? "short_text", typeKnown: guessed !== null, required: required || starred, placeholder }),
+    );
   }
 
+  /*
+   * Choices drawn as a row of buttons: <span>Pick one</span><button>A</button><button>B</button>.
+   * The commonest custom choice control there is, and invisible to a reader
+   * that only knows <select> and radios. The question is the text between the
+   * previous field and the first button. Whether one or several can be picked
+   * lives in the page's script, so the type is left to the generator.
+   */
+  for (const run of markup.matchAll(/(?:<button\b(?:(?!type\s*=\s*["']?submit)[^>])*>(?:(?!<\/?button\b)[\s\S]){1,160}<\/button>(?:\s|<\/?(?:div|span|li|ul)\b[^>]*>)*){2,}/gi)) {
+    const options = [...run[0].matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/gi)].map((b) => textOf(b[1]!)).filter(Boolean);
+    if (options.length < 2 || options.some((o) => o.length > 80)) continue;
+    const before = markup.slice(Math.max(0, run.index! - 800), run.index!);
+    const cut = Math.max(before.lastIndexOf("</label>"), before.lastIndexOf("/>"), before.lastIndexOf("</select>"), before.lastIndexOf("</textarea>"), before.lastIndexOf("</button>"));
+    const { label, starred } = cleanLabel(textOf(before.slice(cut + 1).replace(/^[^<]*>/, "")));
+    if (!label || label.length > 200) continue;
+    const other = options.length > 2 && OTHER_LABEL.test(options.at(-1)!);
+    push(
+      run.index!,
+      field({
+        title: label,
+        type: "multi_select",
+        typeKnown: false,
+        options: other ? options.slice(0, -1) : options,
+        allowOther: other,
+        required: starred,
+      }),
+    );
+  }
+
+  const fields = found.sort((a, b) => a.at - b.at).map((f) => f.field);
   // One box is a newsletter signup or a search, not a form to copy.
   if (fields.length < 2) return null;
+  // No field marked required anywhere means the page checks in script, and
+  // "optional" everywhere would be invented. The generator decides those.
+  const marksRequired = fields.some((f) => f.required);
   const heading = page.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
   const title = heading ? textOf(heading[1]!) : textOf(page.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
-  return { url, provider: "html", title, description: "", fields };
+  return { url, provider: "html", title, description: "", fields: fields.map((f) => ({ ...f, requiredKnown: marksRequired })) };
 }
 
+/** "Other", "Others", "Other (please specify)": the label of a free-text escape hatch. */
+const OTHER_LABEL = /^others?\b/i;
+
 function field(f: Pick<SourceField, "title" | "type" | "required"> & Partial<SourceField>): SourceField {
-  return { description: "", options: [], allowOther: false, config: "", scale: 0, ...f };
+  return { description: "", options: [], allowOther: false, config: "", scale: 0, typeKnown: true, requiredKnown: true, ...f };
 }
 
 // ─── Into the prompt, and back out of the draft ───
@@ -404,16 +522,22 @@ const srcRef = (i: number) => `src_${i + 1}`;
 export function sourceFormPrompt(form: SourceForm): string {
   const lines: string[] = [];
   let section: string | undefined;
+  let from: string | undefined;
   form.fields.forEach((f, i) => {
+    if (f.form !== from) {
+      from = f.form;
+      if (from) lines.push(`  == form ${from} ==`);
+    }
     if (f.section !== section) {
       section = f.section;
       if (section) lines.push(`  -- section ${JSON.stringify(section)} --`);
     }
     const parts = [
       `${srcRef(i)}`,
-      f.type,
-      f.required ? "required" : "optional",
+      f.typeKnown ? f.type : `${f.type}?`,
+      !f.requiredKnown ? "required?" : f.required ? "required" : "optional",
       `title=${JSON.stringify(f.title)}`,
+      f.placeholder ? `placeholder=${JSON.stringify(f.placeholder)}` : "",
       f.description ? `description=${JSON.stringify(f.description)}` : "",
       f.options.length ? `options=${JSON.stringify(f.options)}` : "",
       f.config ? `config=${JSON.stringify(f.config)}` : "",
@@ -424,14 +548,17 @@ export function sourceFormPrompt(form: SourceForm): string {
   });
   return `
 
-THE FORM AT ${form.url} (read from the page itself, so this is exact):
+THE FORM${form.fields.some((f) => f.form) ? "S" : ""} AT ${form.url} (read from the page itself, so the words are exact):
 Title: ${JSON.stringify(form.title)}
 ${form.description ? `Description: ${JSON.stringify(form.description)}\n` : ""}${lines.join("\n")}
 
 The author wants THIS form. Rules for it, which override the sizing guidance:
 - Include every field above as its own question, in this order, with ref exactly as given (src_1, src_2, ...).
-- Copy each title, description and option letter for letter, including capitals, punctuation and typos. Do not reword, shorten, merge, split or translate them, and keep required/optional as listed.
-- Use the listed type. The words are fixed; conversational tone belongs in the welcome and the endings, not in these questions.
+- Copy each title, description, placeholder and option letter for letter, including capitals, punctuation and typos. Do not reword, shorten, merge, split or translate them.
+- A type with no "?" is what the page uses: keep it. A type ending in "?" is only our guess, because the page used a plain text box or its own buttons: choose the best block for the question (email, url, phone, number, date, single_select or multi_select with sensible options, and so on), keeping the words.
+- "required" and "optional" are the page's own; keep them. "required?" means the page does not say: decide as you would for any form.
+- Where several forms are listed, each is its own path: follow the author's request for how respondents reach each one.
+- The words are fixed; conversational tone belongs in the welcome and the endings, not in these questions.
 - Where options list jumps, build those as branches: a "section: X" jump goes to the first question of that section, "submit" goes to an ending.
 - Add questions, branches or endings only if the author's request asks for something the form does not have, and give those your own refs.`;
 }
@@ -449,7 +576,7 @@ export function applySourceForm(draft: GenerationDraft, form: SourceForm): Gener
   const byRef = new Map(form.fields.map((f, i) => [srcRef(i), f]));
   const blocks = draft.blocks.map((b) => {
     const f = byRef.get(b.ref.trim().toLowerCase());
-    return f ? { ...b, ref: b.ref.trim().toLowerCase(), ...draftFields(f) } : b;
+    return f ? { ...b, ref: b.ref.trim().toLowerCase(), ...mergeField(b, f) } : b;
   });
 
   const present = new Set(blocks.map((b) => b.ref));
@@ -485,6 +612,37 @@ export function applySourceForm(draft: GenerationDraft, form: SourceForm): Gener
   return { ...draft, blocks };
 }
 
+const CHOICE_TYPES = new Set(["single_select", "multi_select", "dropdown", "poll", "ranking", "picture_choice"]);
+
+/**
+ * What the source fixes and what the generator keeps.
+ *
+ * The words are always the source's. The type is the source's only when the
+ * page stated one; otherwise the generator's pick stands (an email block for
+ * "Email", a choice for "Where did you hear about us?"), except that options
+ * the page did list are kept, so a guessed choice type still gets them. The
+ * required flag is the source's only when the page marked any.
+ */
+function mergeField(model: GenerationDraft["blocks"][number], f: SourceField): Omit<GenerationDraft["blocks"][number], "ref"> {
+  const exact = draftFields(f);
+  const type = f.typeKnown
+    ? f.type
+    : f.options.length > 0
+      ? CHOICE_TYPES.has(model.type)
+        ? model.type
+        : f.type
+      : model.type;
+  const keepModelShape = !f.typeKnown && f.options.length === 0;
+  return {
+    ...exact,
+    type,
+    required: f.requiredKnown ? f.required : model.required,
+    options: keepModelShape ? model.options : exact.options,
+    scale: keepModelShape ? model.scale : exact.scale,
+    config: keepModelShape ? model.config : exact.config,
+  };
+}
+
 function draftFields(f: SourceField): Omit<GenerationDraft["blocks"][number], "ref"> {
   return {
     type: f.type,
@@ -515,8 +673,12 @@ export function applySourceFormToDoc(doc: FormDoc, form: SourceForm): FormDoc {
     const f = byRef.get(block.ref);
     if (!f) return block;
     let next = { ...block, title: f.title, description: f.description || undefined } as Block;
-    if (block.type !== "welcome" && block.type !== "statement" && block.type !== "legal_consent") {
+    if (f.requiredKnown && block.type !== "welcome" && block.type !== "statement" && block.type !== "legal_consent") {
       next = { ...next, required: f.required } as Block;
+    }
+    // Only the text boxes have one; a placeholder on a choice has nowhere to go.
+    if (f.placeholder && (next.type === "short_text" || next.type === "long_text")) {
+      next = { ...next, placeholder: f.placeholder.slice(0, 200) } as Block;
     }
     if ("allowOther" in next && f.allowOther) next = { ...next, allowOther: true } as Block;
     if (next.type === "opinion_scale" && f.scaleLabels) {

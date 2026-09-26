@@ -30,7 +30,7 @@ import {
 import { logAiGeneration } from "../lib/ai-usage.js";
 import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL, CLARIFY_SYSTEM, withClarifications, type BuilderTurn } from "../lib/agent-prompts.js";
 import { draftToDoc, pruneOrphanEndings } from "../lib/draft-normalize.js";
-import { applySourceForm, applySourceFormToDoc, sourceFormPrompt, type SourceForm } from "../lib/form-import.js";
+import { applySourceForm, applySourceFormToDoc, mergeSourceForms, sourceFormPrompt, type SourceForm } from "../lib/form-import.js";
 import { withDefaultPaymentAccount } from "../lib/payments/default-account.js";
 import { applyEditDraft, introducedFlowProblems, describeEditChanges } from "../lib/edit-apply.js";
 import { buildEditContext, buildEditTools, type EditOutcome } from "../lib/edit-tools.js";
@@ -473,14 +473,15 @@ async function researchFor(
   if (urls.length === 0) return { brief: null, sourceForm: null, urls, tokens: 0, usage: none };
   const sites = await readSites(urls);
   if (sites.length === 0) return { brief: null, sourceForm: null, urls, tokens: 0, usage: none };
-  // A linked form is copied, not researched: a brief about "the product" is
-  // no use to a form whose questions are already written.
-  const sourceForm = sites.find((s) => s.form)?.form ?? null;
-  if (sourceForm) return { brief: null, sourceForm, urls, tokens: 0, usage: none };
-  const brief = await researchBrief({ env, request: prompt, sites, organizationId, trace });
+  // A linked form is copied, not researched. The other pages (the main site,
+  // say) are still read for context, and a prompt with only forms skips the brief.
+  const sourceForm = mergeSourceForms(sites.flatMap((s) => (s.form ? [s.form] : [])));
+  const context = sites.filter((s) => !s.form);
+  if (context.length === 0) return { brief: null, sourceForm, urls, tokens: 0, usage: none };
+  const brief = await researchBrief({ env, request: prompt, sites: context, organizationId, trace });
   return {
     brief: brief ? { brief: brief.brief, sources: brief.sources } : null,
-    sourceForm: null,
+    sourceForm,
     urls,
     tokens: brief?.tokens ?? 0,
     usage: brief?.usage ?? none,
@@ -586,15 +587,15 @@ aiRouter.post(
           const sites = await readSites(urls);
           await stage("reading", sites.length > 0 ? "done" : "skip");
 
-          sourceForm = sites.find((s) => s.form)?.form ?? null;
-          if (sourceForm) {
-            // Copied, not researched; see `researchFor`.
-            await send("sources", { pages: sites.map((s) => ({ url: s.url, title: s.title })) });
+          sourceForm = mergeSourceForms(sites.flatMap((s) => (s.form ? [s.form] : [])));
+          // Forms are copied, not researched; the other pages are context. See `researchFor`.
+          const context = sites.filter((s) => !s.form);
+          if (sites.length > 0) await send("sources", { pages: sites.map((s) => ({ url: s.url, title: s.title })) });
+          if (sourceForm && context.length === 0) {
             await stage("researching", "skip");
-          } else if (sites.length > 0) {
-            await send("sources", { pages: sites.map((s) => ({ url: s.url, title: s.title })) });
+          } else if (context.length > 0) {
             await stage("researching", "start");
-            const brief = await researchBrief({ env: c.env, request: prompt, sites, organizationId: orgId, trace });
+            const brief = await researchBrief({ env: c.env, request: prompt, sites: context, organizationId: orgId, trace });
             if (brief) {
               research = { brief: brief.brief, sources: brief.sources };
               researchTokens = brief.tokens;

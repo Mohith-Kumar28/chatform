@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { lintFormDoc } from "@repo/form-schema";
-import { applySourceForm, applySourceFormToDoc, extractSourceForm, sourceFormPrompt } from "../src/lib/form-import.js";
+import { applySourceForm, applySourceFormToDoc, extractSourceForm, mergeSourceForms, sourceFormPrompt } from "../src/lib/form-import.js";
 import { draftToDoc } from "../src/lib/draft-normalize.js";
 import type { GenerationDraft } from "../src/lib/ai.js";
 
@@ -62,7 +62,7 @@ describe("extractSourceForm: Google Forms", () => {
 
   it("puts every field in the prompt under its src ref, as JSON strings", () => {
     const prompt = sourceFormPrompt(form);
-    expect(prompt).toContain(`- src_1 | short_text | required | title="FULL NAME"`);
+    expect(prompt).toContain(`- src_1 | short_text? | required | title="FULL NAME"`);
     expect(prompt).toContain(`options=["India","Nepal"]`);
     expect(prompt).toContain(`-- section "Other roles" --`);
   });
@@ -106,6 +106,76 @@ describe("extractSourceForm: HTML forms", () => {
 
   it("ignores a page whose only form is one box", () => {
     expect(extractSourceForm(`<form><input type="email" name="e" placeholder="Your email"></form>`, "x")).toBeNull();
+  });
+});
+
+describe("extractSourceForm: a React form with plain text boxes and button choices", () => {
+  // The shape of tgmlabs.co/vc: a honeypot, no `required` anywhere, and a choice drawn as buttons.
+  const html = `<h1>Running a VC portfolio?</h1><form>
+    <input type="text" tabindex="-1" autoComplete="off" aria-hidden="true" name="company"/>
+    <div><label><span>Name</span><input type="text" placeholder="your full name" name="name"/></label>
+    <label><span>Email</span><input type="text" placeholder="work@company.com" name="email"/></label></div>
+    <label><span>Firm Website</span><input type="text" placeholder="https://" name="firmWebsite"/></label>
+    <div><span>Portfolio company type you&#x27;re investing in</span><div>
+      <button type="button">B2B SaaS</button><button type="button">Fintech</button><button type="button">Other</button></div></div>
+    <label><span>Where did you hear about us?</span><input type="text" placeholder="Referral, LinkedIn..." name="source"/></label>
+    <button type="submit">Submit the case</button></form>`;
+  const form = extractSourceForm(html, "https://x.test/vc")!;
+
+  it("skips the honeypot and reads the button choice in its place", () => {
+    expect(form.fields.map((f) => f.title)).toEqual([
+      "Name", "Email", "Firm Website", "Portfolio company type you're investing in", "Where did you hear about us?",
+    ]);
+    const choice = form.fields[3]!;
+    expect([choice.options, choice.allowOther, choice.typeKnown]).toEqual([["B2B SaaS", "Fintech"], true, false]);
+  });
+
+  it("types a plain text box from its name and placeholder, and leaves the rest to the generator", () => {
+    expect(form.fields.map((f) => [f.type, f.typeKnown])).toEqual([
+      ["short_text", false], ["email", true], ["url", true], ["multi_select", false], ["short_text", false],
+    ]);
+    expect(form.fields[0]!.placeholder).toBe("your full name");
+    // Nothing on the page is marked required, so none of it is a copy of "optional".
+    expect(form.fields.every((f) => !f.requiredKnown)).toBe(true);
+  });
+
+  it("keeps the generator's type and required flag where the page said nothing", () => {
+    const draft: GenerationDraft = {
+      title: "VC",
+      description: "",
+      blocks: [
+        { ref: "welcome", type: "welcome", title: "Hi", description: "", required: false, options: [], scale: 0, config: "" },
+        { ref: "src_1", type: "short_text", title: "Your name", description: "", required: true, options: [], scale: 0, config: "" },
+        { ref: "src_2", type: "short_text", title: "Mail", description: "", required: true, options: [], scale: 0, config: "" },
+        { ref: "src_3", type: "url", title: "Site", description: "", required: false, options: [], scale: 0, config: "" },
+        { ref: "src_4", type: "single_select", title: "Type", description: "", required: true, options: ["x"], scale: 0, config: "" },
+        { ref: "src_5", type: "single_select", title: "Heard?", description: "", required: false, options: ["LinkedIn", "Referral"], scale: 0, config: "" },
+      ],
+      endings: [{ ref: "end", title: "Thanks", body: "", kind: "success", requirements: "", redirectUrl: "" }],
+      branches: [],
+    };
+    const fixed = applySourceForm(draft, form).blocks;
+    expect(fixed.map((b) => [b.title, b.type, b.required, b.options])).toEqual([
+      ["Hi", "welcome", false, []],
+      ["Name", "short_text", true, []],
+      ["Email", "email", true, []],
+      ["Firm Website", "url", false, []],
+      ["Portfolio company type you're investing in", "single_select", true, ["B2B SaaS", "Fintech"]],
+      ["Where did you hear about us?", "single_select", false, ["LinkedIn", "Referral"]],
+    ]);
+    const doc = applySourceFormToDoc(draftToDoc(applySourceForm(draft, form)).doc, form);
+    const name = doc.blocks.find((b) => b.title === "Name")!;
+    expect(name.type === "short_text" && name.placeholder).toBe("your full name");
+  });
+});
+
+describe("mergeSourceForms", () => {
+  it("keeps every linked form, tagged, in the order given", () => {
+    const a = extractSourceForm(`<form><label>A1<input name="a1"></label><label>A2<input name="a2"></label></form>`, "https://x.test/a")!;
+    const b = extractSourceForm(`<form><label>B1<input name="b1"></label><label>B2<input name="b2"></label></form>`, "https://x.test/b")!;
+    const merged = mergeSourceForms([a, b])!;
+    expect(merged.fields.map((f) => f.title)).toEqual(["A1", "A2", "B1", "B2"]);
+    expect(sourceFormPrompt(merged)).toContain("== form");
   });
 });
 

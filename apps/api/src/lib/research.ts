@@ -24,8 +24,8 @@ const FETCH_TIMEOUT_MS = 6000;
 const MAX_BYTES = 1024 * 1024;
 /** Characters of page text passed on to the model. */
 const MAX_TEXT_CHARS = 6000;
-/** Pages read per generation. Two is enough for "the site and its pricing page". */
-const MAX_URLS = 2;
+/** Pages read per generation: a form or two, the booking link and the main site, as authors paste them. */
+const MAX_URLS = 4;
 
 export interface SiteReading {
   url: string;
