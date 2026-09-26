@@ -10,7 +10,7 @@ import {
   backfillPlatformDaily,
   utcDay,
 } from "../src/lib/platform-rollup.js";
-import { IMPERSONATION_HEADER, signImpersonation, verifyImpersonation } from "../src/lib/impersonation.js";
+import { IMPERSONATION_HEADER } from "../src/lib/impersonation.js";
 import { NO_MAIL, recordMailDelivery } from "../src/lib/mail.js";
 import { getEntitlements } from "../src/lib/entitlements.js";
 import { PLANS, effectivePlan } from "@repo/entitlements";
@@ -877,7 +877,7 @@ describe("impersonation", () => {
     return { status: res.status, body: (await res.json().catch(() => null)) as { token?: string } | null };
   }
 
-  it("mints a token for a real user and records it in that org's audit log", async () => {
+  it("opens a session for a real user and records it in that org's audit log", async () => {
     const { status, body } = await mint(customer.userId);
     expect(status).toBe(200);
     expect(body?.token).toBeTruthy();
@@ -929,32 +929,27 @@ describe("impersonation", () => {
     expect(row?.organization_id).toBe(customer.orgId);
   });
 
-  it("refuses a forged token", async () => {
-    const forged = `${btoa(JSON.stringify({ adminId: "x", userId: customer.userId, exp: Date.now() + 60_000 }))}.notasignature`;
+  it("refuses a made-up token outright", async () => {
     const res = await fetchApi("/api/forms", {
-      headers: { cookie: admin.cookie, [IMPERSONATION_HEADER]: forged },
+      headers: { cookie: admin.cookie, [IMPERSONATION_HEADER]: "notarealtoken" },
     });
-    // Falls back to the admin's own session rather than erroring — but it is
-    // emphatically not the customer's forms that come back.
-    const forms = (await res.json()) as { id: string }[];
-    expect(forms.map((f) => f.id)).not.toContain(customer.formId);
+    // Not a fallback to the admin's own account: a tab that says it is the
+    // customer's must never quietly show the admin's data.
+    expect(res.status).toBe(401);
   });
 
   /**
-   * The condition that matters most. A stolen token replayed from an ordinary
-   * account must be worth nothing — the allowlist is re-checked on every single
-   * request, against the live secret, not against what was true when the token
-   * was signed.
+   * The header is not a general way to present a session token. Only a session
+   * an admin opened, and marked, is honoured through it.
    */
-  it("refuses a valid token presented by a non-admin", async () => {
-    const { body } = await mint(admin.userId);
-    const res = await fetchApi("/api/forms", {
-      headers: { cookie: customer.cookie, [IMPERSONATION_HEADER]: body!.token! },
-    });
-    expect(res.status).toBe(200);
-    const forms = (await res.json()) as { id: string }[];
-    // Still the customer's own forms. The token did nothing.
-    expect(forms.map((f) => f.id)).toContain(customer.formId);
+  it("refuses an ordinary session's token in the header", async () => {
+    const row = await DB()
+      .DB.prepare(`SELECT token FROM sessions WHERE user_id = ? AND impersonated_by IS NULL LIMIT 1`)
+      .bind(customer.userId)
+      .first<{ token: string }>();
+    expect(row?.token).toBeTruthy();
+    const res = await fetchApi("/api/forms", { headers: { [IMPERSONATION_HEADER]: row!.token } });
+    expect(res.status).toBe(401);
   });
 
   it("refuses a token once the admin is removed from the allowlist", async () => {
@@ -963,17 +958,84 @@ describe("impersonation", () => {
     const res = await fetchApi("/api/forms", {
       headers: { cookie: admin.cookie, [IMPERSONATION_HEADER]: body!.token! },
     });
-    const forms = (await res.json()) as { id: string }[];
-    expect(forms.map((f) => f.id)).not.toContain(customer.formId);
+    expect(res.status).toBe(401);
   });
 
-  it("refuses an expired token", async () => {
-    const expired = await signImpersonation(DB(), admin.userId, customer.userId);
-    // Rewind past the hour the token is good for.
-    const [payload] = expired.token.split(".");
-    const stale = JSON.parse(atob(payload!.replaceAll("-", "+").replaceAll("_", "/"))) as { exp: number };
-    expect(stale.exp).toBeGreaterThan(Date.now());
-    expect(await verifyImpersonation(DB(), `${payload}.wrong`)).toBeNull();
+  it("refuses a session older than an hour, whatever its expiry says", async () => {
+    const { body } = await mint(customer.userId);
+    await DB()
+      .DB.prepare(`UPDATE sessions SET created_at = ?, expires_at = ? WHERE token = ?`)
+      .bind(Date.now() - 2 * 60 * 60 * 1000, Date.now() + 7 * 24 * 60 * 60 * 1000, body!.token!)
+      .run();
+    const res = await fetchApi("/api/forms", { headers: { [IMPERSONATION_HEADER]: body!.token! } });
+    expect(res.status).toBe(401);
+  });
+
+  /**
+   * The point of the redesign: Better Auth's own endpoints answer as the
+   * customer too, so the account menu and the organization switcher show
+   * theirs. And nothing comes back as a cookie, or the admin's own browser
+   * session would be overwritten with the customer's.
+   */
+  it("makes Better Auth answer as the customer, without setting cookies", async () => {
+    const { body } = await mint(customer.userId);
+    const res = await fetchApi("/api/auth/get-session", {
+      headers: { cookie: admin.cookie, [IMPERSONATION_HEADER]: body!.token! },
+    });
+    expect(res.status).toBe(200);
+    const session = (await res.json()) as { user: { id: string } };
+    expect(session.user.id).toBe(customer.userId);
+    expect(res.headers.get("set-cookie")).toBeNull();
+
+    const orgs = (await (
+      await fetchApi("/api/auth/organization/list", { headers: { [IMPERSONATION_HEADER]: body!.token! } })
+    ).json()) as { id: string }[];
+    expect(orgs.map((o) => o.id)).toContain(customer.orgId);
+    expect(orgs.map((o) => o.id)).not.toContain(admin.orgId);
+  });
+
+  it("refuses account-level changes while acting as someone", async () => {
+    const { body } = await mint(customer.userId);
+    const res = await fetchApi("/api/auth/revoke-other-sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", [IMPERSONATION_HEADER]: body!.token! },
+      body: "{}",
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("keeps the admin's own session untouched", async () => {
+    const { body } = await mint(customer.userId);
+    await fetchApi("/api/auth/get-session", { headers: { cookie: admin.cookie, [IMPERSONATION_HEADER]: body!.token! } });
+    const own = (await (await fetchApi("/api/auth/get-session", { headers: { cookie: admin.cookie } })).json()) as {
+      user: { id: string };
+    };
+    expect(own.user.id).toBe(admin.userId);
+  });
+
+  it("stop deletes the session", async () => {
+    const { body } = await mint(customer.userId);
+    const res = await fetchApi("/api/admin/impersonate/stop", {
+      method: "POST",
+      headers: { cookie: admin.cookie, "content-type": "application/json" },
+      body: JSON.stringify({ token: body!.token! }),
+    });
+    expect(res.status).toBe(200);
+    const after = await fetchApi("/api/forms", { headers: { [IMPERSONATION_HEADER]: body!.token! } });
+    expect(after.status).toBe(401);
+  });
+
+  it("does not count as the customer being seen", async () => {
+    const before = await DB()
+      .DB.prepare(`SELECT MAX(created_at) AS t FROM sessions WHERE user_id = ? AND impersonated_by IS NULL`)
+      .bind(customer.userId)
+      .first<{ t: number }>();
+    await mint(customer.userId);
+    const after = await DB()
+      .DB.prepare(`SELECT MAX(created_at) AS t FROM sessions WHERE user_id = ? AND impersonated_by IS NULL`)
+      .bind(customer.userId)
+      .first<{ t: number }>();
+    expect(after?.t).toBe(before?.t);
   });
 
   it("404s for a user that does not exist", async () => {
@@ -1030,8 +1092,8 @@ describe("impersonation", () => {
     const forms = (await (
       await fetchApi("/api/forms", { headers: { cookie: admin.cookie, [IMPERSONATION_HEADER]: token } })
     ).json()) as { id: string }[];
-    // Falls back to a real membership rather than honouring the claim — a token
-    // cannot be edited into access its subject does not have.
+    // Falls back to a real membership rather than honouring the request: an
+    // admin cannot open an organization its subject does not belong to.
     expect(forms.map((f) => f.id)).not.toContain(admin.formId);
   });
 });

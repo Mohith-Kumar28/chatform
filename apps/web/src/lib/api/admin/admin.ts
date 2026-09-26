@@ -90,6 +90,8 @@ import type {
   PostApiAdminFeedbackReportsByIdMoveBody,
   PostApiAdminImpersonate200,
   PostApiAdminImpersonateBody,
+  PostApiAdminImpersonateStop200,
+  PostApiAdminImpersonateStopBody,
   PostApiAdminSubscriptionsByIdGrace200,
   PostApiAdminSubscriptionsByIdGraceBody
 } from '../generated.schemas';
@@ -4680,4 +4682,93 @@ export const usePostApiAdminImpersonate = <TError = void,
         TContext
       > => {
       return useMutation(getPostApiAdminImpersonateMutationOptions(options));
+    }
+    export type postApiAdminImpersonateStopResponse200 = {
+  data: PostApiAdminImpersonateStop200
+  status: 200
+}
+
+export type postApiAdminImpersonateStopResponseSuccess = (postApiAdminImpersonateStopResponse200) & {
+  headers: Headers;
+};
+;
+
+export type postApiAdminImpersonateStopResponse = (postApiAdminImpersonateStopResponseSuccess)
+
+export const getPostApiAdminImpersonateStopUrl = () => {
+
+
+
+
+  return `/api/admin/impersonate/stop`
+}
+
+/**
+ * @summary End an impersonation session
+ */
+export const postApiAdminImpersonateStop = async (postApiAdminImpersonateStopBody: PostApiAdminImpersonateStopBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAdminImpersonateStopResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiAdminImpersonateStopResponse>(getPostApiAdminImpersonateStopUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiAdminImpersonateStopBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiAdminImpersonateStopMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminImpersonateStop>>, TError,PostApiAdminImpersonateStopMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAdminImpersonateStop>>, TError,PostApiAdminImpersonateStopMutationVariables, TContext> => {
+
+const mutationKey = ['postApiAdminImpersonateStop'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAdminImpersonateStop>>, PostApiAdminImpersonateStopMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiAdminImpersonateStop(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiAdminImpersonateStopMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAdminImpersonateStop>>>
+    export type PostApiAdminImpersonateStopMutationBody = PostApiAdminImpersonateStopBody
+    export type PostApiAdminImpersonateStopMutationError = unknown
+    export type PostApiAdminImpersonateStopMutationVariables = {data: PostApiAdminImpersonateStopBody}
+
+    /**
+ * @summary End an impersonation session
+ */
+export const usePostApiAdminImpersonateStop = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminImpersonateStop>>, TError,PostApiAdminImpersonateStopMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiAdminImpersonateStop>>,
+        TError,
+        PostApiAdminImpersonateStopMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiAdminImpersonateStopMutationOptions(options));
     }

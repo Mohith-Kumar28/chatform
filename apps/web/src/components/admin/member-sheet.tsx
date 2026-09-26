@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { InfoHint } from "@/components/ui/info-hint";
 import { ResponseDetails, type ResponseMetadata } from "@/components/builder/response-details";
 import { relativeDay } from "./format";
+import { ImpersonateButton } from "./impersonate-button";
 
 /**
  * One person on an account: where and on what they signed up, and every
@@ -94,17 +95,17 @@ export function MemberRow({ member, onOpen }: { member: Row; onOpen: () => void 
   );
 }
 
-export function MemberSheet({ member, onClose }: { member: Row | null; onClose: () => void }) {
+export function MemberSheet({ member, orgId, onClose }: { member: Row | null; orgId?: string; onClose: () => void }) {
   return (
     <Sheet open={member !== null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent side="right" className="w-full gap-0 overflow-y-auto p-0 sm:max-w-lg">
-        {member && <MemberBody member={member} />}
+        {member && <MemberBody member={member} orgId={orgId} />}
       </SheetContent>
     </Sheet>
   );
 }
 
-function MemberBody({ member }: { member: Row }) {
+function MemberBody({ member, orgId }: { member: Row; orgId?: string }) {
   const signup = memberSignup(member);
   const signIns = (member.sign_ins as SignInEvent[] | undefined) ?? [];
   const sessionDevice = member.session_device as SessionDevice | null | undefined;
@@ -123,9 +124,19 @@ function MemberBody({ member }: { member: Row }) {
 
   return (
     <>
-      <SheetHeader className="border-b px-4 py-3.5">
-        <SheetTitle className="text-sm">{str(member, "name") || str(member, "email")}</SheetTitle>
-        <SheetDescription className="text-xs">{str(member, "name") ? str(member, "email") : str(member, "role")}</SheetDescription>
+      <SheetHeader className="border-b px-4 py-3.5 pr-12">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <SheetTitle className="truncate text-sm">{str(member, "name") || str(member, "email")}</SheetTitle>
+            <SheetDescription className="truncate text-xs">
+              {str(member, "name") ? str(member, "email") : str(member, "role")}
+            </SheetDescription>
+          </div>
+          <ImpersonateButton
+            user={{ id: str(member, "id"), name: str(member, "name"), email: str(member, "email") }}
+            orgId={orgId}
+          />
+        </div>
       </SheetHeader>
 
       <div className="space-y-8 px-4 py-4">

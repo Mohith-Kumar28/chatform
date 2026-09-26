@@ -13,9 +13,11 @@
  *   - **Per tab**, so the console can stay open in one tab while another acts as
  *     the customer.
  *
- * The token itself is a signed assertion the API re-verifies on every request —
- * including re-checking that the holder is still an allowlisted admin — so
- * nothing here is a security boundary. This is convenience storage.
+ * The token is a real session for the customer, capped at an hour and marked
+ * with the admin behind it. The API re-checks both, and that the admin is still
+ * allowlisted, on every request. It is sent as a header by `apiHeaders` and by
+ * the auth client, never as a cookie, so the admin's own session in every other
+ * tab is left alone.
  */
 
 const KEY = "chatform.impersonation";
@@ -92,15 +94,27 @@ export function beginImpersonation(value: Impersonation): void {
 /**
  * Stop being them.
  *
- * When this tab was opened by the console it is closed outright — the admin
- * still has the account page they started from, and returning them to a second
- * copy of the console is clutter. When it was not (the token was minted here
- * before impersonation moved to its own tab, or the tab was restored), it falls
- * back to a full load of the console, which is also what discards the
- * customer's cached data.
+ * Ends the session on the server first, sent as the admin (no impersonation
+ * header), so the token dies now rather than in an hour. A failure there does
+ * not keep the admin stuck: the local copy goes regardless, and the session
+ * still expires on its own.
+ *
+ * When this tab was opened by the console it is closed outright; the admin
+ * still has the account page they started from. When it was not, it falls back
+ * to a full load of the console, which also discards the customer's cached data.
  */
-export function stopImpersonation(): void {
+export async function stopImpersonation(): Promise<void> {
+  const acting = readImpersonation();
   sessionStorage.removeItem(KEY);
+  if (acting) {
+    const origin = (process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.in").replace(/\/$/, "");
+    await fetch(`${origin}/api/admin/impersonate/stop`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: acting.token }),
+    }).catch(() => {});
+  }
   if (window.opener && !window.opener.closed) {
     window.close();
     // `close()` is ignored for tabs the script did not open. If we are still

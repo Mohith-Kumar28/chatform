@@ -63,8 +63,6 @@ function subscribe(onChange: () => void): () => void {
 /**
  * Whether this tab is currently acting as somebody else.
  *
- * Shared with the app shell, which uses it to hide the identity chrome that
- * would otherwise show the admin's own organization over the customer's data.
  */
 export function useImpersonation(): Impersonation | null {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
@@ -103,7 +101,7 @@ export function ImpersonationBanner() {
         <span className="hidden shrink-0 tabular-nums opacity-80 sm:inline">{minutesLeft}m left</span>
         <button
           type="button"
-          onClick={stopImpersonation}
+          onClick={() => void stopImpersonation()}
           className="inline-flex shrink-0 items-center gap-1 rounded-md bg-black/15 px-2 py-1 text-xs font-medium transition-colors duration-[var(--duration-micro)] hover:bg-black/25"
         >
           <X className="size-3.5" strokeWidth={2.25} aria-hidden />

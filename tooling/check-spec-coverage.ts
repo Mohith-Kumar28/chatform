@@ -258,6 +258,7 @@ const DASHBOARD_ONLY: Record<string, string> = {
    * key that can become any user on the platform.
    */
   "/api/admin/impersonate": "see /api/admin/me — and a key must never be able to become a person",
+  "/api/admin/impersonate/stop": "see /api/admin/impersonate",
 
   /**
    * Covered under a different noun.

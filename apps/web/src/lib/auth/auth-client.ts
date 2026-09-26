@@ -3,6 +3,7 @@
 import { createAuthClient } from "better-auth/react";
 import { emailOTPClient, organizationClient } from "better-auth/client/plugins";
 import { clientContextHeader } from "./client-context";
+import { readImpersonation } from "@/lib/impersonation";
 
 export const API_ORIGIN =
   process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.in";
@@ -15,6 +16,10 @@ export const authClient = createAuthClient({
     // Where and on what they signed up or in, for the admin console. Only on
     // the calls that can open a session; see `./client-context.ts`.
     onRequest: (context) => {
+      // Acting as a customer: Better Auth answers as them, so the account menu
+      // and organization switcher are theirs. See `@/lib/impersonation`.
+      const acting = readImpersonation();
+      if (acting) context.headers.set("x-chatform-impersonate", acting.token);
       if (/\/(sign-up|sign-in|email-otp|verify-email)/.test(String(context.url))) {
         const header = clientContextHeader();
         if (header) context.headers.set("x-chatform-client", header);

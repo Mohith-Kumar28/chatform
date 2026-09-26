@@ -6,6 +6,7 @@ import { createAuth, googleAuthConfigured } from "../lib/auth.js";
 // Memoized per-env, unlike `createAuth`, which rebuilds the whole instance —
 // five plugins now — on every single /api/auth/* request.
 import { getAuth } from "../lib/guards.js";
+import { IMPERSONATION_HEADER } from "../lib/impersonation.js";
 
 export const dashboardRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -194,7 +195,19 @@ dashboardRouter.all("/auth/api-key/*", (c) =>
   c.json({ error: { code: "not_found", message: "Route not found" } }, 404),
 );
 
-dashboardRouter.on(["POST", "GET"], "/auth/*", (c) => getAuth(c.env).handler(c.req.raw));
+/**
+ * An impersonating tab's auth calls carry the admin's cookies too, because the
+ * browser sends them. Anything Better Auth sets in reply belongs to the
+ * customer's session and must not land in the admin's cookie jar, where it
+ * would sign the console tab in as the customer. See `lib/impersonation.ts`.
+ */
+dashboardRouter.on(["POST", "GET"], "/auth/*", async (c) => {
+  const res = await getAuth(c.env).handler(c.req.raw);
+  if (!c.req.header(IMPERSONATION_HEADER)) return res;
+  const out = new Response(res.body, res);
+  out.headers.delete("set-cookie");
+  return out;
+});
 
 dashboardRouter.get(
   "/auth/ok",

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Gift, RefreshCw, VenetianMask } from "lucide-react";
+import { Gift, RefreshCw } from "lucide-react";
 import {
   postApiAdminAccountsByOrgIdOverrides,
   postApiAdminAccountsByOrgIdPlan,
@@ -37,7 +37,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { openImpersonationTab } from "@/lib/impersonation";
+import { ImpersonateButton } from "./impersonate-button";
 
 /**
  * The three things you actually do to an account, next to the account.
@@ -107,8 +107,6 @@ export function AccountActions({
   const [busy, setBusy] = useState<string | null>(null);
   /** One reason per dialog: a comp's justification is not why you went into their account. */
   const [reason, setReason] = useState("");
-  const [visitReason, setVisitReason] = useState("");
-  const [impersonateOpen, setImpersonateOpen] = useState(false);
   const [grantOpen, setGrantOpen] = useState(false);
   /**
    * The clock, read once when the dialog opens rather than on every render.
@@ -132,24 +130,6 @@ export function AccountActions({
     kind === "feature" ? FEATURES[featureKey].label : kind === "limit" ? limitMeta(limitKey).label : PLANS[compPlan].name;
   const endsAt = months === "forever" || !openedAt ? null : addMonths(openedAt, Number(months));
   const alreadyHas = kind === "feature" && PLANS[plan]?.features.includes(featureKey);
-
-  /**
-   * Opened straight from the click, with the network call deliberately *not*
-   * awaited first: a `window.open` that happens after an await has lost the
-   * browser's user gesture and is blocked as a popup. The tab that opens does
-   * its own minting — see `openImpersonationTab`.
-   */
-  function impersonate() {
-    if (!owner) return;
-    const win = openImpersonationTab({ userId: owner.id, orgId, reason: visitReason });
-    if (!win) {
-      toast.error("Your browser blocked the new tab. Allow pop-ups for this site and try again.");
-      return;
-    }
-    setImpersonateOpen(false);
-    setVisitReason("");
-    toast.success(`Opened ${owner.name || owner.email}'s account in a new tab`);
-  }
 
   async function grant() {
     setBusy("grant");
@@ -204,49 +184,7 @@ export function AccountActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Dialog open={impersonateOpen} onOpenChange={setImpersonateOpen}>
-        <DialogTrigger asChild>
-          <Button size="sm" variant="secondary" disabled={!owner}>
-            <VenetianMask className="size-3.5" strokeWidth={2} aria-hidden />
-            Impersonate
-          </Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Impersonate {owner?.name || owner?.email}</DialogTitle>
-            <DialogDescription>
-              A new tab, signed in as them. You see their forms, their responses and their plan exactly as they do — and
-              you can change things, so treat it as their account, not a preview.
-            </DialogDescription>
-          </DialogHeader>
-
-          <ul className="text-muted-foreground space-y-1.5 text-xs">
-            <li>· Everything you do is written to their activity log, under your name.</li>
-            <li>· It ends after an hour, when you press Stop, or when you close the tab.</li>
-            <li>· This console stays open in the tab you are in now.</li>
-          </ul>
-
-          <div className="space-y-2">
-            <Label htmlFor="impersonate-reason">Why are you going in?</Label>
-            <Input
-              id="impersonate-reason"
-              value={visitReason}
-              onChange={(e) => setVisitReason(e.target.value)}
-              placeholder="Reproducing the publish failure in ticket 41…"
-            />
-            <p className="text-muted-foreground text-micro">The customer can read this in their own activity log.</p>
-          </div>
-
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setImpersonateOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={impersonate} disabled={!visitReason.trim()}>
-              Open their account
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ImpersonateButton user={owner} orgId={orgId} />
 
       <Dialog
         open={grantOpen}

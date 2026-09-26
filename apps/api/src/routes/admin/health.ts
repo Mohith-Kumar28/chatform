@@ -361,7 +361,7 @@ healthRouter.get(
     const list = await rows(
       c.env.DB.prepare(
         `SELECT u.id, u.name, u.email, u.email_verified, u.created_at,
-                (SELECT MAX(s.created_at) FROM sessions s WHERE s.user_id = u.id) AS last_seen_at,
+                (SELECT MAX(s.created_at) FROM sessions s WHERE s.user_id = u.id AND s.impersonated_by IS NULL) AS last_seen_at,
                 (SELECT COUNT(*) FROM members m WHERE m.user_id = u.id) AS orgs,
                 (SELECT GROUP_CONCAT(o.name, ', ') FROM members m JOIN organizations o ON o.id = m.organization_id
                   WHERE m.user_id = u.id) AS org_names,

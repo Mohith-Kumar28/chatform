@@ -280,6 +280,7 @@ export function AccountDetail({ orgId }: { orgId: string }) {
             ))}
           </ul>
           <MemberSheet
+            orgId={orgId}
             member={members.find((m) => str(m, "id") === openMember) ?? null}
             onClose={() => setOpenMember(null)}
           />

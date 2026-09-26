@@ -1,155 +1,211 @@
+import type { BetterAuthPlugin } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
+import { serializeSignedCookie } from "better-call";
 import type { Bindings } from "../env.js";
 import { isPlatformAdmin } from "./platform-admin.js";
 
 /**
- * Acting as a customer, without minting a second credential.
+ * Acting as a customer.
  *
- * The obvious implementation is to insert a `sessions` row for the target user
- * and hand over its cookie. That works and is wrong in one specific way: it
- * creates a real, indistinguishable login that outlives the support ticket, sits
- * in the session table looking exactly like the customer's own, and has to be
- * remembered about and revoked. A leaked one is a permanent account compromise.
+ * The admin gets a real session for the customer, so the whole product,
+ * Better Auth's own endpoints included, answers exactly as it would for them:
+ * their avatar and profile, their organization list, switching between their
+ * organizations, their plan and usage. The previous design was a signed
+ * assertion honoured only by our own routes, and every screen that read Better
+ * Auth directly (the organization switcher, the account menu) showed the admin
+ * instead, so those screens had to be hidden.
  *
- * This is a signed assertion instead — "admin A may act as user B until T" —
- * carried in a header, verified per request, and expiring on its own. Nothing is
- * written to the database, there is nothing to revoke, and a leaked token dies
- * within the hour.
+ * What keeps it from being an ordinary login:
  *
- * Two conditions must both hold for it to be honoured, and the second is the
- * important one: the signature must verify, **and the caller's own session must
- * still be an allowlisted platform admin**. A token alone is not enough. Someone
- * who steals one and replays it from an ordinary account gets nothing, and an
- * admin removed from `PLATFORM_ADMIN_EMAILS` loses their outstanding tokens the
- * moment the secret is redeployed.
+ *   - **Never a cookie.** The token lives in the impersonating tab's
+ *     `sessionStorage` and rides in the `x-chatform-impersonate` header. The
+ *     plugin below rewrites the request's cookies to that session and nothing
+ *     else, and the auth route strips `Set-Cookie` from the answer, so the
+ *     admin's own browser session is never read or overwritten, and the
+ *     console tab stays the admin.
+ *   - **Marked.** `sessions.impersonated_by` names the admin. It attributes
+ *     audit rows, keeps the session out of "last seen", and is required: the
+ *     header is refused for any session without it, so it cannot become a way
+ *     to replay an ordinary stolen token.
+ *   - **Short.** An hour from creation, enforced here against `created_at`, not
+ *     only against `expires_at`, which Better Auth's refresh could move.
+ *   - **Still an admin.** The allowlist is checked against the live secret on
+ *     every request, so removing someone from `PLATFORM_ADMIN_EMAILS` ends
+ *     their outstanding sessions at once.
+ *   - **Account-safe.** Changing the customer's password, email or sessions,
+ *     deleting the account, and inviting people are refused.
  */
 
 /** An hour. Long enough for a support session, short enough to be forgotten safely. */
-const TTL_MS = 60 * 60 * 1000;
-
-const encoder = new TextEncoder();
-
-function b64url(bytes: ArrayBuffer | Uint8Array): string {
-  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  let binary = "";
-  for (const b of view) binary += String.fromCharCode(b);
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-}
-
-async function key(env: Bindings): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    "raw",
-    encoder.encode(env.BETTER_AUTH_SECRET),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign", "verify"],
-  );
-}
-
-export interface ImpersonationClaim {
-  /** The platform admin doing the impersonating. */
-  adminId: string;
-  /** The customer being acted as. */
-  userId: string;
-  /**
-   * Which of their organizations to land in.
-   *
-   * Without it, `resolveOrgId` falls back to the target's own session or their
-   * oldest membership — so clicking "Sign in as" on one account and arriving in
-   * a different one is not a bug in the resolution, it is the resolution working
-   * as designed on a question nobody asked it. The console asks about a specific
-   * organization, so the token carries which.
-   *
-   * Still verified at use: honoured only if the target is actually a member.
-   */
-  orgId?: string;
-  /** Epoch ms. */
-  exp: number;
-}
-
-export async function signImpersonation(
-  env: Bindings,
-  adminId: string,
-  userId: string,
-  orgId?: string,
-): Promise<{ token: string; expiresAt: number }> {
-  const claim: ImpersonationClaim = { adminId, userId, orgId, exp: Date.now() + TTL_MS };
-  const payload = b64url(encoder.encode(JSON.stringify(claim)));
-  const sig = b64url(await crypto.subtle.sign("HMAC", await key(env), encoder.encode(payload)));
-  return { token: `${payload}.${sig}`, expiresAt: claim.exp };
-}
-
-/**
- * Verify a token's signature and expiry. Returns null on anything suspect.
- *
- * Says nothing about whether the presenter is allowed to use it — that check
- * belongs to the caller, which has the session, and keeping the two separate is
- * what stops a future caller from forgetting the second half.
- */
-export async function verifyImpersonation(env: Bindings, token: string): Promise<ImpersonationClaim | null> {
-  const [payload, sig] = token.split(".");
-  if (!payload || !sig) return null;
-
-  let expected: string;
-  try {
-    expected = b64url(await crypto.subtle.sign("HMAC", await key(env), encoder.encode(payload)));
-  } catch {
-    return null;
-  }
-  // Constant-time-ish: compare full strings of equal length rather than
-  // short-circuiting on the first differing character.
-  if (sig.length !== expected.length) return null;
-  let diff = 0;
-  for (let i = 0; i < sig.length; i++) diff |= sig.charCodeAt(i) ^ expected.charCodeAt(i);
-  if (diff !== 0) return null;
-
-  try {
-    const json = atob(payload.replaceAll("-", "+").replaceAll("_", "/"));
-    const claim = JSON.parse(json) as ImpersonationClaim;
-    if (!claim.adminId || !claim.userId || typeof claim.exp !== "number") return null;
-    if (claim.exp < Date.now()) return null;
-    return claim;
-  } catch {
-    return null;
-  }
-}
+export const IMPERSONATION_TTL_MS = 60 * 60 * 1000;
 
 export const IMPERSONATION_HEADER = "x-chatform-impersonate";
 
 /**
- * Resolve who a request is really acting as.
+ * Better Auth endpoints an admin may not reach while acting as someone.
  *
- * Called by `requireSession` with the *real* session's user already resolved.
- * Returns the impersonated user id when every condition holds, and null
- * otherwise — including when the header is present but the presenter is not an
- * admin, which is the case worth being strict about.
+ * Each of these changes who controls the account, or who else is in the
+ * organization, and none of them is ever the thing a support visit needs.
+ */
+const REFUSED_PATHS = [
+  /^\/change-password/,
+  /^\/change-email/,
+  /^\/email-otp\/(request|change)-email/,
+  /^\/set-password/,
+  /^\/delete-user/,
+  /^\/revoke-/,
+  /^\/sign-out/,
+  /^\/organization\/(invite-member|delete|leave|remove-member|update-member-role)/,
+  /^\/api-key\//,
+];
+
+function newToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  let out = "";
+  for (const b of bytes) out += b.toString(16).padStart(2, "0");
+  return out;
+}
+
+/**
+ * Open a session as `userId`, landing in `orgId` when they belong to it.
+ *
+ * Written straight to `sessions` rather than through Better Auth's adapter, on
+ * purpose: its create hooks would record a "sign in" by the customer (from the
+ * admin's machine) and overwrite the organization the console asked for.
+ */
+export async function startImpersonation(
+  env: Bindings,
+  params: { adminId: string; userId: string; orgId?: string; ipAddress?: string; userAgent?: string },
+): Promise<{ token: string; expiresAt: number }> {
+  let orgId: string | null = null;
+  if (params.orgId) {
+    const member = await env.DB.prepare(`SELECT 1 AS ok FROM members WHERE user_id = ? AND organization_id = ?`)
+      .bind(params.userId, params.orgId)
+      .first<{ ok: number }>();
+    if (member) orgId = params.orgId;
+  }
+  if (!orgId) {
+    // Where they were last, as `resolveOrgId` would pick it for them; the
+    // oldest membership when none of their sessions chose one.
+    const last = await env.DB.prepare(
+      `SELECT m.organization_id AS org
+         FROM members m
+        WHERE m.user_id = ?1
+        ORDER BY (m.organization_id = (
+                    SELECT s.active_organization_id FROM sessions s
+                     WHERE s.user_id = ?1 AND s.active_organization_id IS NOT NULL
+                       AND s.impersonated_by IS NULL
+                     ORDER BY s.updated_at DESC LIMIT 1
+                  )) DESC,
+                 m.created_at ASC
+        LIMIT 1`,
+    )
+      .bind(params.userId)
+      .first<{ org: string }>();
+    orgId = last?.org ?? null;
+  }
+
+  const now = Date.now();
+  const token = newToken();
+  const expiresAt = now + IMPERSONATION_TTL_MS;
+  await env.DB.prepare(
+    `INSERT INTO sessions (id, token, user_id, expires_at, ip_address, user_agent, active_organization_id, impersonated_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      crypto.randomUUID(),
+      token,
+      params.userId,
+      expiresAt,
+      params.ipAddress ?? "",
+      params.userAgent ?? "",
+      orgId,
+      params.adminId,
+      now,
+      now,
+    )
+    .run();
+  return { token, expiresAt };
+}
+
+/** End it. Only ever deletes an impersonation session this admin opened, whatever token is sent. */
+export async function endImpersonation(env: Bindings, token: string, adminId: string): Promise<void> {
+  await env.DB.prepare(`DELETE FROM sessions WHERE token = ? AND impersonated_by = ?`).bind(token, adminId).run();
+}
+
+/**
+ * The admin behind a live impersonation token, or null when anything is off:
+ * no such session, not an impersonation, older than an hour, or the admin is no
+ * longer on the allowlist.
  */
 export async function resolveImpersonation(
   env: Bindings,
-  realUserEmail: string | null | undefined,
-  header: string | undefined,
-): Promise<{ userId: string; adminId: string; orgId: string | null } | null> {
-  if (!header) return null;
-  // The allowlist is checked against the *live* secret on every request, not
-  // against what was true when the token was minted.
-  if (!isPlatformAdmin(env, realUserEmail)) return null;
-  const claim = await verifyImpersonation(env, header);
-  if (!claim) return null;
+  token: string | null | undefined,
+): Promise<{ adminId: string; adminEmail: string; userId: string; orgId: string | null } | null> {
+  if (!token) return null;
+  const row = await env.DB.prepare(
+    `SELECT s.user_id, s.active_organization_id, s.impersonated_by, s.created_at, a.email AS admin_email
+       FROM sessions s JOIN users a ON a.id = s.impersonated_by
+      WHERE s.token = ? AND s.impersonated_by IS NOT NULL`,
+  )
+    .bind(token)
+    .first<{
+      user_id: string;
+      active_organization_id: string | null;
+      impersonated_by: string;
+      created_at: number;
+      admin_email: string;
+    }>();
+  if (!row) return null;
+  if (row.created_at + IMPERSONATION_TTL_MS < Date.now()) return null;
+  if (!isPlatformAdmin(env, row.admin_email)) return null;
+  return {
+    adminId: row.impersonated_by,
+    adminEmail: row.admin_email,
+    userId: row.user_id,
+    orgId: row.active_organization_id,
+  };
+}
 
-  /**
-   * The organization in the token is a preference, not an authority.
-   *
-   * It is re-checked against `members` on every request, so a token cannot be
-   * edited into access the impersonated person does not have — and a membership
-   * removed after the token was minted takes effect immediately.
-   */
-  let orgId: string | null = null;
-  if (claim.orgId) {
-    const member = await env.DB.prepare(
-      `SELECT 1 AS ok FROM members WHERE user_id = ? AND organization_id = ?`,
-    )
-      .bind(claim.userId, claim.orgId)
-      .first<{ ok: number }>();
-    if (member) orgId = claim.orgId;
-  }
-  return { userId: claim.userId, adminId: claim.adminId, orgId };
+/**
+ * Turns the header into the customer's session for every Better Auth call,
+ * including `auth.api.getSession` from our own guards.
+ *
+ * When the header is present the request's cookies are *replaced*, never
+ * merged: a valid token becomes the customer's session cookie, and an invalid
+ * one becomes no cookie at all. Falling back to the admin's own cookie would
+ * quietly show the admin's account inside a tab that says it is the customer's.
+ *
+ * The "don't remember me" cookie rides along so Better Auth never refreshes the
+ * session's expiry out to its usual seven days.
+ */
+export function impersonationPlugin(env: Bindings): BetterAuthPlugin {
+  return {
+    id: "chatform-impersonation",
+    hooks: {
+      before: [
+        {
+          matcher: (context) =>
+            Boolean(context.request?.headers.get(IMPERSONATION_HEADER) || context.headers?.get(IMPERSONATION_HEADER)),
+          handler: createAuthMiddleware(async (c) => {
+            const existing = c.request?.headers ?? c.headers;
+            const token = existing?.get(IMPERSONATION_HEADER);
+            if (!token) return;
+            if (REFUSED_PATHS.some((re) => re.test(c.path))) {
+              throw new APIError("FORBIDDEN", { message: "Not available while acting as a customer." });
+            }
+            const headers = new Headers(existing ?? undefined);
+            headers.delete("cookie");
+            if (await resolveImpersonation(env, token)) {
+              const cookies = c.context.authCookies;
+              const session = await serializeSignedCookie(cookies.sessionToken.name, token, c.context.secret);
+              const dontRemember = await serializeSignedCookie(cookies.dontRememberToken.name, "true", c.context.secret);
+              headers.set("cookie", `${session}; ${dontRemember}`);
+            }
+            return { context: { headers } };
+          }),
+        },
+      ],
+    },
+  };
 }

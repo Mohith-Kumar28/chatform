@@ -1762,6 +1762,18 @@ export type PostApiAdminImpersonate200 = {
   user: PostApiAdminImpersonate200User;
 };
 
+export type PostApiAdminImpersonateStopBody = {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  token: string;
+};
+
+export type PostApiAdminImpersonateStop200 = {
+  ok: boolean;
+};
+
 export type GetHealth200 = {
   ok: boolean;
   env: string;

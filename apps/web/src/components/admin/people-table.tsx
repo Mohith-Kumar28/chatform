@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { apiData } from "@/lib/api/payload";
 import { DataTable } from "./data-table";
 import { relativeDay } from "./format";
+import { ImpersonateButton } from "./impersonate-button";
 
 /**
  * People, as opposed to accounts.
@@ -149,6 +150,17 @@ export function PeopleTable() {
               },
               { key: "seen", header: "Last seen", muted: true, render: (u) => relativeDay(num(u, "last_seen_at")) },
               { key: "joined", header: "Joined", muted: true, render: (u) => relativeDay(num(u, "created_at")) },
+              {
+                key: "act",
+                header: "",
+                width: "8.5rem",
+                render: (u) => (
+                  <ImpersonateButton
+                    size="xs"
+                    user={{ id: str(u, "id"), name: str(u, "name"), email: str(u, "email") }}
+                  />
+                ),
+              },
             ]}
           />
         </div>

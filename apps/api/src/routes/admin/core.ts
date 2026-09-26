@@ -859,9 +859,9 @@ coreRouter.get(
     const [members, signIns, subscription, forms, usage, overrides, audit, denials] = await Promise.all([
       c.env.DB.prepare(
         `SELECT u.id, u.email, u.name, u.email_verified, u.created_at, m.role, m.created_at AS joined_at,
-                (SELECT MAX(s.created_at) FROM sessions s WHERE s.user_id = u.id) AS last_session_at,
+                (SELECT MAX(s.created_at) FROM sessions s WHERE s.user_id = u.id AND s.impersonated_by IS NULL) AS last_session_at,
                 (SELECT COUNT(*) FROM user_sign_ins si WHERE si.user_id = u.id AND si.kind = 'sign_in') AS sign_in_count,
-                (SELECT s.user_agent FROM sessions s WHERE s.user_id = u.id ORDER BY s.created_at DESC LIMIT 1) AS last_user_agent
+                (SELECT s.user_agent FROM sessions s WHERE s.user_id = u.id AND s.impersonated_by IS NULL ORDER BY s.created_at DESC LIMIT 1) AS last_user_agent
            FROM members m JOIN users u ON u.id = m.user_id
           WHERE m.organization_id = ? ORDER BY m.created_at ASC`,
       )

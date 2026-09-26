@@ -33,6 +33,8 @@ export const sessions = sqliteTable(
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
     activeOrganizationId: text("active_organization_id"),
+    /** The platform admin behind this session, when it is an impersonation. See `apps/api/src/lib/impersonation.ts`. */
+    impersonatedBy: text("impersonated_by"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
     updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
   },

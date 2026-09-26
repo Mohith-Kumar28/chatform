@@ -23,6 +23,7 @@ import { webOrigins, returnOrigin, needsCrossSiteCookies, isSecureOrigin } from 
 import { enqueueMail } from "./mail.js";
 import { purgeUserData } from "./delete-account.js";
 import { recordUserContext } from "./user-context.js";
+import { impersonationPlugin } from "./impersonation.js";
 
 /** Requests that created a user, so the session they open is not also counted as a sign-in. */
 const signedUpBy = new WeakSet<Request>();
@@ -340,6 +341,8 @@ export function createAuth(env: Bindings) {
     // `editor`/`viewer` would resolve to no permissions at all.
     plugins: [
       apiKeyPlugin(),
+      // An admin acting as a customer: their session, from a header. See `./impersonation.ts`.
+      impersonationPlugin(env),
       /**
        * Six digits instead of a link.
        *

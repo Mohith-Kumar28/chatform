@@ -13,6 +13,7 @@ import {
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import { signOut, useSession } from "@/lib/auth/auth-client";
+import { readImpersonation, stopImpersonation } from "@/lib/impersonation";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { useHydrated } from "@/hooks/use-client-value";
 import {
@@ -148,6 +149,9 @@ export function UserMenu() {
         <DropdownMenuItem
           variant="destructive"
           onSelect={async () => {
+            // Acting as a customer, "sign out" means stop: signing *them* out
+            // is refused, and the admin's own session is not this tab's.
+            if (readImpersonation()) return stopImpersonation();
             await signOut();
             // Full navigation so the server sees the cleared cookie — and so
             // no cached query from the signed-in session survives the exit.

@@ -84,32 +84,33 @@ function notFound(c: GuardCtx, what = "Not found") {
  * Both the impersonated and the real identity are set. Downstream authorization
  * reads `userId` and so behaves exactly as it would for that customer; anything
  * writing an audit row reads `impersonatorId` and names the admin instead.
+ *
+ * An impersonating request is resolved from its header alone, never from the
+ * cookies it also carries (those are the admin's). The organization is the
+ * impersonation session's own active one, which the customer's organization
+ * switcher moves, re-checked as a real membership.
  */
 export const requireSession: MiddlewareHandler<{ Bindings: Bindings; Variables: Partial<GuardVars> }> = async (c, next) => {
-  const session = await getAuth(c.env).api.getSession({ headers: c.req.raw.headers });
-  if (!session) return unauthorized(c);
-
-  const acting = await resolveImpersonation(
-    c.env,
-    session.user.email,
-    c.req.header(IMPERSONATION_HEADER),
-  );
-  if (acting) {
+  const header = c.req.header(IMPERSONATION_HEADER);
+  if (header) {
+    const acting = await resolveImpersonation(c.env, header);
+    if (!acting) return unauthorized(c);
     c.set("userId", acting.userId);
     c.set("impersonatorId", acting.adminId);
-    c.set("impersonatorEmail", session.user.email);
-    /**
-     * Land in the organization the console was looking at.
-     *
-     * Set here rather than left to `resolveOrgId`, which would otherwise pick
-     * the target's oldest membership — so opening "Sign in as" from one account
-     * and arriving in another of the same person's accounts. Already verified as
-     * a real membership by `resolveImpersonation`.
-     */
-    if (acting.orgId) c.set("orgId", acting.orgId);
-  } else {
-    c.set("userId", session.user.id);
+    c.set("impersonatorEmail", acting.adminEmail);
+    if (acting.orgId) {
+      const member = await c.env.DB.prepare(`SELECT 1 AS ok FROM members WHERE user_id = ? AND organization_id = ?`)
+        .bind(acting.userId, acting.orgId)
+        .first<{ ok: number }>();
+      if (member) c.set("orgId", acting.orgId);
+    }
+    await next();
+    return;
   }
+
+  const session = await getAuth(c.env).api.getSession({ headers: c.req.raw.headers });
+  if (!session) return unauthorized(c);
+  c.set("userId", session.user.id);
   await next();
 };
 
@@ -124,10 +125,10 @@ export const requireOrg: MiddlewareHandler<{ Bindings: Bindings; Variables: Part
   /**
    * An org already on the context wins.
    *
-   * Only `requireSession` sets one, and only while impersonating — where the
-   * console has named which of the person's organizations to open and has
-   * already verified the membership. Re-resolving here would throw that away
-   * and silently pick their oldest account instead.
+   * Only `requireSession` sets one, and only while impersonating: the
+   * impersonation session's own active organization, already verified as a
+   * membership. Re-resolving here would read the customer's *other* sessions
+   * and could land somewhere else.
    */
   const orgId = c.get("orgId") ?? (await resolveOrgId(c.env, userId));
   if (!orgId) return c.json({ error: { code: "no_organization", message: "No organization for this user" } }, 403);
@@ -153,6 +154,7 @@ export async function resolveOrgId(env: Bindings, userId: string): Promise<strin
       ORDER BY (m.organization_id = (
                   SELECT s.active_organization_id FROM sessions s
                    WHERE s.user_id = ?1 AND s.active_organization_id IS NOT NULL
+                     AND s.impersonated_by IS NULL
                    ORDER BY s.updated_at DESC LIMIT 1
                 )) DESC,
                m.created_at ASC

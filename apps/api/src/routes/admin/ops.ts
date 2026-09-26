@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Bindings } from "../../env.js";
 import type { PlatformAdminVars } from "../../lib/platform-admin.js";
 import { invalidateEntitlements } from "../../lib/entitlements.js";
-import { signImpersonation } from "../../lib/impersonation.js";
+import { endImpersonation, startImpersonation } from "../../lib/impersonation.js";
 import { audit, rows } from "./shared.js";
 
 /**
@@ -441,10 +441,10 @@ opsRouter.delete(
  * customer's activity log never shows work they did not do, and every action is
  * traceable to a person. That is a record, not a restriction.
  *
- * A token rather than a real session row: nothing is written to `sessions`, so
- * there is no second credential to leak or forget to revoke, and it expires on
- * its own. Signed with `BETTER_AUTH_SECRET`, and honoured only when the caller's
- * real session is itself an allowlisted platform admin — see `guards.ts`.
+ * A real session for the customer, marked with the admin and capped at an
+ * hour, so every screen shows exactly what they see. It is never set as a
+ * cookie: the tab that asked keeps the token and sends it as a header. See
+ * `lib/impersonation.ts`.
  */
 opsRouter.post(
   "/admin/impersonate",
@@ -482,7 +482,13 @@ opsRouter.post(
     if (!user) return c.json({ error: { code: "not_found", message: "Not found" } }, 404);
 
     const adminId = c.get("userId")!;
-    const { token, expiresAt } = await signImpersonation(c.env, adminId, user.id, orgId);
+    const { token, expiresAt } = await startImpersonation(c.env, {
+      adminId,
+      userId: user.id,
+      orgId,
+      ipAddress: c.req.header("cf-connecting-ip"),
+      userAgent: c.req.header("user-agent"),
+    });
 
     // Written against every organization the person belongs to, because that is
     // where the customer would look for it.
@@ -500,5 +506,26 @@ opsRouter.post(
     }
 
     return c.json({ token, expiresAt, user: { id: user.id, name: user.name, email: user.email } });
+  },
+);
+
+/**
+ * End an impersonation.
+ *
+ * Called by the impersonating tab *without* its header, so this runs as the
+ * admin, and only deletes a session that admin opened.
+ */
+opsRouter.post(
+  "/admin/impersonate/stop",
+  validator("json", z.object({ token: z.string().min(1).max(200) })),
+  describeRoute({
+    tags: ["admin"],
+    summary: "End an impersonation session",
+    responses: { 200: { description: "Ended", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } } },
+  }),
+  async (c) => {
+    const { token } = c.req.valid("json");
+    await endImpersonation(c.env, token, c.get("userId")!);
+    return c.json({ ok: true });
   },
 );

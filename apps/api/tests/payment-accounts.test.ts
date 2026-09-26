@@ -4,7 +4,7 @@ import { applySchema, seedTenant, seedKey, fetchApi, type Tenant } from "./helpe
 import type { Bindings } from "../src/env.js";
 import { webOrigins } from "../src/lib/origins.js";
 import { open } from "../src/lib/secret-box.js";
-import { signImpersonation } from "../src/lib/impersonation.js";
+import { startImpersonation } from "../src/lib/impersonation.js";
 import {
   AccountConflictError,
   loadAccountById,
@@ -399,7 +399,7 @@ describe("connect routes", () => {
   it("refuses to connect or disconnect while impersonating", async () => {
     setEnv({ PLATFORM_ADMIN_EMAILS: "payacc_a@example.com" });
     try {
-      const { token } = await signImpersonation(E, a.userId, b.userId, b.orgId);
+      const { token } = await startImpersonation(E, { adminId: a.userId, userId: b.userId, orgId: b.orgId });
       const res = await fetchApi("/api/payment-accounts/stripe", {
         method: "POST",
         headers: cookieJson(a, { "x-chatform-impersonate": token }),
