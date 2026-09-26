@@ -439,10 +439,10 @@ export function Hero() {
 
           {/* The margin note, pointing down the page at the launch video.
               It replaced "a real form, no signup" beside the pills, which
-              restated the button it pointed at. Orange ink on purpose, set
-              at full strength: by this height the wash has darkened
-              enough for the brand orange to stand off it. */}
-          <WatchVideoCue className="mt-4 ml-1 text-[var(--brand-orange)] [text-shadow:0_1px_12px_rgb(0_0_0/0.18)]" />
+              restated the button it pointed at. White in the dark theme, where
+              the wash has darkened by this height; the headline's ink in the
+              light one, where it fades to cream and white would vanish. */}
+          <WatchVideoCue className="mt-4 ml-1 text-[var(--on-band-vivid)] dark:text-white dark:[text-shadow:0_1px_10px_rgb(0_0_0/0.22)]" />
         </div>
 
         <ChatDemo script={HERO_SCRIPT} variant="hero" />
