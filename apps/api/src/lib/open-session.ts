@@ -304,27 +304,20 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
    * Turnstile, in managed mode: invisible for nearly everyone, a single
    * checkbox for a visitor Cloudflare is unsure of.
    *
-   * A token Cloudflare *rejects* is refused — that is a bot failing the check.
-   * A *missing* token, or a Cloudflare we cannot reach, is let in and labelled
-   * `unverified` rather than refused: the widget is a third-party script that
-   * privacy extensions and flaky networks block, and a form that turns real
-   * people away because somebody else's service is down is the failure this
-   * whole path is built to avoid. The label is on the session, so the author
-   * can see and filter what came in unchecked.
+   * It labels; it never refuses. Whatever Cloudflare answers, or fails to
+   * answer, the form opens. On 2026-09-28 a "no" from Cloudflare returned 403
+   * here, and a key mismatch turned every live respondent on a real form away
+   * with "We couldn't confirm you're not a bot". A captcha that fails is a
+   * captcha problem, never a form outage. The verdict is stored on the
+   * session (`bot_check`) so the author can see and filter what came in
+   * unchecked or flagged.
    */
   let botCheck: BotCheck | null = null;
   if (!settings.captcha.enabled || input.trustedCaller) {
     botCheck = "off";
   } else if (env.TURNSTILE_SECRET_KEY) {
     const verdict = await verifyTurnstile(env.TURNSTILE_SECRET_KEY, input.turnstileToken);
-    if (verdict === "rejected") {
-      return {
-        ok: false,
-        status: 403,
-        body: { error: { code: "captcha_failed", message: "We couldn't confirm you're not a bot. Refresh the page and try again." } },
-      };
-    }
-    botCheck = verdict;
+    botCheck = verdict === "rejected" ? "failed" : verdict;
   }
 
   const ipHash = input.respondentIpHash ?? (input.ip ? sha256Hex(input.ip) : "");
@@ -486,14 +479,16 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
   };
 }
 
-export type BotCheck = "passed" | "unverified" | "off";
+/** `failed`: Cloudflare said no. Still let in; see the comment at the check. */
+export type BotCheck = "passed" | "unverified" | "failed" | "off";
 
 /**
  * Ask Cloudflare about a Turnstile token. `rejected` only when Cloudflare
  * answered and said no; everything we could not decide is `unverified`.
  *
  * `timeout-or-duplicate` is not a rejection: it is what a real browser gets
- * when its session-start POST is retried with the token it already spent.
+ * when its session-start POST is retried with the token it already spent. Nor
+ * is a bad secret, which is ours to fix, not the visitor's.
  */
 export async function verifyTurnstile(
   secret: string,
@@ -512,6 +507,15 @@ export async function verifyTurnstile(
     const body = (await res.json()) as { success?: boolean; "error-codes"?: string[] };
     if (body.success) return "passed";
     const codes = body["error-codes"] ?? [];
+    /*
+     * Only a verdict on the visitor refuses the visitor. A secret that is
+     * missing or wrong is our configuration, and refusing on it would close
+     * every form on the platform at once, so it lets them in and says so loudly.
+     */
+    if (codes.some((c) => c === "invalid-input-secret" || c === "missing-input-secret")) {
+      console.error("turnstile_secret_invalid", { codes });
+      return "unverified";
+    }
     if (codes.length > 0 && codes.every((c) => c === "timeout-or-duplicate" || c === "internal-error")) return "unverified";
     console.warn("turnstile_rejected", { codes });
     return "rejected";

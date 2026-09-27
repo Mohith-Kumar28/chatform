@@ -584,7 +584,7 @@ export const chatSessions = sqliteTable(
      * exists — answers create it lazily.
      */
     followupOptOut: bool("followup_opt_out").notNull().default(false),
-    /** Turnstile's verdict at session start: `passed` | `unverified` | `off`. See 0048. */
+    /** Turnstile's verdict at session start: `passed` | `unverified` | `failed` | `off`. A label only; never refuses. See 0048. */
     botCheck: text("bot_check"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
     lastActivityAt: ts("last_activity_at").notNull().$defaultFn(() => new Date()),

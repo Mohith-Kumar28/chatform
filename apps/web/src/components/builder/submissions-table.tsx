@@ -1812,7 +1812,7 @@ export function SubmissionsTable({
                       )}
                     >
                       {formatWhen(row)}
-                      {row.botCheck === "unverified" && (
+                      {(row.botCheck === "unverified" || row.botCheck === "failed") && (
                         <ShieldQuestion
                           className="ml-1.5 inline size-3.5 align-[-2px] text-[var(--warning-soft-foreground)]"
                           aria-label="Bot check didn't run"
@@ -2277,13 +2277,14 @@ function SubmissionDialog({
                   ? "Screened out"
                   : "Didn't finish"}
             </span>
-            {row.botCheck === "unverified" && (
+            {(row.botCheck === "unverified" || row.botCheck === "failed") && (
               <span className="inline-flex items-center gap-1 rounded-full bg-[var(--warning-soft)] px-2 py-0.5 text-[var(--warning-soft-foreground)]">
                 <ShieldQuestion className="size-3" />
-                Unverified
-                <InfoHint label="About unverified responses" align="start">
-                  Cloudflare&apos;s bot check couldn&apos;t run for this person, usually because their browser blocked it.
-                  They were let in so real people are never turned away. It may still be a bot.
+                {row.botCheck === "failed" ? "Failed bot check" : "Unverified"}
+                <InfoHint label="About the bot check" align="start">
+                  {row.botCheck === "failed"
+                    ? "Cloudflare's bot check didn't pass this person. They were still let in, so a real person is never turned away. It may be a bot."
+                    : "Cloudflare's bot check couldn't run for this person, usually because their browser blocked it. They were still let in. It may be a bot."}
                 </InfoHint>
               </span>
             )}

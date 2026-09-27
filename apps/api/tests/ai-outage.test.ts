@@ -34,6 +34,10 @@ const noCredits = () =>
 beforeAll(async () => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (url.startsWith("https://challenges.cloudflare.com/")) {
+      // Cloudflare says no to every token: the outage of 2026-09-28.
+      return Response.json({ success: false, "error-codes": ["invalid-input-response"] });
+    }
     if (url === SYSTEM_ONE) {
       jevCalls += 1;
       return noCredits();
@@ -261,6 +265,28 @@ describe("finalizeResponse", () => {
   });
 });
 
+describe("a captcha that says no", () => {
+  it("still opens the form, and labels the session", async () => {
+    const { slug } = await seedForm("captcha-no", "hybrid");
+    const e = env as unknown as Record<string, unknown>;
+    const before = e.TURNSTILE_SECRET_KEY;
+    e.TURNSTILE_SECRET_KEY = "real-looking-secret";
+    try {
+      const res = await fetchApi(`/p/forms/${slug}/sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ turnstileToken: "anything" }),
+      });
+      expect(res.ok).toBe(true);
+      const { sessionId } = (await res.json()) as { sessionId: string };
+      const row = await env.DB.prepare(`SELECT bot_check FROM chat_sessions WHERE id = ?`).bind(sessionId).first<{ bot_check: string }>();
+      expect(row?.bot_check).toBe("failed");
+    } finally {
+      e.TURNSTILE_SECRET_KEY = before;
+    }
+  });
+});
+
 describe("verifyTurnstile", () => {
   const answer = (body: unknown, status = 200) => (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
 
@@ -273,6 +299,8 @@ describe("verifyTurnstile", () => {
     expect(await verifyTurnstile("s", undefined, answer({ success: true }))).toBe("unverified");
     expect(await verifyTurnstile("s", "tok", answer({ success: false, "error-codes": ["timeout-or-duplicate"] }))).toBe("unverified");
     expect(await verifyTurnstile("s", "tok", answer({}, 503))).toBe("unverified");
+    // Our secret, wrong or missing: every visitor would be refused, so none is.
+    expect(await verifyTurnstile("s", "tok", answer({ success: false, "error-codes": ["invalid-input-secret"] }))).toBe("unverified");
     const down = (async () => {
       throw new TypeError("network down");
     }) as unknown as typeof fetch;
