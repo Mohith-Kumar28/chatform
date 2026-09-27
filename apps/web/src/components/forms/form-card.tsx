@@ -1,6 +1,9 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useMemo, type CSSProperties } from "react";
+import { ThemeDoc } from "@repo/form-schema";
+import { ChatBubble } from "@/components/chat/chat-bubble";
+import { useThemeFonts } from "@/lib/theme-fonts";
 import Link from "next/link";
 import {
   BarChart3,
@@ -9,7 +12,6 @@ import {
   CopyPlus,
   ExternalLink,
   Link2,
-  MessageSquare,
   MoreHorizontal,
   Folder,
   FolderInput,
@@ -41,7 +43,7 @@ import {
 } from "@/components/ui/context-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { contrast, isDarkColor, patternAlpha, patternOpacity, readableInk } from "@/lib/chat-theme";
+import { chatThemeVars, contrast, isDarkColor, patternAlpha, patternOpacity } from "@/lib/chat-theme";
 import { patternImage, patternSize, patternWeight, resolvePattern, rgbaFromHex } from "@/lib/background-patterns";
 
 /**
@@ -129,6 +131,12 @@ export interface FormRow {
     backgroundPattern?: string;
     backgroundPatternOpacity?: number;
     backgroundPatternColor?: string;
+    text?: string;
+    surface?: string;
+    accentText?: string;
+    radius?: ThemeDoc["radius"];
+    fontHeading?: string;
+    fontBody?: string;
   } | null;
 }
 
@@ -637,7 +645,6 @@ export function FormCard({
               answer={asks[0]}
               theme={form.theme}
               slug={form.slug}
-              logoAlt={form.title}
               pills={thumbPills}
             />
 
@@ -885,7 +892,6 @@ function ChatThumb({
   answer,
   theme,
   slug,
-  logoAlt,
   pills,
 }: {
   opener: string;
@@ -893,87 +899,54 @@ function ChatThumb({
   theme?: FormRow["theme"];
   /** Seeds the background tile. See `thumbSurface`. */
   slug: string;
-  logoAlt: string;
   /** The strip along the bottom edge. Built by the card, which is where the
    *  thumbnail's surface is already worked out for the quick actions. */
   pills: React.ReactNode;
 }) {
+  const doc = useMemo(() => cardThemeDoc(theme), [theme]);
+  useThemeFonts(doc);
   /*
-   * No theme at all only comes from an older payload. Every current one
-   * carries the form's colours, defaults included, because an undesigned form
-   * still opens in cream and orange and the card should show that.
-   */
-  if (!theme) {
-    return (
-      <ThumbFrame
-        pills={pills}
-        style={thumbSurface(null, "thumb", slug)}
-      >
-        <ThumbBubbles
-          opener={opener}
-          answer={answer}
-          avatar={
-            <span className="bg-card/80 text-primary grid size-5 place-items-center rounded-full">
-              <MessageSquare className="size-2.5" strokeWidth={2} />
-            </span>
-          }
-          botStyle={{}}
-          botClassName="bg-card/90 text-foreground"
-          answerStyle={{}}
-          answerClassName="bg-primary/85 text-[var(--on-primary)]"
-        />
-      </ThumbFrame>
-    );
-  }
-
-  /*
-   * Ink is derived from the fill it sits on, never stored.
+   * The chat itself, shrunk.
    *
-   * `readableInk` is the same function `chatThemeVars` uses for the runtime and
-   * the builder preview, so a bubble here resolves to the colour a respondent
-   * would actually read — rather than a third answer that drifts the first time
-   * somebody picks a pale accent.
+   * The same bubble the respondent sees, themed by the same `chatThemeVars`,
+   * at full size and then zoomed down. So corners, font, colours and padding
+   * are the form's own rather than a lookalike, and a change to the chat's
+   * design reaches the card without anyone remembering it exists. `zoom`
+   * rather than a transform because it scales layout too: the bubbles wrap
+   * and clip at the thumbnail's real width.
    */
   return (
-    <ThumbFrame pills={pills} style={thumbSurface(theme, "thumb", slug)}>
-      <ThumbBubbles
-        opener={opener}
-        answer={answer}
-        avatar={
-          theme.logoUrl ? (
-            // The form's own mark, where it has one — the single strongest
-            // signal for telling two cards apart at this size.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={theme.logoUrl}
-              alt={logoAlt}
-              className="size-5 shrink-0 rounded-full object-cover"
-            />
-          ) : (
-            <span
-              className="grid size-5 shrink-0 place-items-center rounded-full"
-              style={{
-                backgroundColor: theme.accent,
-                color: readableInk(theme.accent),
-              }}
-            >
-              <MessageSquare className="size-2.5" strokeWidth={2} />
-            </span>
-          )
-        }
-        botStyle={{
-          backgroundColor: theme.botBubble,
-          color: readableInk(theme.botBubble),
-        }}
-        botClassName="shadow-xs"
-        answerStyle={{
-          backgroundColor: theme.userBubble,
-          color: readableInk(theme.userBubble),
-        }}
-        answerClassName=""
-      />
+    <ThumbFrame pills={pills} style={thumbSurface(theme ?? null, "thumb", slug)}>
+      <div className="flex flex-col gap-3 [zoom:0.7]" style={chatThemeVars(doc, slug)}>
+        <div className="flex justify-start">
+          <ChatBubble from="bot">
+            {/* Clamped inside the bubble so the cut lands at the text's edge,
+                not through the bubble's bottom padding. */}
+            <span className="line-clamp-2">{opener}</span>
+          </ChatBubble>
+        </div>
+        {answer && (
+          <div className="flex justify-end">
+            <ChatBubble from="user">
+              <span className="block truncate">{answer}</span>
+            </ChatBubble>
+          </div>
+        )}
+      </div>
     </ThumbFrame>
   );
+}
+
+/**
+ * The card's theme as the full document `chatThemeVars` takes, the schema's
+ * defaults filling whatever an older payload did not send.
+ */
+function cardThemeDoc(theme: FormRow["theme"] | undefined): ThemeDoc {
+  if (!theme) return ThemeDoc.parse({});
+  // The logo is not drawn here, and a URL the schema would refuse should not
+  // cost the card every other value.
+  const parsed = ThemeDoc.safeParse({ ...theme, logoUrl: null });
+  return parsed.success ? parsed.data : ThemeDoc.parse({});
 }
 
 /**
@@ -1204,69 +1177,6 @@ function ThumbFrame({
         {pills}
       </div>
     </div>
-  );
-}
-
-function ThumbBubbles({
-  opener,
-  answer,
-  avatar,
-  botStyle,
-  botClassName,
-  answerStyle,
-  answerClassName,
-}: {
-  opener: string;
-  answer?: string;
-  avatar: React.ReactNode;
-  botStyle: CSSProperties;
-  botClassName: string;
-  answerStyle: CSSProperties;
-  answerClassName: string;
-}) {
-  /*
-   * The clamp is on an inner span, and it has to be.
-   *
-   * `line-clamp` was on the bubble itself, which also carries `py-1.5`. Those
-   * two clip to different boxes: the clamp ends the text after N lines at the
-   * *content* edge, while `overflow: hidden` cuts at the *padding* edge — so
-   * the line after the last one rendered into the bubble's bottom padding and
-   * was sliced through the middle of its letters. Every long question showed an
-   * ellipsis and then half a line of the words the ellipsis was standing in
-   * for.
-   *
-   * Padding stays on the bubble, clamping moves inside it, and the two now
-   * agree on where the text stops.
-   */
-  return (
-    <>
-      <div className="flex items-start gap-1.5">
-        <span className="mt-0.5 shrink-0">{avatar}</span>
-        <p
-          className={cn(
-            "max-w-[85%] rounded-xl rounded-bl-sm px-2.5 py-1.5 text-[0.6875rem] leading-snug",
-            botClassName,
-          )}
-          style={botStyle}
-        >
-          <span className="line-clamp-2">{opener}</span>
-        </p>
-      </div>
-      {answer && (
-        <p
-          className={cn(
-            "mt-2 ml-auto w-fit max-w-[75%] rounded-xl rounded-br-sm px-2.5 py-1.5 text-[0.6875rem] leading-snug",
-            answerClassName,
-          )}
-          style={answerStyle}
-        >
-          {/* One line, and `truncate` rather than a clamp: with nothing to wrap
-              to there is no second line to leak, and it ellipses on the same
-              line it cuts. */}
-          <span className="block truncate">{answer}</span>
-        </p>
-      )}
-    </>
   );
 }
 

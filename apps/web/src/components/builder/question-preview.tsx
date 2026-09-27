@@ -1,5 +1,6 @@
 "use client";
 
+import { ChatBubble } from "@/components/chat/chat-bubble";
 import { QuestionDescription } from "@/components/chat/rich-text";
 import { useMemo } from "react";
 import { FileUp } from "lucide-react";
@@ -108,17 +109,9 @@ export function QuestionPreview({
           </div>
 
           <div className="flex justify-start">
-            <div
-              data-inspect="title"
-              className="bubble-bot max-w-[90%] border px-4 py-2.5 text-[0.9375rem] leading-relaxed"
-              style={{
-                background: "var(--cf-bot-bubble)",
-                color: "var(--cf-bot-bubble-text)",
-                borderColor: "var(--cf-bot-bubble-border)",
-              }}
-            >
+            <ChatBubble from="bot" data-inspect="title" className="max-w-[90%]">
               <p className="whitespace-pre-wrap">{block.title || "Your question"}</p>
-            </div>
+            </ChatBubble>
           </div>
 
           {/* Under the bubble, as the chat draws it (`chat-client`). */}

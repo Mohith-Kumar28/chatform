@@ -2206,6 +2206,17 @@ export type GetApiFormsParams = {
 ws?: string;
 };
 
+export type GetApiForms200ItemThemeRadius = typeof GetApiForms200ItemThemeRadius[keyof typeof GetApiForms200ItemThemeRadius];
+
+
+export const GetApiForms200ItemThemeRadius = {
+  none: 'none',
+  sm: 'sm',
+  md: 'md',
+  lg: 'lg',
+  full: 'full',
+} as const;
+
 export type GetApiForms200ItemTheme = {
   background: string;
   botBubble: string;
@@ -2216,6 +2227,12 @@ export type GetApiForms200ItemTheme = {
   backgroundPattern: string;
   backgroundPatternOpacity?: number;
   backgroundPatternColor?: string;
+  text?: string;
+  surface?: string;
+  accentText?: string;
+  radius?: GetApiForms200ItemThemeRadius;
+  fontHeading?: string;
+  fontBody?: string;
 } | null;
 
 export type GetApiForms200Item = {

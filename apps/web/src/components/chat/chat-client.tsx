@@ -1,5 +1,6 @@
 "use client";
 
+import { ChatBubble } from "@/components/chat/chat-bubble";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   Check,
@@ -1202,22 +1203,7 @@ const Bubble = memo(function Bubble({
           <Pencil className="size-3.5" />
         </button>
       )}
-      <div
-        className={cn(
-          "max-w-[85%] px-4 py-2.5 text-[0.9375rem] leading-relaxed",
-          isUser ? "bubble-user" : "bubble-bot border",
-          message.optimistic && "opacity-70",
-        )}
-        style={
-          isUser
-            ? { background: "var(--cf-user-bubble)", color: "var(--cf-user-bubble-text)", borderColor: "transparent" }
-            : {
-                background: "var(--cf-bot-bubble)",
-                color: "var(--cf-bot-bubble-text)",
-                borderColor: "var(--cf-bot-bubble-border)",
-              }
-        }
-      >
+      <ChatBubble from={isUser ? "user" : "bot"} className={cn(message.optimistic && "opacity-70")}>
         {isUser ? (
           <p className="whitespace-pre-wrap">{message.text}</p>
         ) : message.streaming ? (
@@ -1239,7 +1225,7 @@ const Bubble = memo(function Bubble({
         ) : (
           <RichText markdown={message.text} trusted={false} allowedElements={[...SAFE_ELEMENTS, "img"]} />
         )}
-      </div>
+      </ChatBubble>
     </div>
   );
 });

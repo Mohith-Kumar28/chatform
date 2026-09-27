@@ -1,5 +1,6 @@
 "use client";
 
+import { ChatBubble } from "@/components/chat/chat-bubble";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Lock, MessageCircle, RotateCcw, SendHorizontal, X } from "lucide-react";
 import type { Block, ThemeDoc } from "@repo/form-schema";
@@ -615,28 +616,9 @@ function Bubble({
   const isUser = role === "user";
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
-      <div
-        className={cn(
-          "px-4 py-2.5 leading-relaxed",
-          compact ? "max-w-[92%] text-[0.875rem]" : "max-w-[85%] text-[0.9375rem]",
-          isUser ? "bubble-user" : "bubble-bot border",
-        )}
-        style={
-          isUser
-            ? {
-                background: "var(--cf-user-bubble)",
-                color: "var(--cf-user-bubble-text)",
-                borderColor: "transparent",
-              }
-            : {
-                background: "var(--cf-bot-bubble)",
-                color: "var(--cf-bot-bubble-text)",
-                borderColor: "var(--cf-bot-bubble-border)",
-              }
-        }
-      >
+      <ChatBubble from={role} className={cn(compact && "max-w-[92%] text-[0.875rem]")}>
         {children}
-      </div>
+      </ChatBubble>
     </div>
   );
 }

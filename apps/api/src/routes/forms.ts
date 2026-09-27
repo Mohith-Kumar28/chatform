@@ -91,10 +91,9 @@ const FormFull = FormSummary.extend({
 /**
  * The handful of theme values a card needs to look like the form it stands for.
  *
- * Not the whole `ThemeDoc`: a list of thirty forms would then carry thirty
- * copies of fonts, radii and background images that a 120px thumbnail cannot
- * show. These are the ones that read at that size — the two bubble colours, the
- * ground behind them, and the logo if there is one.
+ * Everything a bubble is drawn from (colours, corners, fonts) plus the ground
+ * behind it and the logo. Not the whole `ThemeDoc`: storage keys and the
+ * background image stay out, since the card does not draw them.
  */
 const FormCardTheme = z.object({
   background: z.string(),
@@ -115,6 +114,16 @@ const FormCardTheme = z.object({
   backgroundPatternOpacity: z.number().optional(),
   /** The tile's ink; absent means the accent. */
   backgroundPatternColor: z.string().optional(),
+  /**
+   * The rest of what shapes a bubble, so the card's miniature is drawn by the
+   * same `chatThemeVars` the chat is. Optional so an older payload still parses.
+   */
+  text: z.string().optional(),
+  surface: z.string().optional(),
+  accentText: z.string().optional(),
+  radius: z.enum(["none", "sm", "md", "lg", "full"]).optional(),
+  fontHeading: z.string().optional(),
+  fontBody: z.string().optional(),
 });
 
 const FormListItem = FormSummary.extend({
@@ -165,6 +174,14 @@ const FormListItem = FormSummary.extend({
  * a card drawn for an undesigned form cannot disagree with the runtime.
  */
 const THEME_DEFAULTS = ThemeDoc.parse({});
+const shapeOf = (t: ThemeDoc) => ({
+  text: t.text,
+  surface: t.surface,
+  accentText: t.accentText,
+  radius: t.radius,
+  fontHeading: t.fontHeading,
+  fontBody: t.fontBody,
+});
 const DEFAULT_CARD_THEME = {
   background: THEME_DEFAULTS.background,
   botBubble: THEME_DEFAULTS.botBubble,
@@ -173,9 +190,15 @@ const DEFAULT_CARD_THEME = {
   accent: THEME_DEFAULTS.accent,
   logoUrl: null,
   backgroundPattern: THEME_DEFAULTS.backgroundPattern,
+  ...shapeOf(THEME_DEFAULTS),
 } as const;
 
 type CardTheme = z.infer<typeof FormCardTheme>;
+
+function parsedTheme(t: unknown): ThemeDoc {
+  const parsed = ThemeDoc.safeParse(t);
+  return parsed.success ? parsed.data : THEME_DEFAULTS;
+}
 
 function summariseDoc(raw: string | null): {
   questionCount: number;
@@ -220,6 +243,9 @@ function summariseDoc(raw: string | null): {
       backgroundPattern: pick(t.backgroundPattern, DEFAULT_CARD_THEME.backgroundPattern),
       ...(typeof t.backgroundPatternOpacity === "number" ? { backgroundPatternOpacity: t.backgroundPatternOpacity } : {}),
       ...(typeof t.backgroundPatternColor === "string" && t.backgroundPatternColor ? { backgroundPatternColor: t.backgroundPatternColor } : {}),
+      // Parsed rather than picked: these have enums and bounds, and the schema's
+      // own defaults are what the chat falls back to as well.
+      ...shapeOf(parsedTheme(t)),
     };
     return { questionCount: questions.length, preview, theme };
   } catch {

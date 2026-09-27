@@ -1,5 +1,6 @@
 "use client";
 
+import { ChatBubble } from "@/components/chat/chat-bubble";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import {
@@ -447,30 +448,15 @@ export function ChatDemo({
                   <div
                     className={cn("flex", turn.role === "user" ? "justify-end" : "justify-start")}
                   >
-                    <div
-                      className={cn(
-                        "chat-prose max-w-[86%] px-4 py-2.5 text-[0.9375rem] leading-relaxed whitespace-pre-wrap",
-                        turn.role === "user" ? "bubble-user" : "bubble-bot border",
-                      )}
-                      style={
-                        turn.role === "user"
-                          ? {
-                              background: "var(--cf-user-bubble)",
-                              color: "var(--cf-user-bubble-text)",
-                              borderColor: "transparent",
-                            }
-                          : {
-                              background: "var(--cf-bot-bubble)",
-                              color: "var(--cf-bot-bubble-text)",
-                              borderColor: "var(--cf-bot-bubble-border)",
-                            }
-                      }
+                    <ChatBubble
+                      from={turn.role === "user" ? "user" : "bot"}
+                      className="chat-prose max-w-[86%] whitespace-pre-wrap"
                     >
                       {turn.shown}
                       {turn.streaming && (
                         <span className="animate-caret ml-0.5 inline-block">▍</span>
                       )}
-                    </div>
+                    </ChatBubble>
                   </div>
 
                   {turn.chips && !turn.streaming && (

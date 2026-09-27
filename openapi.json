@@ -9391,6 +9391,31 @@
                               },
                               "backgroundPatternColor": {
                                 "type": "string"
+                              },
+                              "text": {
+                                "type": "string"
+                              },
+                              "surface": {
+                                "type": "string"
+                              },
+                              "accentText": {
+                                "type": "string"
+                              },
+                              "radius": {
+                                "type": "string",
+                                "enum": [
+                                  "none",
+                                  "sm",
+                                  "md",
+                                  "lg",
+                                  "full"
+                                ]
+                              },
+                              "fontHeading": {
+                                "type": "string"
+                              },
+                              "fontBody": {
+                                "type": "string"
                               }
                             },
                             "required": [
