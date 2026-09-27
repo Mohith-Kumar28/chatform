@@ -1498,6 +1498,80 @@ export type GetApiAdminAi200 = {
   lossMakers: GetApiAdminAi200LossMakersItem[];
 };
 
+export type GetApiAdminLatencyParams = {
+range?: GetApiAdminLatencyRange;
+};
+
+export type GetApiAdminLatencyRange = typeof GetApiAdminLatencyRange[keyof typeof GetApiAdminLatencyRange];
+
+
+export const GetApiAdminLatencyRange = {
+  '1d': '1d',
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+  '365d': '365d',
+} as const;
+
+export type GetApiAdminLatency200TotalsPrev = {
+  turns: number;
+  p50: number;
+  p90: number;
+  p95: number;
+  p99: number;
+};
+
+export type GetApiAdminLatency200Totals = {
+  turns: number;
+  p50: number;
+  p90: number;
+  p95: number;
+  p99: number;
+  prev: GetApiAdminLatency200TotalsPrev;
+  serverP50: number;
+  cacheHitRate: number;
+  prevCacheHitRate: number;
+};
+
+export type GetApiAdminLatency200BreakdownsItemRowsItem = {
+  turns: number;
+  p50: number;
+  p90: number;
+  p95: number;
+  p99: number;
+  key: string;
+};
+
+export type GetApiAdminLatency200BreakdownsItem = {
+  dimension: string;
+  rows: GetApiAdminLatency200BreakdownsItemRowsItem[];
+};
+
+export type GetApiAdminLatency200SlowestItem = {
+  sessionId: string;
+  formId: string | null;
+  formTitle: string | null;
+  createdAt: number;
+  waitMs: number;
+  serverMs: number | null;
+  path: string | null;
+  isFinal: boolean;
+  steps: number | null;
+  tools: string | null;
+  device: string | null;
+  browser: string | null;
+  country: string | null;
+};
+
+export type GetApiAdminLatency200 = {
+  totals: GetApiAdminLatency200Totals;
+  days: string[];
+  p50Series: number[];
+  p95Series: number[];
+  breakdowns: GetApiAdminLatency200BreakdownsItem[];
+  slowest: GetApiAdminLatency200SlowestItem[];
+};
+
 export type GetApiAdminHealthParams = {
 range?: GetApiAdminHealthRange;
 };

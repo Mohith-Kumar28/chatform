@@ -1053,6 +1053,43 @@ export const aiGenerations = sqliteTable(
   (t) => [index("idx_ai_gen_org_created").on(t.organizationId, t.createdAt), index("idx_ai_gen_kind").on(t.kind, t.createdAt)],
 );
 
+/**
+ * How long each respondent turn kept them waiting. See `0047_chat_turn_timings.sql`:
+ * the session and the browser each upsert their half, so server columns can be null.
+ */
+export const chatTurnTimings = sqliteTable(
+  "chat_turn_timings",
+  {
+    sessionId: text("session_id").notNull(),
+    turnId: text("turn_id").notNull(),
+    organizationId: text("organization_id"),
+    formId: text("form_id"),
+    createdAt: ts("created_at").notNull(),
+    isTest: integer("is_test", { mode: "boolean" }).notNull().default(false),
+    /** `answer` | `action` */
+    kind: text("kind"),
+    mode: text("mode"),
+    /** `deterministic` | `gate` | `agent` | `action:<name>` */
+    path: text("path"),
+    isFinal: integer("is_final", { mode: "boolean" }).notNull().default(false),
+    blockType: text("block_type"),
+    gateMs: integer("gate_ms"),
+    firstWordMs: integer("first_word_ms"),
+    nextCardMs: integer("next_card_ms"),
+    totalMs: integer("total_ms"),
+    steps: integer("steps"),
+    tools: text("tools"),
+    inputTokens: integer("input_tokens"),
+    cacheReadTokens: integer("cache_read_tokens"),
+    device: text("device"),
+    browser: text("browser"),
+    os: text("os"),
+    country: text("country"),
+    clientMs: integer("client_ms"),
+  },
+  (t) => [primaryKey({ columns: [t.sessionId, t.turnId] }), index("idx_turn_timings_created").on(t.createdAt)],
+);
+
 // ─────────────────────────── Billing & usage ───────────────────────────
 
 /**

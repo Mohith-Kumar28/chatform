@@ -54,6 +54,8 @@ import type {
   GetApiAdminFormsParams,
   GetApiAdminHealth200,
   GetApiAdminHealthParams,
+  GetApiAdminLatency200,
+  GetApiAdminLatencyParams,
   GetApiAdminLive200,
   GetApiAdminMe200,
   GetApiAdminOverview200,
@@ -3714,6 +3716,108 @@ export function useGetApiAdminAi<TData = Awaited<ReturnType<typeof getApiAdminAi
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetApiAdminAiQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAdminLatencyResponse200 = {
+  data: GetApiAdminLatency200
+  status: 200
+}
+
+export type getApiAdminLatencyResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminLatencyResponseSuccess = (getApiAdminLatencyResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminLatencyResponseError = (getApiAdminLatencyResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminLatencyResponse = (getApiAdminLatencyResponseSuccess | getApiAdminLatencyResponseError)
+
+export const getGetApiAdminLatencyUrl = (params?: GetApiAdminLatencyParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/latency?${stringifiedParams}` : `/api/admin/latency`
+}
+
+/**
+ * @summary How long respondents wait for each reply, as percentiles and by what explains it
+ */
+export const getApiAdminLatency = async (params?: GetApiAdminLatencyParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminLatencyResponse> => {
+
+  return customFetch<getApiAdminLatencyResponse>(getGetApiAdminLatencyUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminLatencyQueryKey = (params?: GetApiAdminLatencyParams,) => {
+    return [
+    `/api/admin/latency`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiAdminLatencyQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminLatency>>, TError = void>(params?: GetApiAdminLatencyParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminLatency>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminLatencyQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminLatency>>> = ({ signal }) => getApiAdminLatency(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminLatency>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminLatencyQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminLatency>>>
+export type GetApiAdminLatencyQueryError = void
+
+
+/**
+ * @summary How long respondents wait for each reply, as percentiles and by what explains it
+ */
+
+export function useGetApiAdminLatency<TData = Awaited<ReturnType<typeof getApiAdminLatency>>, TError = void>(
+ params?: GetApiAdminLatencyParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminLatency>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminLatencyQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

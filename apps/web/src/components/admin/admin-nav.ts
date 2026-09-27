@@ -1,4 +1,4 @@
-import { Activity, Blocks, CreditCard, LayoutDashboard, MessageSquareWarning, Sparkles, Users } from "lucide-react";
+import { Activity, Blocks, CreditCard, Gauge, LayoutDashboard, MessageSquareWarning, Sparkles, Users } from "lucide-react";
 
 /**
  * The console's destinations, in the order the questions get asked.
@@ -7,7 +7,8 @@ import { Activity, Blocks, CreditCard, LayoutDashboard, MessageSquareWarning, Sp
  * with — organizations, people and forms, all searchable from one place, because
  * whichever of the three you happen to have is the one you search by. Product
  * says what they build, Feedback what the people using it say about it, Revenue
- * what it earns, AI cost what it costs to run, and Health whether the machinery
+ * what it earns, AI cost what it costs to run, Latency how long respondents
+ * wait for a reply, and Health whether the machinery
  * around it is keeping its promises.
  *
  * Deliberately not merged into `APP_NAV`, and deliberately absent from the
@@ -23,5 +24,6 @@ export const ADMIN_NAV = [
   { href: "/admin/feedback", label: "Feedback", icon: MessageSquareWarning },
   { href: "/admin/revenue", label: "Revenue", icon: CreditCard },
   { href: "/admin/ai", label: "AI cost", icon: Sparkles },
+  { href: "/admin/latency", label: "Latency", icon: Gauge },
   { href: "/admin/health", label: "Health", icon: Activity },
 ] as const;

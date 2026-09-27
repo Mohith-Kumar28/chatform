@@ -42,6 +42,7 @@ import {
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { RespondentContext } from "../lib/respondent-context.js";
+import { startTurnTiming, writeTurnTiming, type TurnTiming } from "../lib/turn-timings.js";
 import { gatewayEnabled } from "../lib/payments/flag.js";
 import { loadAccountForOrg } from "../lib/payments/accounts.js";
 import {
@@ -91,7 +92,16 @@ import {
   buildRetryObjective,
   buildReviewSuffix,
 } from "../lib/agent-prompts.js";
-import { buildAgentTools, nextStepAfter, resumeAfterChange, revisionOf, type ToolOutcome } from "./agent-tools.js";
+import {
+  answerSteersFlow,
+  buildAgentTools,
+  settledInOneStep,
+  nextStepAfter,
+  resumeAfterChange,
+  revisionOf,
+  type NextStep,
+  type ToolOutcome,
+} from "./agent-tools.js";
 import { knowledgeStore, knowledgeAvailable } from "../lib/knowledge/index.js";
 import { getEntitlements } from "../lib/entitlements.js";
 import { movePollVote, readPollTally } from "../lib/poll-tallies.js";
@@ -2972,6 +2982,11 @@ export class SessionDO extends DurableObject<Bindings> {
       if (run) data = { ...(data as object), text: run.text };
     }
     const evt: SSEEnvelope = { v: 1, seq: ++this.seq, ts: Date.now(), type, data };
+    const timing = this.turnTiming;
+    if (timing) {
+      if (type === "message_start" && timing.firstWordMs === null) timing.firstWordMs = evt.ts - timing.started;
+      if (type === "ending" || type === "review") timing.isFinal = true;
+    }
     // The events that put the respondent back in control. See `turnHandedBack`.
     // An open checkout card is one: the next move is theirs, in the gateway.
     if (
@@ -2983,6 +2998,7 @@ export class SessionDO extends DurableObject<Bindings> {
       type === "payment_required"
     ) {
       this.turnHandedBack = true;
+      if (timing && timing.nextCardMs === null) timing.nextCardMs = evt.ts - timing.started;
     }
     // The one line that makes a turn returnable over HTTP as well as streamable:
     // when a *Sync RPC is collecting, every event it would have streamed is also
@@ -3143,7 +3159,16 @@ export class SessionDO extends DurableObject<Bindings> {
    * Returns false when AI is unavailable or fails, and the caller falls back
    * to deterministic template phrasing.
    */
-  private async aiStreamMessage(objective: string, opts: { review?: boolean } = {}): Promise<boolean> {
+  private async aiStreamMessage(
+    objective: string,
+    opts: {
+      review?: boolean;
+      /** The step the objective already told the model comes next. See `announceableNext`. */
+      announced?: NextStep | null;
+      /** What the respondent typed, when this turn is a reply to it. */
+      userText?: string;
+    } = {},
+  ): Promise<boolean> {
     if (!this.aiEnabled() || !this.doc || !this.meta) return false;
     /*
      * The review step has no question on screen. It gets a turn anyway — the
@@ -3192,6 +3217,7 @@ export class SessionDO extends DurableObject<Bindings> {
           clarifications: block ? (this.invalidCounts.get(block.ref) ?? 0) : 0,
           unansweredRequired: this.unansweredRequired().map((b) => ({ ref: b.ref, title: b.title })),
           hasKnowledge,
+          announced: opts.announced ?? null,
           searchKnowledge: hasKnowledge
             ? (query: string) => knowledgeStore(this.env).search(formId, query)
             : undefined,
@@ -3199,6 +3225,7 @@ export class SessionDO extends DurableObject<Bindings> {
         (o: ToolOutcome) => outcomes.push(o),
       );
 
+      if (this.turnTiming) this.turnTiming.agent = true;
       const result = streamText({
         model,
         /**
@@ -3236,7 +3263,14 @@ export class SessionDO extends DurableObject<Bindings> {
         // really a pointer. Retrieval can miss and be worth rephrasing once, and
         // a turn that spends its last step searching says nothing at all — so
         // six, which buys exactly one retry without letting a turn wander.
-        stopWhen: stepCountIs(6),
+        stopWhen: [
+          stepCountIs(6),
+          ({ steps }) =>
+            settledInOneStep(this.doc!, this.state, block ?? null, steps, outcomes, {
+              ...opts,
+              editing: !!block && this.editingRef === block.ref,
+            }),
+        ],
         // The author's setting governs the visible reply; reasoning gets its
         // own headroom on top so it can never starve the answer.
         maxOutputTokens: this.doc.settings.agent.responseMaxTokens + REASONING_HEADROOM_TOKENS,
@@ -3298,6 +3332,14 @@ export class SessionDO extends DurableObject<Bindings> {
       // top-level value instead under-reports a two-step call by more than half.
       const steps = await result.steps;
       turnUsage = reportedUsage({ usage, steps, response: await result.response });
+      if (this.turnTiming) {
+        const t = this.turnTiming;
+        t.agent = true;
+        t.steps += steps.length;
+        t.tools.push(...steps.flatMap((st) => st.toolCalls.map((c) => c.toolName)));
+        t.inputTokens += usage?.inputTokens ?? 0;
+        t.cacheReadTokens += usage?.inputTokenDetails?.cacheReadTokens ?? 0;
+      }
       // How long the respondent waited for the first word, and how many model
       // round trips the turn took to get there. The number to watch for speed.
       console.log("interview_turn_timing", {
@@ -3355,7 +3397,10 @@ export class SessionDO extends DurableObject<Bindings> {
           turns: this.turnCount,
         });
       }
-      await this.logAiUsage("interview_turn", turnUsage, modelId, Date.now() - started);
+      // Off the hot path: the next question card and the ending wait on everything
+      // awaited from here to the end of the turn, and this is a KV read, possibly
+      // a price-list fetch, and a D1 insert. `logAiGeneration` never throws.
+      this.ctx.waitUntil(this.logAiUsage("interview_turn", turnUsage, modelId, Date.now() - started));
       if (text.trim()) await this.appendMessage("assistant", text);
 
       // Reliability floor (PLAN.md 4.3): three consecutive tool errors and the
@@ -3383,7 +3428,7 @@ export class SessionDO extends DurableObject<Bindings> {
        * because the throw normally beats the final usage chunk, in which case
        * the row is unpriced rather than free.
        */
-      await this.logAiUsage("interview_turn", turnUsage, modelId, Date.now() - started, "error");
+      this.ctx.waitUntil(this.logAiUsage("interview_turn", turnUsage, modelId, Date.now() - started, "error"));
       // Close whatever was opened before returning to the template path, so
       // the caller's fallback question lands under a finished bubble.
       if (opened) {
@@ -3431,7 +3476,7 @@ export class SessionDO extends DurableObject<Bindings> {
       // Metered like everything else, but never charged to the phrasing
       // allowance — see `comprehensionEnabled`.
       this.sessionTokensUsed += out.tokens;
-      await this.logAiUsage("extraction", out.usage, MODELS.extraction, Date.now() - started);
+      this.ctx.waitUntil(this.logAiUsage("extraction", out.usage, MODELS.extraction, Date.now() - started));
       if (!out.confident || out.value === null || out.value === undefined) return null;
       return out.value;
     } catch (err) {
@@ -3764,6 +3809,38 @@ export class SessionDO extends DurableObject<Bindings> {
    */
   private turnsInFlight = 0;
 
+  /** The turn being timed right now. See `lib/turn-timings.ts`. */
+  private turnTiming: TurnTiming | null = null;
+
+  private beginTurnTiming(turnId: string, kind: TurnTiming["kind"]): TurnTiming {
+    const ref = this.meta?.currentRef;
+    const blockType = ref ? (this.doc?.blocks.find((b) => b.ref === ref)?.type ?? null) : null;
+    const t = startTurnTiming(turnId, kind, blockType);
+    this.turnTiming = t;
+    return t;
+  }
+
+  /** Written after the turn, never awaited by it. */
+  private endTurnTiming(t: TurnTiming): void {
+    if (this.turnTiming === t) this.turnTiming = null;
+    const meta = this.meta;
+    if (!meta) return;
+    const device = meta.context?.device;
+    this.ctx.waitUntil(
+      writeTurnTiming(this.env, t, {
+        sessionId: meta.sessionId,
+        organizationId: meta.organizationId,
+        formId: meta.formId,
+        isTest: meta.isTest === true || meta.formVersionId === "preview",
+        mode: this.mode(),
+        device: device?.type ?? null,
+        browser: device?.browser ?? null,
+        os: device?.os ?? null,
+        country: meta.context?.geo.country ?? meta.country ?? null,
+      }),
+    );
+  }
+
   async handleUserTurn(input: TurnInput): Promise<{ accepted: boolean; error?: string }> {
     this.turnsInFlight += 1;
     try {
@@ -3789,6 +3866,7 @@ export class SessionDO extends DurableObject<Bindings> {
       if (this.seenTurnIds.includes(input.turnId)) return { accepted: true };
     }
     this.turnHandedBack = false;
+    const timing = this.beginTurnTiming(input.turnId ?? crypto.randomUUID(), "answer");
     try {
       const result = await this.runUserTurn(input);
       // Recorded only on acceptance: a refused turn (a failed validation, a
@@ -3830,6 +3908,8 @@ export class SessionDO extends DurableObject<Bindings> {
       });
       await this.failTurn("turn_failed", "Something went wrong on our side. Please try that again.");
       return { accepted: false, error: "turn_failed" };
+    } finally {
+      this.endTurnTiming(timing);
     }
   }
 
@@ -3974,6 +4054,7 @@ export class SessionDO extends DurableObject<Bindings> {
           ? ` The allowed values are: ${block.options.map((o) => `${o.id} (${o.label})`).join(", ")}. Use the id.`
           : "";
 
+      const announced = this.announceableNext(block);
       const ok = await this.aiStreamMessage(
         `The respondent replied: "${text}"\n\n` +
           `Their message may contain an answer, a question of their own, or both, so handle everything in it.\n` +
@@ -3981,11 +4062,10 @@ export class SessionDO extends DurableObject<Bindings> {
           `2. If they also asked something, answer that too, in one or two sentences.\n` +
           `   If instead they want to change an answer they gave EARLIER, call change_earlier_answer for that ` +
           `question and follow its result rather than steps 1 and 3.\n` +
-          `3. Then, if you recorded an answer, go straight on in the same message to the question ` +
-          `record_answer names in its result, not the one that follows in the list, which on a branching ` +
-          `form is a different question. ` +
+          (announced ? this.announcedStep(announced) : this.routedStep()) +
           `If you did not, ask "${block.title}" again.\n` +
           `Never ignore a question they asked, even when they also answered.`,
+        { announced, userText: text },
       );
 
       if (ok) {
@@ -4024,6 +4104,53 @@ export class SessionDO extends DurableObject<Bindings> {
     return this.offScript(block, text, direct);
   }
 
+  /** Step 3 when the next step depends on the answer: only the tool result can name it. */
+  private routedStep(): string {
+    return (
+      `3. Then, if you recorded an answer, go straight on in the same message to the question ` +
+      `record_answer names in its result, not the one that follows in the list, which on a branching ` +
+      `form is a different question. `
+    );
+  }
+
+  /**
+   * Step 3 when the next step is already known (`announceableNext`): say it in
+   * the same response as the record_answer call, so the respondent gets the
+   * acknowledgement and what comes next after one model round trip, not two.
+   */
+  private announcedStep(next: NextStep): string {
+    if (next.kind === "block") {
+      return (
+        `3. Then, if you recorded an answer, the next question is ref=${next.ref} — "${next.title}". ` +
+        `Ask it in this same response, straight after your acknowledgement and before the record_answer ` +
+        `call, so they get both at once. `
+      );
+    }
+    if (!next.screenOut && this.doc?.settings.onComplete.requireSubmit) {
+      return (
+        `3. Then, if you recorded an answer, that was the last question — do NOT ask another. Nothing has ` +
+        `been sent yet: their answers appear right under your message to check and send. Say that in one ` +
+        `short line before the record_answer call — never that they are done, registered or all set. `
+      );
+    }
+    return (
+      `3. Then, if you recorded an answer, that was the last question — do NOT ask another. Your short ` +
+      `acknowledgement before the record_answer call is the whole reply; the form closes itself. `
+    );
+  }
+
+  /**
+   * The step after `block`, when it is already known before the answer is:
+   * nothing in the flow reads this answer (`answerSteersFlow`), and the question
+   * is not one being re-answered, which resumes somewhere else. Null otherwise.
+   */
+  private announceableNext(block: Block): NextStep | null {
+    if (!this.doc || this.editingRef === block.ref) return null;
+    if (this.doc.settings.agent.rephraseQuestions === false) return null;
+    if (answerSteersFlow(this.doc, block.ref)) return null;
+    return nextStepAfter(this.doc, block, this.state);
+  }
+
   /**
    * A reply nothing could take as the answer, with no agent to hand it to.
    *
@@ -4057,6 +4184,7 @@ export class SessionDO extends DurableObject<Bindings> {
    * to see how often the gate takes a reply and why it passes the rest on.
    */
   private async gate(block: Block, text: string) {
+    const gateStarted = Date.now();
     const { outcome, call } = await gateAnswer(this.env, block, text, {
       organizationId: this.meta?.organizationId,
       sessionId: this.meta?.sessionId,
@@ -4065,6 +4193,9 @@ export class SessionDO extends DurableObject<Bindings> {
     });
     // Off the hot path: the agent turn this gate hands over to should not wait on a D1 write.
     if (call) this.ctx.waitUntil(this.logAiUsage("answer_gate", call.usage, call.model, call.latencyMs));
+    // Only a turn that actually asked Jev counts as the gate's; one it settled
+    // without a call (no key, an obvious question) cost nothing to wait for.
+    if (call && this.turnTiming) this.turnTiming.gateMs = Date.now() - gateStarted;
     console.log("answer_gate", {
       sessionId: this.meta?.sessionId,
       mode: this.mode(),
@@ -5125,6 +5256,8 @@ export class SessionDO extends DurableObject<Bindings> {
     // Same reasoning as `handleUserTurn`: skipping and submitting advance the
     // flow, so they can leave the client waiting on an event too.
     this.turnHandedBack = false;
+    const timing = this.beginTurnTiming(crypto.randomUUID(), "action");
+    timing.action = input.action;
     try {
       const result = await this.runAction(input);
       // The same net as `handleUserTurn` — see `turnHandedBack`. `stop` is the
@@ -5149,6 +5282,8 @@ export class SessionDO extends DurableObject<Bindings> {
       });
       await this.failTurn("action_failed", "Something went wrong on our side. Please try that again.");
       return { accepted: false, error: "action_failed" };
+    } finally {
+      this.endTurnTiming(timing);
     }
   }
 

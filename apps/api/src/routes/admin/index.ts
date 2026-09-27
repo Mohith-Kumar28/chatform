@@ -7,6 +7,7 @@ import { builderFeedbackAdminRouter } from "./builder-feedback.js";
 import { productRouter } from "./product.js";
 import { revenueRouter } from "./revenue.js";
 import { aiRouter } from "./ai.js";
+import { latencyRouter } from "./latency.js";
 import { healthRouter } from "./health.js";
 import { opsRouter } from "./ops.js";
 
@@ -45,5 +46,6 @@ adminRouter.route("/", builderFeedbackAdminRouter);
 adminRouter.route("/", productRouter);
 adminRouter.route("/", revenueRouter);
 adminRouter.route("/", aiRouter);
+adminRouter.route("/", latencyRouter);
 adminRouter.route("/", healthRouter);
 adminRouter.route("/", opsRouter);

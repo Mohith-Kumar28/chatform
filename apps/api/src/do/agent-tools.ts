@@ -3,6 +3,7 @@ import { z } from "zod";
 import { tool, type ToolSet } from "ai";
 import { answerability, resolveNext, validateAnswer, type Block, type EvalState, type FormDoc } from "@repo/form-schema";
 import type { KnowledgeHit } from "../lib/knowledge/index.js";
+import { looksLikeQuestion } from "../lib/phrasing.js";
 
 /**
  * The interview agent's toolset.
@@ -106,6 +107,74 @@ export function resumeAfterChange(
 }
 
 const PASSIVE_TYPES = new Set(["welcome", "statement"]);
+
+/**
+ * Whether an agent turn is complete after its first step, so the second model
+ * round trip can be skipped.
+ *
+ * That second trip used to exist only to write what comes next, because the
+ * next question was not known until record_answer had run. Where it was known
+ * up front (`announced`), the model has already written it next to the call.
+ * On the last question it wrote the closing line there, and the ending's own
+ * message follows anyway. Verbatim forms never needed the model to ask at all.
+ *
+ * Only a single, accepted record_answer whose value the flow will take counts.
+ * Anything else — a lookup, a rejected call, a question the respondent asked,
+ * a routed step that differs from the announced one — carries on as before.
+ * Not `hasToolCall`: that stops on rejected calls too.
+ */
+export function settledInOneStep(
+  doc: FormDoc,
+  state: EvalState,
+  block: Block | null,
+  steps: ReadonlyArray<{ text: string; toolCalls: ReadonlyArray<{ toolName: string }> }>,
+  outcomes: ToolOutcome[],
+  opts: { announced?: NextStep | null; userText?: string; editing?: boolean },
+): boolean {
+  if (steps.length !== 1 || !block) return false;
+  const step = steps[0]!;
+  if (step.toolCalls.length !== 1 || step.toolCalls[0]!.toolName !== "record_answer") return false;
+  const recorded = outcomes.find((o) => o.name === "record_answer");
+  if (!recorded?.ok || recorded.effect?.kind !== "record") return false;
+  const next = nextStepAfter(doc, block, state, recorded.effect.value, { resume: opts.editing });
+  if (!next) return false;
+  const said = step.text.trim();
+  if (doc.settings.agent.rephraseQuestions === false) return said.length > 0;
+  const told = opts.announced;
+  if (!told || (opts.userText !== undefined && looksLikeQuestion(opts.userText))) return false;
+  if (next.kind === "ending") {
+    if (told.kind !== "ending") return false;
+    // The review step needs its "check and send" line; a plain ending has its own message.
+    const review = !next.screenOut && doc.settings.onComplete.requireSubmit;
+    return said.length > 0 || !review;
+  }
+  // Asked, not merely acknowledged. An imperative title without a "?" falls back
+  // to the second step, whose tool result says to add nothing if it was asked.
+  return told.kind === "block" && told.ref === next.ref && said.includes("?");
+}
+
+/**
+ * Whether the answer to `ref` could change what comes after it.
+ *
+ * When it cannot, the next question is known before the answer is, so the agent
+ * can be told it up front and ask it in the same response as its record_answer
+ * call: one model round trip instead of two. See `announced` on `ToolContext`.
+ *
+ * Deliberately blunt. The ref turning up anywhere in the flow's rules, in
+ * another question (a condition, a piped `{{ref}}`), in an ending or in a
+ * variable counts as steering. A false positive only costs the old second
+ * round trip; a false negative would ask the wrong question.
+ */
+export function answerSteersFlow(doc: FormDoc, ref: string): boolean {
+  const elsewhere = JSON.stringify([
+    doc.logic,
+    doc.endingRules,
+    doc.endings,
+    doc.variables,
+    doc.blocks.filter((b) => b.ref !== ref),
+  ]);
+  return elsewhere.includes(ref);
+}
 
 export type Revision =
   | { ok: true; block: Block; next: NextStep | null }
@@ -221,6 +290,13 @@ export interface ToolContext {
    * thing that holds them.
    */
   unansweredRequired?: { ref: string; title: string }[];
+  /**
+   * The step the agent was told, before the turn, comes after this answer —
+   * set only when the answer cannot change it (`answerSteersFlow`). The agent
+   * has then already asked it, or closed, alongside its record_answer call, and
+   * the tool result must not tell it to do so a second time.
+   */
+  announced?: NextStep | null;
 }
 
 export interface ToolOutcome {
@@ -262,6 +338,19 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
   const route = (settled: string, next: NextStep | null): string => {
     if (ctx.verbatimQuestions) return `${settled} Do NOT ask the next question — it follows immediately, word for word.`;
     if (!next) return `${settled} Move on to the next question.`;
+    const told = ctx.announced;
+    if (told && told.kind === "block" && next.kind === "block" && told.ref === next.ref) {
+      return (
+        `${settled} The next question is ref=${next.ref}, as you were told. If your message above already asks it, ` +
+        `write nothing more. Otherwise ask it now, and no other.`
+      );
+    }
+    if (told && told.kind === "ending" && next.kind === "ending") {
+      return (
+        `${settled} That was the last question — do NOT ask another. If you already wrote your short line above, ` +
+        `write nothing more; the form takes it from here. Otherwise write it now, in one short line.`
+      );
+    }
     if (next.kind === "ending") {
       /*
        * With a review step, nothing has been sent yet: their answers come up

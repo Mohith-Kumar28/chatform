@@ -775,7 +775,30 @@ export function useChat({
    * Every event that resolves a turn goes through here, so "the dots are down"
    * and "the controls are live again" can never disagree.
    */
+  /**
+   * When the answer in flight was sent, so the wait the respondent actually saw
+   * (network included) can be reported once the reply starts. Server-side
+   * timing cannot see a slow phone connection; this can. See `/timing`.
+   */
+  const turnClockRef = useRef<{ turnId: string; started: number } | null>(null);
+
+  /** The reply has started: report how long it took. Once per answer, never awaited. */
+  const reportTurnWait = useCallback(() => {
+    const clock = turnClockRef.current;
+    const session = sessionRef.current;
+    turnClockRef.current = null;
+    if (!clock || !session) return;
+    void fetch(`${apiOrigin}/p/sessions/${session.sessionId}/timing`, {
+      method: "POST",
+      keepalive: true,
+      headers: { "content-type": "application/json", "x-respondent-token": session.token },
+      body: JSON.stringify({ turnId: clock.turnId, clientMs: Math.round(performance.now() - clock.started) }),
+    }).catch(() => {});
+  }, [apiOrigin]);
+
   const settleTurn = useCallback(() => {
+    // A turn that settles without a reply starting (an error, a refusal) has no wait worth reporting.
+    turnClockRef.current = null;
     actionInFlightRef.current = false;
     setThinking(false);
     setAnswering(false);
@@ -996,6 +1019,7 @@ export function useChat({
 
       on("message_start", (e) => {
         const { messageId } = JSON.parse((e as MessageEvent).data) as { messageId: string };
+        reportTurnWait();
         setThinking(false);
         pushMessage({ id: messageId, role: "assistant", text: "", streaming: true });
       });
@@ -1032,6 +1056,7 @@ export function useChat({
       });
 
       on("question", (e) => {
+        reportTurnWait();
         const data = JSON.parse((e as MessageEvent).data) as QuestionState;
         // Tell the host page which question is on screen, if we are framed.
         emitEmbedEvent({
@@ -1291,6 +1316,7 @@ export function useChat({
       });
 
       on("review", (e) => {
+        reportTurnWait();
         setReview(JSON.parse((e as MessageEvent).data) as ReviewState);
         setQuestion(null);
         setPendingPayment(null);
@@ -1298,6 +1324,7 @@ export function useChat({
       });
 
       on("ending", (e) => {
+        reportTurnWait();
         const { ending, canUndo } = JSON.parse((e as MessageEvent).data) as {
           ending: EndingState;
           canUndo?: boolean;
@@ -1355,7 +1382,7 @@ export function useChat({
         }
       };
     },
-    [apiOrigin, appendToken, ephemeral, pushMessage, settleEcho, settleTurn, slug],
+    [apiOrigin, appendToken, ephemeral, pushMessage, reportTurnWait, settleEcho, settleTurn, slug],
   );
 
   useEffect(() => {
@@ -1710,6 +1737,7 @@ export function useChat({
       const idempotent = path === "messages";
       const payload = idempotent ? { ...body, turnId: crypto.randomUUID() } : body;
       const attempts = idempotent ? POST_MAX_ATTEMPTS : 1;
+      if (idempotent) turnClockRef.current = { turnId: payload.turnId as string, started: performance.now() };
 
       for (let attempt = 0; attempt < attempts; attempt++) {
         if (attempt > 0) await sleep(backoffMs(attempt - 1));

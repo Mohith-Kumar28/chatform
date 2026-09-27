@@ -25,6 +25,7 @@ import { getEntitlements, meter, checkQuota } from "../lib/entitlements.js";
 import { brandingHiddenFor, clampForRuntime, gatewayPaymentsLapsed } from "../lib/doc-entitlements.js";
 import { verifyEmailToken } from "../lib/signed-url.js";
 import { captureRequestContext, ClientContextInput } from "../lib/respondent-context.js";
+import { recordClientTiming } from "../lib/turn-timings.js";
 import { cancelFollowUps, cancelFollowUpsForAddress, recordFollowUpClick, suppress } from "../lib/followups.js";
 import type { RespondentIdentity } from "@repo/form-schema";
 import { confirmPaymentForSession, providersForAccounts, startPaymentForSession } from "../lib/payments/service.js";
@@ -680,6 +681,23 @@ sessionsRouter.post("/sessions/:id/messages", zValidator("json", messageSchema),
         });
   if (!result.accepted) return c.json({ error: { code: result.error ?? "rejected", message: "Turn rejected" } }, 400);
   return c.json({ ok: true }, 202);
+});
+
+const timingSchema = z.object({
+  turnId: z.string().min(8).max(64),
+  clientMs: z.number().finite().nonnegative(),
+});
+
+/**
+ * The wait the browser saw for one turn, from send to the first sign of a reply.
+ * Fire-and-forget from the client; see `lib/turn-timings.ts`.
+ */
+sessionsRouter.post("/sessions/:id/timing", zValidator("json", timingSchema), async (c) => {
+  const sessionId = await requireRespondent(c);
+  if (!sessionId) return c.json({ error: { code: "unauthorized", message: "Invalid session token" } }, 401);
+  const body = c.req.valid("json");
+  await recordClientTiming(c.env, sessionId, body.turnId, body.clientMs);
+  return c.body(null, 204);
 });
 
 sessionsRouter.post("/sessions/:id/actions", zValidator("json", actionSchema), async (c) => {

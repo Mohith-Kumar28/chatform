@@ -6497,6 +6497,322 @@
         ]
       }
     },
+    "/api/admin/latency": {
+      "get": {
+        "operationId": "getApiAdminLatency",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "schema": {
+              "default": "30d",
+              "type": "string",
+              "enum": [
+                "1d",
+                "7d",
+                "30d",
+                "90d",
+                "365d"
+              ]
+            }
+          }
+        ],
+        "tags": [
+          "admin"
+        ],
+        "summary": "How long respondents wait for each reply, as percentiles and by what explains it",
+        "responses": {
+          "200": {
+            "description": "Turn latency",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "totals": {
+                      "type": "object",
+                      "properties": {
+                        "turns": {
+                          "type": "number"
+                        },
+                        "p50": {
+                          "type": "number"
+                        },
+                        "p90": {
+                          "type": "number"
+                        },
+                        "p95": {
+                          "type": "number"
+                        },
+                        "p99": {
+                          "type": "number"
+                        },
+                        "prev": {
+                          "type": "object",
+                          "properties": {
+                            "turns": {
+                              "type": "number"
+                            },
+                            "p50": {
+                              "type": "number"
+                            },
+                            "p90": {
+                              "type": "number"
+                            },
+                            "p95": {
+                              "type": "number"
+                            },
+                            "p99": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "turns",
+                            "p50",
+                            "p90",
+                            "p95",
+                            "p99"
+                          ]
+                        },
+                        "serverP50": {
+                          "type": "number"
+                        },
+                        "cacheHitRate": {
+                          "type": "number"
+                        },
+                        "prevCacheHitRate": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "turns",
+                        "p50",
+                        "p90",
+                        "p95",
+                        "p99",
+                        "prev",
+                        "serverP50",
+                        "cacheHitRate",
+                        "prevCacheHitRate"
+                      ]
+                    },
+                    "days": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "p50Series": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    "p95Series": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    "breakdowns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "dimension": {
+                            "type": "string"
+                          },
+                          "rows": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "turns": {
+                                  "type": "number"
+                                },
+                                "p50": {
+                                  "type": "number"
+                                },
+                                "p90": {
+                                  "type": "number"
+                                },
+                                "p95": {
+                                  "type": "number"
+                                },
+                                "p99": {
+                                  "type": "number"
+                                },
+                                "key": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "turns",
+                                "p50",
+                                "p90",
+                                "p95",
+                                "p99",
+                                "key"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "dimension",
+                          "rows"
+                        ]
+                      }
+                    },
+                    "slowest": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sessionId": {
+                            "type": "string"
+                          },
+                          "formId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "formTitle": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "number"
+                          },
+                          "waitMs": {
+                            "type": "number"
+                          },
+                          "serverMs": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "path": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "isFinal": {
+                            "type": "boolean"
+                          },
+                          "steps": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "tools": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "device": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "browser": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "country": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "sessionId",
+                          "formId",
+                          "formTitle",
+                          "createdAt",
+                          "waitMs",
+                          "serverMs",
+                          "path",
+                          "isFinal",
+                          "steps",
+                          "tools",
+                          "device",
+                          "browser",
+                          "country"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "totals",
+                    "days",
+                    "p50Series",
+                    "p95Series",
+                    "breakdowns",
+                    "slowest"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/admin/health": {
       "get": {
         "operationId": "getApiAdminHealth",
