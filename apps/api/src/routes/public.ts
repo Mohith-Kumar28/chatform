@@ -374,6 +374,18 @@ sessionsRouter.post(
   async (c) => {
     const { slug } = c.req.param();
     const body = c.req.valid("json");
+    /*
+      Where the time goes, as a Server-Timing header: opening a session is the
+      wait in front of every respondent, so it should be readable from any
+      browser's network tab without a log search.
+    */
+    const timings: string[] = [];
+    let lap = Date.now();
+    const mark = (name: string) => {
+      const now = Date.now();
+      timings.push(`${name};dur=${now - lap}`);
+      lap = now;
+    };
 
     const formRow = await c.env.DB.prepare(
       `SELECT f.id, f.slug, f.status, f.close_at, f.organization_id, f.fingerprint_salt, fv.id AS version_id, fv.schema_json
@@ -409,9 +421,11 @@ sessionsRouter.post(
      * `assessIdentity` — because until they sign in we do not know who they are.
      */
     const device = respondentKey({ signal: body.deviceSignal, salt: formRow.fingerprint_salt });
+    mark("form");
     const resume =
       (await loadResumable(c.env, formRow.id, body.resumeToken)) ??
       (body.fresh ? null : await findDeviceResumable(c.env, formRow.id, device));
+    mark("resume");
 
     /**
      * Which clock this respondent is on: the browser's answer, then the edge's.
@@ -470,6 +484,7 @@ sessionsRouter.post(
       ...(resume ? { resumeSubmissionId: resume.submissionId } : {}),
     });
     if (!opened.ok) return c.json(opened.body, opened.status);
+    mark("open");
 
     /**
      * Put the response back in progress *after* the gates passed.
@@ -517,6 +532,17 @@ sessionsRouter.post(
       fallbackChannel: body.embed?.origin ? "embed" : "link",
     });
     const embedded = context.channel !== "link" && context.channel !== "api";
+    /*
+      Who this is, platform-wide, resolved once as the session opens and
+      carried on the session rather than recomputed per response. A visit that
+      offered nothing to recognise anybody by resolves to null and stays
+      unattributed, which is the honest answer and keeps the count of people
+      meaning what it says.
+    */
+    const respondentId = await resolveRespondent(c.env, {
+      deviceKey: opened.respondentDeviceKey,
+    });
+    mark("respondent");
 
     const result = await stub(c.env, opened.sessionId).init({
       sessionId: opened.sessionId,
@@ -531,16 +557,7 @@ sessionsRouter.post(
       hiddenFields: body.hiddenFields ?? {},
       ipHash: opened.ipHash,
       fingerprint: opened.device.value || null,
-      /*
-        Who this is, platform-wide, resolved once as the session opens and
-        carried on the session rather than recomputed per response. A visit that
-        offered nothing to recognise anybody by resolves to null and stays
-        unattributed, which is the honest answer and keeps the count of people
-        meaning what it says.
-      */
-      respondentId: await resolveRespondent(c.env, {
-        deviceKey: opened.respondentDeviceKey,
-      }),
+      respondentId,
       respondentDeviceKey: opened.respondentDeviceKey,
       // The source travels with the value, so a reader can tell "no fingerprint"
       // from "a fingerprint that happens to look like nothing".
@@ -559,6 +576,8 @@ sessionsRouter.post(
       return c.json({ error: { code: result.code, message: "Could not start session" } }, 400);
     }
 
+    mark("init");
+    c.header("Server-Timing", timings.join(", "));
     return c.json({
       sessionId: opened.sessionId,
       sseUrl: `/p/sessions/${opened.sessionId}/events`,
