@@ -40,7 +40,7 @@ The guards, in the order they bite:
 | `agent.guardrails.maxTurns` | — | not authored; taken from the plan at runtime |
 | `agent.sessionTokenBudget` | — | not authored; taken from the plan at runtime |
 | `agent.responseMaxTokens` | 320 | per turn |
-| session opens | 8/min per IP | `RATE_LIMIT_P_START` |
+| session opens | no per-address limit; Turnstile at start | `open-session.ts` |
 
 Spend per org is in `ai_generations`, and the admin console at `/admin` reads it.
 

@@ -36,7 +36,7 @@ import { formHistoryRouter } from "./routes/form-history.js";
 import { adminRouter } from "./routes/admin/index.js";
 import { mountOpenApiSpec } from "./lib/openapi.js";
 import { requestId, type RequestIdVars } from "./lib/request-id.js";
-import { publicIpLimit } from "./lib/ratelimit.js";
+import { publicSessionLimit } from "./lib/ratelimit.js";
 import { attachErrorContext, apiError } from "./lib/api-error.js";
 
 /**
@@ -167,7 +167,7 @@ export function createApp() {
    * per-key sustained window of its own, and counting a developer's request in
    * both places would quietly halve the limit they are paying for.
    */
-  app.use("/p/*", publicIpLimit);
+  app.use("/p/*", publicSessionLimit);
 
   /**
    * The dashboard surface, and the only one that carries the session cookie.

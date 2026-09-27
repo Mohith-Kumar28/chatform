@@ -265,17 +265,17 @@ describe("verifyTurnstile", () => {
   const answer = (body: unknown, status = 200) => (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
 
   it("passes a good token and refuses one Cloudflare rejects", async () => {
-    expect(await verifyTurnstile("s", "tok", null, answer({ success: true }))).toBe("passed");
-    expect(await verifyTurnstile("s", "tok", null, answer({ success: false, "error-codes": ["invalid-input-response"] }))).toBe("rejected");
+    expect(await verifyTurnstile("s", "tok", answer({ success: true }))).toBe("passed");
+    expect(await verifyTurnstile("s", "tok", answer({ success: false, "error-codes": ["invalid-input-response"] }))).toBe("rejected");
   });
 
   it("lets people in, unverified, when it cannot decide", async () => {
-    expect(await verifyTurnstile("s", undefined, null, answer({ success: true }))).toBe("unverified");
-    expect(await verifyTurnstile("s", "tok", null, answer({ success: false, "error-codes": ["timeout-or-duplicate"] }))).toBe("unverified");
-    expect(await verifyTurnstile("s", "tok", null, answer({}, 503))).toBe("unverified");
+    expect(await verifyTurnstile("s", undefined, answer({ success: true }))).toBe("unverified");
+    expect(await verifyTurnstile("s", "tok", answer({ success: false, "error-codes": ["timeout-or-duplicate"] }))).toBe("unverified");
+    expect(await verifyTurnstile("s", "tok", answer({}, 503))).toBe("unverified");
     const down = (async () => {
       throw new TypeError("network down");
     }) as unknown as typeof fetch;
-    expect(await verifyTurnstile("s", "tok", null, down)).toBe("unverified");
+    expect(await verifyTurnstile("s", "tok", down)).toBe("unverified");
   });
 });

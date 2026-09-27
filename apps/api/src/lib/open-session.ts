@@ -316,7 +316,7 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
   if (!settings.captcha.enabled || input.trustedCaller) {
     botCheck = "off";
   } else if (env.TURNSTILE_SECRET_KEY) {
-    const verdict = await verifyTurnstile(env.TURNSTILE_SECRET_KEY, input.turnstileToken, input.ip);
+    const verdict = await verifyTurnstile(env.TURNSTILE_SECRET_KEY, input.turnstileToken);
     if (verdict === "rejected") {
       return {
         ok: false,
@@ -498,7 +498,6 @@ export type BotCheck = "passed" | "unverified" | "off";
 export async function verifyTurnstile(
   secret: string,
   token: string | undefined,
-  ip: string | null | undefined,
   fetcher: typeof fetch = fetch,
 ): Promise<"passed" | "unverified" | "rejected"> {
   if (!token) return "unverified";
@@ -506,7 +505,7 @@ export async function verifyTurnstile(
     const res = await fetcher("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ secret, response: token, ...(ip ? { remoteip: ip } : {}) }),
+      body: JSON.stringify({ secret, response: token }),
       signal: AbortSignal.timeout(3_000),
     });
     if (!res.ok) throw new Error(`status ${res.status}`);

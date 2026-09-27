@@ -39,7 +39,6 @@ export interface Bindings {
    * One shared counter would have to be set for the most expensive of them.
    */
   RATE_LIMIT_P?: RateLimit;
-  RATE_LIMIT_P_START?: RateLimit;
   RATE_LIMIT_P_AUTH?: RateLimit;
   /**
    * The builder's autosave, keyed by the author.

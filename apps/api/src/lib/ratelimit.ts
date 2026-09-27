@@ -106,38 +106,41 @@ async function limited(
 }
 
 /**
- * Everything under `/p`, counted per address and — inside a session — per
- * session as well.
+ * Inside a conversation, counted per conversation. Never per address.
  *
- * Two counters rather than one because they fail differently. An office, a
- * school or a phone network behind one address is many respondents who must not
- * exhaust each other; a single runaway tab is one respondent who must not
- * outrun the form. Neither counter alone says both.
+ * The respondent surface used to count by address as well: 120 requests a
+ * minute for everything under `/p`, and 8 session opens. An address is not a
+ * person. A campus Wi-Fi, an office, or a mobile carrier's shared address
+ * (most of Jio and Airtel) puts hundreds or thousands of respondents behind
+ * one, and at a registration event the ninth person in a room to open the
+ * form in a minute was turned away. A form must take every real respondent,
+ * however many arrive at once, so nothing here may count a crowd.
+ *
+ * What is left is the unit that can actually misbehave: one runaway tab,
+ * bounded to two requests a second sustained, which no person answering
+ * questions comes near. Keeping bots out is Turnstile's job at session start
+ * (`open-session.ts`), and a flood from one machine is Cloudflare's edge's.
  */
-export const publicIpLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
-  const ip = c.req.header("cf-connecting-ip");
+export const publicSessionLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
   const sessionId = c.req.path.match(/^\/p\/sessions\/([^/]+)/)?.[1];
-  const keys = [`p:${ip}`, ...(sessionId ? [`ps:${sessionId}`] : [])];
-  if (await limited(c, c.env.RATE_LIMIT_P, keys)) {
-    return tooMany(c, { seconds: 60, scope: "ip", policy: "120;w=60" });
+  if (sessionId && (await limited(c, c.env.RATE_LIMIT_P, [`ps:${sessionId}`]))) {
+    return tooMany(c, { seconds: 60, scope: "user", policy: "120;w=60" });
   }
   await next();
 };
 
-/** Opening a session: writes rows, meters a response, and can send mail. */
-export const sessionStartLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
-  const ip = c.req.header("cf-connecting-ip");
-  if (await limited(c, c.env.RATE_LIMIT_P_START, [`ps:${ip}`])) {
-    return tooMany(c, { seconds: 60, scope: "ip", policy: "8;w=60" });
-  }
-  await next();
-};
-
-/** Proving an identity: a JWKS fetch happens before the attempt can even fail. */
+/**
+ * Proving an identity: a JWKS fetch happens before the attempt can even fail.
+ *
+ * Per respondent token, for the reason `respondentPaymentLimit` gives: at an
+ * event, a whole hall signs in behind one address, and counting them together
+ * refused the thirteenth. A request with no token is not counted at all: it is
+ * answered 401 by `requireRespondent` a moment later.
+ */
 export const respondentAuthLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
-  const ip = c.req.header("cf-connecting-ip");
-  if (await limited(c, c.env.RATE_LIMIT_P_AUTH, [`pa:${ip}`])) {
-    return tooMany(c, { seconds: 60, scope: "ip", policy: "12;w=60" });
+  const token = respondentToken(c);
+  if (token && (await limited(c, c.env.RATE_LIMIT_P_AUTH, [`pa:t:${await bucketFor(token)}`]))) {
+    return tooMany(c, { seconds: 60, scope: "user", policy: "12;w=60" });
   }
   await next();
 };
@@ -160,15 +163,14 @@ export const respondentAuthLimit: MiddlewareHandler<{ Bindings: Bindings }> = as
  * thing to do to a form at the moment its event starts. The token is the credential the route
  * goes on to check, hashed here for the same reason the API-key limiter hashes: a rate-limit key
  * is not a place to put a secret. A request with no token has nothing to own a bucket with, so it
- * is counted by address instead, and answered 401 a moment later by `requireRespondent`.
+ * is not counted, and is answered 401 a moment later by `requireRespondent`.
  *
  * The same binding as sign-in, under its own key prefix, so the two never share a count and no
  * new binding has to be provisioned.
  */
 export const respondentPaymentLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
   const token = respondentToken(c);
-  const key = token ? `pay:t:${await bucketFor(token)}` : `pay:ip:${c.req.header("cf-connecting-ip") ?? "unknown"}`;
-  if (await limited(c, c.env.RATE_LIMIT_P_AUTH, [key])) {
+  if (token && (await limited(c, c.env.RATE_LIMIT_P_AUTH, [`pay:t:${await bucketFor(token)}`]))) {
     return tooMany(c, { seconds: 60, scope: "ip", policy: "12;w=60" });
   }
   await next();

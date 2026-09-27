@@ -20,7 +20,7 @@ import { canonicalZone } from "../lib/quiet-hours.js";
 import { findDeviceResumable } from "../lib/respondent-history.js";
 import { reopenAbandonedResponse } from "../lib/submissions.js";
 import { mountRespondentAuth } from "./respondent-auth.js";
-import { sessionStartLimit, respondentAuthLimit, respondentPaymentLimit } from "../lib/ratelimit.js";
+import { respondentAuthLimit, respondentPaymentLimit } from "../lib/ratelimit.js";
 import { getEntitlements, meter, checkQuota } from "../lib/entitlements.js";
 import { brandingHiddenFor, clampForRuntime, gatewayPaymentsLapsed } from "../lib/doc-entitlements.js";
 import { verifyEmailToken } from "../lib/signed-url.js";
@@ -34,19 +34,15 @@ import { SESSION_LOCATION } from "../lib/session-location.js";
 const sessionsRouter = new Hono<{ Bindings: Bindings }>();
 
 /**
- * The two expensive things a stranger can do, limited more tightly than the
- * blanket `/p` window in `app.ts`.
+ * Proving an identity fetches a JWKS document before the attempt can even be
+ * rejected, so it gets a tighter window than the rest of `/p`, per respondent.
  *
- * Opening a session writes rows, meters a response against the org's quota and
- * can send mail; proving an identity fetches a JWKS document before the attempt
- * can even be rejected. Both sit well below the 120/min everything else gets,
- * because a person doing either of them legitimately does it a handful of times
- * and a script does it as fast as it is allowed to.
+ * Opening a session has no limit here, on purpose: the only thing to key it on
+ * is an address, and an address is a whole campus. See `publicSessionLimit`.
  *
  * Declared here, before the routes, so they run ahead of the handlers —
  * including the ones `mountRespondentAuth` adds at the bottom of this file.
  */
-sessionsRouter.use("/forms/:slug/sessions", sessionStartLimit);
 sessionsRouter.use("/sessions/:id/auth/*", respondentAuthLimit);
 sessionsRouter.use("/sessions/:id/verify/*", respondentAuthLimit);
 /**
