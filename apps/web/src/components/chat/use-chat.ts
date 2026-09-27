@@ -1547,7 +1547,8 @@ export function useChat({
          * the same reason: a preloaded popup does all of this while hidden so
          * the click pays for the POST alone. A token lasts five minutes, so one
          * fetched longer ago than that (a popup nobody opened for a while) is
-         * fetched again. Undefined is fine: the server lets them in, labelled.
+         * fetched again. Undefined is not fatal: the server answers it with
+         * `captcha_required`, and the checkbox below gets a second chance.
          */
         const botStarted = Date.now();
         const bot = captcha ? getTurnstileToken() : Promise.resolve(undefined);
@@ -1565,58 +1566,74 @@ export function useChat({
         const deviceSignal = await signal;
         let turnstileToken = await bot;
         if (turnstileToken && Date.now() - botStarted > TURNSTILE_TOKEN_TTL_MS) turnstileToken = await getTurnstileToken();
-        const res = await fetch(`${apiOrigin}/p/forms/${slug}/sessions`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            hiddenFields: { ...hiddenFields, ...embedPrefill() },
-            /**
-             * Only when there is no live session to reconnect to — the branches
-             * above already returned in that case. A refresh mid-conversation
-             * must not mint a second session against the same response just
-             * because the token is still sitting in the address bar.
-             *
-             * And not after "Start over", which is the one case where the token
-             * is still in this component's props but the respondent has said
-             * plainly that they do not want what it points at. It outranks
-             * every other way of recognising them, so left in it would resume
-             * the very response they asked to abandon.
-             */
-            ...(resumeToken && !freshRef.current ? { resumeToken } : {}),
-            ...(followUpId ? { followUpId } : {}),
-            /**
-             * Which device this is, so an anonymous respondent who cleared
-             * their storage or opened the form privately gets their own
-             * half-finished response back instead of a blank one — and so the
-             * duplicate rule stops treating a whole office as one person.
-             *
-             * Awaited rather than fired alongside: the server needs it in this
-             * request to decide both. Null whenever the signal cannot be
-             * computed, which the server handles by falling back to the IP.
-             */
-            ...(deviceSignal ? { deviceSignal } : {}),
-            ...(turnstileToken ? { turnstileToken } : {}),
-            /**
-             * Which clock this respondent is on, so a reminder that would fall
-             * in the middle of their night waits for the morning instead.
-             *
-             * Read from the browser rather than guessed at the edge: geo-IP
-             * gets a VPN user and a corporate egress wrong, and this is the one
-             * source that knows where the person is actually sitting. Wrapped
-             * because `resolvedOptions` is missing in a few hardened browsers,
-             * and a form that would not open because it could not name a time
-             * zone would be an absurd trade.
-             */
-            ...respondentTimezone(),
-            /**
-             * Where they are filling it from: channel, host page, referrer,
-             * UTMs, language, screen. Recorded on the response and never used
-             * to decide anything.
-             */
-            ...respondentContext(),
-            ...(freshRef.current ? { fresh: true } : {}),
-          }),
-        });
+        const payload = {
+          hiddenFields: { ...hiddenFields, ...embedPrefill() },
+          /**
+           * Only when there is no live session to reconnect to — the branches
+           * above already returned in that case. A refresh mid-conversation
+           * must not mint a second session against the same response just
+           * because the token is still sitting in the address bar.
+           *
+           * And not after "Start over", which is the one case where the token
+           * is still in this component's props but the respondent has said
+           * plainly that they do not want what it points at. It outranks
+           * every other way of recognising them, so left in it would resume
+           * the very response they asked to abandon.
+           */
+          ...(resumeToken && !freshRef.current ? { resumeToken } : {}),
+          ...(followUpId ? { followUpId } : {}),
+          /**
+           * Which device this is, so an anonymous respondent who cleared
+           * their storage or opened the form privately gets their own
+           * half-finished response back instead of a blank one — and so the
+           * duplicate rule stops treating a whole office as one person.
+           *
+           * Awaited rather than fired alongside: the server needs it in this
+           * request to decide both. Null whenever the signal cannot be
+           * computed, which the server handles by falling back to the IP.
+           */
+          ...(deviceSignal ? { deviceSignal } : {}),
+          /**
+           * Which clock this respondent is on, so a reminder that would fall
+           * in the middle of their night waits for the morning instead.
+           *
+           * Read from the browser rather than guessed at the edge: geo-IP
+           * gets a VPN user and a corporate egress wrong, and this is the one
+           * source that knows where the person is actually sitting. Wrapped
+           * because `resolvedOptions` is missing in a few hardened browsers,
+           * and a form that would not open because it could not name a time
+           * zone would be an absurd trade.
+           */
+          ...respondentTimezone(),
+          /**
+           * Where they are filling it from: channel, host page, referrer,
+           * UTMs, language, screen. Recorded on the response and never used
+           * to decide anything.
+           */
+          ...respondentContext(),
+          ...(freshRef.current ? { fresh: true } : {}),
+        };
+        const openWith = (token: string | undefined) =>
+          fetch(`${apiOrigin}/p/forms/${slug}/sessions`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ...payload, ...(token ? { turnstileToken: token } : {}) }),
+          });
+        let res = await openWith(turnstileToken);
+        /*
+         * The server wants proof this is a person: the background check did not
+         * pass, or never ran. Show Cloudflare's checkbox and try once more with
+         * what it gives back, so a person is asked rather than turned away and
+         * a script, which cannot tick it, stays out.
+         */
+        if (res.status === 403 && captcha) {
+          const code = ((await res.clone().json().catch(() => null)) as { error?: { code?: string } } | null)?.error?.code;
+          if (code === "captcha_required") {
+            const proof = await getTurnstileToken(undefined, { interactive: true });
+            if (!proof) throw new Error("We couldn't load the check that you're not a bot. Check your connection and tap Retry.");
+            res = await openWith(proof);
+          }
+        }
         if (!res.ok) {
           const body = (await res.json().catch(() => null)) as {
             error?: { code?: string; message?: string };

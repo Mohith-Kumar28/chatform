@@ -16,7 +16,7 @@ const WAIT_MS = 3_000;
 /** Cloudflare's is 300s; a little less, so a token is never spent as it expires. */
 export const TURNSTILE_TOKEN_TTL_MS = 270_000;
 /** How long someone who has been shown the checkbox gets to click it. */
-const INTERACTIVE_WAIT_MS = 60_000;
+const INTERACTIVE_WAIT_MS = 180_000;
 
 interface TurnstileApi {
   render(
@@ -62,15 +62,26 @@ export function turnstileSiteKey(): string | undefined {
   return process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || undefined;
 }
 
-export function getTurnstileToken(siteKey: string | undefined = turnstileSiteKey()): Promise<string | undefined> {
+/**
+ * `interactive` is the second try, after the server refused the first token:
+ * the widget is shown outright, centred on the page, and waits for the person
+ * rather than for `WAIT_MS`. Nearly everyone never sees it.
+ */
+export function getTurnstileToken(
+  siteKey: string | undefined = turnstileSiteKey(),
+  { interactive = false }: { interactive?: boolean } = {},
+): Promise<string | undefined> {
   if (!siteKey || typeof window === "undefined") return Promise.resolve(undefined);
   return new Promise((resolve) => {
     let settled = false;
     let widgetId: string | undefined;
     const host = document.createElement("div");
     // Bottom centre, above the composer, and empty (so invisible) unless
-    // Cloudflare decides to show the checkbox.
-    host.style.cssText = "position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:2147483000;";
+    // Cloudflare decides to show the checkbox. The interactive retry sits in
+    // the middle of the screen, where it cannot be missed.
+    host.style.cssText = interactive
+      ? "position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2147483000;"
+      : "position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:2147483000;";
     const finish = (token: string | undefined) => {
       if (settled) return;
       settled = true;
@@ -83,7 +94,7 @@ export function getTurnstileToken(siteKey: string | undefined = turnstileSiteKey
       host.remove();
       resolve(token);
     };
-    let timer = setTimeout(() => finish(undefined), WAIT_MS);
+    let timer = setTimeout(() => finish(undefined), interactive ? INTERACTIVE_WAIT_MS : WAIT_MS);
 
     void loadScript().then((api) => {
       if (settled) return;
@@ -92,7 +103,7 @@ export function getTurnstileToken(siteKey: string | undefined = turnstileSiteKey
       try {
         widgetId = api.render(host, {
           sitekey: siteKey,
-          appearance: "interaction-only",
+          appearance: interactive ? "always" : "interaction-only",
           callback: (token) => finish(token),
           "error-callback": () => finish(undefined),
           "timeout-callback": () => finish(undefined),

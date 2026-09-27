@@ -304,20 +304,25 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
    * Turnstile, in managed mode: invisible for nearly everyone, a single
    * checkbox for a visitor Cloudflare is unsure of.
    *
-   * It labels; it never refuses. Whatever Cloudflare answers, or fails to
-   * answer, the form opens. On 2026-09-28 a "no" from Cloudflare returned 403
-   * here, and a key mismatch turned every live respondent on a real form away
-   * with "We couldn't confirm you're not a bot". A captcha that fails is a
-   * captcha problem, never a form outage. The verdict is stored on the
-   * session (`bot_check`) so the author can see and filter what came in
-   * unchecked or flagged.
+   * A visitor Cloudflare rejects is refused with `captcha_required`, and the
+   * chat client answers that by showing the checkbox, so a person proves it
+   * and gets in while a script does not. What must never refuse anyone is a
+   * failure on our side: on 2026-09-28 a key problem turned every live
+   * respondent away. `verifyTurnstile` sorts the two; see it.
    */
   let botCheck: BotCheck | null = null;
   if (!settings.captcha.enabled || input.trustedCaller) {
     botCheck = "off";
   } else if (env.TURNSTILE_SECRET_KEY) {
     const verdict = await verifyTurnstile(env.TURNSTILE_SECRET_KEY, input.turnstileToken);
-    botCheck = verdict === "rejected" ? "failed" : verdict;
+    if (verdict === "rejected") {
+      return {
+        ok: false,
+        status: 403,
+        body: { error: { code: "captcha_required", message: "Please confirm you're not a bot to continue." } },
+      };
+    }
+    botCheck = verdict;
   }
 
   const ipHash = input.respondentIpHash ?? (input.ip ? sha256Hex(input.ip) : "");
@@ -479,23 +484,27 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
   };
 }
 
-/** `failed`: Cloudflare said no. Still let in; see the comment at the check. */
-export type BotCheck = "passed" | "unverified" | "failed" | "off";
+export type BotCheck = "passed" | "unverified" | "off";
 
 /**
- * Ask Cloudflare about a Turnstile token. `rejected` only when Cloudflare
- * answered and said no; everything we could not decide is `unverified`.
+ * Ask Cloudflare about a Turnstile token.
  *
- * `timeout-or-duplicate` is not a rejection: it is what a real browser gets
- * when its session-start POST is retried with the token it already spent. Nor
- * is a bad secret, which is ours to fix, not the visitor's.
+ * `rejected` is a verdict on the visitor: no token, or a token Cloudflare
+ * refused (invalid, expired, or already spent, which is what a replayed token
+ * looks like). The client answers a rejection by showing the checkbox, so a
+ * real person is asked to prove it rather than turned away.
+ *
+ * `unverified` is everything that is our side's problem, not the visitor's:
+ * our secret missing or wrong, Cloudflare erroring or unreachable. Refusing
+ * on those would close every form on the platform at once, so they let the
+ * visitor in and say so loudly in the logs.
  */
 export async function verifyTurnstile(
   secret: string,
   token: string | undefined,
   fetcher: typeof fetch = fetch,
 ): Promise<"passed" | "unverified" | "rejected"> {
-  if (!token) return "unverified";
+  if (!token) return "rejected";
   try {
     const res = await fetcher("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
       method: "POST",
@@ -507,16 +516,14 @@ export async function verifyTurnstile(
     const body = (await res.json()) as { success?: boolean; "error-codes"?: string[] };
     if (body.success) return "passed";
     const codes = body["error-codes"] ?? [];
-    /*
-     * Only a verdict on the visitor refuses the visitor. A secret that is
-     * missing or wrong is our configuration, and refusing on it would close
-     * every form on the platform at once, so it lets them in and says so loudly.
-     */
     if (codes.some((c) => c === "invalid-input-secret" || c === "missing-input-secret")) {
       console.error("turnstile_secret_invalid", { codes });
       return "unverified";
     }
-    if (codes.length > 0 && codes.every((c) => c === "timeout-or-duplicate" || c === "internal-error")) return "unverified";
+    if (codes.length > 0 && codes.every((c) => c === "internal-error")) {
+      console.error("turnstile_internal_error", { codes });
+      return "unverified";
+    }
     console.warn("turnstile_rejected", { codes });
     return "rejected";
   } catch (err) {

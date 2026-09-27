@@ -42,6 +42,13 @@ export default defineConfig({
            * and set the key themselves (see `answer-gate-runtime.test.ts`).
            */
           OPENROUTER_API_KEY: "",
+          /*
+           * No captcha either, for the same reason: `.dev.vars` carries
+           * Cloudflare's test secret for local runs, and with it every test
+           * that opens a session without a token would be refused. The captcha
+           * tests set it themselves (see `ai-outage.test.ts`).
+           */
+          TURNSTILE_SECRET_KEY: "",
         },
       },
     }),

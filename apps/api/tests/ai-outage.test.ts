@@ -23,6 +23,8 @@ const chatCalls: string[] = [];
 let jevCalls = 0;
 /** Holds a chat call open this long before failing it, for the concurrency case. */
 let chatDelayMs = 0;
+/** What the fake siteverify answers. */
+let cloudflareSays: Record<string, unknown> = { success: true };
 const realFetch = globalThis.fetch;
 
 const noCredits = () =>
@@ -34,10 +36,7 @@ const noCredits = () =>
 beforeAll(async () => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    if (url.startsWith("https://challenges.cloudflare.com/")) {
-      // Cloudflare says no to every token: the outage of 2026-09-28.
-      return Response.json({ success: false, "error-codes": ["invalid-input-response"] });
-    }
+    if (url.startsWith("https://challenges.cloudflare.com/")) return Response.json(cloudflareSays);
     if (url === SYSTEM_ONE) {
       jevCalls += 1;
       return noCredits();
@@ -265,24 +264,57 @@ describe("finalizeResponse", () => {
   });
 });
 
-describe("a captcha that says no", () => {
-  it("still opens the form, and labels the session", async () => {
-    const { slug } = await seedForm("captcha-no", "hybrid");
-    const e = env as unknown as Record<string, unknown>;
-    const before = e.TURNSTILE_SECRET_KEY;
-    e.TURNSTILE_SECRET_KEY = "real-looking-secret";
-    try {
-      const res = await fetchApi(`/p/forms/${slug}/sessions`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ turnstileToken: "anything" }),
-      });
+/** Session start against a secret Cloudflare answers with `verdict`. */
+async function openWithCaptcha(slug: string, verdict: Record<string, unknown>, token?: string) {
+  const e = env as unknown as Record<string, unknown>;
+  const before = e.TURNSTILE_SECRET_KEY;
+  e.TURNSTILE_SECRET_KEY = "real-looking-secret";
+  cloudflareSays = verdict;
+  try {
+    return await fetchApi(`/p/forms/${slug}/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(token ? { turnstileToken: token } : {}),
+    });
+  } finally {
+    e.TURNSTILE_SECRET_KEY = before;
+  }
+}
+
+describe("the captcha at session start", () => {
+  let slug: string;
+  beforeAll(async () => {
+    slug = (await seedForm("captcha", "hybrid")).slug;
+  });
+
+  it("lets a person Cloudflare passes in, marked passed", async () => {
+    const res = await openWithCaptcha(slug, { success: true }, "good");
+    expect(res.ok).toBe(true);
+    const { sessionId } = (await res.json()) as { sessionId: string };
+    const row = await env.DB.prepare(`SELECT bot_check FROM chat_sessions WHERE id = ?`).bind(sessionId).first<{ bot_check: string }>();
+    expect(row?.bot_check).toBe("passed");
+  });
+
+  it("keeps out a bot: a refused token, a replayed one, or none at all", async () => {
+    for (const [verdict, token] of [
+      [{ success: false, "error-codes": ["invalid-input-response"] }, "forged"],
+      [{ success: false, "error-codes": ["timeout-or-duplicate"] }, "replayed"],
+      [{ success: true }, undefined],
+    ] as const) {
+      const res = await openWithCaptcha(slug, verdict, token);
+      expect(res.status).toBe(403);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe("captcha_required");
+    }
+  });
+
+  it("never turns anyone away over our own setup or Cloudflare's trouble", async () => {
+    // A wrong secret: the 2026-09-28 outage.
+    for (const verdict of [
+      { success: false, "error-codes": ["invalid-input-secret"] },
+      { success: false, "error-codes": ["internal-error"] },
+    ]) {
+      const res = await openWithCaptcha(slug, verdict, "anything");
       expect(res.ok).toBe(true);
-      const { sessionId } = (await res.json()) as { sessionId: string };
-      const row = await env.DB.prepare(`SELECT bot_check FROM chat_sessions WHERE id = ?`).bind(sessionId).first<{ bot_check: string }>();
-      expect(row?.bot_check).toBe("failed");
-    } finally {
-      e.TURNSTILE_SECRET_KEY = before;
     }
   });
 });
@@ -290,17 +322,17 @@ describe("a captcha that says no", () => {
 describe("verifyTurnstile", () => {
   const answer = (body: unknown, status = 200) => (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
 
-  it("passes a good token and refuses one Cloudflare rejects", async () => {
+  it("passes a good token and rejects a bot's", async () => {
     expect(await verifyTurnstile("s", "tok", answer({ success: true }))).toBe("passed");
     expect(await verifyTurnstile("s", "tok", answer({ success: false, "error-codes": ["invalid-input-response"] }))).toBe("rejected");
+    expect(await verifyTurnstile("s", "tok", answer({ success: false, "error-codes": ["timeout-or-duplicate"] }))).toBe("rejected");
+    expect(await verifyTurnstile("s", undefined, answer({ success: true }))).toBe("rejected");
   });
 
-  it("lets people in, unverified, when it cannot decide", async () => {
-    expect(await verifyTurnstile("s", undefined, answer({ success: true }))).toBe("unverified");
-    expect(await verifyTurnstile("s", "tok", answer({ success: false, "error-codes": ["timeout-or-duplicate"] }))).toBe("unverified");
-    expect(await verifyTurnstile("s", "tok", answer({}, 503))).toBe("unverified");
-    // Our secret, wrong or missing: every visitor would be refused, so none is.
+  it("lets people in, unverified, when the fault is ours or Cloudflare's", async () => {
     expect(await verifyTurnstile("s", "tok", answer({ success: false, "error-codes": ["invalid-input-secret"] }))).toBe("unverified");
+    expect(await verifyTurnstile("s", "tok", answer({ success: false, "error-codes": ["internal-error"] }))).toBe("unverified");
+    expect(await verifyTurnstile("s", "tok", answer({}, 503))).toBe("unverified");
     const down = (async () => {
       throw new TypeError("network down");
     }) as unknown as typeof fetch;
