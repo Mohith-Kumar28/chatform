@@ -27,6 +27,10 @@ export interface Choice {
  * someone typing "1 or 2 a week" keeps their digits — and only for a question
  * that has numbered choices on offer, which is why a `number`, `rating` or
  * `nps` answer is untouched.
+ *
+ * Only while that focus is ours, though. Someone who clicks or taps into the
+ * box has said they mean to type, so the box keeps every key, the first digit
+ * included, until focus leaves it.
  */
 export function useChoiceKeys(
   choices: Choice[],
@@ -39,6 +43,15 @@ export function useChoiceKeys(
   });
 
   useEffect(() => {
+    // The text field the respondent put the cursor in themselves.
+    let claimed: EventTarget | null = null;
+    function onPointerDown(e: PointerEvent) {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") claimed = e.target;
+    }
+    function onFocusOut(e: FocusEvent) {
+      if (e.target === claimed) claimed = null;
+    }
     function onKey(e: KeyboardEvent) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
@@ -67,12 +80,19 @@ export function useChoiceKeys(
         latest.current.onEnter();
         return;
       }
+      if (inField && target === claimed) return;
       const hit = latest.current.choices.find((c) => c.key === e.key);
       if (!hit) return;
       e.preventDefault();
       latest.current.onPick(hit);
     }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("focusout", onFocusOut, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("focusout", onFocusOut, true);
+    };
   }, []);
 }

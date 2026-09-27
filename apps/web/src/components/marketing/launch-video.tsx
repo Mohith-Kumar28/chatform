@@ -179,9 +179,12 @@ export function LaunchVideo() {
             </div>
           </div>
 
-          {/* The frame: a 1px gradient rim around the player. */}
-          <div className="relative rounded-2xl bg-[linear-gradient(115deg,var(--brand-orange),var(--brand-violet))] p-px shadow-[0_30px_80px_-20px_rgb(0_0_0/0.45)] sm:rounded-3xl">
-            <div className="relative overflow-hidden rounded-[calc(1rem-1px)] bg-black sm:rounded-[calc(1.5rem-1px)]">
+          {/* The frame. Phones composite the video on its own layer, which
+              ignores a rounded overflow clip and paints over a rim drawn
+              underneath it. So the clip is forced onto a layer of its own
+              (translateZ), and the 1px gradient rim is drawn on top. */}
+          <div className="relative rounded-2xl shadow-[0_30px_80px_-20px_rgb(0_0_0/0.45)] sm:rounded-3xl">
+            <div className="relative overflow-hidden rounded-2xl bg-black [transform:translateZ(0)] sm:rounded-3xl">
               <video
                 ref={videoRef}
                 src={src}
@@ -213,6 +216,13 @@ export function LaunchVideo() {
                 </button>
               )}
             </div>
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-2xl bg-[linear-gradient(115deg,var(--brand-orange),var(--brand-violet))] p-px sm:rounded-3xl"
+              style={{
+                mask: "linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0)",
+              }}
+            />
           </div>
         </div>
       </div>
