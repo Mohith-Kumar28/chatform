@@ -88,17 +88,39 @@
 
   function configure(published) {
     var r = published || {};
+    /**
+     * Say so when the tag overrides a published setting.
+     *
+     * The tag wins, on purpose: it is the more specific of the two. But from
+     * the studio it looks like Publish did nothing, so the page's console
+     * names the attribute that is holding the old value.
+     */
+    function overrides(name, key, own, theirs) {
+      if (r[key] === undefined || r[key] === null || own === theirs) return;
+      console.info(
+        "[chatform] " + name + '="' + script.getAttribute(name) + '" on the script tag overrides the published ' +
+          key + ' ("' + r[key] + '"). Remove the attribute to use the published setting.',
+      );
+    }
     function pick(name, key) {
-      if (script.hasAttribute(name)) return script.getAttribute(name);
+      if (script.hasAttribute(name)) {
+        overrides(name, key, script.getAttribute(name), String(r[key]));
+        return script.getAttribute(name);
+      }
       return r[key] === undefined || r[key] === null ? null : String(r[key]);
     }
     function flag(name, key) {
-      if (script.hasAttribute(name)) return script.getAttribute(name) !== "none";
+      if (script.hasAttribute(name)) {
+        overrides(name, key, script.getAttribute(name) !== "none", r[key] !== false);
+        return script.getAttribute(name) !== "none";
+      }
       return r[key] !== false;
     }
 
     mode = pick("data-mode", "mode") || "popup";
-    color = script.getAttribute("data-button-color") || script.getAttribute("data-color") || r.color || "#FD6F29";
+    var colorAttr = script.hasAttribute("data-button-color") ? "data-button-color" : script.hasAttribute("data-color") ? "data-color" : null;
+    if (colorAttr) overrides(colorAttr, "color", script.getAttribute(colorAttr).toLowerCase(), String(r.color).toLowerCase());
+    color = (colorAttr && script.getAttribute(colorAttr)) || r.color || "#FD6F29";
     // Only a plain colour; anything else keeps the default light background.
     skinBackground = typeof r.background === "string" && /^#[0-9a-f]{3,8}$/i.test(r.background) ? r.background : null;
     var labelValue = pick("data-label", "label");
@@ -107,7 +129,10 @@
     showLauncher = flag("data-launcher", "launcher");
     theme = pick("data-theme", "theme") || "auto";
     openOn = pick("data-open-on", "openOn") || "click";
-    if (script.hasAttribute("data-height")) heightAttr = script.getAttribute("data-height");
+    if (script.hasAttribute("data-height")) {
+      heightAttr = script.getAttribute("data-height");
+      overrides("data-height", "height", heightAttr, String(r.height));
+    }
     else if (mode === "inline") heightAttr = r.autoHeight === false && r.height ? String(r.height) : "auto";
     else heightAttr = r.height ? String(r.height) : "auto";
 
