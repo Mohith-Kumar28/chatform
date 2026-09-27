@@ -1083,7 +1083,8 @@
   .chat-edit-affordance {
     opacity: 0;
   }
-  .group:hover .chat-edit-affordance {
+  .group:hover .chat-edit-affordance,
+  .chat-edit-affordance.chat-edit-latest {
     opacity: 0.6;
   }
 }

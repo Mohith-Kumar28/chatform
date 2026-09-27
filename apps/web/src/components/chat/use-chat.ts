@@ -2561,10 +2561,13 @@ export function useChat({
     const session = sessionRef.current;
     if (!session) return;
     try {
-      await fetch(`${apiOrigin}/p/sessions/${session.sessionId}/resync`, {
+      const res = await fetch(`${apiOrigin}/p/sessions/${session.sessionId}/resync`, {
         method: "POST",
         headers: { "x-respondent-token": session.token },
       });
+      // The server is still working on the turn: as good as an event arriving.
+      const body = (await res.json().catch(() => null)) as { pending?: boolean } | null;
+      if (body?.pending) lastEventAtRef.current = Date.now();
     } catch {
       // The watchdog below decides whether to try again.
     }

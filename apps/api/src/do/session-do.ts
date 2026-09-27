@@ -3725,7 +3725,22 @@ export class SessionDO extends DurableObject<Bindings> {
    * with an error nobody can see. The `finally`-shaped tail here re-states the
    * question, which puts the controls back exactly as they were.
    */
+  /**
+   * Turns being worked on right now. A DO interleaves requests while one
+   * awaits a model, so `resync` can land in the middle of a turn.
+   */
+  private turnsInFlight = 0;
+
   async handleUserTurn(input: TurnInput): Promise<{ accepted: boolean; error?: string }> {
+    this.turnsInFlight += 1;
+    try {
+      return await this.userTurn(input);
+    } finally {
+      this.turnsInFlight -= 1;
+    }
+  }
+
+  private async userTurn(input: TurnInput): Promise<{ accepted: boolean; error?: string }> {
     /**
      * A turn this session has already taken is a no-op, not a second turn.
      *
@@ -5003,9 +5018,16 @@ export class SessionDO extends DurableObject<Bindings> {
    * It reads state and emits; it never advances the flow. Calling it twice in
    * a row is the same as calling it once.
    */
-  async resync(): Promise<{ ok: boolean }> {
+  async resync(): Promise<{ ok: boolean; pending?: boolean }> {
     const loaded = await this.ensureLoaded();
     if (!loaded || !this.meta || !this.doc) return { ok: false };
+    /*
+     * A slow turn is not a lost one. Re-stating the question here put the
+     * question the turn was answering back on screen (a calendar, after "I am
+     * a VC" on a booking question) until the real reply replaced it. The
+     * client counts `pending` as the stream still being alive.
+     */
+    if (this.turnsInFlight > 0) return { ok: true, pending: true };
     await this.refreshAuthGate();
 
     // A screen-out is just as finished as a completion, and a reload has to

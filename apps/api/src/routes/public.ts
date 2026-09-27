@@ -813,7 +813,7 @@ sessionsRouter.post("/sessions/:id/resync", async (c) => {
   if (!sessionId) return c.json({ error: { code: "unauthorized", message: "Invalid session token" } }, 401);
   const result = await stub(c.env, sessionId).resync();
   if (!result.ok) return c.json({ error: { code: "not_found", message: "Session not found" } }, 404);
-  return c.json({ ok: true }, 202);
+  return c.json({ ok: true, ...(result.pending ? { pending: true } : {}) }, 202);
 });
 
 sessionsRouter.get("/sessions/:id", async (c) => {

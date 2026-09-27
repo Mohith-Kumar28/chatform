@@ -473,6 +473,11 @@ export function ChatSurface({
         : undefined,
     [media, imageKey, description, chat.messages],
   );
+  // The answer most likely to be changed keeps its pencil in view; older ones reveal it on hover.
+  const latestAnswerId = useMemo(
+    () => chat.messages.filter((m) => m.role === "user" && !m.optimistic && m.answeredRef).at(-1)?.id,
+    [chat.messages],
+  );
   const uploadBase = chat.getUploadBase();
   const respondentToken = chat.getRespondentToken();
 
@@ -644,6 +649,7 @@ export function ChatSurface({
                 // an inline closure here would give every bubble a new prop on
                 // every streamed token and defeat the memo entirely.
                 canEdit={!m.optimistic && !!m.answeredRef && !chat.ending}
+                latest={m.id === latestAnswerId}
                 onEdit={chat.editAnswer}
                 /*
                   Offered only while the form still wants an answer, and only
@@ -1137,11 +1143,14 @@ function ChatHeader({
 const Bubble = memo(function Bubble({
   message,
   canEdit,
+  latest,
   onEdit,
   onSwitchAccount,
 }: {
   message: ChatMessage;
   canEdit: boolean;
+  /** The last answer given: its pencil shows without a hover. */
+  latest: boolean;
   /** Stable across renders — see `editAnswer` in `useChat`. */
   onEdit: (ref: string) => void;
   /** Present only beside the "verified as" note, and only on a gated form. */
@@ -1188,7 +1197,7 @@ const Bubble = memo(function Bubble({
           onClick={() => onEdit(message.answeredRef!)}
           aria-label="Change this answer"
           title="Change this answer"
-          className="chat-edit-affordance order-first shrink-0 rounded-full p-1.5"
+          className={cn("chat-edit-affordance order-first shrink-0 rounded-full p-1.5", latest && "chat-edit-latest")}
         >
           <Pencil className="size-3.5" />
         </button>
