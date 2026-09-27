@@ -274,8 +274,8 @@
     // The first answer rides in the URL so the header X never flashes; later
     // changes (a window resized across 520px) arrive as a "host" message.
     if (hostCloses()) url.searchParams.set("hostClose", "1");
-    // Loaded ahead of the click: the frame counts no view and holds no live
-    // stream until `open` arrives. See `preload`.
+    // Loaded ahead of the click: the frame holds its session (a response row)
+    // until `open` arrives. See `preload`.
     if (!isOpen && mode !== "inline") url.searchParams.set("cf_defer", "1");
     // Where the form sits, recorded on the response. Inside the frame the
     // referrer is only this origin, so the page and its own referrer ride here.
@@ -660,8 +660,8 @@
     if (launcher) launcher.classList.remove("cf-attn");
     isOpen = true;
     if (!frame && panel) panel.appendChild(buildFrame());
-    // A preloaded frame is waiting for this. One that has not said hello yet
-    // hears it again on `ready`.
+    // A preloaded frame is waiting for this to open its session. One that has
+    // not said hello yet hears it again on `ready`.
     post({ type: "open" });
     if (panel) panel.classList.add("cf-open");
     if (launcher) {
@@ -996,16 +996,12 @@
   /**
    * Load a popup's frame once the page has finished its own work.
    *
-   * Built on the click, the form was a server render, a bundle, a session and
-   * a boot screen, one after another: seconds of loading in front of someone
-   * who had just asked for it. Built now, hidden, the conversation is already
-   * on screen when they click. It waits for the page's `load` and an idle
-   * moment so it never competes with the host's first paint.
-   *
-   * The session it opens is not a response (that is born at the first
-   * answer), and it is reused on every later page of the site, so this is one
-   * session per visitor, not per page view. With `cf_defer` the frame counts
-   * no view and keeps no live stream until it is opened.
+   * Built on the click, the form was a server render, a bundle and a boot
+   * screen, one after another, a few seconds of loading in front of someone
+   * who had just asked for it. Built now, hidden, it is already on screen when
+   * they click. It waits for the page's `load` and an idle moment so it never
+   * competes with the host's first paint, and it opens no session until it is
+   * opened (`cf_defer`), so a page view is still not a response.
    */
   function preload() {
     if (lazyAttr === "true" || mode === "inline" || mode === "fullpage") return;

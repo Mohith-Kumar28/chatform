@@ -70,19 +70,20 @@ export function requestEmbedClose(): boolean {
 }
 
 /**
- * Whether the host page has opened the panel yet.
+ * Held until the host page opens the panel.
  *
- * `embed.js` loads a popup's frame while the page is idle, hidden, and with
- * `?cf_defer=1`. The frame then does everything, the session and its first
- * question included, so a click shows a conversation that is already there.
- * Only two things wait for the click: the view ping, because a page view is
- * not a view of the form, and the live stream, which is let go once the
- * conversation is drawn (see `use-chat`) so an unopened popup does not keep a
- * session object running.
+ * `embed.js` loads a popup's frame while the page is idle, hidden, so a click
+ * shows a form that is already there instead of a page, a bundle and a boot
+ * screen arriving one after another. A frame loaded that early must not open a
+ * session, though: a session is a response row, and one per page view of the
+ * host site is a response per page view. So `?cf_defer=1` holds the session
+ * (and the view ping) back until the host says `open`. Everything that does
+ * not write anything, the page, the code and the "already answered?" probe,
+ * is done by then.
  *
- * Decided from the address bar at module load, because `start()` runs before
- * the bridge's effect has. An untrusted parent never gets to send `open`, so
- * the bridge releases the gate itself (see below).
+ * Decided from the address bar at module load, because `start()` reaches the
+ * gate before the bridge's effect has run. An untrusted parent never gets to
+ * send `open`, so the bridge releases the gate itself (see below).
  */
 let releaseOpen: (() => void) | null = null;
 const opened: Promise<void> =
@@ -93,11 +94,6 @@ const opened: Promise<void> =
         releaseOpen = resolve;
       })
     : Promise.resolve();
-
-/** True while a preloaded popup is still waiting for its click. */
-export function embedOpenPending(): boolean {
-  return releaseOpen !== null;
-}
 
 export function whenEmbedOpened(): Promise<void> {
   return opened;
@@ -112,7 +108,8 @@ function markOpened(): void {
  * `Chatform.prefill()` values that arrived before the session opened.
  *
  * Only the form's declared hidden fields, the same filter the page applies to
- * the query string. Read when the session is created.
+ * the query string. Read when the session is created, which for a preloaded
+ * popup is after the click, so a prefill made any time before then lands.
  */
 const prefilled: Record<string, string> = {};
 export function embedPrefill(): Record<string, string> {
