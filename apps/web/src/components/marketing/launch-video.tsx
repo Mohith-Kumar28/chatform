@@ -231,7 +231,7 @@ export function LaunchVideo() {
  */
 export function WatchVideoCue({ className }: { className?: string }) {
   const maskId = useId();
-  const d = "M6 10 C 52 2, 92 22, 80 52 C 72 72, 44 62, 54 44 C 64 26, 98 48, 88 104";
+  const d = "M6 10 C 52 2, 92 22, 80 52 C 72 72, 44 62, 54 44 C 64 26, 98 48, 88 104 S 86 132, 88 146";
   return (
     <a
       href={`#${LAUNCH_VIDEO_ID}`}
@@ -253,12 +253,12 @@ export function WatchVideoCue({ className }: { className?: string }) {
       <span data-armed="" data-inview="" className="contents">
         <svg
           aria-hidden
-          viewBox="0 0 110 112"
+          viewBox="0 0 110 154"
           fill="none"
-          className="-mb-10 h-24 w-24 shrink-0 translate-y-3"
+          className="-mb-[5rem] h-[8.4rem] w-24 shrink-0 translate-y-3"
         >
           <defs>
-            <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="110" height="112">
+            <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="110" height="154">
               <path
                 d={d}
                 stroke="white"
@@ -279,13 +279,13 @@ export function WatchVideoCue({ className }: { className?: string }) {
             strokeDasharray="5 6"
           />
           <path
-            d="M78 94 L88 105 L98 92"
+            d="M78 136 L88 147 L98 134"
             stroke="currentColor"
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
             className="cf-a-pop"
-            style={{ animationDelay: "2500ms", transformOrigin: "88px 104px" }}
+            style={{ animationDelay: "2500ms", transformOrigin: "88px 146px" }}
           />
         </svg>
       </span>
