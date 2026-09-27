@@ -40,6 +40,15 @@
   box-shadow: 0 0 0 7px color-mix(in oklch, var(--primary) 26%, transparent);
 }
 
+/*
+ * Empty canvas is an arrow, not a hand. React Flow marks the pane as clickable
+ * because a drag there draws a selection box, but nothing on it is a link.
+ * Questions keep their grab cursor; space+drag still shows the hand.
+ */
+.react-flow__pane.selection {
+  cursor: default;
+}
+
 /* Wires are worth clicking too; the stroke alone is a 2px target. */
 .react-flow__edge .react-flow__edge-interaction {
   stroke-width: 22;
