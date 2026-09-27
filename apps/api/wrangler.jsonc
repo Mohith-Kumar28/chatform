@@ -12,10 +12,12 @@
   // Dodo webhook endpoint is registered at the workers.dev host, and a dead endpoint means
   // deliveries fail and subscriptions never activate.
   "workers_dev": true,
-  // Run next to D1 (APAC), not next to the visitor. Opening a session is a
+  // Run next to D1 (SIN), not next to the visitor. Opening a session is a
   // dozen sequential queries; from a far colo (India is often routed to
-  // Marseille) each one crossed a continent and the whole took 2-3s.
-  "placement": { "mode": "smart" },
+  // Marseille) each one crossed a continent and the whole took 2-3s. Targeted
+  // rather than smart: smart placed it in Chicago after a redeploy, 236ms
+  // from the database per query.
+  "placement": { "mode": "targeted", "region": "aws:ap-southeast-1" },
   "observability": {
     "enabled": true
   },
