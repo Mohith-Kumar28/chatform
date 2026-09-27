@@ -162,6 +162,13 @@ export function BuilderShell({
       the answer can be exact, so it seeds the store rather than being recomputed here.
     */
     hydrate(row.id, parsed.data, row.workingRevision, row.hasUnpublishedChanges);
+    // `?design=1` (Integrate's "Edit in Design") opens the sheet that hydrating just closed.
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("design")) {
+      useBuilderStore.getState().setDesignOpen(true);
+      url.searchParams.delete("design");
+      window.history.replaceState(window.history.state, "", url);
+    }
 
     /*
       Work that never reached the server, from a tab that closed before it could.

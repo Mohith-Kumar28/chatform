@@ -237,10 +237,11 @@ sessionsRouter.get(
     c.header("cache-control", "public, max-age=60");
     if (!row || row.status !== "published") return c.json({});
     const doc = readFormDoc(JSON.parse(row.schema_json));
-    const { buttonColor, ...embed } = doc.embed ?? {};
+    const { buttonColor, buttonTextColor, ...embed } = doc.embed ?? {};
     return c.json({
       ...embed,
       color: buttonColor ?? doc.theme.accent,
+      textColor: buttonTextColor,
       background: doc.theme.background,
       font: doc.theme.fontBody,
     });

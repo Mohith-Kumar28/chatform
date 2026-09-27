@@ -89,6 +89,7 @@ function toEmbedDoc(c: EmbedConfig): EmbedDoc {
   return {
     mode: c.mode,
     buttonColor: c.buttonColor || undefined,
+    buttonTextColor: c.buttonTextColor || undefined,
     buttonShape: c.buttonShape,
     buttonSize: c.buttonSize,
     position: c.position,
@@ -371,21 +372,20 @@ export function EmbedStudio({
                         />
                       </Field>
                       <Field label="Colour" hint="Empty matches the form's primary colour.">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="color"
-                            value={/^#[0-9a-fA-F]{6}$/.test(config.color) ? config.color : "#FD6F29"}
-                            onChange={(e) => set("buttonColor", e.target.value)}
-                            className="size-8 shrink-0 cursor-pointer rounded-md border"
-                            aria-label="Button colour"
-                          />
-                          <BufferedInput
-                            value={config.buttonColor}
-                            onCommit={(v) => set("buttonColor", /^#[0-9a-f]{3,8}$/i.test(v.trim()) ? v.trim() : "")}
-                            placeholder={theme.accent}
-                            className="h-8 font-mono text-xs"
-                          />
-                        </div>
+                        <ColorInput
+                          value={config.buttonColor}
+                          fallback={theme.accent}
+                          label="Button colour"
+                          onChange={(v) => set("buttonColor", v)}
+                        />
+                      </Field>
+                      <Field label="Text colour" hint="The button's text and icon. Empty is white.">
+                        <ColorInput
+                          value={config.buttonTextColor}
+                          fallback="#ffffff"
+                          label="Button text colour"
+                          onChange={(v) => set("buttonTextColor", v)}
+                        />
                       </Field>
                       <Field label="Shape">
                         <SegmentedControl
@@ -491,13 +491,13 @@ export function EmbedStudio({
           {/* The form's own look is the Design sheet's, one click away. */}
           {formId && (
             <p className="border-border/60 text-muted-foreground text-caption shrink-0 border-t px-5 py-3">
-              Fonts and colours of the form?{" "}
+              To change the form&apos;s font and colours,{" "}
               <Link
-                href={`/forms/${formId}/build`}
+                href={`/forms/${formId}/build?design=1`}
                 onClick={() => setDesignOpen(true)}
                 className="text-foreground underline underline-offset-2"
               >
-                Edit in Design
+                open Design
               </Link>
             </p>
           )}
@@ -704,6 +704,38 @@ function PositionPicker({
         );
       })}
     </RadioGroupPrimitive.Root>
+  );
+}
+
+/** A swatch and a hex box. Empty means the fallback, which the box shows as its placeholder. */
+function ColorInput({
+  value,
+  fallback,
+  label,
+  onChange,
+}: {
+  value: string;
+  fallback: string;
+  label: string;
+  onChange: (value: string) => void;
+}) {
+  const shown = value || fallback;
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="color"
+        value={/^#[0-9a-fA-F]{6}$/.test(shown) ? shown : "#ffffff"}
+        onChange={(e) => onChange(e.target.value)}
+        className="size-8 shrink-0 cursor-pointer rounded-md border"
+        aria-label={label}
+      />
+      <BufferedInput
+        value={value}
+        onCommit={(v) => onChange(/^#[0-9a-f]{3,8}$/i.test(v.trim()) ? v.trim() : "")}
+        placeholder={fallback}
+        className="h-8 font-mono text-xs"
+      />
+    </div>
   );
 }
 

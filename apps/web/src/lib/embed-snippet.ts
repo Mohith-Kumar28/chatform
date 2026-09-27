@@ -48,6 +48,8 @@ export interface EmbedConfig {
   color: string;
   /** The launcher's own colour. Empty wears the form's accent. */
   buttonColor: string;
+  /** The launcher's text and icon. Empty is white. */
+  buttonTextColor: string;
   buttonShape: ButtonShape;
   buttonSize: ButtonSize;
   /** Launcher text. Empty means an icon-only bubble. */
@@ -87,6 +89,7 @@ export const EMBED_DEFAULTS: EmbedConfig = {
   // default in `public/embed.js`, for the reason given on `color` above.
   label: "Fill this form",
   buttonColor: "",
+  buttonTextColor: "",
   buttonShape: "round",
   buttonSize: "medium",
   icon: true,
@@ -289,7 +292,9 @@ Script: ${origin}/embed.js
 
 ## Step 1: ask me first
 
-How the form looks and when it opens (popup or inline, corner, button text, auto open, size, colours) is set in Chatform and loaded by the script, so do not ask about those or add attributes for them. Currently: ${MODE_WORDS[config.mode]}${overlay ? `, ${config.launcher ? `corner button "${config.label || "icon only"}" at ${config.position}` : "no corner button, opened from my own button"}, opens ${OPEN_WORDS[config.openOn]}` : ""}.
+How the form looks and when it opens (popup or inline, corner, button text, button colour, shape and size, auto open, panel size, fonts and colours) is set in Chatform and loaded by the script, so do not ask about those or add attributes for them. Currently: ${MODE_WORDS[config.mode]}${overlay ? `, ${config.launcher ? `${config.buttonSize} ${config.buttonShape} corner button "${config.label || "icon only"}" at ${config.position}` : "no corner button, opened from my own button"}, opens ${OPEN_WORDS[config.openOn]}` : ""}.
+
+If my site already has a Chatform script tag, reuse it: remove any data-mode, data-position, data-label, data-button-color or other look and behaviour attributes from it rather than updating their values.
 
 Before you write any code, ask me these questions one at a time and wait for my reply:
 
@@ -309,7 +314,7 @@ Do not install any npm package for this. The script is all it needs.
 
 ## Settings
 
-The form's look and behaviour come from Chatform and update when I press Publish there, with no code change. Do not add data-mode, data-position, data-label, data-open-on or similar attributes: an attribute on the tag overrides the Chatform setting on this site for good.
+The form's look and behaviour come from Chatform and update when I press Publish there, with no code change. That includes the corner button's text, colour, text colour, shape, size and font (the button uses the form's own font). Do not add data-mode, data-position, data-label, data-open-on, data-button-color, data-button-text-color, data-button-shape, data-button-size or similar attributes: an attribute on the tag overrides the Chatform setting on this site for good. When one does, the browser console says so with a line starting "[chatform]".
 
 The only attributes to use:
 
@@ -319,7 +324,7 @@ The only attributes to use:
 | data-target | Inline only: CSS selector of the element to put the form in |
 | data-hidden-<name> | A hidden value saved with each response, e.g. data-hidden-plan="pro" |
 
-On screens narrower than 520px the popup and side tab fill the whole screen, and an automatic open only draws attention to the corner button instead of covering the page.
+An automatic open happens at most once a day per visitor, and never again after they submit. On screens narrower than 520px the popup and side tab fill the whole screen, and an automatic open only draws attention to the corner button instead of covering the page.
 
 ## Opening it from my own button
 
@@ -349,5 +354,5 @@ ${embedSnippet(options)}
 
 - Only one script tag per form per page.
 - If the site sets a Content Security Policy, add: frame-src ${origin}; script-src ${origin};
-- Tell me how to check it works: which page to open and what I should see.`;
+- Tell me how to check it works: which page to open and what I should see, and that the browser console shows no "[chatform]" override notes.`;
 }

@@ -313,6 +313,7 @@ export function EmbedPreview({
                         height: config.label ? size.x : size.bare,
                         borderRadius: radius,
                         background: config.color,
+                        color: config.buttonTextColor || "#fff",
                         boxShadow: "0 6px 24px rgba(0,0,0,.18)",
                       }}
                     >
@@ -335,6 +336,7 @@ export function EmbedPreview({
                           : { width: size.bare, height: size.bare }),
                         borderRadius: radius,
                         background: config.color,
+                        color: config.buttonTextColor || "#fff",
                         boxShadow: "0 6px 24px rgba(0,0,0,.18)",
                         ["--cf-c" as string]: config.color,
                         fontFamily: fontStack(theme.fontBody),

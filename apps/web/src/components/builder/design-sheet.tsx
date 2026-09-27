@@ -54,7 +54,17 @@ export function DesignSheet({
         a grey guess at the colours being picked. Clicking outside still
         closes it; there is just nothing painted over the form any more.
       */}
-      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-sm" overlayClassName="bg-transparent backdrop-blur-none">
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-0 p-0 sm:max-w-sm"
+        overlayClassName="bg-transparent backdrop-blur-none"
+        // The sheet takes focus itself: its first field is the form name, and
+        // opening Design to pick a colour should not put a caret in it.
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          (e.currentTarget as HTMLElement).focus();
+        }}
+      >
         <SheetHeader className="shrink-0 px-5 pt-5 pb-3">
           <SheetTitle>Design</SheetTitle>
         </SheetHeader>

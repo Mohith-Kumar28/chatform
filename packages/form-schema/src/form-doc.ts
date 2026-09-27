@@ -39,6 +39,8 @@ export const EmbedDoc = z.object({
   autoHeight: z.boolean().optional().catch(undefined),
   /** The corner button's own colour. Absent wears the theme's accent. */
   buttonColor: z.string().regex(/^#[0-9a-f]{3,8}$/i).optional().catch(undefined),
+  /** The corner button's text and icon. Absent is white. */
+  buttonTextColor: z.string().regex(/^#[0-9a-f]{3,8}$/i).optional().catch(undefined),
   buttonShape: z.enum(["round", "rounded", "square"]).optional().catch(undefined),
   buttonSize: z.enum(["small", "medium", "large"]).optional().catch(undefined),
 });

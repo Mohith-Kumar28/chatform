@@ -31,6 +31,7 @@
  *   data-button-color launcher colour (data-color still works)  default #FD6F29
  *   data-label       launcher text; "" for an icon-only bubble   default "Fill this form"
  *   data-icon        chat | none                                 default chat
+ *   data-button-text-color launcher text and icon colour        default #fff
  *   data-button-shape round | rounded | square                  default round
  *   data-button-size small | medium | large                     default medium
  *   data-launcher    "none" hides the corner button; open it from
@@ -84,7 +85,7 @@
    * That is what keeps every snippet pasted before this existed, each of which
    * spelled its settings out as attributes, behaving exactly as it did.
    */
-  var mode, color, label, showIcon, showLauncher, theme, openOn, heightAttr, buttonShape, buttonSize;
+  var mode, color, textColor, label, showIcon, showLauncher, theme, openOn, heightAttr, buttonShape, buttonSize;
   var position, vertical, horizontal, offset, panelWidth, panelHeight;
   var POSITIONS = ["bottom-right", "bottom-left", "top-right", "top-left"];
   /** How much room each launcher size takes: its circle plus a 12px gap. */
@@ -125,6 +126,7 @@
     var colorAttr = script.hasAttribute("data-button-color") ? "data-button-color" : script.hasAttribute("data-color") ? "data-color" : null;
     if (colorAttr) overrides(colorAttr, "color", script.getAttribute(colorAttr).toLowerCase(), String(r.color).toLowerCase());
     color = (colorAttr && script.getAttribute(colorAttr)) || r.color || "#FD6F29";
+    textColor = pick("data-button-text-color", "textColor") || "#fff";
     // Only a plain colour; anything else keeps the default light background.
     skinBackground = typeof r.background === "string" && /^#[0-9a-f]{3,8}$/i.test(r.background) ? r.background : null;
     // A family name only: it goes into a stylesheet URL and a font-family.
@@ -584,6 +586,7 @@
       launcher.className =
         "cf-launcher cf-l-" + uid + (label ? "" : " cf-bare") + " cf-sz-" + buttonSize + " cf-r-" + buttonShape;
       launcher.style.background = color;
+      launcher.style.color = textColor;
       fontLauncher(launcher);
       // The attention ring pulses in the button's own colour.
       launcher.style.setProperty("--cf-c", color);
