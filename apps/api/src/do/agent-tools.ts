@@ -173,7 +173,9 @@ export function answerSteersFlow(doc: FormDoc, ref: string): boolean {
     doc.variables,
     doc.blocks.filter((b) => b.ref !== ref),
   ]);
-  return elsewhere.includes(ref);
+  // Being a branch's destination is not reading the answer: a rule that jumps
+  // *to* this question says nothing about where the flow goes *after* it.
+  return elsewhere.split(`"target":"${ref}"`).join("").includes(ref);
 }
 
 export type Revision =

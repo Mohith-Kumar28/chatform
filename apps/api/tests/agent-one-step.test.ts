@@ -63,6 +63,25 @@ describe("answerSteersFlow", () => {
     expect(answerSteersFlow(doc, "q_size")).toBe(true);
   });
 
+  it("is false for a question that is only a branch's destination", () => {
+    const jumpedTo = FormDoc.parse({
+      ...doc,
+      logic: [
+        ...doc.logic,
+        {
+          id: "rl_bbbb02",
+          action_kind: "goto",
+          from: "q_name",
+          target: "q_idea",
+          targetKind: "block",
+          when: { op: "and", conditions: [{ left: { kind: "ref", ref: "q_name" }, op: "eq", value: "x" }], groups: [] },
+        },
+      ],
+    });
+    expect(answerSteersFlow(jumpedTo, "q_name")).toBe(true);
+    expect(answerSteersFlow(jumpedTo, "q_idea")).toBe(false);
+  });
+
   it("is true for an answer piped into a later question", () => {
     expect(answerSteersFlow(doc, "q_team")).toBe(true);
   });
