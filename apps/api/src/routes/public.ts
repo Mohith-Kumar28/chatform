@@ -29,6 +29,7 @@ import { recordClientTiming } from "../lib/turn-timings.js";
 import { cancelFollowUps, cancelFollowUpsForAddress, recordFollowUpClick, suppress } from "../lib/followups.js";
 import type { RespondentIdentity } from "@repo/form-schema";
 import { confirmPaymentForSession, providersForAccounts, startPaymentForSession } from "../lib/payments/service.js";
+import { SESSION_LOCATION } from "../lib/session-location.js";
 
 const sessionsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -205,7 +206,7 @@ function assetIdFromKey(key: string): string {
 }
 
 function stub(env: Bindings, sessionId: string): DurableObjectStub<SessionDO> {
-  return env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+  return env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId), SESSION_LOCATION) as unknown as DurableObjectStub<SessionDO>;
 }
 
 /**

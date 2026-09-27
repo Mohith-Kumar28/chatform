@@ -14,6 +14,7 @@ import { openSession, type FormRow } from "../../lib/open-session.js";
 import type { SessionDO } from "../../do/session-do.js";
 import { mountRespondentAuth, type AuthRouter } from "../respondent-auth.js";
 import { confirmPaymentForSession, providersForAccounts, startPaymentForSession } from "../../lib/payments/service.js";
+import { SESSION_LOCATION } from "../../lib/session-location.js";
 
 /**
  * The conversational API, headless.
@@ -29,7 +30,7 @@ export const chatRouter = new Hono<{
 }>();
 
 function stub(env: Bindings, sessionId: string) {
-  return env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+  return env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId), SESSION_LOCATION) as unknown as DurableObjectStub<SessionDO>;
 }
 
 /**

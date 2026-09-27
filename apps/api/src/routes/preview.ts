@@ -5,6 +5,7 @@ import { sha256Hex, readFormDoc, type FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { SessionDO } from "../do/session-do.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
+import { SESSION_LOCATION } from "../lib/session-location.js";
 
 /**
  * Preview sessions — authenticated, run against the WORKING schema (drafts).
@@ -45,7 +46,7 @@ previewRouter.post(
       .bind(sessionId, row.id, row.organization_id, sha256Hex(respondentToken), Date.now(), Date.now())
       .run();
 
-    const stub = c.env.SESSION_DO.get(c.env.SESSION_DO.idFromName(sessionId)) as unknown as InstanceType<typeof SessionDO>;
+    const stub = c.env.SESSION_DO.get(c.env.SESSION_DO.idFromName(sessionId), SESSION_LOCATION) as unknown as InstanceType<typeof SessionDO>;
     const init = await stub.init({
       sessionId,
       formId: row.id,
