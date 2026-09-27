@@ -23,6 +23,7 @@ import {
   usePatchApiFormsByIdWorkspace,
 } from "@/lib/api/dashboard/dashboard";
 import { apiData } from "@/lib/api/payload";
+import { ApiError } from "@/lib/api/mutator";
 import { invalidateForms } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { TooltipHint } from "@/components/ui/kbd";
@@ -69,6 +70,42 @@ import { useDuplicateForm } from "@/components/forms/use-duplicate-form";
 type Sort = "newest" | "oldest" | "responses" | "alpha";
 type StatusFilter = "all" | "live" | "draft";
 
+/**
+ * The last workspace, status and sort, remembered per browser.
+ *
+ * Read once, synchronously, in the first render's state, so the forms request
+ * that goes out is already the right one. Loading defaults, fetching, then
+ * correcting from storage would be two requests and a visible swap. Nothing
+ * that renders on the server depends on it (the grid is a shimmer until the
+ * forms arrive), so the server's empty read cannot cause a hydration mismatch.
+ */
+const PREFS_KEY = "chatform:dashboard";
+type Prefs = { ws?: string; status?: StatusFilter; sort?: Sort };
+const SORTS: Sort[] = ["newest", "oldest", "responses", "alpha"];
+const STATUSES: StatusFilter[] = ["all", "live", "draft"];
+
+function readPrefs(): Prefs {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as Prefs;
+    return {
+      ws: typeof raw.ws === "string" && raw.ws ? raw.ws : undefined,
+      status: STATUSES.includes(raw.status as StatusFilter) ? raw.status : undefined,
+      sort: SORTS.includes(raw.sort as Sort) ? raw.sort : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function writePrefs(patch: Prefs) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ ...readPrefs(), ...patch }));
+  } catch {
+    // Private mode or blocked storage: the dashboard just starts from defaults.
+  }
+}
+
 export function DashboardContent() {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -77,16 +114,18 @@ export function DashboardContent() {
   /**
    * `?ws=` is the active workspace, and it is a query parameter rather than
    * session state so switching folders is a client-side push instead of the
-   * page reload switching organizations needs. Absent means the organization's
-   * first workspace, which is what every link written before workspaces were
-   * selectable means.
+   * page reload switching organizations needs.
    *
    * It belongs in the query key as well as the request: two workspaces are two
    * different lists, and sharing a cache entry between them shows the previous
    * folder's forms under the new folder's name until the refetch lands.
    */
-  const ws = searchParams.get("ws");
-  const formsParams = useMemo(() => (ws ? { ws } : undefined), [ws]);
+  const [stored] = useState(readPrefs);
+  // The URL wins, so a shared link opens what it names; then the last one
+  // viewed here; then every workspace.
+  const urlWs = searchParams.get("ws");
+  const ws = urlWs ?? stored.ws ?? ALL_WORKSPACES;
+  const formsParams = useMemo(() => ({ ws }), [ws]);
 
   /**
    * The workspaces this form could be moved to, for the card menu.
@@ -127,17 +166,43 @@ export function DashboardContent() {
 
   const moveForm = usePatchApiFormsByIdWorkspace();
 
-  const { data, isLoading } = useGetApiForms(formsParams, {
+  const { data, isLoading, error } = useGetApiForms(formsParams, {
     query: { queryKey: getGetApiFormsQueryKey(formsParams) },
   });
+  /*
+    A remembered workspace that has since been deleted, or belongs to the
+    organization you were in last time, is a 404. Fall back to every workspace
+    rather than an error.
+  */
+  useEffect(() => {
+    if (ws === ALL_WORKSPACES || !(error instanceof ApiError) || error.status !== 404) return;
+    const query = new URLSearchParams(window.location.search);
+    query.set("ws", ALL_WORKSPACES);
+    router.replace(`${window.location.pathname}?${query}`);
+  }, [error, ws, router]);
   // Memoised so it is not a fresh array on every render — the sort below
   // depends on it, and an unstable dependency re-sorts the whole grid whenever
   // anything else in this component changes.
   const allForms = useMemo(() => apiData<FormRow[]>(data) ?? [], [data]);
 
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<Sort>("newest");
-  const [status, setStatus] = useState<StatusFilter>("all");
+  const [sort, setSort] = useState<Sort>(stored.sort ?? "newest");
+  const [status, setStatus] = useState<StatusFilter>(stored.status ?? "all");
+
+  useEffect(() => writePrefs({ ws, sort, status }), [ws, sort, status]);
+
+  /*
+    Put the remembered workspace into the URL, so everything else that reads
+    `?ws=` (new form, invite) agrees with the grid. `history.replaceState`
+    rather than the router: the value is unchanged, so the query key is too,
+    and no second request goes out.
+  */
+  useEffect(() => {
+    if (urlWs) return;
+    const query = new URLSearchParams(window.location.search);
+    query.set("ws", ws);
+    window.history.replaceState(null, "", `${window.location.pathname}?${query}`);
+  }, [urlWs, ws]);
   // ?new=1 lets the command palette open the create dialog.
   const [createOpen, setCreateOpen] = useState(searchParams.get("new") === "1");
   /*
@@ -347,7 +412,7 @@ export function DashboardContent() {
         narrow it and what you make in the middle and right.
       */}
       <div className="flex flex-wrap items-center gap-2">
-        <WorkspaceSwitcher />
+        <WorkspaceSwitcher value={ws} />
 
         {allForms.length > 0 && (
           <div className="relative min-w-0 flex-1 sm:max-w-xs">
@@ -600,7 +665,7 @@ export function DashboardContent() {
         open={createOpen}
         onOpenChange={(open) => {
           setCreateOpen(open);
-          if (!open && searchParams.get("new")) router.replace("/dashboard");
+          if (!open && searchParams.get("new")) router.replace(`/dashboard?ws=${encodeURIComponent(ws)}`);
         }}
       />
 

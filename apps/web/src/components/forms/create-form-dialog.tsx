@@ -1,5 +1,6 @@
 "use client";
 
+import { ALL_WORKSPACES } from "@/components/dashboard/workspace-switcher";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -114,7 +115,9 @@ export function CreateFormDialog({
    * A slug, not an id — `requireWorkspace` resolves either, inside the caller's
    * organization and nowhere else.
    */
-  const ws = searchParams.get("ws") ?? undefined;
+  // "All workspaces" is a view, not a folder: the form goes to the default one.
+  const wsParam = searchParams.get("ws");
+  const ws = wsParam && wsParam !== ALL_WORKSPACES ? wsParam : undefined;
 
   const { templates, isLoading: templatesLoading } = useTemplates();
   const categories = useMemo(() => templateCategories(templates), [templates]);

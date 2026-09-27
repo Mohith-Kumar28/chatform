@@ -53,8 +53,8 @@ import { cn } from "@/lib/utils";
  * belongs to the caller — a check that was missing while the parameter was
  * only ever supplied by our own code.
  *
- * No `?ws=` at all means the organization's oldest workspace, which is what
- * every link written before this control existed means.
+ * The dashboard fills in a missing `?ws=` from the last workspace viewed in
+ * this browser, or every workspace (`all`) the first time.
  */
 /** `?ws=all`: every workspace at once. The API never issues it as a slug. */
 export const ALL_WORKSPACES = "all";
@@ -68,7 +68,14 @@ interface Workspace {
   myRole?: string;
 }
 
-export function WorkspaceSwitcher({ className }: { className?: string } = {}) {
+export function WorkspaceSwitcher({
+  className,
+  value,
+}: {
+  className?: string;
+  /** The workspace the page is showing, when it resolves `?ws=` itself. */
+  value?: string;
+} = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -85,7 +92,7 @@ export function WorkspaceSwitcher({ className }: { className?: string } = {}) {
   // `apiData` because the generated types claim a `{ data, headers }` wrapper
   // the mutator does not actually produce. See `lib/api/payload.ts`.
   const list = apiData<Workspace[]>(workspaces) ?? [];
-  const slug = params.get("ws");
+  const slug = value ?? params.get("ws");
   // Absent or unrecognised falls back to the first, which is the same rule the
   // server applies. An unrecognised slug is a link to a workspace that has been
   // renamed or deleted; showing the default beats showing nothing.
@@ -105,14 +112,11 @@ export function WorkspaceSwitcher({ className }: { className?: string } = {}) {
   if (list.length === 1 && !canCreate) return null;
 
   function switchTo(next: string) {
+    // Always explicit: with no `?ws=` the dashboard opens the last workspace
+    // viewed, so leaving it off no longer means the first one.
     const query = new URLSearchParams(params.toString());
-    // The first workspace is the no-parameter case, so switching back to it
-    // clears `?ws=` instead of pinning it. Keeps the common URL clean and means
-    // a bookmark of the dashboard keeps working after a rename.
-    if (next === list[0]?.slug) query.delete("ws");
-    else query.set("ws", next);
-    const qs = query.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname);
+    query.set("ws", next);
+    router.push(`${pathname}?${query}`);
   }
 
   async function submit(e: React.FormEvent) {
