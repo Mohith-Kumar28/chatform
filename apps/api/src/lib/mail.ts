@@ -446,6 +446,18 @@ export type MailJob =
       gifted: boolean;
     }
   | {
+      /**
+       * Somebody accepted an invitation. Mailed to the one person who sent it,
+       * not to every admin: they are the one waiting to hear.
+       *
+       * Identifiers only, like `submission`: the consumer reads the invitation,
+       * both people and the workspace grants, which by then are real rows.
+       */
+      kind: "invitation_accepted";
+      invitationId: string;
+      memberId: string;
+    }
+  | {
       /** A platform admin unlocked a feature or raised a limit. Mailed to the owner. */
       kind: "access_granted";
       organizationId: string;

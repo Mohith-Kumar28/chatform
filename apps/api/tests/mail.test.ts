@@ -790,4 +790,49 @@ describe("plan and access mail", () => {
     expect(m.html).toContain("AI conversations: 5,000 a month");
     expect(m.html).toContain("No end date");
   });
+
+  describe("invitation accepted", () => {
+    const seedAccepted = async (tag: string) => {
+      const now = Date.now();
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO users (id, name, email, email_verified, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)`)
+          .bind(`usr_${tag}`, "Priya Raman", `${tag}@example.com`, now, now),
+        env.DB.prepare(`INSERT INTO members (id, organization_id, user_id, role, created_at) VALUES (?, ?, ?, 'member', ?)`)
+          .bind(`mem_${tag}`, t.orgId, `usr_${tag}`, now),
+        env.DB.prepare(
+          `INSERT INTO invitations (id, organization_id, email, role, status, expires_at, inviter_id, created_at)
+           VALUES (?, ?, ?, 'member', 'accepted', ?, ?, ?)`,
+        ).bind(`inv_${tag}`, t.orgId, `${tag}@example.com`, now + 86_400_000, t.userId, now - 2 * 86_400_000),
+        env.DB.prepare(
+          `INSERT INTO workspace_members (id, workspace_id, member_id, role, created_by, created_at) VALUES (?, ?, ?, 'editor', NULL, ?)`,
+        ).bind(`wm_${tag}`, t.workspaceId, `mem_${tag}`, now),
+      ]);
+      return { invitationId: `inv_${tag}`, memberId: `mem_${tag}` };
+    };
+
+    it("tells the one person who sent it, with who joined and what they can open", async () => {
+      const ids = await seedAccepted("joiner");
+      const { sent, binding } = captureBinding();
+      await runMailJob(withMail({ EMAIL: binding }), { kind: "invitation_accepted", ...ids });
+      expect(sent).toHaveLength(1);
+      const m = sent[0]!;
+      expect(m.to).toBe("mailtest@example.com");
+      expect(m.replyTo).toBe("joiner@example.com");
+      expect(m.subject).toBe("Priya Raman joined mailtest on chatform");
+      expect(m.html).toContain("joiner@example.com");
+      expect(m.html).toContain("Default");
+      expect(m.html).toContain("Editor");
+      expect(m.html).toContain("/settings/team");
+      expect(m.html).not.toContain("\u2014");
+    });
+
+    it("mails nobody once the inviter has left the organization", async () => {
+      const ids = await seedAccepted("orphan");
+      await env.DB.prepare(`UPDATE invitations SET inviter_id = ? WHERE id = ?`).bind("usr_joiner", ids.invitationId).run();
+      await env.DB.prepare(`DELETE FROM members WHERE id = 'mem_joiner'`).run();
+      const { sent, binding } = captureBinding();
+      await runMailJob(withMail({ EMAIL: binding }), { kind: "invitation_accepted", ...ids });
+      expect(sent).toHaveLength(0);
+    });
+  });
 });

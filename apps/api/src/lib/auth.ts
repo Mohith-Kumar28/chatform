@@ -443,6 +443,9 @@ export function createAuth(env: Bindings) {
            */
           afterAcceptInvitation: async ({ invitation, member }) => {
             await applyInvitationGrants(env, invitation.id, member.id, member.role);
+            // The person who sent it hears that it landed. Queued after the
+            // grants so the mail lists the workspaces they can actually open.
+            await enqueueMail(env, { kind: "invitation_accepted", invitationId: invitation.id, memberId: member.id });
           },
           /**
            * Seat limit, enforced where invitations are actually created.

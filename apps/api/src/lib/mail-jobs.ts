@@ -32,6 +32,7 @@ import {
   escapeHtml,
   feedbackNotificationEmail,
   followUpEmail,
+  invitationAcceptedEmail,
   invitationEmail,
   otpEmail,
   passwordResetEmail,
@@ -159,6 +160,9 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOu
       return oneMessage(who.email, await sendMail(env, { to: who.email, ...msg }));
     }
 
+    case "invitation_accepted":
+      return runInvitationAcceptedJob(env, job);
+
     case "access_granted": {
       const who = await ownerOf(env, job.organizationId);
       if (!who) return NO_MAIL;
@@ -183,6 +187,78 @@ async function invitationWorkspaceGrants(env: Bindings, invitationId: string): P
       ORDER BY w.name COLLATE NOCASE`,
   )
     .bind(invitationId)
+    .all<InvitationWorkspace>();
+  return res.results ?? [];
+}
+
+/**
+ * "They joined", to the one person who sent the invitation.
+ *
+ * Nobody is mailed when the inviter has since left the organization (the news
+ * is no longer theirs to receive) or when somebody accepted their own
+ * invitation. Replies go to the newcomer, so a welcome is one click away.
+ */
+async function runInvitationAcceptedJob(
+  env: Bindings,
+  job: Extract<MailJob, { kind: "invitation_accepted" }>,
+): Promise<MailJobOutcome> {
+  const row = await env.DB.prepare(
+    `SELECT i.organization_id AS orgId, i.inviter_id AS inviterId, i.created_at AS invitedAt,
+            o.name AS orgName, inv.email AS inviterEmail, inv.name AS inviterName,
+            m.role AS role, m.created_at AS joinedAt, u.id AS memberUserId, u.email AS memberEmail, u.name AS memberName
+       FROM invitations i
+       JOIN organizations o ON o.id = i.organization_id
+       JOIN users inv ON inv.id = i.inviter_id
+       JOIN members m ON m.id = ? AND m.organization_id = i.organization_id
+       JOIN users u ON u.id = m.user_id
+      WHERE i.id = ?
+        AND EXISTS (SELECT 1 FROM members im WHERE im.organization_id = i.organization_id AND im.user_id = i.inviter_id)`,
+  )
+    .bind(job.memberId, job.invitationId)
+    .first<{
+      orgId: string;
+      inviterId: string;
+      invitedAt: number | null;
+      orgName: string;
+      inviterEmail: string;
+      inviterName: string | null;
+      role: string;
+      joinedAt: number | null;
+      memberUserId: string;
+      memberEmail: string;
+      memberName: string | null;
+    }>();
+  if (!row || row.memberUserId === row.inviterId) return NO_MAIL;
+
+  const [workspaces, team] = await Promise.all([
+    memberWorkspaces(env, job.memberId),
+    env.DB.prepare(`SELECT COUNT(*) AS n FROM members WHERE organization_id = ?`).bind(row.orgId).first<{ n: number }>(),
+  ]);
+  const msg = invitationAcceptedEmail({
+    organizationName: row.orgName,
+    inviterName: row.inviterName,
+    memberName: row.memberName,
+    memberEmail: row.memberEmail,
+    role: row.role,
+    workspaces,
+    invitedAt: row.invitedAt,
+    joinedAt: row.joinedAt ?? Date.now(),
+    teamSize: team?.n ?? 1,
+    teamUrl: `${webOrigins(env)[0]!}/settings/team`,
+  });
+  const res = await sendMail(env, { to: row.inviterEmail, ...msg, replyTo: row.memberEmail });
+  return oneMessage(row.inviterEmail, res);
+}
+
+/** The workspaces a member can open, by name, as granted. */
+async function memberWorkspaces(env: Bindings, memberId: string): Promise<InvitationWorkspace[]> {
+  const res = await env.DB.prepare(
+    `SELECT w.name AS name, wm.role AS role
+       FROM workspace_members wm JOIN workspaces w ON w.id = wm.workspace_id
+      WHERE wm.member_id = ?
+      ORDER BY w.name COLLATE NOCASE`,
+  )
+    .bind(memberId)
     .all<InvitationWorkspace>();
   return res.results ?? [];
 }

@@ -327,6 +327,100 @@ export function invitationEmail(a: {
   };
 }
 
+// ─────────────────────────── invitation accepted ───────────────────────────
+
+/** The newcomer as a card: an initial disc, their name and address, their role. */
+function personCard(a: { name: string; email: string; badge: string }): string {
+  const initial = escapeHtml((a.name.trim()[0] ?? a.email[0] ?? "?").toUpperCase());
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 14px 0;background-color:${CARD};border:1px solid ${BORDER};border-radius:12px;">
+  <tr>
+    <td width="48" valign="middle" style="padding:16px 0 16px 16px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td align="center" valign="middle" width="44" height="44" style="width:44px;height:44px;border-radius:999px;background-color:${ORANGE};background-image:linear-gradient(135deg, ${ORANGE}, ${VIOLET});font-family:${FONT};font-size:18px;line-height:44px;font-weight:700;color:${ON_PRIMARY};">${initial}</td>
+      </tr></table>
+    </td>
+    <td valign="middle" style="padding:16px 12px;font-family:${FONT};">
+      <div style="font-size:16px;line-height:22px;font-weight:600;color:${INK};">${escapeHtml(a.name)}</div>
+      <div style="font-size:13px;line-height:18px;color:${MUTED};word-break:break-all;">${escapeHtml(a.email)}</div>
+    </td>
+    <td align="right" valign="middle" style="padding:16px 16px 16px 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="border-radius:999px;padding:4px 10px;background-color:${ORANGE_TINT};font-family:${FONT};font-size:12px;line-height:16px;font-weight:600;color:${INK};white-space:nowrap;">${escapeHtml(a.badge)}</td>
+      </tr></table>
+    </td>
+  </tr>
+</table>`;
+}
+
+/** To the person who sent an invitation, once it has been accepted. */
+export function invitationAcceptedEmail(a: {
+  organizationName: string;
+  inviterName: string | null;
+  memberName: string | null;
+  memberEmail: string;
+  role: string;
+  workspaces: InvitationWorkspace[];
+  invitedAt: number | null;
+  joinedAt: number;
+  teamSize: number;
+  teamUrl: string;
+}): Omit<MailMessage, "to"> {
+  const who = a.memberName?.trim() || a.memberEmail;
+  const primary = a.role.split(",")[0]?.trim() ?? a.role;
+  const isAdmin = primary === "admin" || primary === "owner";
+  const roleTitle = isAdmin ? (primary === "owner" ? "Owner" : "Admin") : "Member";
+  const workspaces = isAdmin ? [] : a.workspaces;
+
+  const rows: [string, string][] = [];
+  if (isAdmin) rows.push(["Workspaces", "All, with full access"]);
+  for (const w of workspaces) rows.push([w.name, escapeHtml(WORKSPACE_ROLE_COPY[w.role]?.title ?? w.role)]);
+  if (!isAdmin && workspaces.length === 0) rows.push(["Workspaces", "None yet"]);
+  if (a.invitedAt) rows.push(["Invited", escapeHtml(longDate(a.invitedAt))]);
+  rows.push(["Joined", escapeHtml(longDate(a.joinedAt))]);
+  rows.push(["Team size", `${a.teamSize} ${a.teamSize === 1 ? "person" : "people"}`]);
+
+  const hi = a.inviterName?.trim() ? `${escapeHtml(a.inviterName.trim().split(/\s+/)[0]!)}, ` : "";
+  const nudge =
+    !isAdmin && workspaces.length === 0
+      ? "They can't open any workspace yet. Give them access from your team settings."
+      : "They can start working with you right away.";
+
+  const body = [
+    hero({
+      eyebrow: "New teammate",
+      title: `${who} joined ${a.organizationName}`,
+      subtitle: `${hi}<strong style="color:${INK};">${escapeHtml(who)}</strong> accepted your invitation to <strong style="color:${INK};">${escapeHtml(a.organizationName)}</strong>. ${escapeHtml(nudge)}`,
+    }),
+    personCard({ name: who, email: a.memberEmail, badge: roleTitle }),
+    detailRows(rows),
+    button(a.teamUrl, "View your team"),
+  ].join("\n");
+
+  return {
+    subject: `${who} joined ${a.organizationName} on chatform`,
+    html: layout({
+      preheader: `${who} accepted your invitation and joined as ${ROLE_LABELS[primary] ?? "a member"}.`,
+      body,
+      footer: `You received this because you invited ${escapeHtml(a.memberEmail)} to ${escapeHtml(a.organizationName)} on chatform.`,
+    }),
+    text: [
+      `${who} (${a.memberEmail}) accepted your invitation and joined ${a.organizationName} on chatform.`,
+      ``,
+      `Team role: ${roleTitle}`,
+      ...(isAdmin
+        ? ["Workspaces: all, with full access"]
+        : workspaces.length === 0
+          ? ["Workspaces: none yet"]
+          : workspaces.map((w) => `${w.name}: ${WORKSPACE_ROLE_COPY[w.role]?.title ?? w.role}`)),
+      ...(a.invitedAt ? [`Invited: ${longDate(a.invitedAt)}`] : []),
+      `Joined: ${longDate(a.joinedAt)}`,
+      `Team size: ${a.teamSize}`,
+      ``,
+      `View your team: ${a.teamUrl}`,
+    ].join("\n"),
+  };
+}
+
 /**
  * The organization role, with its article, the way the web app's `lib/roles.ts`
  * spells it: an organization role is owner, admin or member. `editor` and
