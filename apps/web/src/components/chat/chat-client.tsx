@@ -90,6 +90,7 @@ export function ChatClient({
     ...(followUpId ? { followUpId } : {}),
     existingSession,
     onRestart,
+    captcha: config.captchaEnabled === true,
     ...(paymentReturn ? { paymentReturn } : {}),
     ...(paymentCancelled ? { paymentCancelled } : {}),
   });

@@ -1425,6 +1425,11 @@ export type GetApiAdminAi200ByKindItem = {
   value: number;
 };
 
+export type GetApiAdminAi200ErrorsByReasonItem = {
+  key: string;
+  value: number;
+};
+
 export type GetApiAdminAi200CostByKindItem = {
   key: string;
   value: number;
@@ -1489,6 +1494,7 @@ export type GetApiAdminAi200 = {
   callSeries: number[];
   byModel: GetApiAdminAi200ByModelItem[];
   byKind: GetApiAdminAi200ByKindItem[];
+  errorsByReason: GetApiAdminAi200ErrorsByReasonItem[];
   costByKind: GetApiAdminAi200CostByKindItem[];
   totals: GetApiAdminAi200Totals;
   previous: GetApiAdminAi200Previous;
@@ -3396,6 +3402,7 @@ export type GetApiFormsByIdSubmissions200SubmissionsItemFollowUp = {
 } | null;
 
 export type GetApiFormsByIdSubmissions200SubmissionsItem = {
+  botCheck?: string | null;
   id: string;
   status: string;
   startedAt: number;
@@ -3580,6 +3587,17 @@ export type GetApiFormsByIdAnalytics200DurationBucketsItem = {
   count: number;
 };
 
+export type GetApiFormsByIdAnalytics200AiFallbacksReasonsItem = {
+  code: string;
+  count: number;
+};
+
+export type GetApiFormsByIdAnalytics200AiFallbacks = {
+  calls: number;
+  sessions: number;
+  reasons: GetApiFormsByIdAnalytics200AiFallbacksReasonsItem[];
+};
+
 export type GetApiFormsByIdAnalytics200LockedContext = {
   feature: string;
   requiredPlan: string;
@@ -3612,6 +3630,7 @@ export type GetApiFormsByIdAnalytics200 = {
   byLanguage: GetApiFormsByIdAnalytics200ByLanguageItem[];
   byWeekHour: number[][];
   durationBuckets: GetApiFormsByIdAnalytics200DurationBucketsItem[];
+  aiFallbacks: GetApiFormsByIdAnalytics200AiFallbacks;
   locked: string[];
   lockedContext: GetApiFormsByIdAnalytics200LockedContext;
 };
@@ -5206,6 +5225,17 @@ export type GetV1FormsByIdAnalytics200DurationBucketsItem = {
   count: number;
 };
 
+export type GetV1FormsByIdAnalytics200AiFallbacksReasonsItem = {
+  code: string;
+  count: number;
+};
+
+export type GetV1FormsByIdAnalytics200AiFallbacks = {
+  calls: number;
+  sessions: number;
+  reasons: GetV1FormsByIdAnalytics200AiFallbacksReasonsItem[];
+};
+
 export type GetV1FormsByIdAnalytics200 = {
   views: number;
   starts: number;
@@ -5230,6 +5260,7 @@ export type GetV1FormsByIdAnalytics200 = {
   byLanguage?: GetV1FormsByIdAnalytics200ByLanguageItem[];
   byWeekHour?: number[][];
   durationBuckets: GetV1FormsByIdAnalytics200DurationBucketsItem[];
+  aiFallbacks?: GetV1FormsByIdAnalytics200AiFallbacks;
   locked?: string[];
   [key: string]: unknown;
 };

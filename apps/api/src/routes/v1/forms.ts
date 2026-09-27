@@ -493,7 +493,7 @@ formsV1Router.get(
      */
     const ent = await entitlementsFor(c as never);
     if (!ent.features.advanced_analytics) {
-      const { views, starts, completed, abandoned, avgDurationMs, completionRate } = aggregate;
+      const { views, starts, completed, abandoned, avgDurationMs, completionRate, aiFallbacks } = aggregate;
       return c.json({
         views,
         starts,
@@ -501,6 +501,7 @@ formsV1Router.get(
         abandoned,
         avgDurationMs,
         completionRate,
+        aiFallbacks,
         perBlock: [],
         distributions: [],
         locked: ["perBlock", "distributions"],

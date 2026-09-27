@@ -300,29 +300,31 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
     }
   }
 
-  // A missing token used to skip verification entirely, so any client could
-  // bypass the captcha by simply not sending one. Enabled means required.
-  if (settings.captcha.enabled && env.TURNSTILE_SECRET_KEY && !input.trustedCaller) {
-    if (!input.turnstileToken) {
+  /*
+   * Turnstile, in managed mode: invisible for nearly everyone, a single
+   * checkbox for a visitor Cloudflare is unsure of.
+   *
+   * A token Cloudflare *rejects* is refused — that is a bot failing the check.
+   * A *missing* token, or a Cloudflare we cannot reach, is let in and labelled
+   * `unverified` rather than refused: the widget is a third-party script that
+   * privacy extensions and flaky networks block, and a form that turns real
+   * people away because somebody else's service is down is the failure this
+   * whole path is built to avoid. The label is on the session, so the author
+   * can see and filter what came in unchecked.
+   */
+  let botCheck: BotCheck | null = null;
+  if (!settings.captcha.enabled || input.trustedCaller) {
+    botCheck = "off";
+  } else if (env.TURNSTILE_SECRET_KEY) {
+    const verdict = await verifyTurnstile(env.TURNSTILE_SECRET_KEY, input.turnstileToken, input.ip);
+    if (verdict === "rejected") {
       return {
         ok: false,
         status: 403,
-        body: { error: { code: "captcha_required", message: "Captcha verification required" } },
+        body: { error: { code: "captcha_failed", message: "We couldn't confirm you're not a bot. Refresh the page and try again." } },
       };
     }
-    const verify = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ secret: env.TURNSTILE_SECRET_KEY, response: input.turnstileToken }),
-    });
-    const vr = (await verify.json()) as { success: boolean };
-    if (!vr.success) {
-      return {
-        ok: false,
-        status: 403,
-        body: { error: { code: "captcha_failed", message: "Captcha verification failed" } },
-      };
-    }
+    botCheck = verdict;
   }
 
   const ipHash = input.respondentIpHash ?? (input.ip ? sha256Hex(input.ip) : "");
@@ -421,8 +423,8 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
   await env.DB.prepare(
     `INSERT INTO chat_sessions (id, form_id, form_version_id, organization_id, respondent_token_hash, status,
                                 hidden_fields, ip_hash, fingerprint, country, timezone, source, is_test,
-                                started_over, submission_id, created_at, last_activity_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                started_over, submission_id, created_at, last_activity_at, expires_at, bot_check)
+     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       sessionId,
@@ -446,6 +448,7 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
       // Written at last. The column has existed since the first migration and
       // nothing has ever populated it, so a respondent token never expired.
       expiresAt,
+      botCheck,
     )
     .run();
 
@@ -481,4 +484,40 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
     device,
     respondentDeviceKey: deviceKeyFor(env, input.deviceSignal),
   };
+}
+
+export type BotCheck = "passed" | "unverified" | "off";
+
+/**
+ * Ask Cloudflare about a Turnstile token. `rejected` only when Cloudflare
+ * answered and said no; everything we could not decide is `unverified`.
+ *
+ * `timeout-or-duplicate` is not a rejection: it is what a real browser gets
+ * when its session-start POST is retried with the token it already spent.
+ */
+export async function verifyTurnstile(
+  secret: string,
+  token: string | undefined,
+  ip: string | null | undefined,
+  fetcher: typeof fetch = fetch,
+): Promise<"passed" | "unverified" | "rejected"> {
+  if (!token) return "unverified";
+  try {
+    const res = await fetcher("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret, response: token, ...(ip ? { remoteip: ip } : {}) }),
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const body = (await res.json()) as { success?: boolean; "error-codes"?: string[] };
+    if (body.success) return "passed";
+    const codes = body["error-codes"] ?? [];
+    if (codes.length > 0 && codes.every((c) => c === "timeout-or-duplicate" || c === "internal-error")) return "unverified";
+    console.warn("turnstile_rejected", { codes });
+    return "rejected";
+  } catch (err) {
+    console.error("turnstile_unreachable", { message: err instanceof Error ? err.message : String(err) });
+    return "unverified";
+  }
 }

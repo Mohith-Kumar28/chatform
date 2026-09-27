@@ -98,7 +98,7 @@ export async function gateAnswer(
   block: Block,
   text: string,
   ctx: Omit<AiCallContext, "kind">,
-  opts: { fetch?: typeof fetch } = {},
+  opts: Pick<NonNullable<Parameters<typeof askJev>[4]>, "fetch" | "onFailure"> = {},
 ): Promise<GateResult> {
   const reply = text.trim();
   if (!reply) return { outcome: off("no_match"), call: null };

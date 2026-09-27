@@ -42,6 +42,11 @@ const AiResponse = z.object({
   callSeries: z.array(z.number()),
   byModel: z.array(z.object({ key: z.string(), value: z.number() })),
   byKind: z.array(z.object({ key: z.string(), value: z.number() })),
+  /**
+   * Failed calls by why they failed (`credits_exhausted`, `timeout`, …). Rows
+   * written before `0048` have no reason and count as `unknown`.
+   */
+  errorsByReason: z.array(z.object({ key: z.string(), value: z.number() })),
   /** Spend per purpose, alongside the call counts in `byKind`. */
   costByKind: z.array(z.object({ key: z.string(), value: z.number() })),
   totals: z.object({
@@ -167,7 +172,7 @@ aiRouter.get(
 
     const metrics = await loadMetrics(c.env, window[0]!, window[window.length - 1]!);
 
-    const [totals, conversations, models, topSpenders, breakdown] = await Promise.all([
+    const [totals, conversations, models, topSpenders, breakdown, errorsByReason] = await Promise.all([
       /**
        * Both windows in one scan. Two queries over the same index would say the
        * same thing at twice the cost, and the `CASE` keeps the pair honest:
@@ -261,6 +266,13 @@ aiRouter.get(
             ORDER BY costUsd DESC`,
         ).bind(since),
       ),
+      rows<{ key: string; value: number }>(
+        c.env.DB.prepare(
+          `SELECT COALESCE(error_code, 'unknown') AS key, COUNT(*) AS value
+             FROM ai_generations WHERE created_at >= ? AND status != 'ok'
+            GROUP BY key ORDER BY value DESC`,
+        ).bind(since),
+      ),
     ]);
 
     const latency = await Promise.all(models.map((m) => latencyFor(c.env, m.model, since)));
@@ -303,6 +315,7 @@ aiRouter.get(
       callSeries: seriesOf(metrics, "ai_calls", window),
       byModel: sumByDimension(metrics, "ai_cost_usd_by_model", windowSet),
       byKind: sumByDimension(metrics, "ai_calls_by_kind", windowSet),
+      errorsByReason,
       costByKind: sumByDimension(metrics, "ai_cost_usd_by_kind", windowSet),
       totals: {
         costUsd: cost,

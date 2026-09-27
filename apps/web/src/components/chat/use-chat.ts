@@ -25,6 +25,7 @@ import {
 } from "./respondent-hint";
 import { rememberEmbedQuery, storageKey, submittedKey } from "./session-store";
 import { respondentContext } from "./respondent-context";
+import { getTurnstileToken, TURNSTILE_TOKEN_TTL_MS } from "./turnstile";
 
 export interface ChatMessage {
   /**
@@ -379,6 +380,8 @@ interface UseChatOptions {
    * "Start over" reconnected to the session it was trying to leave.
    */
   onRestart?: () => void;
+  /** The form's `captchaEnabled`: run Cloudflare's background bot check before opening a session. */
+  captcha?: boolean;
   /**
    * From `?cf_pay=`: the payment record a gateway redirect has just sent this
    * respondent back from.
@@ -561,6 +564,7 @@ export function useChat({
   onRestart,
   paymentReturn,
   paymentCancelled,
+  captcha = false,
 }: UseChatOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pollResults, setPollResults] = useState<Record<string, PollResult>>({});
@@ -1538,10 +1542,21 @@ export function useChat({
          * second on it after.
          */
         const signal = getRespondentSignal();
+        /*
+         * The bot check too, beside the device probe, and before the gate for
+         * the same reason: a preloaded popup does all of this while hidden so
+         * the click pays for the POST alone. A token lasts five minutes, so one
+         * fetched longer ago than that (a popup nobody opened for a while) is
+         * fetched again. Undefined is fine: the server lets them in, labelled.
+         */
+        const botStarted = Date.now();
+        const bot = captcha ? getTurnstileToken() : Promise.resolve(undefined);
         // A popup loaded ahead of its click opens no session until it is
         // opened: a session is a response row. See `whenEmbedOpened`.
         await whenEmbedOpened();
         const deviceSignal = await signal;
+        let turnstileToken = await bot;
+        if (turnstileToken && Date.now() - botStarted > TURNSTILE_TOKEN_TTL_MS) turnstileToken = await getTurnstileToken();
         const res = await fetch(`${apiOrigin}/p/forms/${slug}/sessions`, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1572,6 +1587,7 @@ export function useChat({
              * computed, which the server handles by falling back to the IP.
              */
             ...(deviceSignal ? { deviceSignal } : {}),
+            ...(turnstileToken ? { turnstileToken } : {}),
             /**
              * Which clock this respondent is on, so a reminder that would fall
              * in the middle of their night waits for the morning instead.
@@ -1681,7 +1697,7 @@ export function useChat({
       }
     })();
     await pendingRef.current;
-  }, [slug, apiOrigin, hiddenFields, resumeToken, followUpId, connectStream, existingSession]);
+  }, [slug, apiOrigin, hiddenFields, resumeToken, followUpId, connectStream, existingSession, captcha]);
 
   /** Manual retry after a hard failure — replaces a full page reload. */
   const retry = useCallback(() => {

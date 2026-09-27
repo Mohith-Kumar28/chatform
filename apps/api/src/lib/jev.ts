@@ -1,5 +1,6 @@
 import type { Bindings } from "../env.js";
 import { APP_HEADERS, MODELS, telemetry, type AiCallContext, type TokenUsage } from "./ai.js";
+import { classifyAiError, codeForStatus, type AiFailure } from "./ai-failure.js";
 
 /**
  * TypeSafe's Jev, through OpenRouter: a classifier, not a chat model.
@@ -59,10 +60,19 @@ export async function askJev(
   state: unknown,
   questions: Record<string, JevQuestion>,
   ctx: Omit<AiCallContext, "kind">,
-  opts: { fetch?: typeof fetch; timeoutMs?: number } = {},
+  opts: {
+    fetch?: typeof fetch;
+    timeoutMs?: number;
+    /** Told why, when the call itself failed; a well-formed "no" is not a failure. */
+    onFailure?: (failure: AiFailure, latencyMs: number) => void;
+  } = {},
 ): Promise<JevResult | null> {
   if (!jevAvailable(env)) return null;
   const started = Date.now();
+  const failed = (failure: AiFailure) => {
+    opts.onFailure?.(failure, Date.now() - started);
+    return null;
+  };
   // The same `user`, `session_id` and `trace` every chat call sends, so Langfuse
   // shows the gate inside the conversation it ran in.
   const attribution = telemetry(env, {}, { ...ctx, kind: "answer_gate" }).openrouter ?? {};
@@ -74,8 +84,9 @@ export async function askJev(
       signal: AbortSignal.timeout(opts.timeoutMs ?? JEV_TIMEOUT_MS),
     });
     if (!res.ok) {
-      console.error("jev_failed", { status: res.status, body: (await res.text().catch(() => "")).slice(0, 300) });
-      return null;
+      const body = (await res.text().catch(() => "")).slice(0, 300);
+      console.error("jev_failed", { status: res.status, body });
+      return failed({ code: codeForStatus(res.status), message: `${res.status} ${body}`.trim().slice(0, 300) });
     }
     const body = (await res.json()) as {
       id?: unknown;
@@ -87,9 +98,10 @@ export async function askJev(
     // A missing or mistyped answer is a failed call, not a "no".
     for (const [id, q] of Object.entries(questions)) {
       const a = answers[id];
-      if (!a || a.type !== q.type) return null;
-      if (a.type === "noul" && typeof a.noul !== "number") return null;
-      if (a.type === "choice" && (typeof a.choice !== "string" || typeof a.confidence !== "number")) return null;
+      const malformed = { code: "no_output", message: `malformed answer for ${id}` } as const;
+      if (!a || a.type !== q.type) return failed(malformed);
+      if (a.type === "noul" && typeof a.noul !== "number") return failed(malformed);
+      if (a.type === "choice" && (typeof a.choice !== "string" || typeof a.confidence !== "number")) return failed(malformed);
     }
     const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
     return {
@@ -106,6 +118,6 @@ export async function askJev(
     };
   } catch (err) {
     console.error("jev_failed", { message: err instanceof Error ? err.message : String(err) });
-    return null;
+    return failed(classifyAiError(err));
   }
 }

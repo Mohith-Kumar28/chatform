@@ -823,7 +823,14 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
     return { changed: false, durationMs };
   }
 
-  await o.env.Q_WEBHOOKS.send({
+  /*
+   * Caught, because the row above is already committed. A throw here used to
+   * skip everything after it — the owner's email, the auto-reply, cancelling
+   * follow-ups, the analytics point — and nothing retried, since a second
+   * finalize finds the row closed and does nothing. One more try for a blip;
+   * past that the webhook is lost and said so, and the rest still happens.
+   */
+  const webhookJob = {
     /**
      * A screen-out gets its own event rather than borrowing either neighbour.
      * `response.completed` on a refused respondent is the damaging one — it is
@@ -843,7 +850,17 @@ export async function finalizeResponse(o: ResponseOwner, a: FinalizeArgs): Promi
     ...(o.sessionId ? { sessionId: o.sessionId } : {}),
     source: o.source,
     isTest: o.isTest === true,
-  });
+  };
+  try {
+    await o.env.Q_WEBHOOKS.send(webhookJob).catch(() => o.env.Q_WEBHOOKS.send(webhookJob));
+  } catch (err) {
+    console.error("webhook_enqueue_failed", {
+      responseId: a.responseId,
+      formId: o.formId,
+      event: webhookJob.event,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   /**
    * The owner's notification and the respondent's auto-reply.

@@ -45,11 +45,13 @@ import {
   Send,
   ShieldAlert,
   ShieldCheck,
+  ShieldQuestion,
   Trash2,
   Wifi,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { InfoHint } from "@/components/ui/info-hint";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   csvCellsFor,
@@ -167,6 +169,8 @@ export interface SubmissionRecord {
   startedAt: number;
   completedAt: number | null;
   durationMs: number | null;
+  /** Cloudflare's bot check at session start: `passed`, `unverified` or `off`. */
+  botCheck?: string | null;
   answers: { blockRef: string; blockType: string; value: unknown }[];
   transcript: { role: string; content: string; createdAt: number }[];
   /** Only for forms that required sign-in. */
@@ -1808,6 +1812,12 @@ export function SubmissionsTable({
                       )}
                     >
                       {formatWhen(row)}
+                      {row.botCheck === "unverified" && (
+                        <ShieldQuestion
+                          className="ml-1.5 inline size-3.5 align-[-2px] text-[var(--warning-soft-foreground)]"
+                          aria-label="Bot check didn't run"
+                        />
+                      )}
                       <ViewerZone at={submittedAt(row)} zone={respondentTimeZone(row.metadata)} />
                       <TheirTime at={submittedAt(row)} zone={respondentTimeZone(row.metadata)} block />
                     </td>
@@ -2267,6 +2277,16 @@ function SubmissionDialog({
                   ? "Screened out"
                   : "Didn't finish"}
             </span>
+            {row.botCheck === "unverified" && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--warning-soft)] px-2 py-0.5 text-[var(--warning-soft-foreground)]">
+                <ShieldQuestion className="size-3" />
+                Unverified
+                <InfoHint label="About unverified responses" align="start">
+                  Cloudflare&apos;s bot check couldn&apos;t run for this person, usually because their browser blocked it.
+                  They were let in so real people are never turned away. It may still be a bot.
+                </InfoHint>
+              </span>
+            )}
             <FollowUpCell row={row} empty="none" />
             <span className="text-muted-foreground">
               {answered} of {columns.length} answered

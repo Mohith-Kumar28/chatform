@@ -325,6 +325,14 @@ export const AnalyticsView = z
     /** Seven rows (Monday first) of 24 hours, on each respondent's own clock. */
     byWeekHour: z.array(z.array(z.number())).optional(),
     durationBuckets: z.array(z.object({ label: z.string(), count: z.number() })),
+    /** Model calls that failed over the period; each turn carried on without AI. */
+    aiFallbacks: z
+      .object({
+        calls: z.number(),
+        sessions: z.number(),
+        reasons: z.array(z.object({ code: z.string(), count: z.number() })),
+      })
+      .optional(),
     /** Names what a plan withheld, rather than omitting it silently. */
     locked: z.array(z.string()).optional(),
   })

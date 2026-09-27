@@ -584,6 +584,8 @@ export const chatSessions = sqliteTable(
      * exists — answers create it lazily.
      */
     followupOptOut: bool("followup_opt_out").notNull().default(false),
+    /** Turnstile's verdict at session start: `passed` | `unverified` | `off`. See 0048. */
+    botCheck: text("bot_check"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
     lastActivityAt: ts("last_activity_at").notNull().$defaultFn(() => new Date()),
     expiresAt: ts("expires_at"),
@@ -1048,6 +1050,9 @@ export const aiGenerations = sqliteTable(
     costToolStepsUsd: real("cost_tool_steps_usd"),
     latencyMs: integer("latency_ms"),
     status: text("status").notNull().default("ok"),
+    /** Why an `error` row failed; see `0048_ai_failures_and_bot_check.sql`. */
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
   },
   (t) => [index("idx_ai_gen_org_created").on(t.organizationId, t.createdAt), index("idx_ai_gen_kind").on(t.kind, t.createdAt)],

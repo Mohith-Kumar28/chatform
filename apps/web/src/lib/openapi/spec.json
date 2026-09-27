@@ -6402,6 +6402,40 @@
                         ]
                       }
                     },
+                    "aiFallbacks": {
+                      "type": "object",
+                      "properties": {
+                        "calls": {
+                          "type": "number"
+                        },
+                        "sessions": {
+                          "type": "number"
+                        },
+                        "reasons": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "count"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "calls",
+                        "sessions",
+                        "reasons"
+                      ]
+                    },
                     "locked": {
                       "type": "array",
                       "items": {

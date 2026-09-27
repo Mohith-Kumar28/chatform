@@ -1468,8 +1468,8 @@ Use only what the page content and your search results support. If something is 
  * `validateAnswer` enforces — and the result is still passed through
  * `validateAnswer` afterwards. The extractor narrows; the validator decides.
  *
- * Returns null on any failure so the caller falls back to a clarify turn
- * rather than recording a guess.
+ * Throws on any failure. The caller catches it, records why, and falls back
+ * to a clarify turn rather than recording a guess.
  */
 export interface ExtractionEnvelope {
   value: unknown;
@@ -1490,48 +1490,47 @@ export async function extractAnswer(opts: {
   guidance: string;
   answer: string;
   transcript?: string;
-}): Promise<{ value: unknown; confident: boolean; note?: string; tokens: number; usage: TokenUsage } | null> {
-  try {
-    const result = await generateObject({
-      model: chatModel(opts.env, MODELS.extraction),
-      schema: opts.schema,
-      system:
-        "You convert a person's free-text reply into a structured value. " +
-        "You never invent information they did not give. " +
-        // Without this, a reply that points at something instead of repeating
-        // it — "yes, use the same one", "the address I signed in with", "same
-        // as above" — was read as giving nothing, and the respondent was told
-        // their perfectly clear answer was invalid. Resolving a reference to
-        // something already in the conversation is not inventing; it is the
-        // most common way people answer a question they have effectively
-        // already answered.
-        "A reply may refer to something stated earlier in the conversation rather than repeat it. " +
-        "When it does, resolve the reference against the conversation and return the value it points to. " +
-        "If their reply is ambiguous, incomplete, refers to something the conversation does not actually contain, " +
-        "or does not answer the question, return value=null and confident=false.",
-      prompt: `Question asked: ${opts.question}
+}): Promise<{ value: unknown; confident: boolean; note?: string; tokens: number; usage: TokenUsage }> {
+  const result = await generateObject({
+    model: chatModel(opts.env, MODELS.extraction),
+    schema: opts.schema,
+    // A respondent is waiting on this, and the fallback (the plain validator)
+    // is always there. One retry for a blip, and a deadline for a hang.
+    maxRetries: 1,
+    abortSignal: AbortSignal.timeout(15_000),
+    system:
+      "You convert a person's free-text reply into a structured value. " +
+      "You never invent information they did not give. " +
+      // Without this, a reply that points at something instead of repeating
+      // it — "yes, use the same one", "the address I signed in with", "same
+      // as above" — was read as giving nothing, and the respondent was told
+      // their perfectly clear answer was invalid. Resolving a reference to
+      // something already in the conversation is not inventing; it is the
+      // most common way people answer a question they have effectively
+      // already answered.
+      "A reply may refer to something stated earlier in the conversation rather than repeat it. " +
+      "When it does, resolve the reference against the conversation and return the value it points to. " +
+      "If their reply is ambiguous, incomplete, refers to something the conversation does not actually contain, " +
+      "or does not answer the question, return value=null and confident=false.",
+    prompt: `Question asked: ${opts.question}
 ${opts.guidance}
 ${opts.transcript ? `\nRecent conversation:\n${opts.transcript}\n` : ""}
 Their reply: """${opts.answer}"""`,
-      providerOptions: telemetry(opts.env, {}, { kind: "extraction", organizationId: opts.organizationId, sessionId: opts.sessionId, formId: opts.formId, ...opts.trace }),
-    });
-    const out = result.object;
-    // The split is returned as well as the total, because the caller used to
-    // book every token here as an input token — the whole call logged as
-    // `(tokens, 0)`, so output was recorded at the input rate and the model's
-    // real shape was unreadable in the data.
-    const usage = reportedUsage(result);
-    return {
-      value: out.value,
-      confident: out.confident,
-      note: out.note ?? undefined,
-      tokens: usage.input + usage.output,
-      usage,
-    };
-  } catch (err) {
-    console.error("extraction_failed", err);
-    return null;
-  }
+    providerOptions: telemetry(opts.env, {}, { kind: "extraction", organizationId: opts.organizationId, sessionId: opts.sessionId, formId: opts.formId, ...opts.trace }),
+  });
+  const out = result.object;
+  // The split is returned as well as the total, because the caller used to
+  // book every token here as an input token — the whole call logged as
+  // `(tokens, 0)`, so output was recorded at the input rate and the model's
+  // real shape was unreadable in the data.
+  const usage = reportedUsage(result);
+  return {
+    value: out.value,
+    confident: out.confident,
+    note: out.note ?? undefined,
+    tokens: usage.input + usage.output,
+    usage,
+  };
 }
 
 export { tool, generateText };

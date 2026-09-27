@@ -39,6 +39,11 @@ resultsRouter.use("/forms/:id/analytics", requirePermission("analytics", "read")
 resultsRouter.use("/forms/:id/followup-analytics", requirePermission("analytics", "read"));
 
 const SubmissionRow = z.object({
+  /**
+   * Cloudflare Turnstile at session start: `passed`, `unverified` (no token, or
+   * Cloudflare unreachable; let in and labelled) or `off`. Null before it existed.
+   */
+  botCheck: z.string().nullable().optional(),
   id: z.string(),
   status: z.string(),
   startedAt: z.number(),
@@ -264,6 +269,15 @@ const Summary = z.object({
   /** Seven rows, Monday first, of 24 hours on the respondent's own clock. */
   byWeekHour: z.array(z.array(z.number())),
   durationBuckets: z.array(z.object({ label: z.string(), count: z.number() })),
+  /**
+   * Model calls that failed over the period; the conversation carried on
+   * without AI each time. Not a paid detail: it says whether the form works.
+   */
+  aiFallbacks: z.object({
+    calls: z.number(),
+    sessions: z.number(),
+    reasons: z.array(z.object({ code: z.string(), count: z.number() })),
+  }),
   /** Field names withheld because the plan or the role does not include them. */
   locked: z.array(z.string()),
   /** What it would take to see them, and enough truth to make that worth doing. */
@@ -403,6 +417,7 @@ resultsRouter.get(
       context_json: string | null;
       meta_country: string | null;
       meta_user_agent: string | null;
+      bot_check: string | null;
     };
     type AnswerRow = { submission_id: string; block_ref: string; block_type: string; value_json: string };
     type MessageRow = { submission_id: string; role: string; content: string; created_at: number };
@@ -487,7 +502,8 @@ resultsRouter.get(
                 json_extract(s.meta, '$.followUpSkip') AS followup_skip,
                 s.source, json_extract(s.meta, '$.context') AS context_json,
                 json_extract(s.meta, '$.country') AS meta_country,
-                json_extract(s.meta, '$.userAgent') AS meta_user_agent
+                json_extract(s.meta, '$.userAgent') AS meta_user_agent,
+                (SELECT cs.bot_check FROM chat_sessions cs WHERE cs.id = s.session_id) AS bot_check
            FROM submissions s WHERE s.form_id = ?1 AND ${MATCHES}
           ${NEWEST_FIRST} LIMIT ?3 OFFSET ?4`,
       ).bind(id, effectiveStatus, limit, offset),
@@ -676,6 +692,7 @@ resultsRouter.get(
         completedAt: s.completed_at,
         durationMs: s.duration_ms,
         respondentId: s.respondent_id,
+        botCheck: s.bot_check,
         metadata: readRespondentContext(
           {
             context: s.context_json ? parseMeta(s.context_json) : undefined,
@@ -1098,6 +1115,7 @@ resultsRouter.get(
       byLanguage: showDetail ? agg.byLanguage : [],
       byWeekHour: showDetail ? agg.byWeekHour : [],
       durationBuckets: showDetail ? agg.durationBuckets : [],
+      aiFallbacks: agg.aiFallbacks,
       locked: showDetail
         ? []
         : ["perBlock", "distributions", "avgDurationMs", "medianDurationMs", "daily", "bySource", "byCountry", "byDevice", "places", "byBrowser", "byOs", "byChannel", "byReferrer", "byCampaign", "byDeviceType", "byLanguage", "byWeekHour", "durationBuckets"],

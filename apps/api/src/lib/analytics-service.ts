@@ -113,6 +113,13 @@ export interface AnalyticsAggregate {
   byWeekHour: number[][];
   /** How long finishing took, in buckets everyone reads the same way. */
   durationBuckets: { label: string; count: number }[];
+  /**
+   * Model calls that failed over the period, each of which the conversation
+   * answered without AI instead (the author's own wording, the plain
+   * validator). `sessions` is how many conversations met at least one.
+   * `reasons` from `ai_generations.error_code`; see `lib/ai-failure.ts`.
+   */
+  aiFallbacks: { calls: number; sessions: number; reasons: { code: string; count: number }[] };
 }
 
 export interface Segment {
@@ -225,7 +232,7 @@ export async function computeAnalytics(
   const nonTextTypes = [...groupedTypes, ...NUMERIC_TYPES, ...PASSIVE_TYPES];
   const holes = (n: number) => Array.from({ length: n }, () => "?").join(",");
 
-  const [formRes, countsRes, answeredRes, groupedRes, numericRes, textsRes, dailyRes, viewRes, sourceRes, countryRes, deviceRes, bucketRes, medianRes, viewsRes, placesRes, browserRes, osRes, channelRes, referrerRes, campaignRes, deviceTypeRes, languageRes, weekHourRes] =
+  const [formRes, countsRes, answeredRes, groupedRes, numericRes, textsRes, dailyRes, viewRes, sourceRes, countryRes, deviceRes, bucketRes, medianRes, viewsRes, placesRes, browserRes, osRes, channelRes, referrerRes, campaignRes, deviceTypeRes, languageRes, weekHourRes, aiReasonRes, aiSessionsRes] =
     (await env.DB.batch([
       /**
        * The published document, falling back to the draft only when nothing has
@@ -380,6 +387,18 @@ export async function computeAnalytics(
           WHERE ${where} AND COALESCE(json_extract(meta, '$.context.timezone'), json_extract(meta, '$.context.geo.timezone')) IS NOT NULL
           GROUP BY tz, dow, hour`,
       ).bind(...binds),
+      // Over the period, like `daily`: this is "is the AI healthy lately", not a lifetime total.
+      env.DB.prepare(
+        `SELECT COALESCE(error_code, 'unknown') AS code, COUNT(*) AS n
+           FROM ai_generations
+          WHERE form_id = ? AND status = 'error' AND created_at >= ?
+          GROUP BY code ORDER BY n DESC`,
+      ).bind(formId, since),
+      env.DB.prepare(
+        `SELECT COUNT(DISTINCT session_id) AS n
+           FROM ai_generations
+          WHERE form_id = ? AND status = 'error' AND created_at >= ?`,
+      ).bind(formId, since),
       // Typed as a tuple because `batch()` returns a positional array: the names
       // above are the only thing keeping a statement matched to its shape.
     ])) as [
@@ -406,6 +425,8 @@ export async function computeAnalytics(
       D1Result<SegmentRow>,
       D1Result<SegmentRow>,
       D1Result<{ tz: string; dow: number; hour: number; n: number }>,
+      D1Result<{ code: string; n: number }>,
+      D1Result<{ n: number }>,
     ];
 
   const form = (formRes.results ?? [])[0];
@@ -686,6 +707,11 @@ export async function computeAnalytics(
     byDeviceType: segments(deviceTypeRes),
     byLanguage: segments(languageRes),
     byWeekHour: weekHour(weekHourRes.results ?? []),
+    aiFallbacks: {
+      calls: (aiReasonRes.results ?? []).reduce((sum, r) => sum + r.n, 0),
+      sessions: aiSessionsRes.results?.[0]?.n ?? 0,
+      reasons: (aiReasonRes.results ?? []).map((r) => ({ code: r.code, count: r.n })),
+    },
     durationBuckets: [
       { label: "Under 30s", count: bucketRow?.b1 ?? 0 },
       { label: "30s–1m", count: bucketRow?.b2 ?? 0 },

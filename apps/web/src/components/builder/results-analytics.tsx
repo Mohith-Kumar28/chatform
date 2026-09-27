@@ -13,7 +13,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, Gauge, TrendingDown, Users } from "lucide-react";
+import { Bot, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, Gauge, TrendingDown, Users } from "lucide-react";
+import { InfoHint } from "@/components/ui/info-hint";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { CHANNEL_LABELS, DEVICE_LABELS, countryFlag, countryName } from "@repo/form-schema";
@@ -66,7 +67,18 @@ export interface AnalyticsPayload {
   /** Seven rows, Monday first, of 24 hours on the respondent's own clock. */
   byWeekHour?: number[][];
   durationBuckets: { label: string; count: number }[];
+  /** Model calls that failed over the period; each turn carried on without AI. */
+  aiFallbacks?: { calls: number; sessions: number; reasons: { code: string; count: number }[] };
 }
+
+const FALLBACK_REASONS: Record<string, string> = {
+  credits_exhausted: "AI credits ran out",
+  rate_limited: "AI provider was busy",
+  timeout: "AI took too long",
+  provider_error: "AI provider error",
+  no_output: "AI gave no usable reply",
+  unknown: "Other",
+};
 
 const SOURCE_LABELS: Record<string, string> = {
   chat: "Direct link",
@@ -149,6 +161,29 @@ export function ResultsAnalytics({ analytics }: { analytics: AnalyticsPayload })
         <StatCard label="Median time" value={formatDuration(analytics.medianDurationMs)} icon={Clock} />
         <StatCard label="Didn't finish" value={analytics.abandoned} icon={TrendingDown} tone="warning" />
       </div>
+
+      {analytics.aiFallbacks && analytics.aiFallbacks.calls > 0 && (
+        <div className="bg-card shadow-xs flex items-center gap-2 rounded-xl px-4 py-3">
+          <Bot className="text-muted-foreground size-4 shrink-0" strokeWidth={1.75} aria-hidden />
+          <p className="text-body min-w-0 flex-1">
+            AI fallbacks: <span className="tabular font-medium">{analytics.aiFallbacks.calls}</span>
+            <span className="text-muted-foreground">
+              {" "}in {analytics.aiFallbacks.sessions} {analytics.aiFallbacks.sessions === 1 ? "conversation" : "conversations"}
+            </span>
+          </p>
+          <InfoHint label="About AI fallbacks">
+            <p>The AI didn&apos;t answer, so these turns used your own question wording instead. Respondents could still finish.</p>
+            <ul className="mt-2 space-y-0.5">
+              {analytics.aiFallbacks.reasons.map((r) => (
+                <li key={r.code} className="flex justify-between gap-4">
+                  <span>{FALLBACK_REASONS[r.code] ?? r.code}</span>
+                  <span className="tabular">{r.count}</span>
+                </li>
+              ))}
+            </ul>
+          </InfoHint>
+        </div>
+      )}
 
       <ChartCard
         title="Responses over time"

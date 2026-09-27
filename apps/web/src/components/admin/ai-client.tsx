@@ -36,6 +36,8 @@ interface Ai {
   callSeries: number[];
   byModel: { key: string; value: number }[];
   byKind: { key: string; value: number }[];
+  /** Failed calls by reason: `credits_exhausted`, `timeout`, … */
+  errorsByReason?: { key: string; value: number }[];
   costByKind: { key: string; value: number }[];
   totals: {
     costUsd: number;
@@ -331,6 +333,11 @@ export function AiClient() {
           format={(n) => `${n}%`}
           lowerIsBetter
           hint={`${(t.errors ?? 0).toLocaleString()} failed`}
+          about={
+            (a.errorsByReason ?? []).length > 0
+              ? (a.errorsByReason ?? []).map((r) => `${r.key.replace(/_/g, " ")}: ${r.value.toLocaleString()}`).join(", ")
+              : undefined
+          }
         />
       </div>
 

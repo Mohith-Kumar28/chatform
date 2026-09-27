@@ -110,6 +110,7 @@ import { clampForRuntime } from "../lib/doc-entitlements.js";
 import { can } from "@repo/entitlements";
 import { meter } from "../lib/entitlements.js";
 import { logAiGeneration } from "../lib/ai-usage.js";
+import { classifyAiError, type AiFailure } from "../lib/ai-failure.js";
 import { gateAnswer } from "../lib/answer-gate.js";
 import {
   newResponseId,
@@ -146,6 +147,21 @@ interface DoSessionMeta {
    * the two the same; everything that counts submissions must not.
    */
   status: "active" | "completed" | "disqualified" | "abandoned" | "blocked";
+  /**
+   * A close the session has decided on and D1 has not yet confirmed.
+   *
+   * Written before `finalize` runs and cleared when it returns, so a D1 or
+   * queue failure there leaves a record the alarm can retry from. Without it
+   * the respondent saw the ending, the in-memory status said completed (which
+   * also stopped the alarm), the stored status still said active, and after an
+   * eviction the idle alarm filed the response as abandoned.
+   */
+  finalizePending?: {
+    status: "completed" | "disqualified" | "abandoned";
+    endingRef: string | null;
+    reason: string | null;
+    attempts: number;
+  } | null;
   currentRef: string | null;
   startedAt: number;
   hiddenFields: Record<string, string>;
@@ -433,6 +449,13 @@ const WRITE_STALL_MS = 5000;
  */
 const AI_TURN_TIMEOUT_MS = 45000;
 
+/** First retry of a failed `finalize`, doubling each time. See `finalizeDurably`. */
+const FINALIZE_RETRY_MS = 30_000;
+const FINALIZE_MAX_ATTEMPTS = 10;
+
+/** How long a failed model call keeps this session on templates. See `aiCoolingDown`. */
+const AI_FAILURE_COOLDOWN_MS = 60_000;
+
 /**
  * Used only if a document reaches the runtime without `clampForRuntime` having
  * written the plan's number onto it — which should not happen, and did once.
@@ -581,6 +604,10 @@ export class SessionDO extends DurableObject<Bindings> {
   private toolErrorStreak = 0;
   /** Sticky: once true this session never calls the model again. */
   private degraded = false;
+  /** Not sticky: the model is skipped until then, after a failed call. See `aiCoolingDown`. */
+  private aiCooldownUntil = 0;
+  /** Turns started and not yet returned, by `turnId`. See `userTurn`. */
+  private inFlightTurnIds = new Set<string>();
   /** Tool effects awaiting application after the model's turn completes. */
   private pendingEffects: NonNullable<ToolOutcome["effect"]>[] = [];
   /** True when the agent already asked the next question in this same turn. */
@@ -2801,6 +2828,12 @@ export class SessionDO extends DurableObject<Bindings> {
   override async alarm(): Promise<void> {
     const ok = await this.ensureLoaded();
     if (!ok || !this.meta) return;
+    // Before the status check: a close that D1 has not confirmed is by
+    // definition on a session that is no longer active.
+    if (this.meta.finalizePending) {
+      await this.retryFinalize();
+      return;
+    }
     if (this.meta.status !== "active") return;
 
     /*
@@ -3151,6 +3184,7 @@ export class SessionDO extends DurableObject<Bindings> {
   /** True when the LLM layer should phrase this turn. */
   private aiEnabled(): boolean {
     if (this.degraded) return false;
+    if (this.aiCoolingDown()) return false;
     const mode = this.doc?.settings.agent.mode ?? "template";
     return (
       Boolean(this.env.OPENROUTER_API_KEY) &&
@@ -3175,12 +3209,42 @@ export class SessionDO extends DurableObject<Bindings> {
    * invalid when it plainly was not.
    */
   private comprehensionEnabled(): boolean {
+    // A provider that just failed is not asked again for a minute, for this
+    // too: the fallback is the plain validator, which is what it would have
+    // come to anyway.
+    if (this.aiCoolingDown()) return false;
     const mode = this.doc?.settings.agent.mode ?? "template";
     return (
       Boolean(this.env.OPENROUTER_API_KEY) &&
       mode !== "template" &&
       this.extractionCalls < MAX_EXTRACTION_CALLS
     );
+  }
+
+  /**
+   * A model call failed a moment ago: skip the model until `aiCooldownUntil`.
+   *
+   * Every call in the conversation already falls back to the author's own
+   * wording when it fails, so a failure never reaches the respondent as an
+   * error. What it did reach them as was time. With nothing remembered between
+   * turns, a provider that hangs cost `AI_TURN_TIMEOUT_MS` on *every* answer,
+   * and one that was down entirely was retried by the SDK on every answer too.
+   * A minute of scripted turns, then the next answer tries again. In memory
+   * only: an evicted object has forgotten, and simply tries.
+   */
+  private aiCoolingDown(): boolean {
+    return this.aiCooldownUntil > Date.now();
+  }
+
+  private noteAiFailure(kind: string, failure: AiFailure): void {
+    this.aiCooldownUntil = Date.now() + AI_FAILURE_COOLDOWN_MS;
+    console.warn("ai_fallback", {
+      sessionId: this.meta?.sessionId,
+      formId: this.meta?.formId,
+      kind,
+      code: failure.code,
+      message: failure.message,
+    });
   }
 
   /**
@@ -3233,6 +3297,10 @@ export class SessionDO extends DurableObject<Bindings> {
     // Declared out here so the catch below can still write a usage row for a
     // turn that failed halfway. Starts unpriced, not free.
     let turnUsage: TokenUsage = NO_USAGE;
+    // The SDK reports a provider failure as an `error` part in the stream and
+    // then throws something generic at `result.usage`. This keeps the original,
+    // which is the one that says "insufficient credits".
+    let streamError: unknown = null;
 
     try {
       const answered = Object.keys(this.state.answers).length;
@@ -3326,6 +3394,10 @@ export class SessionDO extends DurableObject<Bindings> {
         // A turn that never returns is worse than a turn phrased by template.
         // See AI_TURN_TIMEOUT_MS.
         abortSignal: AbortSignal.timeout(AI_TURN_TIMEOUT_MS),
+        // The SDK's default is two retries with backoff, each up to the timeout
+        // above, while the respondent watches the typing dots. One is enough to
+        // ride out a blip; past that the template is the better answer.
+        maxRetries: 1,
       });
 
       // Open the bubble lazily, on the first token. A turn that spends itself
@@ -3344,6 +3416,10 @@ export class SessionDO extends DurableObject<Bindings> {
       for await (const part of result.fullStream) {
         if (part.type === "start-step") {
           newStep = text.trim().length > 0;
+          continue;
+        }
+        if (part.type === "error") {
+          streamError ??= part.error;
           continue;
         }
         if (part.type !== "text-delta" || !part.text) continue;
@@ -3469,7 +3545,9 @@ export class SessionDO extends DurableObject<Bindings> {
        * because the throw normally beats the final usage chunk, in which case
        * the row is unpriced rather than free.
        */
-      this.ctx.waitUntil(this.logAiUsage("interview_turn", turnUsage, modelId, Date.now() - started, "error"));
+      const failure = classifyAiError(streamError ?? err);
+      this.noteAiFailure("interview_turn", failure);
+      this.ctx.waitUntil(this.logAiUsage("interview_turn", turnUsage, modelId, Date.now() - started, "error", failure));
       // Close whatever was opened before returning to the template path, so
       // the caller's fallback question lands under a finished bubble.
       if (opened) {
@@ -3513,7 +3591,6 @@ export class SessionDO extends DurableObject<Bindings> {
         answer: text,
         transcript,
       });
-      if (!out) return null;
       // Metered like everything else, but never charged to the phrasing
       // allowance — see `comprehensionEnabled`.
       this.sessionTokensUsed += out.tokens;
@@ -3522,6 +3599,9 @@ export class SessionDO extends DurableObject<Bindings> {
       return out.value;
     } catch (err) {
       console.error("extract_failed", { sessionId: this.meta?.sessionId, blockRef: block.ref, ...errorInfo(err) });
+      const failure = classifyAiError(err);
+      this.noteAiFailure("extraction", failure);
+      this.ctx.waitUntil(this.logAiUsage("extraction", NO_USAGE, MODELS.extraction, Date.now() - started, "error", failure));
       return null;
     }
   }
@@ -3718,6 +3798,7 @@ export class SessionDO extends DurableObject<Bindings> {
     model: string,
     latencyMs: number,
     status: "ok" | "error" = "ok",
+    error?: AiFailure,
   ): Promise<void> {
     if (!this.meta) return;
     await logAiGeneration(this.env, {
@@ -3729,6 +3810,7 @@ export class SessionDO extends DurableObject<Bindings> {
       usage,
       latencyMs,
       status,
+      error,
     });
   }
 
@@ -3910,6 +3992,16 @@ export class SessionDO extends DurableObject<Bindings> {
     if (input.turnId) {
       if (!(await this.ensureLoaded())) return { accepted: false, error: "session_not_found" };
       if (this.seenTurnIds.includes(input.turnId)) return { accepted: true };
+      /*
+       * Still running. `seenTurnIds` only learns a turn once it has finished,
+       * and the browser gives up on a POST after 20 seconds and resends the
+       * same id, while a turn waiting on a slow model can take longer than
+       * that. This object takes the resend while the first is still awaiting,
+       * so without this both ran: the answer was written twice and the agent
+       * was asked twice. The first run's reply reaches them over the stream.
+       */
+      if (this.inFlightTurnIds.has(input.turnId)) return { accepted: true };
+      this.inFlightTurnIds.add(input.turnId);
     }
     this.turnHandedBack = false;
     const timing = this.beginTurnTiming(input.turnId ?? crypto.randomUUID(), "answer");
@@ -3955,6 +4047,7 @@ export class SessionDO extends DurableObject<Bindings> {
       await this.failTurn("turn_failed", "Something went wrong on our side. Please try that again.");
       return { accepted: false, error: "turn_failed" };
     } finally {
+      if (input.turnId) this.inFlightTurnIds.delete(input.turnId);
       this.endTurnTiming(timing);
     }
   }
@@ -4236,6 +4329,11 @@ export class SessionDO extends DurableObject<Bindings> {
       sessionId: this.meta?.sessionId,
       formId: this.meta?.formId,
       source: "chat",
+    }, {
+      // No cooldown for this one: it has its own short deadline and no retries,
+      // so a failing gate costs the respondent at most that, once.
+      onFailure: (failure, latencyMs) =>
+        this.ctx.waitUntil(this.logAiUsage("answer_gate", NO_USAGE, MODELS.answerGate, latencyMs, "error", failure)),
     });
     // Off the hot path: the agent turn this gate hands over to should not wait on a D1 write.
     if (call) this.ctx.waitUntil(this.logAiUsage("answer_gate", call.usage, call.model, call.latencyMs));
@@ -4903,7 +5001,7 @@ export class SessionDO extends DurableObject<Bindings> {
     // internal ids, and only the projection applies the form-level redirect
     // default that `settings.onComplete` is supposed to provide.
     await this.emit("ending", { ending: this.projectEnding(ending), canUndo: this.canUndoScreenOut() });
-    const submissionId = await this.finalize(screenedOut ? "disqualified" : "completed", ending.ref);
+    const submissionId = await this.finalizeDurably(screenedOut ? "disqualified" : "completed", ending.ref);
     /**
      * `complete` fires either way, because the conversation is over either way
      * and a client that only listens for it must not hang. What it means is
@@ -5700,7 +5798,67 @@ export class SessionDO extends DurableObject<Bindings> {
   private async abandon(reason: string): Promise<void> {
     if (!this.meta) return;
     this.meta.status = "abandoned";
-    await this.finalize("abandoned", null, reason);
+    await this.finalizeDurably("abandoned", null, reason);
+    await this.persistMeta();
+  }
+
+  /**
+   * `finalize`, with the decision written down first and a failure retried.
+   *
+   * The ending is already on the respondent's screen when this runs, and their
+   * answers are safe in this object's storage, so a failure here is not theirs
+   * to see: it is logged, and the alarm keeps trying until D1 has the row.
+   * `finalizeResponse` only moves a row out of `in_progress`, so a retry after
+   * a partial success changes nothing twice.
+   */
+  private async finalizeDurably(
+    status: "completed" | "disqualified" | "abandoned",
+    endingRef: string | null,
+    reason?: string,
+  ): Promise<string> {
+    if (!this.meta) return "";
+    this.meta.finalizePending = { status, endingRef, reason: reason ?? null, attempts: 0 };
+    await this.persistMeta();
+    try {
+      const submissionId = await this.finalize(status, endingRef, reason);
+      this.meta.finalizePending = null;
+      return submissionId;
+    } catch (err) {
+      console.error("finalize_failed", {
+        sessionId: this.meta.sessionId,
+        formId: this.meta.formId,
+        status,
+        attempt: 0,
+        ...errorInfo(err),
+      });
+      await this.ctx.storage.setAlarm(Date.now() + FINALIZE_RETRY_MS);
+      // Usually already minted by the first answer; empty only if D1 never took one.
+      return (await this.ctx.storage.get<string>("submission_id").catch(() => undefined)) ?? "";
+    }
+  }
+
+  /** The alarm's half of `finalizeDurably`. Backs off; gives up loudly after FINALIZE_MAX_ATTEMPTS. */
+  private async retryFinalize(): Promise<void> {
+    const pending = this.meta?.finalizePending;
+    if (!this.meta || !pending) return;
+    pending.attempts += 1;
+    try {
+      await this.finalize(pending.status, pending.endingRef, pending.reason ?? undefined);
+      this.meta.finalizePending = null;
+      console.log("finalize_recovered", { sessionId: this.meta.sessionId, attempts: pending.attempts });
+    } catch (err) {
+      const giveUp = pending.attempts >= FINALIZE_MAX_ATTEMPTS;
+      console.error(giveUp ? "finalize_gave_up" : "finalize_failed", {
+        sessionId: this.meta.sessionId,
+        formId: this.meta.formId,
+        status: pending.status,
+        attempt: pending.attempts,
+        ...errorInfo(err),
+      });
+      if (!giveUp) {
+        await this.ctx.storage.setAlarm(Date.now() + Math.min(FINALIZE_RETRY_MS * 2 ** pending.attempts, 60 * 60 * 1000));
+      }
+    }
     await this.persistMeta();
   }
 

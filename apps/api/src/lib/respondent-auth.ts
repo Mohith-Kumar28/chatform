@@ -52,19 +52,47 @@ interface Jwk {
 const jwksCaches = new Map<string, { keys: Jwk[]; fetchedAt: number }>();
 const JWKS_TTL_MS = 60 * 60 * 1000;
 
-async function getSigningKey(jwksUrl: string, kid: string, allowRefetch = true): Promise<CryptoKey | null> {
+/**
+ * Google's key set, or null when Google could not be reached.
+ *
+ * Bounded and caught: this sits in front of every sign-in, and an unanswered
+ * fetch used to hold the respondent's request until the Worker gave up, then
+ * 500. An expired copy is still Google's keys — they rotate over days — so
+ * when the refetch fails it is served rather than refusing everyone.
+ */
+async function fetchKeys(jwksUrl: string): Promise<Jwk[] | null> {
+  try {
+    const res = await fetch(jwksUrl, { signal: AbortSignal.timeout(5_000) });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const body = (await res.json()) as { keys?: Jwk[] };
+    return body.keys ?? [];
+  } catch (err) {
+    console.error("jwks_fetch_failed", { jwksUrl, message: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
+}
+
+async function getSigningKey(
+  jwksUrl: string,
+  kid: string,
+  allowRefetch = true,
+): Promise<CryptoKey | null | "unavailable"> {
   let cache = jwksCaches.get(jwksUrl);
   if (!cache || Date.now() - cache.fetchedAt > JWKS_TTL_MS) {
-    const res = await fetch(jwksUrl);
-    if (!res.ok) return null;
-    const body = (await res.json()) as { keys: Jwk[] };
-    cache = { keys: body.keys ?? [], fetchedAt: Date.now() };
-    jwksCaches.set(jwksUrl, cache);
+    const keys = await fetchKeys(jwksUrl);
+    if (keys) {
+      cache = { keys, fetchedAt: Date.now() };
+      jwksCaches.set(jwksUrl, cache);
+    } else if (!cache) {
+      return "unavailable";
+    }
   }
   const jwk = cache.keys.find((k) => k.kid === kid);
   if (!jwk) {
     if (!allowRefetch) return null;
-    jwksCaches.delete(jwksUrl); // key rotated mid-cache; refetch once
+    // Key rotated mid-cache: refetch once. Marked stale rather than deleted,
+    // so a failed refetch still has these to fall back on.
+    jwksCaches.set(jwksUrl, { ...cache, fetchedAt: 0 });
     return getSigningKey(jwksUrl, kid, false);
   }
   return crypto.subtle.importKey(
@@ -94,6 +122,9 @@ async function verifyRs256<T>(
   if (header.alg !== "RS256") return { ok: false, code: "bad_alg", message: "Unsupported sign-in token." };
 
   const key = await getSigningKey(jwksUrl, header.kid);
+  if (key === "unavailable") {
+    return { ok: false, code: "signin_unavailable", message: "Sign-in is unavailable right now. Try again in a moment." };
+  }
   if (!key) return { ok: false, code: "unknown_key", message: "Could not verify that sign-in. Try again." };
 
   const verified = await crypto.subtle.verify(

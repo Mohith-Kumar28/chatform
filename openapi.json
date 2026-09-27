@@ -6249,6 +6249,24 @@
                         ]
                       }
                     },
+                    "errorsByReason": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ]
+                      }
+                    },
                     "costByKind": {
                       "type": "array",
                       "items": {
@@ -6473,6 +6491,7 @@
                     "callSeries",
                     "byModel",
                     "byKind",
+                    "errorsByReason",
                     "costByKind",
                     "totals",
                     "previous",
@@ -13314,6 +13333,16 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "botCheck": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "id": {
                             "type": "string"
                           },
@@ -14772,6 +14801,40 @@
                         ]
                       }
                     },
+                    "aiFallbacks": {
+                      "type": "object",
+                      "properties": {
+                        "calls": {
+                          "type": "number"
+                        },
+                        "sessions": {
+                          "type": "number"
+                        },
+                        "reasons": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "count"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "calls",
+                        "sessions",
+                        "reasons"
+                      ]
+                    },
                     "locked": {
                       "type": "array",
                       "items": {
@@ -14851,6 +14914,7 @@
                     "byLanguage",
                     "byWeekHour",
                     "durationBuckets",
+                    "aiFallbacks",
                     "locked",
                     "lockedContext"
                   ]
@@ -21330,6 +21394,40 @@
                           "count"
                         ]
                       }
+                    },
+                    "aiFallbacks": {
+                      "type": "object",
+                      "properties": {
+                        "calls": {
+                          "type": "number"
+                        },
+                        "sessions": {
+                          "type": "number"
+                        },
+                        "reasons": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "count"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "calls",
+                        "sessions",
+                        "reasons"
+                      ]
                     },
                     "locked": {
                       "type": "array",

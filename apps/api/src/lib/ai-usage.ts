@@ -1,6 +1,7 @@
 import type { Bindings } from "../env.js";
 import type { TokenUsage } from "./ai.js";
 import { modelRates, splitCost } from "./ai-cost-split.js";
+import type { AiFailure } from "./ai-failure.js";
 
 /**
  * Record one model call in `ai_generations`.
@@ -42,6 +43,8 @@ export async function logAiGeneration(
     usage: TokenUsage;
     latencyMs?: number;
     status?: "ok" | "error";
+    /** Why an `error` row failed. See `ai-failure.ts`. */
+    error?: AiFailure | null;
   },
 ): Promise<void> {
   /**
@@ -63,8 +66,9 @@ export async function logAiGeneration(
          (id, organization_id, user_id, session_id, form_id, kind, provider, model,
           prompt_tokens, completion_tokens, cost_usd, generation_id, latency_ms, status, created_at,
           cache_read_tokens, cache_write_tokens, reasoning_tokens, steps, tool_calls,
-          cost_input_usd, cost_cached_usd, cost_output_usd, cost_reasoning_usd, cost_other_usd, cost_tool_steps_usd)
-       VALUES (?, ?, ?, ?, ?, ?, 'openrouter', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          cost_input_usd, cost_cached_usd, cost_output_usd, cost_reasoning_usd, cost_other_usd, cost_tool_steps_usd,
+          error_code, error_message)
+       VALUES (?, ?, ?, ?, ?, ?, 'openrouter', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         `ai_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
@@ -93,6 +97,8 @@ export async function logAiGeneration(
         split?.other ?? null,
         // Unpriced overall means unpriced here too, whatever the steps said.
         u.costUsd === null ? null : (u.toolStepsCostUsd ?? null),
+        row.error?.code ?? null,
+        row.error?.message ?? null,
       )
       .run();
   } catch (err) {
