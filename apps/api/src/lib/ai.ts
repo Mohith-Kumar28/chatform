@@ -257,7 +257,12 @@ export function interviewModel(env: Bindings, override?: string): { model: Langu
  * treated as a failure and fell back to scripted phrasing — after ~19 seconds.
  */
 export const INTERVIEW_PROVIDER_OPTIONS = {
-  openrouter: { reasoning: { effort: "minimal" as const, exclude: true } },
+  openrouter: {
+    reasoning: { effort: "minimal" as const, exclude: true },
+    // A respondent is waiting on every turn, so OpenRouter routes to whichever
+    // provider of the same model is answering fastest. Same model, same price.
+    provider: { sort: "latency" as const },
+  },
 } as const;
 
 /**

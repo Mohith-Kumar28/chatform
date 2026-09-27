@@ -3258,8 +3258,29 @@ export class SessionDO extends DurableObject<Bindings> {
       // transcript, immediately followed by the deterministic fallback.
       let text = "";
       let firstTokenMs: number | null = null;
-      for await (const delta of result.textStream) {
-        if (!delta) continue;
+      /*
+       * The full stream rather than `textStream`, which is the same text with
+       * the step boundaries thrown away: an acknowledgement written before a
+       * tool call and the question written after it ran together as
+       * "Got it.What is your email?". Only text is read, exactly as
+       * `textStream` does; everything else is left to `result.steps`.
+       */
+      let newStep = false;
+      for await (const part of result.fullStream) {
+        if (part.type === "start-step") {
+          newStep = text.trim().length > 0;
+          continue;
+        }
+        if (part.type !== "text-delta" || !part.text) continue;
+        let delta = part.text;
+        if (newStep) {
+          newStep = false;
+          delta = `\n\n${delta.trimStart()}`;
+          if (delta === "\n\n") {
+            newStep = true;
+            continue;
+          }
+        }
         if (!opened) {
           opened = true;
           firstTokenMs = Date.now() - started;
@@ -4042,7 +4063,8 @@ export class SessionDO extends DurableObject<Bindings> {
       formId: this.meta?.formId,
       source: "chat",
     });
-    if (call) await this.logAiUsage("answer_gate", call.usage, call.model, call.latencyMs);
+    // Off the hot path: the agent turn this gate hands over to should not wait on a D1 write.
+    if (call) this.ctx.waitUntil(this.logAiUsage("answer_gate", call.usage, call.model, call.latencyMs));
     console.log("answer_gate", {
       sessionId: this.meta?.sessionId,
       mode: this.mode(),
