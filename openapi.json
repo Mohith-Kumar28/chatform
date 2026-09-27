@@ -9335,6 +9335,9 @@
                       "updatedAt": {
                         "type": "number"
                       },
+                      "workspaceId": {
+                        "type": "string"
+                      },
                       "questionCount": {
                         "type": "number"
                       },
@@ -9413,6 +9416,7 @@
                       "status",
                       "responses",
                       "updatedAt",
+                      "workspaceId",
                       "questionCount",
                       "preview",
                       "partials",

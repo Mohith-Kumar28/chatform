@@ -33,7 +33,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { NEW_FORM_EVENT } from "@/components/dashboard/use-app-shortcuts";
-import { WorkspaceSwitcher } from "@/components/dashboard/workspace-switcher";
+import { ALL_WORKSPACES, WorkspaceSwitcher } from "@/components/dashboard/workspace-switcher";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterChips } from "@/components/ui/filter-chips";
@@ -102,14 +102,22 @@ export function DashboardContent() {
       >(workspaceData) ?? [],
     [workspaceData],
   );
-  const currentWorkspace = workspaces.find((w) => w.slug === ws) ?? workspaces[0];
+  // Every workspace at once. Each card then answers for its own folder, and a
+  // new form lands in the default one, the same as a link with no `?ws=`.
+  const showingAll = ws === ALL_WORKSPACES && workspaces.length > 1;
+  const currentWorkspace = showingAll ? undefined : (workspaces.find((w) => w.slug === ws) ?? workspaces[0]);
   const currentWorkspaceId = currentWorkspace?.id;
+  const workspaceById = useMemo(() => new Map(workspaces.map((w) => [w.id, w])), [workspaces]);
   /*
-    What the caller's role in this workspace lets them do. Optimistic until the
+    What the caller's role in a workspace lets them do. Optimistic until the
     list arrives, the same rule `allows` follows, so an editor's grid does not
     flash read-only on every load. The server refuses regardless.
   */
-  const canEditHere = !currentWorkspace || (currentWorkspace.permissions?.form ?? []).includes("update");
+  const canEditIn = (w: (typeof workspaces)[number] | undefined) =>
+    !w || (w.permissions?.form ?? []).includes("update");
+  const canEditHere = showingAll
+    ? workspaces.some((w) => (w.permissions?.form ?? []).includes("create"))
+    : canEditIn(currentWorkspace);
   // Only workspaces this person may put forms into are places to move one.
   const moveTargets = useMemo(
     () => workspaces.filter((w) => (w.permissions?.form ?? []).includes("create")),
@@ -538,26 +546,30 @@ export function DashboardContent() {
           />
         ) : (
           <ul className={GRID} data-tour="form-grid">
-            {forms.map((form) => (
+            {forms.map((form) => {
+              const home = workspaceById.get(form.workspaceId ?? "");
+              const canEdit = showingAll ? canEditIn(home) : canEditHere;
+              return (
               <li key={form.id}>
                 <FormCard
                   form={form}
+                  workspaceName={showingAll ? home?.name : undefined}
                   selected={selected.has(form.id)}
                   onSelectedChange={
-                    canEditHere && moveTargets.length > 1
+                    canEdit && moveTargets.length > 1
                       ? (on) => toggleSelected(form.id, on)
                       : undefined
                   }
                   anySelected={selectedCount > 0}
-                  readOnly={!canEditHere}
-                  onDelete={canEditHere ? () => setPendingDelete(form) : undefined}
-                  onDuplicate={canEditHere ? () => void duplicate(form) : undefined}
+                  readOnly={!canEdit}
+                  onDelete={canEdit ? () => setPendingDelete(form) : undefined}
+                  onDuplicate={canEdit ? () => void duplicate(form) : undefined}
                   onUnpublish={
-                    canEditHere && form.status === "published" ? () => setPendingOffline(form) : undefined
+                    canEdit && form.status === "published" ? () => setPendingOffline(form) : undefined
                   }
-                  onPublish={canEditHere ? () => publish.mutate({ id: form.id }) : undefined}
-                  workspaces={canEditHere ? moveTargets : []}
-                  currentWorkspaceId={currentWorkspaceId}
+                  onPublish={canEdit ? () => publish.mutate({ id: form.id }) : undefined}
+                  workspaces={canEdit ? moveTargets : []}
+                  currentWorkspaceId={form.workspaceId ?? currentWorkspaceId}
                   onMove={(workspaceId) => {
                     void (async () => {
                       try {
@@ -578,7 +590,8 @@ export function DashboardContent() {
                   }}
                 />
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

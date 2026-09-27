@@ -93,6 +93,9 @@ export async function requireWorkspace(
   return { orgId, wsId };
 }
 
+/** The `?ws=` value that means every workspace; never issued as a real slug. */
+export const ALL_WORKSPACES = "all";
+
 /** `my-form-a1b2c3` — readable, and unique without a round trip to check. */
 export function formSlug(title: string): string {
   const base =

@@ -105,6 +105,15 @@ describe("a member added to one workspace", () => {
     expect((await fetchApi(`/api/forms/${formB}/knowledge`, { headers: auth(editor) })).status).toBe(404);
   });
 
+  it("sees only its own workspace's forms under ?ws=all, while an admin sees both", async () => {
+    const mine = await (await fetchApi("/api/forms?ws=all", { headers: auth(editor) })).json<{ id: string; workspaceId: string }[]>();
+    expect(mine.map((f) => f.id)).toContain(owner.formId);
+    expect(mine.map((f) => f.id)).not.toContain(formB);
+    const all = await (await fetchApi("/api/forms?ws=all", { headers: auth(owner) })).json<{ id: string; workspaceId: string }[]>();
+    expect(all.find((f) => f.id === formB)?.workspaceId).toBe(wsB);
+    expect(all.find((f) => f.id === owner.formId)?.workspaceId).toBe(owner.workspaceId);
+  });
+
   it("still works in its own workspace", async () => {
     expect((await fetchApi(`/api/forms/${owner.formId}`, { headers: auth(editor) })).status).toBe(200);
     const list = await fetchApi("/api/forms", { headers: auth(editor) });

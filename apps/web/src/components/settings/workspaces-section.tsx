@@ -193,11 +193,11 @@ export function WorkspacesSection() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  aria-label={`Share ${ws.name}`}
+                  aria-label={`Who can open ${ws.name}`}
                   onClick={() => setAccessFor(ws)}
                 >
                   <Users className="size-3.5" />
-                  Share
+                  Access
                 </Button>
               )}
               {canUpdate && (

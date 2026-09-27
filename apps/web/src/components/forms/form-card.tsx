@@ -11,6 +11,7 @@ import {
   Link2,
   MessageSquare,
   MoreHorizontal,
+  Folder,
   FolderInput,
   PowerOff,
   Trash2,
@@ -106,6 +107,8 @@ export interface FormRow {
   /** True when the draft has moved on from what respondents are answering. */
   hasUnpublishedChanges?: boolean;
   questionCount?: number;
+  /** The folder it lives in. Sent by `GET /forms`; used by the all-workspaces grid. */
+  workspaceId?: string;
   preview?: string[];
   /**
    * The few theme values a thumbnail can show. The API sends the defaults for
@@ -154,8 +157,11 @@ export function FormCard({
   onSelectedChange,
   anySelected = false,
   readOnly = false,
+  workspaceName,
 }: {
   form: FormRow;
+  /** Set only on the all-workspaces grid, where the folder is not otherwise on screen. */
+  workspaceName?: string;
   /** Absent for someone who may only view this workspace: no Delete at all. */
   onDelete?: () => void;
   /** Copy it into a new draft. Absent for a viewer, who cannot create forms here. */
@@ -218,11 +224,9 @@ export function FormCard({
   /*
    * What the footer keeps.
    *
-   * Status and question count moved up onto the thumbnail (see `thumbPills`),
-   * because they are what you scan a grid *for* — is this one live, how long is
-   * it — and the footer had them fourth and second in a run of four grey spans
-   * that all looked alike. What is left is the pair that only matters once you
-   * have already found the form: how much has come in, and when it last moved.
+   * Status moved up onto the thumbnail (see `thumbPills`), because it is what
+   * you scan a grid *for*. The footer is plain text: how much has come in, how
+   * long the form is, and when it last moved.
    */
   /*
    * Partials ride along with the completed count rather than getting a line.
@@ -246,6 +250,12 @@ export function FormCard({
         {form.responses} response{form.responses === 1 ? "" : "s"}
         {partials > 0 && (
           <span className="text-muted-foreground/70"> +{partials} partial</span>
+        )}
+        {form.questionCount !== undefined && (
+          <>
+            {" · "}
+            {form.questionCount} question{form.questionCount === 1 ? "" : "s"}
+          </>
         )}
       </span>
       <span className="text-muted-foreground text-xs">
@@ -543,7 +553,7 @@ export function FormCard({
           sitting next to a Live pill that says it is — when what it means is
           that the draft has changes the live form does not have. It is the
           noun that carries the meaning, so it is the half that cannot be cut;
-          it truncates before the question count does instead.
+          it truncates before the workspace name does instead.
         */}
         {published && form.hasUnpublishedChanges && (
           <span
@@ -558,9 +568,10 @@ export function FormCard({
           </span>
         )}
       </span>
-      {form.questionCount !== undefined && (
-        <span className={cn(thumbPill, "tabular shrink-0")}>
-          {form.questionCount} question{form.questionCount === 1 ? "" : "s"}
+      {workspaceName && (
+        <span className={cn(thumbPill, "min-w-0 max-w-[45%] font-medium")} title={workspaceName}>
+          <Folder aria-hidden className="size-3 shrink-0 opacity-70" strokeWidth={2} />
+          <span className="truncate">{workspaceName}</span>
         </span>
       )}
     </>
@@ -1188,7 +1199,7 @@ function ThumbFrame({
         {children}
       </div>
       {/* `justify-between` with one child leaves it at the start, so a form
-          with no question count keeps the status where it always was. */}
+          with no workspace name keeps the status where it always was. */}
       <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 pt-1.5">
         {pills}
       </div>

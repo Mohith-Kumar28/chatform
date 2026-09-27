@@ -2225,6 +2225,7 @@ export type GetApiForms200Item = {
   status: string;
   responses: number;
   updatedAt: number;
+  workspaceId: string;
   questionCount: number;
   preview: string[];
   partials: number;

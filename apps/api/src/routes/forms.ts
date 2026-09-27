@@ -10,7 +10,7 @@ import { ErrorEnvelope } from "../lib/openapi.js";
 import { hashPassword, isHashedPassword } from "../lib/crypto.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 import { requirePermission, requireGauge, entitlementsFor, assertPermission, type AuthzVars } from "../lib/authorize.js";
-import { workspaceRoleFor } from "../lib/workspace-access.js";
+import { accessFor, workspaceFilter, workspaceRoleFor } from "../lib/workspace-access.js";
 import { workspacePermissionsFor } from "../lib/permissions.js";
 import { stripForPublish, checkDocLimits, checkGatewayPayments } from "../lib/doc-entitlements.js";
 import { publishFingerprint, hasUnpublishedChanges } from "../lib/publish-state.js";
@@ -20,7 +20,7 @@ import { audit } from "../lib/gate-log.js";
 import { apiError, describeSchemaError } from "../lib/api-error.js";
 import { saveLimit } from "../lib/ratelimit.js";
 import { limitReached } from "@repo/entitlements";
-import { requireWorkspace, formSlug } from "../lib/workspace.js";
+import { requireWorkspace, formSlug, ALL_WORKSPACES } from "../lib/workspace.js";
 import { enqueueMail } from "../lib/mail.js";
 
 export const formsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
@@ -118,6 +118,8 @@ const FormCardTheme = z.object({
 });
 
 const FormListItem = FormSummary.extend({
+  /** The folder the form is in, so an all-workspaces grid can say which. */
+  workspaceId: z.string(),
   questionCount: z.number(),
   preview: z.array(z.string()),
   /**
@@ -297,30 +299,40 @@ formsRouter.get(
     // `?ws=` names the workspace being viewed — a slug from the switcher, or an
     // id. Absent, `requireWorkspace` falls back to the organization's oldest,
     // which is what every link written before workspaces were selectable means.
-    const ws = await requireWorkspace(c, c.req.query("ws"));
-    if (ws === undefined) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
-    if (!ws) return c.json([]);
+    // `all` is every workspace the caller can open; `freeSlug` never hands it
+    // out, so it cannot shadow a real one.
+    let scope: { sql: string; binds: string[] };
+    if (c.req.query("ws") === ALL_WORKSPACES) {
+      const orgId = c.get("orgId");
+      if (!orgId) return c.json([]);
+      const filter = workspaceFilter(await accessFor(c as never), "f.workspace_id");
+      scope = { sql: `f.organization_id = ?${filter.sql}`, binds: [orgId, ...filter.binds] };
+    } else {
+      const ws = await requireWorkspace(c, c.req.query("ws"));
+      if (ws === undefined) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
+      if (!ws) return c.json([]);
+      scope = { sql: "f.workspace_id = ?", binds: [ws.wsId] };
+    }
     // `working_schema` joins the select so the card can describe the form.
     // It is the one wide column here; a workspace holds tens of forms, not
     // thousands, and the alternative is a denormalised summary column that
     // can disagree with the document it summarises.
     const rows = await c.env.DB.prepare(
-      `SELECT f.id, f.title, f.slug, f.status, f.updated_at, f.working_schema, fv.checksum AS active_checksum,
+      `SELECT f.id, f.title, f.slug, f.status, f.updated_at, f.workspace_id, f.working_schema, fv.checksum AS active_checksum,
               (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id AND s.status = 'completed') AS responses,
               (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id AND s.status IN ('abandoned','in_progress','disqualified')) AS partials
        FROM forms f LEFT JOIN form_versions fv ON fv.id = f.active_version_id
-       WHERE f.workspace_id = ? AND f.deleted_at IS NULL ORDER BY f.updated_at DESC`,
+       WHERE ${scope.sql} AND f.deleted_at IS NULL ORDER BY f.updated_at DESC`,
     )
-      .bind(ws.wsId)
-      .all<{ id: string; title: string; slug: string; status: string; updated_at: number; responses: number; partials: number; working_schema: string | null; active_checksum: string | null }>();
+      .bind(...scope.binds)
+      .all<{ id: string; title: string; slug: string; status: string; updated_at: number; workspace_id: string; responses: number; partials: number; working_schema: string | null; active_checksum: string | null }>();
     /*
       One entitlements lookup for the whole list, not one per card.
 
       `hasUnpublishedChanges` needs the plan, because `stripForPublish` removes
       gated settings and the same draft published on two plans is two different
-      live forms. Every row here belongs to one workspace and therefore one
-      organization, so the plan is a property of the request rather than of the
-      form — resolving it inside the map would ask the same question thirty
+      live forms. Every row here belongs to one organization, so the plan is a
+      property of the request rather than of the form — resolving it inside the map would ask the same question thirty
       times for thirty identical answers.
     */
     const { planId } = await entitlementsFor(c);
@@ -333,6 +345,7 @@ formsRouter.get(
         responses: r.responses,
         partials: r.partials,
         updatedAt: r.updated_at,
+        workspaceId: r.workspace_id,
         // A form with no document cannot have drifted from anything, and the
         // fingerprint needs one — so absent working schema is "up to date"
         // rather than a hash of the empty string.

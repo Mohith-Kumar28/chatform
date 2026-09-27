@@ -6,7 +6,7 @@ import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, type GuardVars } from "../lib/guards.js";
 import { requirePermission, requireGauge, type AuthzVars } from "../lib/authorize.js";
 import { audit } from "../lib/gate-log.js";
-import { newWorkspaceId, workspaceSlug } from "../lib/workspace.js";
+import { ALL_WORKSPACES, newWorkspaceId, workspaceSlug } from "../lib/workspace.js";
 import { accessFor, workspaceFilter } from "../lib/workspace-access.js";
 import { workspacePermissionsFor } from "../lib/permissions.js";
 
@@ -127,7 +127,8 @@ async function freeSlug(env: Bindings, orgId: string, name: string, excludeId?: 
   )
     .bind(orgId, excludeId ?? null, base)
     .all<{ slug: string }>();
-  const used = new Set((taken.results ?? []).map((r) => r.slug));
+  // `all` is the dashboard's every-workspace view, so no folder may be called it.
+  const used = new Set([ALL_WORKSPACES, ...(taken.results ?? []).map((r) => r.slug)]);
   for (let n = 1; n <= 50; n++) {
     const candidate = n === 1 ? base : `${base}-${n}`;
     if (!used.has(candidate)) return candidate;

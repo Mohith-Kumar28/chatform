@@ -173,7 +173,7 @@ export function WorkspaceAccessDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-5 sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Share {workspace.name}</DialogTitle>
+          <DialogTitle>Who can open {workspace.name}</DialogTitle>
           <DialogDescription>Add teammates, or invite anyone by email.</DialogDescription>
         </DialogHeader>
 
