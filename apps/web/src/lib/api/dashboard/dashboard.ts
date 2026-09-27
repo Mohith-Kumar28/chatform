@@ -144,9 +144,6 @@ import type {
   PostApiWebhooksByIdTest200,
   PostApiWorkspaces200,
   PostApiWorkspacesBody,
-  PutApiFormsByIdAiThread200,
-  PutApiFormsByIdAiThread413,
-  PutApiFormsByIdAiThreadBody,
   PutApiFormsByIdDoc200,
   PutApiFormsByIdDoc409,
   PutApiFormsByIdDoc429,
@@ -1382,104 +1379,7 @@ export function useGetApiFormsByIdAiThread<TData = Awaited<ReturnType<typeof get
 
 
 
-export type putApiFormsByIdAiThreadResponse200 = {
-  data: PutApiFormsByIdAiThread200
-  status: 200
-}
-
-export type putApiFormsByIdAiThreadResponse413 = {
-  data: PutApiFormsByIdAiThread413
-  status: 413
-}
-
-export type putApiFormsByIdAiThreadResponseSuccess = (putApiFormsByIdAiThreadResponse200) & {
-  headers: Headers;
-};
-export type putApiFormsByIdAiThreadResponseError = (putApiFormsByIdAiThreadResponse413) & {
-  headers: Headers;
-};
-
-export type putApiFormsByIdAiThreadResponse = (putApiFormsByIdAiThreadResponseSuccess | putApiFormsByIdAiThreadResponseError)
-
-export const getPutApiFormsByIdAiThreadUrl = (id: string,) => {
-
-
-
-
-  return `/api/forms/${id}/ai-thread`
-}
-
-/**
- * @summary Replace the builder AI conversation for a form
- */
-export const putApiFormsByIdAiThread = async (id: string,
-    putApiFormsByIdAiThreadBody: PutApiFormsByIdAiThreadBody, options?: Parameters<typeof customFetch>[1]): Promise<putApiFormsByIdAiThreadResponse> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
-  };
-return customFetch<putApiFormsByIdAiThreadResponse>(getPutApiFormsByIdAiThreadUrl(id),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(putApiFormsByIdAiThreadBody)
-  }
-);}
-
-
-
-
-
-export const getPutApiFormsByIdAiThreadMutationOptions = <TError = PutApiFormsByIdAiThread413,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdAiThread>>, TError,PutApiFormsByIdAiThreadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdAiThread>>, TError,PutApiFormsByIdAiThreadMutationVariables, TContext> => {
-
-const mutationKey = ['putApiFormsByIdAiThread'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiFormsByIdAiThread>>, PutApiFormsByIdAiThreadMutationVariables> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  putApiFormsByIdAiThread(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PutApiFormsByIdAiThreadMutationResult = NonNullable<Awaited<ReturnType<typeof putApiFormsByIdAiThread>>>
-    export type PutApiFormsByIdAiThreadMutationBody = PutApiFormsByIdAiThreadBody
-    export type PutApiFormsByIdAiThreadMutationError = PutApiFormsByIdAiThread413
-    export type PutApiFormsByIdAiThreadMutationVariables = {id: string;data: PutApiFormsByIdAiThreadBody}
-
-    /**
- * @summary Replace the builder AI conversation for a form
- */
-export const usePutApiFormsByIdAiThread = <TError = PutApiFormsByIdAiThread413,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdAiThread>>, TError,PutApiFormsByIdAiThreadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof putApiFormsByIdAiThread>>,
-        TError,
-        PutApiFormsByIdAiThreadMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPutApiFormsByIdAiThreadMutationOptions(options));
-    }
-    export type getApiFormsByIdKnowledgeResponse200 = {
+export type getApiFormsByIdKnowledgeResponse200 = {
   data: GetApiFormsByIdKnowledge200
   status: 200
 }

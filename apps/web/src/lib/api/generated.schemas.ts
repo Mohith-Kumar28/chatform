@@ -2456,52 +2456,6 @@ export type GetApiFormsByIdAiThread200 = {
   turns: GetApiFormsByIdAiThread200TurnsItem[];
 };
 
-export type PutApiFormsByIdAiThreadBodyTurnsItemRole = typeof PutApiFormsByIdAiThreadBodyTurnsItemRole[keyof typeof PutApiFormsByIdAiThreadBodyTurnsItemRole];
-
-
-export const PutApiFormsByIdAiThreadBodyTurnsItemRole = {
-  user: 'user',
-  assistant: 'assistant',
-} as const;
-
-export type PutApiFormsByIdAiThreadBodyTurnsItem = {
-  /** @maxLength 100 */
-  id: string;
-  role: PutApiFormsByIdAiThreadBodyTurnsItemRole;
-  /** @maxLength 20000 */
-  text: string;
-  [key: string]: unknown;
-};
-
-export type PutApiFormsByIdAiThreadBody = {
-  /** @maxItems 40 */
-  turns: PutApiFormsByIdAiThreadBodyTurnsItem[];
-};
-
-export type PutApiFormsByIdAiThread200 = {
-  ok: boolean;
-};
-
-export type PutApiFormsByIdAiThread413ErrorIssuesItem = {
-  ref?: string;
-  path?: string;
-  code: string;
-  message: string;
-};
-
-export type PutApiFormsByIdAiThread413Error = {
-  code: string;
-  message: string;
-  issues?: PutApiFormsByIdAiThread413ErrorIssuesItem[];
-  request_id?: string;
-  doc_url?: string;
-  [key: string]: unknown;
-};
-
-export type PutApiFormsByIdAiThread413 = {
-  error: PutApiFormsByIdAiThread413Error;
-};
-
 export type GetApiFormsByIdKnowledge200SourcesItem = {
   id: string;
   kind: string;
