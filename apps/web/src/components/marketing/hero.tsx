@@ -434,7 +434,7 @@ export function Hero() {
                 been made loud on purpose — it pulled the eye down and past
                 them. The anchor still exists; the nav and the section below
                 both reach it. */}
-            Free forever · Unlimited submissions · No card
+            Free forever · Unlimited submissions · No credit card required
           </p>
 
           {/* The margin note, pointing down the page at the launch video.
