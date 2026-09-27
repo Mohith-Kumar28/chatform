@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ChatBubble } from "@/components/chat/chat-bubble";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
@@ -908,10 +909,18 @@ function DemoEnding({ ending, inline }: { ending: DemoTurn; inline?: boolean }) 
           {ending.body}
         </p>
       )}
+      {/* The one live control in the demo: the visitor's own next step.
+          /dashboard sends a signed-out visitor to sign in first. The inline
+          copy sits inside the aria-hidden thread, so it stays out of the tab
+          order there. */}
       {ending.cta && (
-        <span className="relative z-20 mt-1">
+        <Link
+          href="/dashboard"
+          tabIndex={inline ? -1 : undefined}
+          className="relative z-20 mt-1 rounded-full transition-transform duration-200 ease-out hover:scale-105 active:scale-[0.97]"
+        >
           <AccentPill>{ending.cta}</AccentPill>
-        </span>
+        </Link>
       )}
     </div>
   );

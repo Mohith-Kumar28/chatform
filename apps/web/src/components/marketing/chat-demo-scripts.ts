@@ -179,7 +179,7 @@ export const HERO_SCRIPT: readonly DemoTurn[] = [
     role: "end",
     text: "You're all set, Maya.",
     body: "Twelve seats are live, and I'll see you Thursday at 10:30.",
-    cta: "Open your workspace",
+    cta: "Create your form",
     waitMs: 700,
   },
 ];
