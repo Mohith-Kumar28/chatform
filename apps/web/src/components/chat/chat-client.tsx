@@ -2079,12 +2079,21 @@ function EndingCard({
           respondent file a second response. One registration per person is a
           setting, and it was being applied to forms that had not asked for it.
         */}
+        {/*
+          An outline button, not the faded underline it was: at the end of a
+          form that allows repeats, a second response is a real next step and
+          the link was easy to miss. Outline rather than filled, so it never
+          outranks the ending's own call-to-action above it. The label stays in
+          the text colour, since a pale accent (yellow, mint) is unreadable as
+          text; the accent carries the border and the icon.
+        */}
         {allowRepeat && (
           <button
             type="button"
             onClick={onRestart}
-            className="mt-6 text-sm underline opacity-55 transition-opacity hover:opacity-100"
+            className="mt-6 inline-flex h-11 items-center gap-2 rounded-[var(--cf-radius-control)] border border-[var(--cf-accent)] bg-[color-mix(in_oklab,var(--cf-accent)_6%,transparent)] px-6 text-sm font-medium transition-[background-color,transform] hover:bg-[color-mix(in_oklab,var(--cf-accent)_14%,transparent)] active:scale-[0.98] motion-reduce:active:scale-100"
           >
+            <RotateCcw className="size-4 text-[var(--cf-accent)]" strokeWidth={2} aria-hidden />
             {/*
               "Submit another response" is wrong on a refusal in both halves:
               nothing was submitted, and the offer sounds like an invitation to
