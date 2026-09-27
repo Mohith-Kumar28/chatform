@@ -1554,6 +1554,14 @@ export function useChat({
         // A popup loaded ahead of its click opens no session until it is
         // opened: a session is a response row. See `whenEmbedOpened`.
         await whenEmbedOpened();
+        /*
+         * Fresh, now: nothing saved to resume and nothing already answered,
+         * so the boot screen has no decision left to hold the frame for. The
+         * chat goes up with the typing dots (see `opening` in chat-client)
+         * while the session opens, instead of "Getting the conversation
+         * ready" followed by an empty thread saying "Connecting".
+         */
+        setResolving(false);
         const deviceSignal = await signal;
         let turnstileToken = await bot;
         if (turnstileToken && Date.now() - botStarted > TURNSTILE_TOKEN_TTL_MS) turnstileToken = await getTurnstileToken();

@@ -700,7 +700,8 @@ export function ChatSurface({
             </div>
           ))}
 
-          {chat.thinking && <TypingDots />}
+          {/* Also while the session opens: the first question is on its way. */}
+          {(chat.thinking || (chat.status === "connecting" && chat.messages.length === 0)) && <TypingDots />}
 
           {/* The current question's controls live here, under the agent's
               message — not in place of the composer. */}
@@ -2378,7 +2379,7 @@ const Composer = memo(function Composer({
   if (!block) {
     return (
       <p className="text-center text-sm opacity-50">
-        {status === "connecting" ? "Connecting…" : " "}
+        {" "}
       </p>
     );
   }
