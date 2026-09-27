@@ -3257,10 +3257,12 @@ export class SessionDO extends DurableObject<Bindings> {
       // on tool calls and says nothing used to leave an empty bubble in the
       // transcript, immediately followed by the deterministic fallback.
       let text = "";
+      let firstTokenMs: number | null = null;
       for await (const delta of result.textStream) {
         if (!delta) continue;
         if (!opened) {
           opened = true;
+          firstTokenMs = Date.now() - started;
           await this.emit("message_start", { messageId, role: "assistant" });
         }
         text += delta;
@@ -3273,7 +3275,17 @@ export class SessionDO extends DurableObject<Bindings> {
       // steps and `result.providerMetadata` would carry only the last one, so
       // `reportedUsage` is given the whole step list to add up — reading the
       // top-level value instead under-reports a two-step call by more than half.
-      turnUsage = reportedUsage({ usage, steps: await result.steps, response: await result.response });
+      const steps = await result.steps;
+      turnUsage = reportedUsage({ usage, steps, response: await result.response });
+      // How long the respondent waited for the first word, and how many model
+      // round trips the turn took to get there. The number to watch for speed.
+      console.log("interview_turn_timing", {
+        sessionId: this.meta.sessionId,
+        firstTokenMs,
+        totalMs: Date.now() - started,
+        steps: steps.length,
+        tools: steps.flatMap((st) => st.toolCalls.map((c) => c.toolName)),
+      });
       const inTok = usage?.inputTokens ?? 0;
       const outTok = usage?.outputTokens ?? 0;
       // The stable-prefix restructure above was measured once, by hand, against
