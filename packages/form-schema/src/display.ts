@@ -123,7 +123,9 @@ export function displayAnswer(block: Block, value: unknown): string {
 
     case "scheduling": {
       const sched = value as { slotIso?: string };
-      return sched.slotIso ? `Booked for ${sched.slotIso}` : "Booked";
+      // Without a slot we only know the booking page was opened, not that a
+      // booking was made there.
+      return sched.slotIso ? `Booked for ${sched.slotIso}` : "Opened booking page";
     }
 
     case "legal_consent": {

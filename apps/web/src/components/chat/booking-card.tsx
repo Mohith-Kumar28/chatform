@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, CalendarDays, Check, Video } from "lucide-react";
+import { ArrowUpRight, CalendarDays, Video } from "lucide-react";
 import { detectSchedulingProvider, isMeetingRoom, schedulingLabel, type SchedulingProvider } from "@repo/form-schema";
 
 const PROVIDER_NAME: Record<SchedulingProvider, string | null> = {
@@ -31,21 +31,27 @@ function shortLink(url: string): string {
  *
  * It was a pill and a chip under the question, which read as a bare link:
  * nothing said it was a calendar, or whose. The card names the service and the
- * page it opens, so the respondent knows where they are going before they go,
- * and keeps "I've booked" as the second step under the first. Drawn from the
- * theme's own variables, so it wears the form's colours in the live chat and
- * the builder preview alike (both render `QuestionAffordance`).
+ * page it opens, so the respondent knows where they are going before they go.
+ *
+ * Opening the page is the answer. There used to be an "I've booked" button
+ * under it, and whoever booked in the new tab and never came back to press it
+ * was left a partial response and sent a "finish your form" email. We can't
+ * see the booking either way, so the click is recorded as the page being
+ * opened, not as a booking.
+ *
+ * Drawn from the theme's own variables, so it wears the form's colours in the
+ * live chat and the builder preview alike (both render `QuestionAffordance`).
  */
 export function BookingCard({
   url,
   buttonLabel,
   disabled,
-  onConfirm,
+  onOpen,
 }: {
   url: string;
   buttonLabel?: string;
   disabled?: boolean;
-  onConfirm: (room: boolean) => void;
+  onOpen: (room: boolean) => void;
 }) {
   // A bare Zoom or Meet room has no slot to pick: it is joined, not booked.
   const room = url ? isMeetingRoom(url) : false;
@@ -68,25 +74,21 @@ export function BookingCard({
         </div>
       </div>
 
-      <div className="space-y-2 px-4 pb-4">
+      <div className="px-4 pb-4">
         <a
           href={url || "#"}
           target="_blank"
           rel="noreferrer"
+          // Still opens once answered, so the link stays usable; only the
+          // first click answers.
+          onClick={() => {
+            if (!disabled) onOpen(room);
+          }}
           className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] px-5 text-sm font-semibold text-[var(--cf-accent-text)] shadow-sm transition-[transform,filter] hover:brightness-105 active:scale-[0.98] motion-reduce:active:scale-100"
         >
           {schedulingLabel(url, buttonLabel)}
           <ArrowUpRight className="size-4" aria-hidden />
         </a>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => onConfirm(room)}
-          className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] px-5 text-sm font-medium transition-colors hover:bg-[color-mix(in_oklab,var(--cf-accent)_8%,transparent)] disabled:pointer-events-none disabled:opacity-50"
-        >
-          <Check className="size-4 opacity-70" aria-hidden />
-          {room ? "I’ve got the link" : "I’ve booked"}
-        </button>
       </div>
     </div>
   );

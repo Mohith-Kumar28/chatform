@@ -299,7 +299,7 @@ export function schedulingLabel(url: string, custom?: string): string {
 
 /**
  * A meeting room is not a booking page: there is no slot to pick, so asking
- * "have you booked?" afterwards makes no sense. Used to switch the confirm copy.
+ * "have you booked?" makes no sense. Used to word the answer "opened the call link".
  */
 export function isMeetingRoom(url: string): boolean {
   const provider = detectSchedulingProvider(url);

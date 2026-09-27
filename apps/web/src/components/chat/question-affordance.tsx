@@ -544,8 +544,11 @@ function AffordanceControls({
           url={url}
           buttonLabel={block.buttonLabel}
           disabled={disabled}
-          onConfirm={(room) =>
-            onStructured({ provider: "external", url, confirmedAt: Date.now() }, room ? "Joined" : "Booked")
+          onOpen={(room) =>
+            onStructured(
+              { provider: "external", url, confirmedAt: Date.now() },
+              room ? "Opened the call link" : "Opened the booking page",
+            )
           }
         />
       );
