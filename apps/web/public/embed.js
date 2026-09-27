@@ -730,14 +730,16 @@
    * Whether the form has already opened itself (or shaken the launcher) for
    * this visitor, on this site.
    *
-   * An automatic open is a one-time invitation. Without this it fired again on
-   * every page of the site and every visit, so a reader who closed it once got
-   * it back on the next scroll. Kept in the host page's storage, like
+   * An automatic open is an invitation at most once a day. Without this it
+   * fired again on every page of the site and every visit, so a reader who
+   * closed it once got it back on the next scroll. After 24 hours it may
+   * invite them again. Kept in the host page's storage, like
    * `submittedKey`, because this script runs on the host page, not in the
    * frame: one key covers every page of the site with no network call. A
    * click on the launcher still always opens it.
    */
   var promptedKey = "chatform:prompted:" + slug;
+  var PROMPT_EVERY_MS = 24 * 60 * 60 * 1000;
   function markPrompted() {
     try {
       window.localStorage.setItem(promptedKey, String(Date.now()));
@@ -747,7 +749,8 @@
   }
   function hasPrompted() {
     try {
-      return !!window.localStorage.getItem(promptedKey);
+      var at = Number(window.localStorage.getItem(promptedKey));
+      return at > 0 && Date.now() - at < PROMPT_EVERY_MS;
     } catch (e) {
       return false;
     }
@@ -822,7 +825,7 @@
 
   var attended = false;
   function attention() {
-    // Once per visitor on this site; see `promptedKey`.
+    // Once a day per visitor on this site; see `promptedKey`.
     if (!launcher || attended) return;
     attended = true;
     markPrompted();
