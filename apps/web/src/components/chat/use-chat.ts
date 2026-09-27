@@ -1,6 +1,6 @@
 "use client";
 
-import { embedPrefill, emitEmbedEvent, whenEmbedOpened } from "./embed-bridge";
+import { embedOpenPending, embedPrefill, emitEmbedEvent, whenEmbedOpened } from "./embed-bridge";
 import { stuckTurnStep } from "./stuck-turn";
 import { rememberValue } from "./respondent-profile";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -884,6 +884,25 @@ export function useChat({
         setError(null);
         setResolving(false);
         /*
+          A popup loaded behind its launcher has its conversation on screen
+          now, so the stream is let go until the click. An open stream keeps
+          the session object running, and a page can sit unopened for an hour.
+          The pause lets anything sent just behind the replay land; the
+          reconnect on open is invisible because the thread is already drawn,
+          and the seq ratchet makes its replay free.
+        */
+        if (embedOpenPending()) {
+          setTimeout(() => {
+            if (!embedOpenPending() || esRef.current !== es) return;
+            es.close();
+            esRef.current = null;
+            if (stallTimer.current) clearInterval(stallTimer.current);
+            void whenEmbedOpened().then(() => {
+              if (!esRef.current) reconnectRef.current?.(sessionId, token, 0);
+            });
+          }, 1500);
+        }
+        /*
           Who this session already knows we are.
 
           `auth_verified` fires the once, at the moment somebody signs in, and
@@ -1483,8 +1502,6 @@ export function useChat({
             canRepeat?: boolean;
           };
           if (state.status === "active") {
-            // A popup loaded ahead of its click waits here; see `whenEmbedOpened`.
-            await whenEmbedOpened();
             sessionRef.current = saved;
             setResumed(true);
             connectStream(saved.sessionId, saved.token, 0);
@@ -1533,15 +1550,9 @@ export function useChat({
         /*
          * Computed here rather than at mount: it runs a canvas and an audio
          * probe, and nothing needs it until a session is actually being opened.
-         * Failure is normal and returns null. Started before the gate below, so
-         * a preloaded popup has it by the click instead of spending half a
-         * second on it after.
+         * Failure is normal and returns null.
          */
-        const signal = getRespondentSignal();
-        // A popup loaded ahead of its click opens no session until it is
-        // opened: a session is a response row. See `whenEmbedOpened`.
-        await whenEmbedOpened();
-        const deviceSignal = await signal;
+        const deviceSignal = await getRespondentSignal();
         const res = await fetch(`${apiOrigin}/p/forms/${slug}/sessions`, {
           method: "POST",
           headers: { "content-type": "application/json" },
