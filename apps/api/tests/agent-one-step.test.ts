@@ -164,6 +164,22 @@ describe("settledInOneStep", () => {
   });
 });
 
+describe("settledInOneStep on a follow-up", () => {
+  const clarified: ToolOutcome[] = [{ name: "clarify", ok: true, effect: { kind: "clarify", reason: "throwaway" }, message: "Ask again" }];
+
+  it("stops when the follow-up question is already written", () => {
+    expect(
+      settledInOneStep(doc, empty(), team, step("No worries! Any name in mind, even a working one?", ["clarify"]), clarified, {}),
+    ).toBe(true);
+  });
+
+  it("carries on when the model wrote nothing, or the follow-up was refused", () => {
+    expect(settledInOneStep(doc, empty(), team, step("", ["clarify"]), clarified, {})).toBe(false);
+    const refused: ToolOutcome[] = [{ name: "clarify", ok: false, message: "Rejected: limit" }];
+    expect(settledInOneStep(doc, empty(), team, step("Any name in mind?", ["clarify"]), refused, {})).toBe(false);
+  });
+});
+
 describe("record_answer after an announced question", () => {
   it("tells the model not to ask it a second time", async () => {
     const tools = buildAgentTools(

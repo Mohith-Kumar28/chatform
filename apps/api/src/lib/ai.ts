@@ -26,6 +26,14 @@ export const MODELS = {
    * optimised for speed, with tool calling as a hard requirement.
    */
   interview: "google/gemini-3.7-flash",
+  /**
+   * Every step of a conversation turn after the first. By then the decision is
+   * made (the answer recorded, the next question named in the tool result) and
+   * all that is left is writing one or two sentences. Measured through
+   * OpenRouter with the same prompt: ~0.7s to the first word, against 2–4s for
+   * `interview`, at a third of the price.
+   */
+  interviewFollowup: "google/gemini-3.1-flash-lite",
   /** Free-text → structured answer. Narrow, schema-bound, wants to be cheap. */
   extraction: "google/gemini-3.1-flash-lite",
   /**
@@ -240,6 +248,11 @@ export function interviewModel(env: Bindings, override?: string): { model: Langu
   void override;
   const id = MODELS.interview;
   return { model: openrouter(env).chat(id), id };
+}
+
+/** The model for a turn's later steps. See `MODELS.interviewFollowup`. */
+export function interviewFollowupModel(env: Bindings): LanguageModel {
+  return openrouter(env).chat(MODELS.interviewFollowup);
 }
 
 /**

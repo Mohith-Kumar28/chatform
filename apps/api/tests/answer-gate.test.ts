@@ -150,6 +150,23 @@ describe("gateAnswer: turning answers into values", () => {
     expect(r.outcome).toEqual({ kind: "answer", value: "Sam@Acme.io" });
   });
 
+  it("takes a reply that is nothing but one valid value without asking Jev", async () => {
+    const email = block({ type: "email", title: "Email?" });
+    const site = block({ type: "url", title: "Website?" });
+    const count = block({ type: "number", title: "How many?" });
+    const jev = fakeJev(() => yesDirect);
+    expect((await gateAnswer(ENV, email, "asha@example.com", CTX, { fetch: jev.fetch })).outcome).toEqual({
+      kind: "answer",
+      value: "asha@example.com",
+    });
+    expect((await gateAnswer(ENV, site, "https://abc.com", CTX, { fetch: jev.fetch })).outcome).toMatchObject({ kind: "answer" });
+    expect((await gateAnswer(ENV, count, "4", CTX, { fetch: jev.fetch })).outcome).toMatchObject({ kind: "answer" });
+    expect(jev.sent).toHaveLength(0);
+    // One word more and it is a sentence again, for Jev to judge.
+    await gateAnswer(ENV, email, "asha@example.com but no spam", CTX, { fetch: jev.fetch });
+    expect(jev.sent).toHaveLength(1);
+  });
+
   it("never trims two glued addresses into one that nobody owns", async () => {
     const email = block({ type: "email", title: "Email?" });
     const jev = fakeJev(() => yesDirect);

@@ -76,6 +76,7 @@ import { asideText, clarifyText, closingText, codeExpectedText, codeSentText, co
 import {
   chatModel,
   interviewModel,
+  interviewFollowupModel,
   extractAnswer,
   MODELS,
   INTERVIEW_PROVIDER_OPTIONS,
@@ -458,11 +459,28 @@ const MAX_EXTRACTION_CALLS = 40;
  * the transcript (DO SQLite = source of truth during the session),
  * SSE fan-out, and finalization into D1.
  */
+/** Tools after which a turn has nothing left to decide, only words to write. */
+const WRITING_ONLY_AFTER = new Set(["record_answer", "skip_current", "clarify"]);
+
+/** Every step so far called only those tools, and at least one step ran. */
+function writingOnly(steps: ReadonlyArray<{ toolCalls: ReadonlyArray<{ toolName: string }> }>): boolean {
+  if (steps.length === 0) return false;
+  const calls = steps.flatMap((st) => st.toolCalls);
+  return calls.length > 0 && calls.every((c) => WRITING_ONLY_AFTER.has(c.toolName));
+}
+
 export class SessionDO extends DurableObject<Bindings> {
   private meta: DoSessionMeta | null = null;
   private doc: FormDoc | null = null;
   private state: EvalState = { answers: {}, variables: {}, hidden: {} };
   private invalidCounts = new Map<string, number>();
+  /**
+   * Follow-ups the agent has asked on each question (`clarify`). Counted towards
+   * `maxClarificationsPerBlock` beside the invalid attempts, which is the only
+   * thing that ever stopped the agent asking again. In memory: an eviction
+   * costs at most one extra follow-up.
+   */
+  private followUps = new Map<string, number>();
   /**
    * What a refused record-shaped answer kept, per block ref.
    *
@@ -857,6 +875,24 @@ export class SessionDO extends DurableObject<Bindings> {
     if (this.meta.identity || this.meta.status !== "active") return;
 
     try {
+      /*
+       * The common case first, and cheaply: no gate held, none published. This
+       * runs before every message, and reading, parsing and re-validating the
+       * whole published document plus an entitlements lookup to learn that was
+       * most of the ~0.2s every turn spent before anything else could start.
+       */
+      const held = this.doc.settings.requireAuth;
+      if (held.enabled !== true) {
+        const peek = await this.env.DB.prepare(
+          `SELECT json_extract(fv.schema_json, '$.settings.requireAuth.enabled') AS enabled
+             FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
+            WHERE f.id = ?1 AND f.deleted_at IS NULL LIMIT 1`,
+        )
+          .bind(this.meta.formId)
+          .first<{ enabled: number | boolean | null }>();
+        if (!peek || !peek.enabled) return;
+      }
+
       const row = await this.env.DB.prepare(
         `SELECT fv.schema_json AS schema_json
            FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
@@ -873,7 +909,6 @@ export class SessionDO extends DurableObject<Bindings> {
        */
       const ent = await getEntitlements(this.env, this.meta.organizationId);
       const live = clampForRuntime(readFormDoc(JSON.parse(row.schema_json)), ent).settings.requireAuth;
-      const held = this.doc.settings.requireAuth;
       if (
         live.enabled === held.enabled &&
         live.method === held.method &&
@@ -3180,6 +3215,7 @@ export class SessionDO extends DurableObject<Bindings> {
 
     const started = Date.now();
     const { model, id: modelId } = interviewModel(this.env, this.doc.settings.agent.model);
+    const followupModel = interviewFollowupModel(this.env);
 
     /**
      * Declared out here so the catch can close a bubble the try opened.
@@ -3214,7 +3250,7 @@ export class SessionDO extends DurableObject<Bindings> {
               : null,
           revise: (ref: string, value?: unknown) => revisionOf(this.doc!, this.state, block?.ref ?? null, ref, value),
           verbatimQuestions: this.doc.settings.agent.rephraseQuestions === false,
-          clarifications: block ? (this.invalidCounts.get(block.ref) ?? 0) : 0,
+          clarifications: block ? (this.invalidCounts.get(block.ref) ?? 0) + (this.followUps.get(block.ref) ?? 0) : 0,
           unansweredRequired: this.unansweredRequired().map((b) => ({ ref: b.ref, title: b.title })),
           hasKnowledge,
           announced: opts.announced ?? null,
@@ -3263,6 +3299,11 @@ export class SessionDO extends DurableObject<Bindings> {
         // really a pointer. Retrieval can miss and be worth rephrasing once, and
         // a turn that spends its last step searching says nothing at all — so
         // six, which buys exactly one retry without letting a turn wander.
+        // Once the first step has only recorded, skipped or clarified, what is
+        // left is writing the next sentence, on the faster model (see
+        // MODELS.interviewFollowup). After a lookup or a changed answer the main
+        // model keeps the turn: that reply needs the judgement.
+        prepareStep: ({ steps }) => (writingOnly(steps) ? { model: followupModel } : undefined),
         stopWhen: [
           stepCountIs(6),
           ({ steps }) =>
@@ -3576,8 +3617,13 @@ export class SessionDO extends DurableObject<Bindings> {
           if (ending) await this.advanceTo({ kind: "ending", ending }, this.meta.currentRef ?? "");
           break;
         }
-        // `clarify` and `ask` need no state change — the model already said
-        // the words, and the FSM is still on the same block.
+        case "clarify": {
+          const ref = this.meta.currentRef;
+          if (ref) this.followUps.set(ref, (this.followUps.get(ref) ?? 0) + 1);
+          break;
+        }
+        // `ask` needs no state change — the model already said the words, and
+        // the FSM is still on the same block.
         default:
           break;
       }
@@ -4469,6 +4515,7 @@ export class SessionDO extends DurableObject<Bindings> {
       this.state.answers[block.ref] = result.value;
     }
     this.invalidCounts.delete(block.ref);
+    this.followUps.delete(block.ref);
     // Answered. Nothing to hand back next time this ref is asked — and an edit
     // from the review step must start from the stored answer, not from a
     // half-filled card two questions ago.
@@ -5502,6 +5549,7 @@ export class SessionDO extends DurableObject<Bindings> {
       this.pendingEndingRef = null;
       this.editingRef = null;
       this.invalidCounts.clear();
+      this.followUps.clear();
       this.partials.clear();
       const next = resolveNext(this.doc, null, this.state);
       await this.advanceTo(next);

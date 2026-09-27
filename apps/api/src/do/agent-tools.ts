@@ -118,7 +118,8 @@ const PASSIVE_TYPES = new Set(["welcome", "statement"]);
  * On the last question it wrote the closing line there, and the ending's own
  * message follows anyway. Verbatim forms never needed the model to ask at all.
  *
- * Only a single, accepted record_answer whose value the flow will take counts.
+ * Only a single, accepted record_answer whose value the flow will take counts,
+ * or a single accepted clarify with its follow-up question already written.
  * Anything else — a lookup, a rejected call, a question the respondent asked,
  * a routed step that differs from the announced one — carries on as before.
  * Not `hasToolCall`: that stops on rejected calls too.
@@ -133,6 +134,11 @@ export function settledInOneStep(
 ): boolean {
   if (steps.length !== 1 || !block) return false;
   const step = steps[0]!;
+  // A follow-up already written beside its clarify call is the whole reply: the
+  // tool result would only say "ask again", and it has been asked.
+  if (step.toolCalls.length === 1 && step.toolCalls[0]!.toolName === "clarify") {
+    return !!outcomes.find((o) => o.name === "clarify")?.ok && step.text.includes("?");
+  }
   if (step.toolCalls.length !== 1 || step.toolCalls[0]!.toolName !== "record_answer") return false;
   const recorded = outcomes.find((o) => o.name === "record_answer");
   if (!recorded?.ok || recorded.effect?.kind !== "record") return false;

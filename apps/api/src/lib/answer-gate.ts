@@ -186,19 +186,20 @@ export function planFor(block: Block, reply: string): Plan | GateOutcome {
        */
       return candidatePlan(
         block,
+        reply,
         matches(reply, /(?<![^\s<>(),;:"'])[^\s@<>(),;:"']+@[^\s@<>(),;:"']+\.[a-z]{2,}(?![^\s<>(),;:"'.!?])/gi),
       );
     case "url":
-      return candidatePlan(block, matches(reply, /\b(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s,;]*)?/gi));
+      return candidatePlan(block, reply, matches(reply, /\b(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s,;]*)?/gi));
     case "phone":
-      return candidatePlan(block, matches(reply, /\+?\d[\d\s().-]{5,}\d/g));
+      return candidatePlan(block, reply, matches(reply, /\+?\d[\d\s().-]{5,}\d/g));
     case "number":
-      return candidatePlan(block, matches(reply, /-?\d[\d,]*(?:\.\d+)?/g).map((n) => n.replace(/,/g, "")));
+      return candidatePlan(block, reply, matches(reply, /-?\d[\d,]*(?:\.\d+)?/g).map((n) => n.replace(/,/g, "")));
     case "date":
       // Dates are arithmetic, which Jev is documented to be bad at. Only a reply
       // the validator already reads as a date is taken; anything looser is the
       // extractor's job, on the agent path.
-      return candidatePlan(block, [reply]);
+      return candidatePlan(block, reply, [reply]);
     default:
       /*
        * Ranking, matrix, contact and address cards, groups, uploads, payments,
@@ -444,9 +445,17 @@ function matches(reply: string, re: RegExp): string[] {
  * Formatted values (email, phone, URL, number, date): code finds them, the
  * validator vets them, and Jev only chooses when there is more than one.
  */
-function candidatePlan(block: Block, found: string[]): Plan | GateOutcome {
+function candidatePlan(block: Block, reply: string, found: string[]): Plan | GateOutcome {
   const valid = [...new Set(found)].filter((c) => validateAnswer(block, c).ok);
   if (valid.length === 0) return off(found.length > 0 ? "invalid" : "no_match");
+  /*
+   * The whole reply is one valid address, link, number or date and nothing
+   * else. There is nothing for Jev to judge: a bare "asha@example.com" to an
+   * email question cannot be anything but the answer, and asking cost the
+   * respondent ~300ms on every such turn. A single word more ("mine is …")
+   * still goes to Jev.
+   */
+  if (valid.length === 1 && valid[0] === reply) return { kind: "answer", value: valid[0] };
   if (valid.length === 1) return { questions: {}, decide: () => ({ kind: "answer", value: valid[0] }) };
   if (valid.length > MAX_CHOICE_OPTIONS) return off("unsupported");
   const criteria: Record<string, unknown> = {};
