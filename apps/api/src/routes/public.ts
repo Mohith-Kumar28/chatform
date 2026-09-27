@@ -238,7 +238,12 @@ sessionsRouter.get(
     if (!row || row.status !== "published") return c.json({});
     const doc = readFormDoc(JSON.parse(row.schema_json));
     const { buttonColor, ...embed } = doc.embed ?? {};
-    return c.json({ ...embed, color: buttonColor ?? doc.theme.accent, background: doc.theme.background });
+    return c.json({
+      ...embed,
+      color: buttonColor ?? doc.theme.accent,
+      background: doc.theme.background,
+      font: doc.theme.fontBody,
+    });
   },
 );
 

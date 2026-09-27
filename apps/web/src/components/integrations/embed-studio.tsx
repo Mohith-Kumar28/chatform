@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { RadioGroup as RadioGroupPrimitive } from "radix-ui";
 import type { EmbedDoc } from "@repo/form-schema";
 import { useBuilderStore } from "@/stores/builder-store";
@@ -146,6 +147,8 @@ export function EmbedStudio({
    */
   const saved = useBuilderStore((s) => s.doc?.embed);
   const edit = useBuilderStore((s) => s.edit);
+  const formId = useBuilderStore((s) => s.formId);
+  const setDesignOpen = useBuilderStore((s) => s.setDesignOpen);
   const chosen = useMemo<EmbedConfig>(
     () => ({ ...STUDIO_DEFAULTS, ...stripUndefined(saved ?? {}) }),
     [saved],
@@ -485,6 +488,19 @@ export function EmbedStudio({
             )}
 
           </div>
+          {/* The form's own look is the Design sheet's, one click away. */}
+          {formId && (
+            <p className="border-border/60 text-muted-foreground text-caption shrink-0 border-t px-5 py-3">
+              Fonts and colours of the form?{" "}
+              <Link
+                href={`/forms/${formId}/build`}
+                onClick={() => setDesignOpen(true)}
+                className="text-foreground underline underline-offset-2"
+              >
+                Edit in Design
+              </Link>
+            </p>
+          )}
         </div>
       </div>
 

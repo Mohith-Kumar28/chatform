@@ -127,6 +127,8 @@
     color = (colorAttr && script.getAttribute(colorAttr)) || r.color || "#FD6F29";
     // Only a plain colour; anything else keeps the default light background.
     skinBackground = typeof r.background === "string" && /^#[0-9a-f]{3,8}$/i.test(r.background) ? r.background : null;
+    // A family name only: it goes into a stylesheet URL and a font-family.
+    launcherFont = typeof r.font === "string" && /^[a-z0-9 ]{1,60}$/i.test(r.font) ? r.font : null;
     var labelValue = pick("data-label", "label");
     label = labelValue === null ? "Fill this form" : labelValue;
     showIcon = flag("data-icon", "icon");
@@ -482,6 +484,33 @@
 
   /** The published background, on the placeholder, so loading and loaded are one colour. */
   var skinBackground = null;
+  var launcherFont = null;
+
+  /**
+   * The launcher in the form's own body font, so the button reads as part of
+   * the form it opens rather than of the page it sits on.
+   *
+   * Only the glyphs of the button's text are fetched (`text=`), a few hundred
+   * bytes on someone else's page. A family Google does not serve, or a page
+   * whose CSP refuses the stylesheet, falls back to the system face as before.
+   */
+  function fontLauncher(el) {
+    if (!launcherFont) return;
+    el.style.fontFamily = '"' + launcherFont + '", system-ui, sans-serif';
+    if (!label) return;
+    var link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href =
+      "https://fonts.googleapis.com/css2?family=" + launcherFont.replace(/ /g, "+") +
+      ":wght@500&text=" + encodeURIComponent(label) + "&display=swap";
+    // No weight 500 in this family: ask again for its regular cut.
+    link.onerror = function () {
+      link.onerror = null;
+      link.href = link.href.replace(":wght@500", "");
+    };
+    if (nonce) link.setAttribute("nonce", nonce);
+    document.head.appendChild(link);
+  }
   function skin(el) {
     if (skinBackground) el.style.setProperty("--cf-skel-bg", skinBackground);
     return el;
@@ -555,6 +584,7 @@
       launcher.className =
         "cf-launcher cf-l-" + uid + (label ? "" : " cf-bare") + " cf-sz-" + buttonSize + " cf-r-" + buttonShape;
       launcher.style.background = color;
+      fontLauncher(launcher);
       // The attention ring pulses in the button's own colour.
       launcher.style.setProperty("--cf-c", color);
       if (showIcon) launcher.appendChild(chatIcon());

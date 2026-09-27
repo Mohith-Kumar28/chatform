@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Lock, MessageCircle, RotateCcw, SendHorizontal, X } from "lucide-react";
 import type { Block, ThemeDoc } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
-import { useThemeFonts } from "@/lib/theme-fonts";
+import { fontStack, useThemeFonts } from "@/lib/theme-fonts";
 import { isOverlay, type EmbedConfig } from "@/lib/embed-snippet";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/brand/logo";
@@ -110,6 +110,8 @@ export function EmbedPreview({
   const box = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState({ width: 0, height: 0 });
   const stage = STAGES[device];
+  // The launcher is set in the form's body font, as `embed.js` sets it.
+  useThemeFonts(theme);
 
   useEffect(() => {
     const el = box.current;
@@ -335,6 +337,7 @@ export function EmbedPreview({
                         background: config.color,
                         boxShadow: "0 6px 24px rgba(0,0,0,.18)",
                         ["--cf-c" as string]: config.color,
+                        fontFamily: fontStack(theme.fontBody),
                         fontSize: size.font,
                         fontWeight: 500,
                         lineHeight: 1,
