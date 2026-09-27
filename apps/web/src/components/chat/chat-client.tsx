@@ -234,15 +234,29 @@ export function ChatSurface({
    * middle of a sentence. Until they answer, the thread stays at its top; the
    * first answer hands the scroll back to the bottom-following below.
    */
-  const opening = !chat.messages.some((m) => m.role === "user");
+  /*
+    A form already answered is not an opening, even with nothing in
+    `chat.messages`: `AlreadySubmittedCard` redraws the answers inside itself,
+    so a return visit held the thread at its top, on the first question, with
+    the ending out of sight below.
+  */
+  const opening = !chat.submitted && !chat.messages.some((m) => m.role === "user");
   const openingRef = useRef(opening);
   useEffect(() => {
     const was = openingRef.current;
     openingRef.current = opening;
     const el = scrollRef.current;
     if (!was || opening || !el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    /*
+      Instant when the thread is being put back rather than answered into: a
+      reload replays the whole conversation (or draws the submitted card) at
+      once, and a smooth scroll toward it raised `onScroll` mid-flight, read
+      as the respondent scrolling away, and unpinned before the replay ended.
+    */
+    const restoring = chat.submitted != null || chat.messages.filter((m) => m.role === "user").length > 1;
+    el.scrollTo({ top: el.scrollHeight, behavior: restoring ? "instant" : "smooth" });
     setPinned(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only the flip matters
   }, [opening]);
   useEffect(() => {
     if (!pinned || openingRef.current) return;
