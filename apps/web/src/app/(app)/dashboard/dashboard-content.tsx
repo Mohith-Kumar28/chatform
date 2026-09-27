@@ -166,7 +166,7 @@ export function DashboardContent() {
 
   const moveForm = usePatchApiFormsByIdWorkspace();
 
-  const { data, isLoading, error } = useGetApiForms(formsParams, {
+  const { data, isLoading, error, refetch } = useGetApiForms(formsParams, {
     query: { queryKey: getGetApiFormsQueryKey(formsParams) },
   });
   /*
@@ -557,6 +557,19 @@ export function DashboardContent() {
           </div>
         ) : noWorkspace ? (
           <NoWorkspaceState />
+        ) : error && allForms.length === 0 ? (
+          // A failed request is not an empty workspace; saying "No forms yet"
+          // to someone with forms is the worst answer available.
+          <EmptyState
+            icon={MessageSquarePlus}
+            title="Couldn't load your forms"
+            description="Something went wrong on our side. Try again in a moment."
+            action={
+              <Button shape="pill" variant="outline" onClick={() => void refetch()}>
+                Try again
+              </Button>
+            }
+          />
         ) : allForms.length === 0 && !canEditHere ? (
           <EmptyState
             icon={MessageSquarePlus}
