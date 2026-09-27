@@ -37,6 +37,10 @@ export const EmbedDoc = z.object({
   width: z.number().int().min(240).max(1200).optional().catch(undefined),
   height: z.number().int().min(240).max(2000).optional().catch(undefined),
   autoHeight: z.boolean().optional().catch(undefined),
+  /** The corner button's own colour. Absent wears the theme's accent. */
+  buttonColor: z.string().regex(/^#[0-9a-f]{3,8}$/i).optional().catch(undefined),
+  buttonShape: z.enum(["round", "rounded", "square"]).optional().catch(undefined),
+  buttonSize: z.enum(["small", "medium", "large"]).optional().catch(undefined),
 });
 export type EmbedDoc = z.output<typeof EmbedDoc>;
 

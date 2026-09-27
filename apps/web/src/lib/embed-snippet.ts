@@ -17,6 +17,8 @@ import { escapeAttr } from "@repo/guard";
 
 export type EmbedMode = "inline" | "popup" | "side-tab" | "fullpage";
 export type EmbedPosition = "bottom-right" | "bottom-left" | "top-right" | "top-left";
+export type ButtonShape = "round" | "rounded" | "square";
+export type ButtonSize = "small" | "medium" | "large";
 
 export const EMBED_MODES: { mode: EmbedMode; label: string; blurb: string }[] = [
   { mode: "popup", label: "Popup", blurb: "A button in the corner that opens the form." },
@@ -42,8 +44,12 @@ export interface EmbedConfig {
   position: EmbedPosition;
   /** px between the launcher and the edges of the window. */
   offset: number;
-  /** Launcher colour. */
+  /** Launcher colour: `buttonColor`, or the form's accent when that is empty. */
   color: string;
+  /** The launcher's own colour. Empty wears the form's accent. */
+  buttonColor: string;
+  buttonShape: ButtonShape;
+  buttonSize: ButtonSize;
   /** Launcher text. Empty means an icon-only bubble. */
   label: string;
   icon: boolean;
@@ -80,6 +86,9 @@ export const EMBED_DEFAULTS: EmbedConfig = {
   // read as a help desk nobody was staffing. Must stay in step with the same
   // default in `public/embed.js`, for the reason given on `color` above.
   label: "Fill this form",
+  buttonColor: "",
+  buttonShape: "round",
+  buttonSize: "medium",
   icon: true,
   launcher: true,
   theme: "auto",

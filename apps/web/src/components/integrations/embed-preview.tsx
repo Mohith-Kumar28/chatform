@@ -39,8 +39,17 @@ const STAGES: Record<PreviewDevice, { width: number; height: number }> = {
 
 /** `embed.js`: a phone gets the whole screen, whatever the panel size says. */
 const MOBILE_TAKEOVER = 520;
-/** `embed.js`: the launcher is ~48px tall plus its own gap. */
-const LAUNCHER_CLEARANCE = 68;
+/**
+ * `embed.js`'s launcher sizes, to the pixel: the text button's padding and
+ * type, the bare circle, the close circle, and the room the panel leaves it.
+ */
+const LAUNCHER = {
+  small: { padding: "9px 14px", gap: 6, font: 13, icon: 16, bare: 44, x: 40, clearance: 56 },
+  medium: { padding: "12px 18px", gap: 8, font: 15, icon: 18, bare: 56, x: 48, clearance: 68 },
+  large: { padding: "15px 22px", gap: 10, font: 17, icon: 20, bare: 64, x: 56, clearance: 80 },
+} as const;
+/** `embed.js`'s `.cf-r-*` corners. */
+const LAUNCHER_RADIUS = { round: 9999, rounded: 12, square: 4 } as const;
 
 /** The browser bar and the phone's status bar are both 44px (`top-11`). */
 const CHROME_BAR = 44;
@@ -125,7 +134,9 @@ export function EmbedPreview({
   const vertical = config.position.startsWith("top") ? "top" : "bottom";
   const horizontal = config.position.endsWith("left") ? "left" : "right";
   const hasLauncher = config.launcher;
-  const clearance = config.offset + (hasLauncher ? LAUNCHER_CLEARANCE : 0);
+  const size = LAUNCHER[config.buttonSize];
+  const radius = LAUNCHER_RADIUS[config.buttonShape];
+  const clearance = config.offset + (hasLauncher ? size.clearance : 0);
   const takeover = stage.width <= MOBILE_TAKEOVER;
   // `embed.js`'s `hostCloses()`: a desktop popup closes from the launcher.
   const launcherCloses = config.mode === "popup" && hasLauncher && !takeover;
@@ -171,7 +182,15 @@ export function EmbedPreview({
    * state when a prop changes"), and the ring is keyed by the count so each
    * change restarts it.
    */
-  const signature = [config.position, config.offset, config.label, config.icon, config.launcher].join("|");
+  const signature = [
+    config.position,
+    config.offset,
+    config.label,
+    config.icon,
+    config.launcher,
+    config.buttonShape,
+    config.buttonSize,
+  ].join("|");
   const [flash, setFlash] = useState({ signature, count: 0 });
   if (flash.signature !== signature) setFlash({ signature, count: flash.count + 1 });
 
@@ -276,17 +295,21 @@ export function EmbedPreview({
                   className={cn("absolute", launcherSize && "cf-move")}
                   style={{ ...launcherBox, ["--cf-c" as string]: config.color }}
                 >
-                  {flash.count > 0 && <span key={flash.count} aria-hidden className="cf-flash" />}
+                  {flash.count > 0 && (
+                    <span key={flash.count} aria-hidden className="cf-flash" style={{ borderRadius: radius }} />
+                  )}
                   {launcherCloses && open ? (
                     <button
                       type="button"
                       onClick={onToggle}
                       aria-label="Close the panel"
                       className={cn(
-                        "relative grid cursor-pointer place-items-center rounded-full border-0 text-white",
-                        config.label ? "size-12" : "size-14",
+                        "relative grid cursor-pointer place-items-center border-0 text-white",
                       )}
                       style={{
+                        width: config.label ? size.x : size.bare,
+                        height: config.label ? size.x : size.bare,
+                        borderRadius: radius,
                         background: config.color,
                         boxShadow: "0 6px 24px rgba(0,0,0,.18)",
                       }}
@@ -299,24 +322,30 @@ export function EmbedPreview({
                       onClick={onToggle}
                       aria-label="Open the panel"
                       className={cn(
-                        "relative inline-flex cursor-pointer items-center gap-2 border-0 whitespace-nowrap text-white",
+                        "relative inline-flex cursor-pointer items-center border-0 whitespace-nowrap text-white",
                         // `embed.js`'s `.cf-attn`: an automatic open on a phone calls out instead.
                         device === "mobile" && config.openOn !== "click" && "cf-attn",
-                        config.label
-                          ? "rounded-full px-[18px] py-3"
-                          : "size-14 justify-center rounded-full",
+                        !config.label && "justify-center",
                       )}
                       style={{
+                        ...(config.label
+                          ? { padding: size.padding, gap: size.gap }
+                          : { width: size.bare, height: size.bare }),
+                        borderRadius: radius,
                         background: config.color,
                         boxShadow: "0 6px 24px rgba(0,0,0,.18)",
                         ["--cf-c" as string]: config.color,
-                        fontSize: 15,
+                        fontSize: size.font,
                         fontWeight: 500,
                         lineHeight: 1,
                       }}
                     >
                       {config.icon && (
-                        <MessageCircle className="size-[18px] shrink-0" strokeWidth={2} />
+                        <MessageCircle
+                          className="shrink-0"
+                          style={{ width: size.icon, height: size.icon }}
+                          strokeWidth={2}
+                        />
                       )}
                       {config.label}
                     </button>

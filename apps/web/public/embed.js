@@ -31,6 +31,8 @@
  *   data-button-color launcher colour (data-color still works)  default #FD6F29
  *   data-label       launcher text; "" for an icon-only bubble   default "Fill this form"
  *   data-icon        chat | none                                 default chat
+ *   data-button-shape round | rounded | square                  default round
+ *   data-button-size small | medium | large                     default medium
  *   data-launcher    "none" hides the corner button; open it from
  *                    your own element instead (see below)
  *   data-theme       light | dark | auto                         default auto
@@ -82,9 +84,11 @@
    * That is what keeps every snippet pasted before this existed, each of which
    * spelled its settings out as attributes, behaving exactly as it did.
    */
-  var mode, color, label, showIcon, showLauncher, theme, openOn, heightAttr;
+  var mode, color, label, showIcon, showLauncher, theme, openOn, heightAttr, buttonShape, buttonSize;
   var position, vertical, horizontal, offset, panelWidth, panelHeight;
   var POSITIONS = ["bottom-right", "bottom-left", "top-right", "top-left"];
+  /** How much room each launcher size takes: its circle plus a 12px gap. */
+  var BUTTON_SIZES = { small: 56, medium: 68, large: 80 };
 
   function configure(published) {
     var r = published || {};
@@ -127,6 +131,10 @@
     label = labelValue === null ? "Fill this form" : labelValue;
     showIcon = flag("data-icon", "icon");
     showLauncher = flag("data-launcher", "launcher");
+    buttonShape = pick("data-button-shape", "buttonShape");
+    if (["round", "rounded", "square"].indexOf(buttonShape) === -1) buttonShape = "round";
+    buttonSize = pick("data-button-size", "buttonSize");
+    if (!BUTTON_SIZES[buttonSize]) buttonSize = "medium";
     theme = pick("data-theme", "theme") || "auto";
     openOn = pick("data-open-on", "openOn") || "click";
     if (script.hasAttribute("data-height")) {
@@ -296,6 +304,14 @@
         ".cf-launcher svg{width:18px;height:18px;flex:none;display:block}",
         // An empty data-label asks for the bare circle every messenger widget uses.
         ".cf-launcher.cf-bare{width:56px;height:56px;padding:0;justify-content:center;border-radius:50%}",
+        // Size and shape. After the rules above, and one class more specific,
+        // so they also reach the bare circle and the close state (`.cf-x`).
+        ".cf-launcher.cf-sz-small{padding:9px 14px;gap:6px;font-size:13px}",
+        ".cf-launcher.cf-sz-small svg{width:16px;height:16px}",
+        ".cf-launcher.cf-sz-small.cf-bare{width:44px;height:44px;padding:0}",
+        ".cf-launcher.cf-sz-large{padding:15px 22px;gap:10px;font-size:17px}",
+        ".cf-launcher.cf-sz-large svg{width:20px;height:20px}",
+        ".cf-launcher.cf-sz-large.cf-bare{width:64px;height:64px;padding:0}",
         /*
          * Shown and hidden by opacity and transform rather than display, so it
          * can animate both ways. visibility waits for the fade before hiding,
@@ -342,6 +358,12 @@
         ".cf-launcher .cf-x-icon{display:none}",
         ".cf-launcher.cf-x{width:48px;height:48px;padding:0;justify-content:center;border-radius:50%}",
         ".cf-launcher.cf-bare.cf-x{width:56px;height:56px}",
+        ".cf-launcher.cf-sz-small.cf-x{width:40px;height:40px;padding:0}",
+        ".cf-launcher.cf-sz-small.cf-bare.cf-x{width:44px;height:44px}",
+        ".cf-launcher.cf-sz-large.cf-x{width:56px;height:56px;padding:0}",
+        ".cf-launcher.cf-sz-large.cf-bare.cf-x{width:64px;height:64px}",
+        ".cf-launcher.cf-r-rounded,.cf-launcher.cf-r-rounded.cf-bare,.cf-launcher.cf-r-rounded.cf-x{border-radius:12px}",
+        ".cf-launcher.cf-r-square,.cf-launcher.cf-r-square.cf-bare,.cf-launcher.cf-r-square.cf-x{border-radius:4px}",
         ".cf-launcher.cf-x>*{display:none}",
         ".cf-launcher.cf-x>.cf-x-icon{display:block;width:20px;height:20px;animation:cf-spin .2s ease-out}",
         "@keyframes cf-spin{from{opacity:0;transform:rotate(-90deg)}to{opacity:1;transform:none}}",
@@ -390,9 +412,9 @@
         ".cf-p-" + uid + "{top:0;bottom:0;" + horizontal + ":0;width:" + panelWidth +
         "px;height:100vh;border-radius:0}";
     } else {
-      // Clear of the launcher, which is about 48px tall plus its own gap. With
-      // no launcher the panel takes the corner itself.
-      var clearance = showLauncher ? offset + 68 : offset;
+      // Clear of the launcher, by its size. With no launcher the panel takes
+      // the corner itself.
+      var clearance = showLauncher ? offset + BUTTON_SIZES[buttonSize] : offset;
       panelRule =
         ".cf-p-" + uid + "{" + vertical + ":" + clearance + "px;" + horizontal + ":" + offset +
         "px;width:" + panelWidth + "px;height:" + panelHeight +
@@ -530,7 +552,8 @@
     if (mode !== "fullpage" && showLauncher) {
       launcher = document.createElement("button");
       launcher.type = "button";
-      launcher.className = "cf-launcher cf-l-" + uid + (label ? "" : " cf-bare");
+      launcher.className =
+        "cf-launcher cf-l-" + uid + (label ? "" : " cf-bare") + " cf-sz-" + buttonSize + " cf-r-" + buttonShape;
       launcher.style.background = color;
       // The attention ring pulses in the button's own colour.
       launcher.style.setProperty("--cf-c", color);

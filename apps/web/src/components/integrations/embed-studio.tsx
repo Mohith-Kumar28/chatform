@@ -39,9 +39,12 @@ import {
   EMBED_POSITIONS,
   isOverlay,
   reactSnippet,
+  type ButtonShape,
+  type ButtonSize,
   type EmbedConfig,
   type EmbedPosition,
 } from "@/lib/embed-snippet";
+import { BufferedInput } from "@/components/ui/buffered-input";
 import { InfoHint } from "@/components/ui/info-hint";
 import { cn } from "@/lib/utils";
 
@@ -80,10 +83,13 @@ function stripUndefined<T extends object>(o: T): Partial<T> {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
 
-/** What the document keeps: everything but the colour (the theme's) and hidden fields (per page). */
+/** What the document keeps: everything but hidden fields (per page). */
 function toEmbedDoc(c: EmbedConfig): EmbedDoc {
   return {
     mode: c.mode,
+    buttonColor: c.buttonColor || undefined,
+    buttonShape: c.buttonShape,
+    buttonSize: c.buttonSize,
     position: c.position,
     offset: c.offset,
     label: c.label,
@@ -96,6 +102,18 @@ function toEmbedDoc(c: EmbedConfig): EmbedDoc {
     autoHeight: c.autoHeight,
   };
 }
+
+const BUTTON_SHAPES: { value: ButtonShape; label: string }[] = [
+  { value: "round", label: "Round" },
+  { value: "rounded", label: "Rounded" },
+  { value: "square", label: "Square" },
+];
+
+const BUTTON_SIZES: { value: ButtonSize; label: string }[] = [
+  { value: "small", label: "Small" },
+  { value: "medium", label: "Medium" },
+  { value: "large", label: "Large" },
+];
 
 const TRIGGERS: { value: EmbedConfig["openOn"]; label: string }[] = [
   { value: "scroll:50", label: "Halfway down the page" },
@@ -132,12 +150,11 @@ export function EmbedStudio({
     () => ({ ...STUDIO_DEFAULTS, ...stripUndefined(saved ?? {}) }),
     [saved],
   );
-  /**
-   * The launcher wears the form's own accent. There used to be a separate
-   * picker for it, which only ever produced a button that did not match the
-   * form it opened.
-   */
-  const config = useMemo(() => ({ ...chosen, color: theme.accent }), [chosen, theme.accent]);
+  /** The launcher wears the form's own accent unless it was given a colour of its own. */
+  const config = useMemo(
+    () => ({ ...chosen, color: chosen.buttonColor || theme.accent }),
+    [chosen, theme.accent],
+  );
   const setConfig = (next: EmbedConfig | ((prev: EmbedConfig) => EmbedConfig)) => {
     // From the store, not the render: two changes in one tick must both land.
     const current = {
@@ -283,7 +300,7 @@ export function EmbedStudio({
               <>
                 <Section
                   title="Auto open"
-                  hint="Opens by itself once per visitor. Closed, it won't open again on any page of your site, and on a phone the button shakes once instead. Clicking a button always opens it."
+                  hint="Opens by itself at most once a day per visitor. Closed, it won't open again on any page of your site for 24 hours, and on a phone the button shakes instead. Clicking a button always opens it."
                 >
                   <Select
                     value={config.openOn}
@@ -332,7 +349,7 @@ export function EmbedStudio({
 
                 <Section
                   title="Corner button"
-                  hint="The round button in the corner that opens the form."
+                  hint="The button in the corner that opens the form."
                   action={
                     <Switch
                       aria-label="Show the corner button"
@@ -348,6 +365,41 @@ export function EmbedStudio({
                           value={config.label}
                           placeholder="Icon only"
                           onChange={(e) => set("label", e.target.value)}
+                        />
+                      </Field>
+                      <Field label="Colour" hint="Empty matches the form's primary colour.">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={/^#[0-9a-fA-F]{6}$/.test(config.color) ? config.color : "#FD6F29"}
+                            onChange={(e) => set("buttonColor", e.target.value)}
+                            className="size-8 shrink-0 cursor-pointer rounded-md border"
+                            aria-label="Button colour"
+                          />
+                          <BufferedInput
+                            value={config.buttonColor}
+                            onCommit={(v) => set("buttonColor", /^#[0-9a-f]{3,8}$/i.test(v.trim()) ? v.trim() : "")}
+                            placeholder={theme.accent}
+                            className="h-8 font-mono text-xs"
+                          />
+                        </div>
+                      </Field>
+                      <Field label="Shape">
+                        <SegmentedControl
+                          size="sm"
+                          options={BUTTON_SHAPES}
+                          value={config.buttonShape}
+                          onChange={(v) => set("buttonShape", v)}
+                          ariaLabel="Button shape"
+                        />
+                      </Field>
+                      <Field label="Size">
+                        <SegmentedControl
+                          size="sm"
+                          options={BUTTON_SIZES}
+                          value={config.buttonSize}
+                          onChange={(v) => set("buttonSize", v)}
+                          ariaLabel="Button size"
                         />
                       </Field>
                       <div className="flex items-center justify-between">
