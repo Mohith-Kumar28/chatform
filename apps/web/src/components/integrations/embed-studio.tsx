@@ -418,7 +418,7 @@ export function EmbedStudio({
                   )}
                 </Section>
 
-                <Section title="Size" hint="In pixels. On phones it always fills the screen.">
+                <Section title="Panel size" hint="In pixels. On phones it always fills the screen.">
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Width">
                       <NumberInput
