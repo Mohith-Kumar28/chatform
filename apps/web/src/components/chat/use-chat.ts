@@ -1,6 +1,6 @@
 "use client";
 
-import { emitEmbedEvent } from "./embed-bridge";
+import { embedPrefill, emitEmbedEvent, whenEmbedOpened } from "./embed-bridge";
 import { stuckTurnStep } from "./stuck-turn";
 import { rememberValue } from "./respondent-profile";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -1456,6 +1456,8 @@ export function useChat({
             canRepeat?: boolean;
           };
           if (state.status === "active") {
+            // A popup loaded ahead of its click waits here; see `whenEmbedOpened`.
+            await whenEmbedOpened();
             sessionRef.current = saved;
             setResumed(true);
             connectStream(saved.sessionId, saved.token, 0);
@@ -1504,14 +1506,20 @@ export function useChat({
         /*
          * Computed here rather than at mount: it runs a canvas and an audio
          * probe, and nothing needs it until a session is actually being opened.
-         * Failure is normal and returns null.
+         * Failure is normal and returns null. Started before the gate below, so
+         * a preloaded popup has it by the click instead of spending half a
+         * second on it after.
          */
-        const deviceSignal = await getRespondentSignal();
+        const signal = getRespondentSignal();
+        // A popup loaded ahead of its click opens no session until it is
+        // opened: a session is a response row. See `whenEmbedOpened`.
+        await whenEmbedOpened();
+        const deviceSignal = await signal;
         const res = await fetch(`${apiOrigin}/p/forms/${slug}/sessions`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            hiddenFields,
+            hiddenFields: { ...hiddenFields, ...embedPrefill() },
             /**
              * Only when there is no live session to reconnect to — the branches
              * above already returned in that case. A refresh mid-conversation
@@ -2543,8 +2551,16 @@ export function useChat({
    */
   useEffect(() => {
     if (!resolving) return;
-    const t = setTimeout(() => setResolving(false), BOOT_MAX_MS);
-    return () => clearTimeout(t);
+    // A popup waiting, hidden, for its click is not a boot that stalled.
+    let t: ReturnType<typeof setTimeout> | undefined;
+    let live = true;
+    void whenEmbedOpened().then(() => {
+      if (live) t = setTimeout(() => setResolving(false), BOOT_MAX_MS);
+    });
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
   }, [resolving]);
 
   /**

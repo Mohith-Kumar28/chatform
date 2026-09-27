@@ -165,6 +165,7 @@ export default async function PublicFormPage({ params, searchParams }: PageProps
         <EmbedBridge
           parentOrigin={parentOrigin}
           allowedOrigins={config.embed?.allowedOrigins ?? []}
+          hiddenFieldNames={config.hiddenFieldNames ?? []}
         />
       ) : null}
       <ChatClient

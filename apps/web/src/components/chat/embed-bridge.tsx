@@ -70,6 +70,53 @@ export function requestEmbedClose(): boolean {
 }
 
 /**
+ * Held until the host page opens the panel.
+ *
+ * `embed.js` loads a popup's frame while the page is idle, hidden, so a click
+ * shows a form that is already there instead of a page, a bundle and a boot
+ * screen arriving one after another. A frame loaded that early must not open a
+ * session, though: a session is a response row, and one per page view of the
+ * host site is a response per page view. So `?cf_defer=1` holds the session
+ * (and the view ping) back until the host says `open`. Everything that does
+ * not write anything, the page, the code and the "already answered?" probe,
+ * is done by then.
+ *
+ * Decided from the address bar at module load, because `start()` reaches the
+ * gate before the bridge's effect has run. An untrusted parent never gets to
+ * send `open`, so the bridge releases the gate itself (see below).
+ */
+let releaseOpen: (() => void) | null = null;
+const opened: Promise<void> =
+  typeof window !== "undefined" &&
+  window.parent !== window &&
+  new URLSearchParams(window.location.search).get("cf_defer") === "1"
+    ? new Promise((resolve) => {
+        releaseOpen = resolve;
+      })
+    : Promise.resolve();
+
+export function whenEmbedOpened(): Promise<void> {
+  return opened;
+}
+
+function markOpened(): void {
+  releaseOpen?.();
+  releaseOpen = null;
+}
+
+/**
+ * `Chatform.prefill()` values that arrived before the session opened.
+ *
+ * Only the form's declared hidden fields, the same filter the page applies to
+ * the query string. Read when the session is created, which for a preloaded
+ * popup is after the click, so a prefill made any time before then lands.
+ */
+const prefilled: Record<string, string> = {};
+export function embedPrefill(): Record<string, string> {
+  return prefilled;
+}
+
+/**
  * Whether this form is framed by a host page that accepted our handshake.
  *
  * Subscribable, because the answer is not known at first render — the handshake
@@ -121,13 +168,18 @@ function setHostCloses(next: boolean): void {
 export function EmbedBridge({
   parentOrigin,
   allowedOrigins,
+  hiddenFieldNames,
 }: {
   parentOrigin: string | null;
   /** From the form's settings. Empty means embeddable anywhere. */
   allowedOrigins: string[];
+  hiddenFieldNames: string[];
 }) {
   useEffect(() => {
-    if (window.parent === window || !parentOrigin) return;
+    if (window.parent === window || !parentOrigin) {
+      markOpened();
+      return;
+    }
 
     /**
      * The parent's origin arrives as a query parameter, so it is
@@ -153,7 +205,10 @@ export function EmbedBridge({
           return false;
         }
       });
-    if (!trusted) return;
+    if (!trusted) {
+      markOpened();
+      return;
+    }
 
     const send = (message: Omit<ToParent, "source" | "v">) => {
       window.parent.postMessage({ source: "chatform", v: 1, ...message }, parentOrigin);
@@ -192,6 +247,13 @@ export function EmbedBridge({
         closes?: boolean;
       };
       if (message?.source !== "chatform") return;
+      if (message.type === "open") markOpened();
+      if (message.type === "prefill" && message.fields) {
+        for (const name of hiddenFieldNames) {
+          const value = message.fields[name];
+          if (typeof value === "string") prefilled[name] = value;
+        }
+      }
       if (message.type === "close") send({ type: "close" });
       if (message.type === "host") setHostCloses(message.closes === true);
     };
@@ -203,7 +265,7 @@ export function EmbedBridge({
       window.removeEventListener("message", onMessage);
       setPost(null);
     };
-  }, [parentOrigin, allowedOrigins]);
+  }, [parentOrigin, allowedOrigins, hiddenFieldNames]);
 
   return null;
 }

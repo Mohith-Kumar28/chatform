@@ -42,7 +42,8 @@
  *                    instead of covering the page)
  *                    (the automatic ones never fire again once this
  *                    visitor has submitted the form on this site)
- *   data-lazy        "false" to build the frame immediately      default lazy
+ *   data-lazy        when the frame loads: "false" at once, "true"
+ *                    only on hover or click                     default once the page is idle
  *   data-nonce       CSP nonce, copied onto injected styles
  *   data-hidden-*    prefilled hidden fields (data-hidden-plan="pro")
  *
@@ -71,7 +72,8 @@
 
   var scriptOrigin = new URL(script.src, window.location.href).origin;
   var app = script.getAttribute("data-app") || scriptOrigin;
-  var lazy = script.getAttribute("data-lazy") !== "false";
+  var lazyAttr = script.getAttribute("data-lazy");
+  var lazy = lazyAttr !== "false";
   var nonce = script.getAttribute("data-nonce");
   var target = script.getAttribute("data-target");
 
@@ -272,6 +274,9 @@
     // The first answer rides in the URL so the header X never flashes; later
     // changes (a window resized across 520px) arrive as a "host" message.
     if (hostCloses()) url.searchParams.set("hostClose", "1");
+    // Loaded ahead of the click: the frame holds its session (a response row)
+    // until `open` arrives. See `preload`.
+    if (!isOpen && mode !== "inline") url.searchParams.set("cf_defer", "1");
     // Where the form sits, recorded on the response. Inside the frame the
     // referrer is only this origin, so the page and its own referrer ride here.
     url.searchParams.set("cf_mode", mode);
@@ -520,8 +525,7 @@
 
   /**
    * Warm the connection now, so the first open does not also pay for DNS and
-   * TLS. The frame itself is not loaded here: loading it opens a session, and
-   * a session per page view is a response per page view.
+   * TLS, even before `preload` builds the frame.
    */
   function preconnect(href) {
     var link = document.createElement("link");
@@ -608,11 +612,10 @@
       document.body.appendChild(launcher);
 
       /**
-       * Build the frame on intent rather than on load.
+       * Build the frame on intent, if `preload` has not already.
        *
-       * A hidden iframe still costs a document, a stylesheet and a connection —
-       * on someone else's page, competing with their own first paint. Hovering
-       * the launcher is enough warning to have it ready by the time it opens.
+       * Hovering the launcher is a head start of a few hundred ms. With
+       * data-lazy="true" it is the only one.
        */
       if (lazy) {
         // Hover on a desktop, the first touch on a phone, focus from a keyboard:
@@ -655,7 +658,11 @@
     markPrompted();
     if (destroyed || isOpen) return;
     if (launcher) launcher.classList.remove("cf-attn");
+    isOpen = true;
     if (!frame && panel) panel.appendChild(buildFrame());
+    // A preloaded frame is waiting for this to open its session. One that has
+    // not said hello yet hears it again on `ready`.
+    post({ type: "open" });
     if (panel) panel.classList.add("cf-open");
     if (launcher) {
       launcher.setAttribute("aria-expanded", "true");
@@ -666,7 +673,6 @@
     // Nothing to escape through until the frame says hello, so give it a moment
     // and then draw an exit anyway.
     if (!frameReady && !fallbackTimer) fallbackTimer = setTimeout(showFallbackClose, READY_GRACE_MS);
-    isOpen = true;
     emit("open", {});
   }
 
@@ -717,6 +723,9 @@
         hideFallbackClose();
         reveal();
         post({ type: "host", closes: hostCloses() });
+        // Anything posted before the frame was listening was dropped.
+        post({ type: "prefill", fields: hidden });
+        if (isOpen) post({ type: "open" });
         emit("ready", message);
         break;
       case "resize":
@@ -984,6 +993,28 @@
     });
   }
 
+  /**
+   * Load a popup's frame once the page has finished its own work.
+   *
+   * Built on the click, the form was a server render, a bundle and a boot
+   * screen, one after another, a few seconds of loading in front of someone
+   * who had just asked for it. Built now, hidden, it is already on screen when
+   * they click. It waits for the page's `load` and an idle moment so it never
+   * competes with the host's first paint, and it opens no session until it is
+   * opened (`cf_defer`), so a page view is still not a response.
+   */
+  function preload() {
+    if (lazyAttr === "true" || mode === "inline" || mode === "fullpage") return;
+    function go() {
+      var idle = window.requestIdleCallback || function (fn) { return setTimeout(fn, 1500); };
+      idle(function () {
+        if (!frame && panel && !destroyed) panel.appendChild(buildFrame());
+      }, { timeout: 4000 });
+    }
+    if (document.readyState === "complete") go();
+    else window.addEventListener("load", go, { once: true });
+  }
+
   function build() {
     if (narrow && mode === "popup") {
       if (narrow.addEventListener) narrow.addEventListener("change", onNarrowChange);
@@ -993,7 +1024,10 @@
     else {
       mountOverlay();
       if (mode === "fullpage") open();
-      else setupTriggers();
+      else {
+        setupTriggers();
+        preload();
+      }
     }
   }
 
