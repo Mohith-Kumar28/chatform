@@ -10,7 +10,7 @@ import type {} from "@better-auth/core";
 import type {} from "@better-auth/core/db/adapter";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { emailOTP, organization } from "better-auth/plugins";
+import { emailOTP, multiSession, organization } from "better-auth/plugins";
 import { createDb, schema } from "@repo/db";
 import type { Bindings } from "../env.js";
 import { ac, roles } from "./permissions.js";
@@ -343,6 +343,12 @@ export function createAuth(env: Bindings) {
       apiKeyPlugin(),
       // An admin acting as a customer: their session, from a header. See `./impersonation.ts`.
       impersonationPlugin(env),
+      /**
+       * Several accounts signed in at once in one browser, switched from the
+       * account menu. No tables: each extra session rides in its own signed
+       * cookie. Signing out ends all of them.
+       */
+      multiSession(),
       /**
        * Six digits instead of a link.
        *

@@ -9,6 +9,7 @@ import { deleteUserPlugin } from "@/lib/auth/delete-user-plugin";
 import { emailOtpPlugin } from "@/lib/auth/email-otp-plugin";
 import { safeNext } from "@/lib/safe-next";
 import { organizationPlugin } from "@/lib/auth/organization-plugin";
+import { multiSessionPlugin } from "@/lib/auth/multi-session-plugin";
 import { AuthProvider } from "./auth-provider";
 
 /**
@@ -158,6 +159,12 @@ export function AuthUIProvider({ children }: { children: React.ReactNode }) {
          * promise we did not keep. See `purgeUserData` in the API.
          */
         deleteUserPlugin(),
+        /**
+         * Several accounts in one browser: "Switch account" in the account
+         * menu lists them, and "Add account" signs another one in beside the
+         * current one. Signing out ends all of them.
+         */
+        multiSessionPlugin(),
       ]}
       Link={Link}
     >

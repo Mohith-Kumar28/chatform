@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { SwitchAccountSubmenu } from "@/components/auth/multi-session/switch-account-submenu";
 
 /**
  * Account menu.
@@ -117,6 +118,10 @@ export function UserMenu() {
             Profile settings
           </Link>
         </DropdownMenuItem>
+        {/* Better Auth UI's own switcher: the other signed-in accounts, and
+            Add account. Not while acting as a customer, where the server
+            refuses a switch anyway. */}
+        {!readImpersonation() && <SwitchAccountSubmenu />}
 
         <DropdownMenuSeparator />
 

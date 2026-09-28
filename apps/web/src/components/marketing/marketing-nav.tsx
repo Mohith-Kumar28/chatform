@@ -19,6 +19,13 @@ import { Logo } from "@/components/brand/logo";
 import { UseCasesMenu } from "./use-cases-menu";
 import { USE_CASE_GROUPS } from "@/content/use-cases";
 import { cn } from "@/lib/utils";
+import dynamic from "next/dynamic";
+
+// Loaded only for a signed-in visitor; see `MarketingAccountButton`.
+const MarketingAccountButton = dynamic(
+  () => import("./marketing-account-button").then((m) => m.MarketingAccountButton),
+  { ssr: false, loading: () => <div className="shimmer size-8 rounded-full" aria-hidden /> },
+);
 
 /**
  * The marketing shell DESIGN.md 1.2 specified and never got.
@@ -145,9 +152,12 @@ export function MarketingNav() {
           {signedIn === null ? (
             <div className="shimmer hidden h-8 w-24 rounded-full sm:block" aria-hidden />
           ) : signedIn ? (
-            <Button asChild size="sm" shape="pill" variant={ctaVariant} className="hidden sm:inline-flex">
-              <Link href="/dashboard">Dashboard</Link>
-            </Button>
+            <>
+              <Button asChild size="sm" shape="pill" variant={ctaVariant} className="hidden sm:inline-flex">
+                <Link href="/dashboard">Dashboard</Link>
+              </Button>
+              <MarketingAccountButton />
+            </>
           ) : (
             <Button asChild size="sm" shape="pill" variant={ctaVariant} className="hidden sm:inline-flex">
               <Link href="/signin">Start free</Link>

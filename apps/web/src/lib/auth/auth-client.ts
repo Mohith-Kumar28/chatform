@@ -1,7 +1,7 @@
 "use client";
 
 import { createAuthClient } from "better-auth/react";
-import { emailOTPClient, organizationClient } from "better-auth/client/plugins";
+import { emailOTPClient, multiSessionClient, organizationClient } from "better-auth/client/plugins";
 import { clientContextHeader } from "./client-context";
 import { readImpersonation, stopImpersonation } from "@/lib/impersonation";
 
@@ -44,7 +44,9 @@ export const authClient = createAuthClient({
   // `emailOTPClient` is what puts `authClient.emailOtp.*` on the client. The
   // server verifies email with six-digit codes rather than links, and without
   // this the browser has no method to send one back.
-  plugins: [organizationClient(), emailOTPClient()],
+  // `multiSessionClient` is what lets one browser hold several accounts and
+  // switch between them (`authClient.multiSession.*`).
+  plugins: [organizationClient(), emailOTPClient(), multiSessionClient()],
 });
 
 export const { signIn, signUp, signOut, useSession, useActiveOrganization, useListOrganizations } = authClient;

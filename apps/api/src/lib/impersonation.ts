@@ -65,6 +65,7 @@ const REFUSED_PATHS = [
   /^\/delete-user/,
   /^\/revoke-/,
   /^\/sign-out/,
+  /^\/multi-session\/(set-active|revoke)/,
   /^\/(link-social|unlink-account)/,
   /^\/organization\/(invite-member|delete|leave|remove-member|update-member-role|accept-invitation|reject-invitation)/,
   /^\/api-key\//,
