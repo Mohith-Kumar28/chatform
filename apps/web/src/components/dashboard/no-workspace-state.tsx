@@ -1,11 +1,82 @@
 "use client";
 
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { OrganizationAuthClient } from "@better-auth-ui/core/plugins/organization";
-import { useAuth } from "@better-auth-ui/react";
+import { useAuth, useSession } from "@better-auth-ui/react";
 import { useListOrganizationMembers } from "@better-auth-ui/react/plugins/organization";
-import { FolderLock } from "lucide-react";
+import { FolderLock, FolderPlus } from "lucide-react";
+import { toast } from "sonner";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { getGetApiWorkspacesQueryKey, usePostApiWorkspaces } from "@/lib/api/dashboard/dashboard";
+import { useEntitlements } from "@/hooks/use-entitlements";
 import { isOrgAdminRole } from "@/lib/roles";
+
+/**
+ * The dashboard with no workspace behind it.
+ *
+ * Two different people land here. An owner or admin fresh from sign-up, whose
+ * organization has no workspace yet: they get the one step that makes one,
+ * with a name already filled in. And a member nobody has added to a workspace:
+ * they can't make their own, so they're told who can fix it.
+ */
+export function NoWorkspaceState() {
+  const { allows, isLoading } = useEntitlements();
+  if (isLoading) return <div className="shimmer h-64 rounded-2xl" />;
+  return allows("workspace", "create") ? <CreateFirstWorkspace /> : <WaitingForAccess />;
+}
+
+/** "Priya's Workspace", or plain "My Workspace" when there is no name to use. */
+function defaultName(name: string | null | undefined): string {
+  const first = name?.trim().split(/\s+/)[0];
+  return first ? `${first}'s Workspace`.slice(0, 60) : "My Workspace";
+}
+
+function CreateFirstWorkspace() {
+  const { authClient } = useAuth<OrganizationAuthClient>();
+  const { data: session } = useSession(authClient);
+  const queryClient = useQueryClient();
+  const create = usePostApiWorkspaces();
+  // Untouched, the field follows the session as it loads; typed in, it's theirs.
+  const [name, setName] = useState<string | null>(null);
+  const value = name ?? defaultName(session?.user?.name);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    try {
+      await create.mutateAsync({ data: { name: trimmed } });
+      await queryClient.invalidateQueries({ queryKey: getGetApiWorkspacesQueryKey() });
+    } catch {
+      toast.error("Couldn't create your workspace", { description: "Try again in a moment." });
+    }
+  }
+
+  return (
+    <EmptyState
+      icon={FolderPlus}
+      title="Name your workspace"
+      action={
+        <form onSubmit={submit} className="flex w-full max-w-sm flex-col gap-2 sm:flex-row">
+          <Input
+            aria-label="Workspace name"
+            value={value}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={60}
+            autoFocus
+            className="h-9"
+          />
+          <Button type="submit" shape="pill" disabled={!value.trim() || create.isPending}>
+            {create.isPending ? "Creating…" : "Continue"}
+          </Button>
+        </form>
+      }
+    />
+  );
+}
 
 /**
  * A member who has not been added to any workspace yet.
@@ -14,7 +85,7 @@ import { isOrgAdminRole } from "@/lib/roles";
  * it, by name, because "ask an admin" is useless to someone who does not know
  * who the admins are.
  */
-export function NoWorkspaceState() {
+function WaitingForAccess() {
   const { authClient } = useAuth<OrganizationAuthClient>();
   const { data } = useListOrganizationMembers(authClient);
   const members =
