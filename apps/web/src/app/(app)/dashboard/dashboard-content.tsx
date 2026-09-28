@@ -142,7 +142,7 @@ export function DashboardContent() {
     [workspaceData],
   );
   // Every workspace at once. Each card then answers for its own folder, and a
-  // new form lands in the default one, the same as a link with no `?ws=`.
+  // new form asks which one it goes in.
   const showingAll = ws === ALL_WORKSPACES && workspaces.length > 1;
   const currentWorkspace = showingAll ? undefined : (workspaces.find((w) => w.slug === ws) ?? workspaces[0]);
   const currentWorkspaceId = currentWorkspace?.id;
@@ -205,6 +205,8 @@ export function DashboardContent() {
   }, [urlWs, ws]);
   // ?new=1 lets the command palette open the create dialog.
   const [createOpen, setCreateOpen] = useState(searchParams.get("new") === "1");
+  // The workspace chosen for a new form started from the all-workspaces view.
+  const [pickedWs, setPickedWs] = useState("");
   /*
     Both delete dialogs read this one piece of state, and which of the two
     opens is decided by the form's own status rather than by a second flag: a
@@ -674,8 +676,45 @@ export function DashboardContent() {
         )}
       </div>
 
+      {/*
+        "All workspaces" is a view, not a folder, so a new form from here asks
+        where it goes first. Picking one switches the dashboard to it, and the
+        ordinary dialog opens there.
+      */}
+      <Dialog
+        open={createOpen && showingAll}
+        onOpenChange={(open) => !open && setCreateOpen(false)}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Which workspace?</DialogTitle>
+          </DialogHeader>
+          <Select value={pickedWs} onValueChange={setPickedWs}>
+            <SelectTrigger aria-label="Workspace">
+              <SelectValue placeholder="Choose a workspace" />
+            </SelectTrigger>
+            <SelectContent>
+              {moveTargets.map((w) => (
+                <SelectItem key={w.id} value={w.slug}>
+                  {w.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <DialogFooter>
+            <Button
+              shape="pill"
+              disabled={!pickedWs}
+              onClick={() => router.push(`/dashboard?ws=${encodeURIComponent(pickedWs)}`)}
+            >
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <CreateFormDialog
-        open={createOpen}
+        open={createOpen && !showingAll}
         onOpenChange={(open) => {
           setCreateOpen(open);
           if (!open && searchParams.get("new")) router.replace(`/dashboard?ws=${encodeURIComponent(ws)}`);
