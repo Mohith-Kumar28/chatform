@@ -56,14 +56,22 @@ async function publish(settings: Record<string, unknown> = DOC.settings): Promis
   ]);
 }
 
+/**
+ * The browser an anonymous response was started in. A link to one only
+ * resumes in that same browser, so the tests that are about resuming come back
+ * from it; `a link opened on another device` covers every other one.
+ */
+const LINK_SIGNAL = "linkdevice01";
+const fingerprintOf = (signal: string) => sha256Hex(`salt:d:${signal}`);
+
 /** An abandoned response that got through the first two questions. */
-async function seedAbandoned(id: string, status = "abandoned"): Promise<void> {
+async function seedAbandoned(id: string, status = "abandoned", signal = LINK_SIGNAL): Promise<void> {
   const now = Date.now();
   await env.DB.prepare(
-    `INSERT INTO submissions (id, form_id, form_version_id, organization_id, status, source, is_test, started_at, updated_at, active_ms)
-     VALUES (?, ?, ?, ?, ?, 'chat', 0, ?, ?, 60000)`,
+    `INSERT INTO submissions (id, form_id, form_version_id, organization_id, status, source, is_test, started_at, updated_at, active_ms, fingerprint)
+     VALUES (?, ?, ?, ?, ?, 'chat', 0, ?, ?, 60000, ?)`,
   )
-    .bind(id, t.formId, VERSION_ID, t.orgId, status, now - 3_600_000, now - 3_600_000)
+    .bind(id, t.formId, VERSION_ID, t.orgId, status, now - 3_600_000, now - 3_600_000, fingerprintOf(signal))
     .run();
   const answers: [string, string, unknown][] = [
     ["q_name", "short_text", "Maya"],
@@ -88,7 +96,9 @@ const open = (body: Record<string, unknown>, ip?: string) =>
       // and the test that depends on it would pass for the wrong reason.
       ...(ip ? { "cf-connecting-ip": ip } : {}),
     },
-    body: JSON.stringify(body),
+    // A link is opened from the browser that started the response unless the
+    // test says otherwise.
+    body: JSON.stringify(body.resumeToken && !("deviceSignal" in body) ? { ...body, deviceSignal: LINK_SIGNAL } : body),
   });
 
 async function token(submissionId: string, days = RESUME_TTL_DAYS): Promise<string> {
@@ -184,10 +194,10 @@ describe("resuming a response the form has since outgrown", () => {
   async function seedStale(id: string): Promise<void> {
     const now = Date.now();
     await env.DB.prepare(
-      `INSERT INTO submissions (id, form_id, form_version_id, organization_id, status, source, is_test, started_at, updated_at, active_ms)
-       VALUES (?, ?, ?, ?, 'abandoned', 'chat', 0, ?, ?, 60000)`,
+      `INSERT INTO submissions (id, form_id, form_version_id, organization_id, status, source, is_test, started_at, updated_at, active_ms, fingerprint)
+       VALUES (?, ?, ?, ?, 'abandoned', 'chat', 0, ?, ?, 60000, ?)`,
     )
-      .bind(id, t.formId, VERSION_ID, t.orgId, now - 3_600_000, now - 3_600_000)
+      .bind(id, t.formId, VERSION_ID, t.orgId, now - 3_600_000, now - 3_600_000, fingerprintOf(LINK_SIGNAL))
       .run();
     for (const ref of ["q_gone_one", "q_gone_two", "q_gone_three"]) {
       await env.DB.prepare(
@@ -311,7 +321,12 @@ describe("resuming a response the form has since outgrown", () => {
 describe("resuming when it should not work", () => {
   it("starts a fresh session for a token that does not verify", async () => {
     await seedAbandoned("sbm_resume05");
-    const res = await open({ resumeToken: "sbm_resume05.9999999999.deadbeefdeadbeefdeadbeefdeadbeef" });
+    // No device signal: what is under test is the token, and the same browser
+    // would get its draft back through the device match regardless.
+    const res = await open({
+      resumeToken: "sbm_resume05.9999999999.deadbeefdeadbeefdeadbeefdeadbeef",
+      deviceSignal: undefined,
+    });
     expect(res.status).toBe(200);
     const { sessionId } = (await res.json()) as { sessionId: string };
     const session = await env.DB.prepare(`SELECT submission_id FROM chat_sessions WHERE id = ?`)
@@ -327,7 +342,7 @@ describe("resuming when it should not work", () => {
 
   it("ignores an expired token", async () => {
     await seedAbandoned("sbm_resume06");
-    const res = await open({ resumeToken: await token("sbm_resume06", -1) });
+    const res = await open({ resumeToken: await token("sbm_resume06", -1), deviceSignal: undefined });
     const { sessionId } = (await res.json()) as { sessionId: string };
     const session = await env.DB.prepare(`SELECT submission_id FROM chat_sessions WHERE id = ?`)
       .bind(sessionId)
@@ -368,10 +383,96 @@ describe("resuming when it should not work", () => {
   });
 });
 
+/**
+ * The reminder for an anonymous response went to whatever address was typed,
+ * so a typo puts it in a stranger's inbox. Opened anywhere but the browser the
+ * response was started in, the link is an ordinary visit to the form: nothing
+ * carried over, and the owner's response left exactly as it was.
+ */
+describe("a link opened on another device", () => {
+  async function seedSentFollowUp(submissionId: string): Promise<void> {
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT INTO followups (id, submission_id, form_id, organization_id, channel, address,
+                              address_source, step, status, scheduled_at, sent_at, created_at)
+       VALUES (?1, ?2, ?3, ?4, 'email', 'maya@northwind.example', 'answer', 1, 'sent', ?5, ?5, ?5),
+              (?6, ?2, ?3, ?4, 'email', 'maya@northwind.example', 'answer', 2, 'scheduled', ?5, NULL, ?5)`,
+    )
+      .bind(`flw_${submissionId}_1`, submissionId, t.formId, t.orgId, now, `flw_${submissionId}_2`)
+      .run();
+  }
+
+  for (const [label, signal] of [
+    ["a different browser", "someotherdevice"],
+    ["a browser that sends no signal", undefined],
+  ] as const) {
+    it(`starts fresh in ${label}`, async () => {
+      await publish();
+      await seedAbandoned("sbm_resume_dev1");
+      await seedSentFollowUp("sbm_resume_dev1");
+      const res = await open({
+        resumeToken: await token("sbm_resume_dev1"),
+        followUpId: "flw_sbm_resume_dev1_1",
+        deviceSignal: signal,
+      });
+      expect(res.status).toBe(200);
+      const { sessionId } = (await res.json()) as { sessionId: string };
+
+      const session = await env.DB.prepare(`SELECT submission_id FROM chat_sessions WHERE id = ?`)
+        .bind(sessionId)
+        .first<{ submission_id: string | null }>();
+      expect(session?.submission_id).toBeNull();
+
+      // Nothing of theirs on screen, and the form at its first question.
+      const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+      const frames = await readFrames(await stub.stream());
+      expect(JSON.stringify(frames)).not.toContain("Maya");
+      expect(frames.some((f) => f.event === "user_message")).toBe(false);
+      const question = frames.findLast((f) => f.event === "question");
+      expect((question?.data as { block: { ref: string } }).block.ref).toBe("q_name");
+
+      // The owner's response, reminders and click are untouched.
+      const sub = await env.DB.prepare(`SELECT status FROM submissions WHERE id = 'sbm_resume_dev1'`)
+        .first<{ status: string }>();
+      expect(sub?.status).toBe("abandoned");
+      const fus = await env.DB.prepare(
+        `SELECT status, clicked_at FROM followups WHERE submission_id = 'sbm_resume_dev1' ORDER BY step`,
+      ).all<{ status: string; clicked_at: number | null }>();
+      expect(fus.results?.map((f) => [f.status, f.clicked_at])).toEqual([
+        ["sent", null],
+        ["scheduled", null],
+      ]);
+    });
+  }
+
+  it("still resumes on the device it was started on", async () => {
+    await publish();
+    await seedAbandoned("sbm_resume_dev2");
+    const res = await open({ resumeToken: await token("sbm_resume_dev2"), deviceSignal: LINK_SIGNAL });
+    const { sessionId } = (await res.json()) as { sessionId: string };
+    const session = await env.DB.prepare(`SELECT submission_id FROM chat_sessions WHERE id = ?`)
+      .bind(sessionId)
+      .first<{ submission_id: string | null }>();
+    expect(session?.submission_id).toBe("sbm_resume_dev2");
+  });
+
+  it("does not match a response that never had a device key", async () => {
+    await publish();
+    await seedAbandoned("sbm_resume_dev3");
+    await env.DB.prepare(`UPDATE submissions SET fingerprint = NULL WHERE id = 'sbm_resume_dev3'`).run();
+    const res = await open({ resumeToken: await token("sbm_resume_dev3") });
+    const { sessionId } = (await res.json()) as { sessionId: string };
+    const session = await env.DB.prepare(`SELECT submission_id FROM chat_sessions WHERE id = ?`)
+      .bind(sessionId)
+      .first<{ submission_id: string | null }>();
+    expect(session?.submission_id).toBeNull();
+  });
+});
+
 describe("the gates a resume may and may not walk through", () => {
   it("is not blocked by the resubmission rule it would otherwise trip", async () => {
     await publish({ ...DOC.settings, allowResubmissions: false });
-    await seedAbandoned("sbm_resume09");
+    await seedAbandoned("sbm_resume09", "abandoned", "resumedevice1");
     /*
      * A finished session from the same *device* is exactly what the rule
      * refuses. It has to be the device: the rule no longer enforces on an
@@ -380,11 +481,13 @@ describe("the gates a resume may and may not walk through", () => {
      */
     const IP = "203.0.113.7";
     const SIGNAL = "resumedevice1";
-    await open({ deviceSignal: SIGNAL }, IP);
+    // `fresh`, so these two are new visits and not the device match handing
+    // back the draft this same browser started.
+    await open({ deviceSignal: SIGNAL, fresh: true }, IP);
     await env.DB.prepare(`UPDATE chat_sessions SET status = 'completed' WHERE ip_hash = ?1`)
       .bind(sha256Hex(IP))
       .run();
-    const blocked = await open({ deviceSignal: SIGNAL }, IP);
+    const blocked = await open({ deviceSignal: SIGNAL, fresh: true }, IP);
     expect(blocked.status).toBe(409);
 
     const resumed = await open({ resumeToken: await token("sbm_resume09"), deviceSignal: SIGNAL }, IP);

@@ -17,7 +17,7 @@ import {
 import type { Bindings } from "../env.js";
 import type { SessionDO } from "../do/session-do.js";
 import { verifyGoogleIdToken, verifyFirebasePhoneToken } from "../lib/respondent-auth.js";
-import { findIdentityHistory } from "../lib/respondent-history.js";
+import { findHeldResumable, findIdentityHistory } from "../lib/respondent-history.js";
 import { clampForRuntime } from "../lib/doc-entitlements.js";
 import { getEntitlements } from "../lib/entitlements.js";
 import { can } from "@repo/entitlements";
@@ -136,7 +136,7 @@ async function assessIdentity(
 ): Promise<SignInVerdict> {
   const sess = await env.DB.prepare(
     `SELECT s.form_id AS form_id, s.organization_id AS organization_id, s.started_over AS started_over,
-            fv.schema_json AS schema_json
+            s.held_resume_id AS held_resume_id, fv.schema_json AS schema_json
        FROM chat_sessions s
        LEFT JOIN form_versions fv ON fv.id = s.form_version_id
       WHERE s.id = ?1`,
@@ -146,9 +146,23 @@ async function assessIdentity(
       form_id: string;
       organization_id: string;
       started_over: number | null;
+      held_resume_id: string | null;
       schema_json: string | null;
     }>();
   if (!sess?.schema_json) return NOTHING;
+
+  /*
+   * They came in through a reminder link the session held back, and the
+   * sign-in has just shown it was theirs: hand over what the link would have
+   * opened. Ahead of everything below because the link always was — it did
+   * not stop to show an earlier submission or ask about another one, and a
+   * respondent who proved who they are should not get less than one who did
+   * not have to. A mismatch falls through to the ordinary lookup.
+   */
+  if (sess.held_resume_id && !sess.started_over) {
+    const held = await findHeldResumable(env, sess.form_id, sess.held_resume_id, identity);
+    if (held) return { blocked: null, resume: held };
+  }
 
   let doc: FormDoc;
   let ent: Awaited<ReturnType<typeof getEntitlements>>;

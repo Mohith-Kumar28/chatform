@@ -127,6 +127,7 @@ import {
 } from "../lib/submissions.js";
 import { startEmailChallenge, verifyEmailChallenge } from "../lib/respondent-auth.js";
 import { findOpenResponseId } from "../lib/respondent-history.js";
+import { cancelFollowUps, recordFollowUpClick } from "../lib/followups.js";
 import type { RespondentKeySource } from "../lib/respondent-key.js";
 import type { RespondentIdentity, RespondentAuthMethod, FileDescriptor } from "@repo/form-schema";
 import { holesFor } from "../lib/d1-bindings.js";
@@ -197,6 +198,21 @@ interface DoSessionMeta {
   completedAt?: number | null;
   /** Set once the sign-in gate is satisfied. Null while it still blocks. */
   identity?: RespondentIdentity | null;
+  /**
+   * A response a reminder link pointed at, not yet handed to this session.
+   *
+   * The response was signed in without a verified email, so the reminder went
+   * to an address nobody proved and whoever clicked may be a stranger. None of
+   * it is loaded: the gate stays shut until somebody signs in, and only a
+   * sign-in as `provider`/`subject` gets it back. See `resumeSignInProvider`
+   * in `openSession`.
+   */
+  heldResume?: {
+    submissionId: string;
+    provider: RespondentAuthMethod;
+    subject: string;
+    followUpId?: string;
+  } | null;
   /**
    * A `verify` answer that has been given, had a code sent to it, and is
    * waiting for that code back.
@@ -690,6 +706,8 @@ export class SessionDO extends DurableObject<Bindings> {
       answers: Record<string, unknown>;
       identity?: RespondentIdentity | null;
     };
+    /** A reminder link held for the sign-in. See `DoSessionMeta.heldResume`. */
+    heldResume?: NonNullable<DoSessionMeta["heldResume"]>;
   }): Promise<{ ok: true } | { ok: false; code: string }> {
     if (this.loaded) return { ok: true };
 
@@ -720,6 +738,7 @@ export class SessionDO extends DurableObject<Bindings> {
       context: params.context ?? null,
       source: params.source ?? "chat",
       isTest: params.isTest === true,
+      ...(params.heldResume ? { heldResume: params.heldResume } : {}),
     };
     // Shares the `degraded` flag with the reliability floor (three guard rejections drop a
     // session to template mode permanently) — the two reasons to stop using the LLM want
@@ -862,6 +881,13 @@ export class SessionDO extends DurableObject<Bindings> {
     if (!this.doc || !this.meta) return false;
     const gate = this.doc.settings.requireAuth;
     if (!gate.enabled || this.meta.identity) return false;
+    /*
+     * A held response closes the gate at the door, whatever `afterBlocks`
+     * says. Letting them answer first would start a second response, and the
+     * adoption in `attachIdentity` refuses to lay one on top of the other, so
+     * the real respondent would lose the one they came back for.
+     */
+    if (this.meta.heldResume) return true;
     return this.collectedCount >= gate.afterBlocks;
   }
 
@@ -1026,6 +1052,10 @@ export class SessionDO extends DurableObject<Bindings> {
     if (this.meta.status !== "active") return { accepted: false, error: "session_closed" };
     if (this.meta.identity) return { accepted: true }; // idempotent: a double-submit is not an error
 
+    // Spent by this sign-in whoever it turns out to be: a stranger who signs in
+    // as themselves has a form of their own from here, and never this one.
+    const held = this.meta.heldResume ?? null;
+    this.meta.heldResume = null;
     this.meta.identity = identity;
     await this.persistMeta();
 
@@ -1120,6 +1150,14 @@ export class SessionDO extends DurableObject<Bindings> {
       // the replay only ever runs once, and covers the branches that reach a
       // question without going through `beginInterview` at all.
       await this.replayAnswerHistory();
+      if (
+        held &&
+        held.submissionId === resume.submissionId &&
+        held.provider === identity.provider &&
+        held.subject === identity.subject
+      ) {
+        await this.creditHeldResume(held);
+      }
     }
 
     /**
@@ -6056,6 +6094,34 @@ export class SessionDO extends DurableObject<Bindings> {
    * This is what keeps the row honest *while* the conversation is live — the
    * partials tab, the follow-up sequence and the resume gates all read it.
    */
+  /**
+   * The rest of what opening a reminder link does, once the sign-in has shown
+   * the link was theirs.
+   *
+   * The public route does these for a link it can hand over at once; for a
+   * held one it cannot know yet whether the person who clicked is the one it
+   * was meant for, and a stranger's click must not cancel the real
+   * respondent's reminders or be counted as the reminder working. Same order
+   * as the route: the click lands before the cancel, which is what stops the
+   * row being `scheduled`.
+   */
+  private async creditHeldResume(held: NonNullable<DoSessionMeta["heldResume"]>): Promise<void> {
+    if (!this.meta || this.meta.formVersionId === "preview") return;
+    if (held.followUpId) await recordFollowUpClick(this.env, held.followUpId, held.submissionId);
+    await cancelFollowUps(this.env, held.submissionId, "resumed");
+    await this.env.Q_WEBHOOKS.send({
+      event: "response.resumed",
+      organizationId: this.meta.organizationId,
+      formId: this.meta.formId,
+      submissionId: held.submissionId,
+      sessionId: this.meta.sessionId,
+      source: "chat",
+      isTest: false,
+    }).catch((err: unknown) =>
+      console.error("resume_webhook_failed", { submissionId: held.submissionId, ...errorInfo(err) }),
+    );
+  }
+
   private async reopenAdopted(submissionId: string): Promise<void> {
     if (!this.meta || this.meta.formVersionId === "preview") return;
     try {

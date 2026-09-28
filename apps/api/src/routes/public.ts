@@ -11,7 +11,7 @@ import { timingSafeEqual, isHashedPassword, verifyPassword } from "../lib/crypto
 import { SessionDO } from "../do/session-do.js";
 import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
 import { completedSubmissions, openSession, type FormRow } from "../lib/open-session.js";
-import { respondentKey } from "../lib/respondent-key.js";
+import { respondentKey, type RespondentKey } from "../lib/respondent-key.js";
 import { resolveRespondent } from "../lib/respondents.js";
 import { recordFeedback, FEEDBACK_DAILY_CAP, SNAPSHOT_MAX_BYTES, snapshotKeyFor } from "../lib/feedback.js";
 import { FEEDBACK_NOTE_MAX } from "@repo/form-schema";
@@ -419,8 +419,9 @@ sessionsRouter.post(
      */
     const device = respondentKey({ signal: body.deviceSignal, salt: formRow.fingerprint_salt });
     mark("form");
+    const linked = await loadResumable(c.env, formRow.id, body.resumeToken, device);
     const resume =
-      (await loadResumable(c.env, formRow.id, body.resumeToken)) ??
+      linked ??
       (body.fresh ? null : await findDeviceResumable(c.env, formRow.id, device));
     mark("resume");
 
@@ -479,9 +480,18 @@ sessionsRouter.post(
        */
       ...(body.fresh ? { startedOver: true } : {}),
       ...(resume ? { resumeSubmissionId: resume.submissionId } : {}),
+      ...(linked?.signInProvider ? { resumeSignInProvider: linked.signInProvider } : {}),
     });
     if (!opened.ok) return c.json(opened.body, opened.status);
     mark("open");
+
+    /*
+     * Held for the sign-in: nothing about the response reaches this session,
+     * and nothing that treats the link as the respondent's return runs yet.
+     * `attachIdentity` does all of it once the sign-in matches.
+     */
+    const held = resume && opened.resumeHeld ? resume : null;
+    const handed = held ? null : resume;
 
     /**
      * Put the response back in progress *after* the gates passed.
@@ -496,26 +506,26 @@ sessionsRouter.post(
      * match inside the session object — because for a long time this route was
      * the only one of the three that did it. See `reopenAbandonedResponse`.
      */
-    if (resume) {
-      await reopenAbandonedResponse(c.env, resume.submissionId);
+    if (handed) {
+      await reopenAbandonedResponse(c.env, handed.submissionId);
       /**
        * Credit the click before cancelling the rest of the sequence — the
        * cancel is what makes this row stop being `scheduled`, and doing it
        * first would leave the click landing on a row we had just written off.
        */
       if (body.followUpId) {
-        await recordFollowUpClick(c.env, body.followUpId, resume.submissionId);
+        await recordFollowUpClick(c.env, body.followUpId, handed.submissionId);
       }
-      await cancelFollowUps(c.env, resume.submissionId, "resumed");
+      await cancelFollowUps(c.env, handed.submissionId, "resumed");
       await c.env.Q_WEBHOOKS.send({
         event: "response.resumed",
         organizationId: formRow.organization_id,
         formId: formRow.id,
-        submissionId: resume.submissionId,
+        submissionId: handed.submissionId,
         sessionId: opened.sessionId,
         source: "chat",
         isTest: false,
-      }).catch((err: unknown) => console.error("resume_webhook_failed", resume.submissionId, err));
+      }).catch((err: unknown) => console.error("resume_webhook_failed", handed.submissionId, err));
     }
 
     /*
@@ -564,8 +574,18 @@ sessionsRouter.post(
       userAgent: c.req.header("user-agent") ?? null,
       source: body.embed?.origin || embedded ? "embed" : "chat",
       context,
-      ...(resume
-        ? { resume: { submissionId: resume.submissionId, answers: resume.answers, identity: resume.identity } }
+      ...(handed
+        ? { resume: { submissionId: handed.submissionId, answers: handed.answers, identity: handed.identity } }
+        : {}),
+      ...(held && held.identity
+        ? {
+            heldResume: {
+              submissionId: held.submissionId,
+              provider: held.identity.provider,
+              subject: held.identity.subject,
+              ...(body.followUpId ? { followUpId: body.followUpId } : {}),
+            },
+          }
         : {}),
     });
 
@@ -587,6 +607,12 @@ interface Resumable {
   submissionId: string;
   answers: Record<string, unknown>;
   identity: RespondentIdentity | null;
+  /**
+   * Set when the response was signed in without a verified email, so the
+   * reminder carrying this link may have gone to an address nobody proved.
+   * See `resumeSignInProvider` in `openSession`.
+   */
+  signInProvider?: RespondentIdentity["provider"];
 }
 
 /**
@@ -604,6 +630,8 @@ async function loadResumable(
   env: Bindings,
   formId: string,
   token: string | undefined,
+  /** This browser's key, from `respondentKey`, under the same form's salt. */
+  device: RespondentKey,
 ): Promise<Resumable | null> {
   if (!token) return null;
   const { verdict, id } = await verifyEmailToken(env, "resume", token);
@@ -611,7 +639,7 @@ async function loadResumable(
 
   const sub = await env.DB.prepare(
     `SELECT id, form_id, status, is_test, respondent_provider, respondent_subject,
-            respondent_email, respondent_phone, respondent_name
+            respondent_email, respondent_phone, respondent_name, fingerprint
        FROM submissions WHERE id = ?`,
   )
     .bind(id)
@@ -625,8 +653,25 @@ async function loadResumable(
       respondent_email: string | null;
       respondent_phone: string | null;
       respondent_name: string | null;
+      fingerprint: string | null;
     }>();
   if (!sub || sub.form_id !== formId || sub.is_test === 1) return null;
+
+  /*
+   * Nobody signed in, so the link is the only proof on offer, and it proves
+   * less than it looks. The reminder went to whatever address was typed, and
+   * a typo or somebody else's address puts it in a stranger's inbox. Resuming
+   * there would show the stranger every answer, and finishing would send them
+   * the confirmation with all of them in it.
+   *
+   * So an anonymous response only continues in the browser that started it.
+   * Anywhere else the link opens the form fresh, and the response it named is
+   * left exactly as it was for its owner to come back to. A missing signal on
+   * either side is not a match: an empty key would match every other empty key.
+   */
+  if (!sub.respondent_subject) {
+    if (device.source !== "device" || !device.value || sub.fingerprint !== device.value) return null;
+  }
   // A completed response is not resumable: coming back to a form you finished
   // should not quietly reopen it and let a second submission overwrite the first.
   if (sub.status !== "abandoned" && sub.status !== "in_progress") return null;
@@ -662,7 +707,18 @@ async function loadResumable(
         } as RespondentIdentity)
       : null;
 
-  return { submissionId: sub.id, answers, identity };
+  /*
+   * A verified email is the one address `resolveRespondentAddress` always
+   * mails ahead of anything typed, so a link for a response that has one went
+   * to the person who proved it. Without one, it went to an answer.
+   */
+  const unprovenInbox = identity !== null && !sub.respondent_email?.trim();
+  return {
+    submissionId: sub.id,
+    answers,
+    identity,
+    ...(unprovenInbox ? { signInProvider: identity.provider } : {}),
+  };
 }
 
 async function requireRespondent(c: RespondentCtx): Promise<string | null> {

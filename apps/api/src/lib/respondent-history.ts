@@ -187,6 +187,45 @@ export async function findIdentityHistory(
 }
 
 /**
+ * The response a reminder link pointed at, if the person who just signed in is
+ * the one it belongs to and it is still open.
+ *
+ * The link used to open this response by itself, and still does wherever the
+ * reminder went to a verified address. When it went to an address nobody
+ * proved, the session holds it back until sign-in — and once the sign-in shows
+ * the link was theirs, they get exactly what the link would have given them.
+ * That includes coming back to this draft when they have a finished response
+ * too, which the identity lookup alone would have answered with their earlier
+ * submission.
+ *
+ * Null on any mismatch, so the caller falls through to the ordinary lookup.
+ */
+export async function findHeldResumable(
+  env: Bindings,
+  formId: string,
+  submissionId: string,
+  identity: RespondentIdentity,
+): Promise<{ submissionId: string; answers: Record<string, unknown> } | null> {
+  try {
+    const res = await env.DB.prepare(
+      `SELECT s.id, a.block_ref, a.value_json
+         FROM submissions s LEFT JOIN submission_answers a ON a.submission_id = s.id
+        WHERE s.id = ?1 AND s.form_id = ?2
+          AND s.respondent_provider = ?3 AND s.respondent_subject = ?4
+          AND s.status IN ('in_progress', 'abandoned') AND s.is_test = 0`,
+    )
+      .bind(submissionId, formId, identity.provider, identity.subject)
+      .all<{ id: string; block_ref: string | null; value_json: string | null }>();
+    const rows = res.results ?? [];
+    const row = rows[0];
+    return row ? { submissionId: row.id, answers: collectAnswers(rows) } : null;
+  } catch (err) {
+    console.error("held_resumable_failed", formId, err);
+    return null;
+  }
+}
+
+/**
  * The unfinished response belonging to this *device*, for a respondent who has
  * not signed in.
  *

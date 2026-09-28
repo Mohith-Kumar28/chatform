@@ -1,4 +1,4 @@
-import { readFormDoc, sha256Hex, type FormDoc } from "@repo/form-schema";
+import { readFormDoc, sha256Hex, type FormDoc, type RespondentAuthMethod } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { getEntitlements, meter, checkQuota } from "./entitlements.js";
 import { clampForRuntime, brandingHiddenFor, gatewayPaymentsLapsed } from "./doc-entitlements.js";
@@ -111,6 +111,27 @@ export interface OpenSessionInput {
    */
   resumeSubmissionId?: string;
   /**
+   * The resumed response belongs to a sign-in that proved no email address,
+   * and this is the provider it was.
+   *
+   * A reminder goes to the verified email when there is one, and otherwise to
+   * whatever address the respondent typed. With a phone sign-in there is never
+   * a verified email, so the link can be sitting in the inbox of somebody who
+   * was never the respondent: a typo, or someone else's address given on
+   * purpose. Opening the response for whoever clicks would show that stranger
+   * every answer and let them carry on as the person who signed in.
+   *
+   * So when the form can still check who is asking, it does: the session is
+   * opened without the response, `resumeHeld` comes back true, and the sign-in
+   * gate decides. The one who signed in gets their response back through the
+   * same identity match that recognises any returning respondent; anybody else
+   * gets a form of their own. A gate that is off, or asks for a different
+   * provider now, cannot tell the two apart, so the link keeps working as it
+   * always has rather than stranding the real respondent behind a check they
+   * can never pass.
+   */
+  resumeSignInProvider?: RespondentAuthMethod | null;
+  /**
    * The respondent pressed "Start over".
    *
    * The caller has already used it to decline the device match; this records it
@@ -165,6 +186,11 @@ export type OpenSessionResult =
        * the one signal, and neither can be computed from the other.
        */
       respondentDeviceKey: string | null;
+      /**
+       * The resumed response was not handed to this session; the sign-in gate
+       * decides whose it is. See `resumeSignInProvider`.
+       */
+      resumeHeld: boolean;
     }
   | { ok: false; status: 401 | 403 | 409; body: { error: { code: string; message: string } } };
 
@@ -413,6 +439,23 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
     }
   }
 
+  // Plan-capped turn and token budgets are applied at read time, so a form
+  // authored on a higher plan keeps running after a downgrade.
+  const runtimeDoc = clampForRuntime(doc, ent);
+
+  /*
+   * Read off the gate this session will actually run, after the plan has had
+   * its say: a gate `clampForRuntime` switched off asks nobody anything, so it
+   * cannot be what decides whose response this is.
+   */
+  const gate = runtimeDoc.settings.requireAuth;
+  const resumeHeld = Boolean(
+    input.resumeSubmissionId &&
+      input.resumeSignInProvider &&
+      gate.enabled &&
+      gate.method === input.resumeSignInProvider,
+  );
+
   const sessionId = `chs_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
   const respondentToken = crypto.randomUUID().replace(/-/g, "");
   const now = Date.now();
@@ -440,7 +483,8 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
       input.source,
       input.isTest ? 1 : 0,
       input.startedOver ? 1 : 0,
-      input.resumeSubmissionId ?? null,
+      // A held response is not this session's until the sign-in says so.
+      resumeHeld ? null : (input.resumeSubmissionId ?? null),
       now,
       now,
       // Written at last. The column has existed since the first migration and
@@ -449,6 +493,24 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
       botCheck,
     )
     .run();
+
+  /*
+   * Where the sign-in gate will look for it. A separate write so the insert
+   * every other session makes is untouched; this one is rare. If it fails the
+   * sign-in still matches them by identity as it would any returning
+   * respondent, so it is logged rather than refused.
+   */
+  if (resumeHeld) {
+    await env.DB.prepare(`UPDATE chat_sessions SET held_resume_id = ?1 WHERE id = ?2`)
+      .bind(input.resumeSubmissionId, sessionId)
+      .run()
+      .catch((err: unknown) =>
+        console.error("held_resume_write_failed", {
+          sessionId,
+          errMessage: err instanceof Error ? err.message : String(err),
+        }),
+      );
+  }
 
   /**
    * Should this interview be a conversation, or scripted questions?
@@ -473,14 +535,13 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
     respondentToken,
     expiresAt,
     doc,
-    // Plan-capped turn and token budgets are applied at read time, so a form
-    // authored on a higher plan keeps running after a downgrade.
-    runtimeDoc: clampForRuntime(doc, ent),
+    runtimeDoc,
     brandingHidden: brandingHiddenFor(doc, ent),
     aiDegraded,
     ipHash,
     device,
     respondentDeviceKey: deviceKeyFor(env, input.deviceSignal),
+    resumeHeld,
   };
 }
 

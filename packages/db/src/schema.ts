@@ -570,6 +570,15 @@ export const chatSessions = sqliteTable(
      * knows what the earlier one decided.
      */
     startedOver: bool("started_over").notNull().default(false),
+    /**
+     * A response a reminder link pointed at, not yet this session's.
+     *
+     * Set when that response was signed in without a verified email, so the
+     * reminder went to an address nobody proved and whoever clicked may be
+     * somebody else. The sign-in gate hands it over only to the identity it is
+     * filed under. See `resumeSignInProvider` in `lib/open-session.ts`.
+     */
+    heldResumeId: text("held_resume_id"),
     /** `chat` | `embed` | `api` — mirrors `submissions.source`. */
     source: text("source").notNull().default("chat"),
     /** Set when the session was opened with a `*_test_` API key. */
