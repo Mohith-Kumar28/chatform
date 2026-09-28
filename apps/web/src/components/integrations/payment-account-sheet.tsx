@@ -170,8 +170,6 @@ function AccountCard({ account, formId }: { account: PaymentAccount; formId: str
   const label = PAYMENT_PROVIDER_LABELS[account.provider];
   const reconnect = useStartOAuth(account.provider, formId);
   const broken = account.status === "needs_reconnect" || account.status === "revoked";
-  const who = account.connectedBy?.name || account.connectedBy?.email || null;
-  const whoDetail = account.connectedBy?.name && account.connectedBy.email ? account.connectedBy.email : null;
 
   const disconnect = useMutation({
     mutationFn: () => paymentAccountsFetch(`/api/payment-accounts/${account.id}`, { method: "DELETE" }),
@@ -302,15 +300,6 @@ function AccountCard({ account, formId }: { account: PaymentAccount; formId: str
             <dd className="flex min-w-0 items-center gap-1">
               <span className="truncate font-mono">{account.providerAccountId}</span>
               <CopyButton value={account.providerAccountId} toastMessage={`${label} ID copied`} className="text-muted-foreground size-6" />
-            </dd>
-          </>
-        )}
-        {who && (
-          <>
-            <dt className="text-muted-foreground">Connected by</dt>
-            <dd className="min-w-0 truncate">
-              {who}
-              {whoDetail && <span className="text-muted-foreground"> · {whoDetail}</span>}
             </dd>
           </>
         )}

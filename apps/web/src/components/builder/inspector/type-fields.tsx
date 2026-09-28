@@ -1005,15 +1005,14 @@ function AccountPicker({
 }
 
 /**
- * One account as a row: its name, and under it the email of whoever connected it.
+ * One account as a row: its name, and under it the tail of the gateway's account id.
  *
- * The gateway's own email would be better, and was tried: Razorpay answers "Access Denied" to
- * its account endpoint for an OAuth-connected account, so the connector's email is the most
- * recognisable thing on hand, and the tail of the account id is the fallback.
+ * Only what the gateway reports. The gateway's own email would be better, but Razorpay answers
+ * "Access Denied" to its account endpoint for an OAuth-connected account, and the email of
+ * whoever connected it read as the account's own.
  */
 function AccountOption({ account }: { account: PaymentAccount }) {
-  const { name, detail } = accountDisplay(account, PAYMENT_PROVIDER_LABELS[account.provider]);
-  const secondary = account.connectedBy?.email ?? account.connectedBy?.name ?? detail;
+  const { name, detail: secondary } = accountDisplay(account, PAYMENT_PROVIDER_LABELS[account.provider]);
   return (
     <span className="flex min-w-0 items-center gap-3 text-left">
       <ProviderLogo provider={account.provider} className="size-9" />
