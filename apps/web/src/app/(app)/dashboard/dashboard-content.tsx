@@ -207,6 +207,7 @@ export function DashboardContent() {
   const [createOpen, setCreateOpen] = useState(searchParams.get("new") === "1");
   // The workspace chosen for a new form started from the all-workspaces view.
   const [pickedWs, setPickedWs] = useState("");
+  const targetWs = pickedWs || moveTargets[0]?.slug || "";
   /*
     Both delete dialogs read this one piece of state, and which of the two
     opens is decided by the form's own status rather than by a second flag: a
@@ -689,27 +690,29 @@ export function DashboardContent() {
           <DialogHeader>
             <DialogTitle>Which workspace?</DialogTitle>
           </DialogHeader>
-          <Select value={pickedWs} onValueChange={setPickedWs}>
-            <SelectTrigger aria-label="Workspace">
-              <SelectValue placeholder="Choose a workspace" />
-            </SelectTrigger>
-            <SelectContent>
-              {moveTargets.map((w) => (
-                <SelectItem key={w.id} value={w.slug}>
-                  {w.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <DialogFooter>
-            <Button
-              shape="pill"
-              disabled={!pickedWs}
-              onClick={() => router.push(`/dashboard?ws=${encodeURIComponent(pickedWs)}`)}
-            >
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (targetWs) router.push(`/dashboard?ws=${encodeURIComponent(targetWs)}`);
+            }}
+          >
+            <Select value={targetWs} onValueChange={setPickedWs}>
+              <SelectTrigger aria-label="Workspace" className="h-9 min-w-0 flex-1">
+                <SelectValue placeholder="Choose a workspace" />
+              </SelectTrigger>
+              <SelectContent>
+                {moveTargets.map((w) => (
+                  <SelectItem key={w.id} value={w.slug}>
+                    {w.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button type="submit" shape="pill" disabled={!targetWs}>
               Continue
             </Button>
-          </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
