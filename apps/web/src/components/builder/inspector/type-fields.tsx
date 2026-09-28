@@ -972,7 +972,7 @@ function AccountPicker({
             {selectedId && !account && <SelectItem value={selectedId}>No longer connected</SelectItem>}
             {accounts.map((a) => (
               <SelectItem key={a.id} value={a.id} className="py-2.5">
-                <AccountOption account={a} linked />
+                <AccountOption account={a} />
               </SelectItem>
             ))}
           </SelectContent>
@@ -1007,35 +1007,36 @@ function AccountPicker({
  * "Access Denied" to its account endpoint for an OAuth-connected account, and the email of
  * whoever connected it read as the account's own.
  */
-function AccountOption({ account, linked }: { account: PaymentAccount; linked?: boolean }) {
+function AccountOption({ account }: { account: PaymentAccount }) {
   const { name, detail: secondary } = accountDisplay(account, PAYMENT_PROVIDER_LABELS[account.provider]);
   return (
     <span className="flex min-w-0 items-center gap-3 text-left">
       <ProviderLogo provider={account.provider} className="size-9" />
       <span className="min-w-0 flex-1 space-y-1">
-        {linked ? (
-          /*
-           * In the open list the name opens the gateway's dashboard, so an author
-           * with two accounts can check which is which. The select picks on
-           * pointerup and click, so the link keeps both to itself; the rest of
-           * the row still selects.
-           */
-          <a
-            href={PAYMENT_DASHBOARD_URL[account.provider]}
-            target="_blank"
-            rel="noreferrer"
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerUp={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-            className="group flex w-fit max-w-full items-center gap-1 text-sm leading-none font-medium"
-          >
-            {/* The padding gives the underline room inside truncate's clip; the margin takes it back. */}
-            <span className="-mb-1 truncate pb-1 underline-offset-2 group-hover:underline">{name}</span>
-            <ArrowUpRight className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
-          </a>
-        ) : (
-          <span className="block truncate text-sm leading-none font-medium">{name}</span>
-        )}
+        {/*
+         * The name opens the gateway's dashboard, in the closed box and in the
+         * list, so an author with two accounts can check which is which. It is
+         * a span, not an <a>, because the closed box is a button. The select
+         * opens on pointerdown and picks on pointerup and click, so the name
+         * keeps all three to itself; the rest of the row still opens and picks.
+         * Radix turns pointer events off on the closed box's value, so the name
+         * turns them back on.
+         */}
+        <span
+          role="link"
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            window.open(PAYMENT_DASHBOARD_URL[account.provider], "_blank", "noopener,noreferrer");
+          }}
+          className="group pointer-events-auto flex w-fit max-w-full cursor-pointer items-center gap-1 text-sm leading-none font-medium"
+        >
+          {/* The padding gives the underline room inside truncate's clip; the margin takes it back. */}
+          <span className="-mb-1 truncate pb-1 underline-offset-2 group-hover:underline">{name}</span>
+          <ArrowUpRight className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
+        </span>
         {secondary && <span className="text-muted-foreground block truncate text-xs leading-none">{secondary}</span>}
       </span>
     </span>
