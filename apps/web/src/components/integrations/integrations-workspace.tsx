@@ -87,15 +87,18 @@ export function IntegrationsWorkspace({
   });
   const { data: webhooks } = useQuery({
     queryKey: ["webhooks", formId],
-    queryFn: () => customFetch<{ formId?: string | null }[]>("/api/webhooks"),
+    queryFn: () => customFetch<{ formId?: string | null; health?: string }[]>("/api/webhooks"),
   });
 
   const feedConnected = (Array.isArray(integrations) ? integrations : []).some(
     (row) => row.provider === "spreadsheet_feed",
   );
-  const webhookCount = (Array.isArray(webhooks) ? webhooks : []).filter(
-    (h) => !h.formId || h.formId === formId,
-  ).length;
+  const formHooks = (Array.isArray(webhooks) ? webhooks : []).filter((h) => !h.formId || h.formId === formId);
+  const webhookCount = formHooks.length;
+  // Green only for an endpoint that has actually answered; "1 endpoint" in
+  // green used to sit over one that replied 500 to every test.
+  const failingHooks = formHooks.filter((h) => h.health === "failing").length;
+  const workingHooks = formHooks.filter((h) => h.health === "healthy").length;
 
   return (
     // Room below, so "Collect payments" (the last section) can scroll to the top when linked to.
@@ -134,8 +137,18 @@ export function IntegrationsWorkspace({
             accent="var(--primary)"
             name="Webhooks"
             blurb="Signed HTTP callbacks to your own server, with retries and a delivery log."
-            state={webhookCount > 0 ? "connected" : "available"}
-            detail={webhookCount > 0 ? `${webhookCount} endpoint${webhookCount === 1 ? "" : "s"}` : undefined}
+            state={
+              webhookCount === 0 ? "available" : failingHooks === 0 && workingHooks > 0 ? "connected" : "attention"
+            }
+            detail={
+              webhookCount === 0
+                ? undefined
+                : failingHooks > 0
+                  ? `${failingHooks} failing`
+                  : workingHooks > 0
+                    ? `${webhookCount} endpoint${webhookCount === 1 ? "" : "s"}`
+                    : "Not tested"
+            }
             onClick={() => setPanel("webhooks")}
           />
           <DestinationCard
