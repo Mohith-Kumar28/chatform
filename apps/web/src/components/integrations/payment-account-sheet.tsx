@@ -102,7 +102,7 @@ function useStartOAuth(provider: PaymentProviderName, formId: string) {
 }
 
 /** Where each gateway's own dashboard lives, so an author can check which account this is. */
-const DASHBOARD_URL: Record<PaymentProviderName, string> = {
+export const PAYMENT_DASHBOARD_URL: Record<PaymentProviderName, string> = {
   razorpay: "https://dashboard.razorpay.com/",
   cashfree: "https://merchant.cashfree.com/",
   stripe: "https://dashboard.stripe.com/",
@@ -325,7 +325,7 @@ function AccountCard({ account, formId }: { account: PaymentAccount; formId: str
 
       <div className="flex items-center justify-between gap-3 border-t px-4 py-2.5">
         <a
-          href={DASHBOARD_URL[account.provider]}
+          href={PAYMENT_DASHBOARD_URL[account.provider]}
           target="_blank"
           rel="noreferrer"
           className="text-muted-foreground hover:text-foreground text-caption inline-flex items-center gap-1 font-medium"

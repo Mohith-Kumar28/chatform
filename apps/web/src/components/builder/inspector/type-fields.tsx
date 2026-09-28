@@ -26,6 +26,7 @@ import {
   type PaymentAccount,
 } from "@/components/integrations/payment-accounts";
 import { ProviderLogo } from "@/components/integrations/provider-logo";
+import { PAYMENT_DASHBOARD_URL } from "@/components/integrations/payment-account-sheet";
 import { useBuilderStore } from "@/stores/builder-store";
 import { DomainsHelp, GroupFieldsEditor, PatternHelp, patternIsValid } from "./group-fields";
 import { Switch } from "@/components/ui/switch";
@@ -971,7 +972,7 @@ function AccountPicker({
             {selectedId && !account && <SelectItem value={selectedId}>No longer connected</SelectItem>}
             {accounts.map((a) => (
               <SelectItem key={a.id} value={a.id} className="py-2.5">
-                <AccountOption account={a} />
+                <AccountOption account={a} linked />
               </SelectItem>
             ))}
           </SelectContent>
@@ -1006,13 +1007,35 @@ function AccountPicker({
  * "Access Denied" to its account endpoint for an OAuth-connected account, and the email of
  * whoever connected it read as the account's own.
  */
-function AccountOption({ account }: { account: PaymentAccount }) {
+function AccountOption({ account, linked }: { account: PaymentAccount; linked?: boolean }) {
   const { name, detail: secondary } = accountDisplay(account, PAYMENT_PROVIDER_LABELS[account.provider]);
   return (
     <span className="flex min-w-0 items-center gap-3 text-left">
       <ProviderLogo provider={account.provider} className="size-9" />
       <span className="min-w-0 flex-1 space-y-1">
-        <span className="block truncate text-sm leading-none font-medium">{name}</span>
+        {linked ? (
+          /*
+           * In the open list the name opens the gateway's dashboard, so an author
+           * with two accounts can check which is which. The select picks on
+           * pointerup and click, so the link keeps both to itself; the rest of
+           * the row still selects.
+           */
+          <a
+            href={PAYMENT_DASHBOARD_URL[account.provider]}
+            target="_blank"
+            rel="noreferrer"
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            className="group flex w-fit max-w-full items-center gap-1 text-sm leading-none font-medium"
+          >
+            {/* The padding gives the underline room inside truncate's clip; the margin takes it back. */}
+            <span className="-mb-1 truncate pb-1 underline-offset-2 group-hover:underline">{name}</span>
+            <ArrowUpRight className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
+          </a>
+        ) : (
+          <span className="block truncate text-sm leading-none font-medium">{name}</span>
+        )}
         {secondary && <span className="text-muted-foreground block truncate text-xs leading-none">{secondary}</span>}
       </span>
     </span>
