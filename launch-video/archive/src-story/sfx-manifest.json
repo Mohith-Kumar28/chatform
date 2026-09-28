@@ -1,0 +1,317 @@
+{
+ "bass-pulse": {
+  "file": "bass-pulse.mp3",
+  "onset": 0,
+  "peak": 0.24,
+  "end": 6.13,
+  "level": -4.2
+ },
+ "click-check": {
+  "file": "click-check.mp3",
+  "onset": 0.1,
+  "peak": 0.1,
+  "end": 0.16,
+  "level": -14.6
+ },
+ "click-cool": {
+  "file": "click-cool.mp3",
+  "onset": 0,
+  "peak": 0,
+  "end": 0.03,
+  "level": -12.1
+ },
+ "click-option": {
+  "file": "click-option.mp3",
+  "onset": 0.1,
+  "peak": 0.12,
+  "end": 0.47,
+  "level": -4.7
+ },
+ "click-select": {
+  "file": "click-select.mp3",
+  "onset": 0,
+  "peak": 0.06,
+  "end": 0.21,
+  "level": -9.1
+ },
+ "click-tech": {
+  "file": "click-tech.mp3",
+  "onset": 0,
+  "peak": 0.01,
+  "end": 0.02,
+  "level": -8.9
+ },
+ "confirm-scifi": {
+  "file": "confirm-scifi.mp3",
+  "onset": 0.15,
+  "peak": 0.49,
+  "end": 0.96,
+  "level": -8.7
+ },
+ "ding-correct": {
+  "file": "ding-correct.mp3",
+  "onset": 0,
+  "peak": 0.02,
+  "end": 0.45,
+  "level": -4.5
+ },
+ "impact-big": {
+  "file": "impact-big.mp3",
+  "onset": 1.26,
+  "peak": 2.16,
+  "end": 4.23,
+  "level": -2.8
+ },
+ "impact-deep": {
+  "file": "impact-deep.mp3",
+  "onset": 0.27,
+  "peak": 0.62,
+  "end": 1.36,
+  "level": -2.2
+ },
+ "impact-logo": {
+  "file": "impact-logo.mp3",
+  "onset": 0.48,
+  "peak": 4.43,
+  "end": 7.47,
+  "level": -3.7
+ },
+ "impact-zoom": {
+  "file": "impact-zoom.mp3",
+  "onset": 0.13,
+  "peak": 0.51,
+  "end": 0.65,
+  "level": -4.9
+ },
+ "notify-positive": {
+  "file": "notify-positive.mp3",
+  "onset": 0.05,
+  "peak": 0.18,
+  "end": 1.4,
+  "level": -7.9
+ },
+ "pop-bubble": {
+  "file": "pop-bubble.mp3",
+  "onset": 0.01,
+  "peak": 0.04,
+  "end": 0.3,
+  "level": -8.6
+ },
+ "pop-dry": {
+  "file": "pop-dry.mp3",
+  "onset": 0.03,
+  "peak": 0.13,
+  "end": 0.21,
+  "level": -9.9
+ },
+ "pop-electric": {
+  "file": "pop-electric.mp3",
+  "onset": 0.01,
+  "peak": 0.09,
+  "end": 0.1,
+  "level": -7
+ },
+ "pop-hard": {
+  "file": "pop-hard.mp3",
+  "onset": 0,
+  "peak": 0.04,
+  "end": 0.07,
+  "level": -5.2
+ },
+ "pop-light": {
+  "file": "pop-light.mp3",
+  "onset": 0.01,
+  "peak": 0.02,
+  "end": 0.15,
+  "level": -4.9
+ },
+ "pop-long": {
+  "file": "pop-long.mp3",
+  "onset": 0.03,
+  "peak": 0.03,
+  "end": 0.06,
+  "level": -4.8
+ },
+ "pop-msg": {
+  "file": "pop-msg.mp3",
+  "onset": 0.05,
+  "peak": 0.05,
+  "end": 0.06,
+  "level": -11.6
+ },
+ "rm-ding": {
+  "file": "rm-ding.wav",
+  "onset": 0.14,
+  "peak": 0.21,
+  "end": 1.18,
+  "level": -7.3
+ },
+ "rm-mouse-click": {
+  "file": "rm-mouse-click.wav",
+  "onset": 0.12,
+  "peak": 0.21,
+  "end": 0.22,
+  "level": -18
+ },
+ "rm-page-turn": {
+  "file": "rm-page-turn.wav",
+  "onset": 0.07,
+  "peak": 0.16,
+  "end": 0.3,
+  "level": -14.8
+ },
+ "rm-shutter-modern": {
+  "file": "rm-shutter-modern.wav",
+  "onset": 0.19,
+  "peak": 0.24,
+  "end": 0.39,
+  "level": -20.5
+ },
+ "rm-switch": {
+  "file": "rm-switch.wav",
+  "onset": 0.1,
+  "peak": 0.12,
+  "end": 0.21,
+  "level": -17.6
+ },
+ "rm-whip": {
+  "file": "rm-whip.wav",
+  "onset": 0.01,
+  "peak": 0.02,
+  "end": 0.1,
+  "level": -5.4
+ },
+ "rm-whoosh": {
+  "file": "rm-whoosh.wav",
+  "onset": 0.05,
+  "peak": 0.07,
+  "end": 0.11,
+  "level": -10
+ },
+ "scifi-sweep": {
+  "file": "scifi-sweep.mp3",
+  "onset": 0.15,
+  "peak": 0.34,
+  "end": 0.55,
+  "level": -20.1
+ },
+ "sweep-fast": {
+  "file": "sweep-fast.mp3",
+  "onset": 0.14,
+  "peak": 0.44,
+  "end": 1.39,
+  "level": -7.4
+ },
+ "sweep-short": {
+  "file": "sweep-short.mp3",
+  "onset": 0.26,
+  "peak": 0.46,
+  "end": 0.51,
+  "level": -16.3
+ },
+ "sweep-small": {
+  "file": "sweep-small.mp3",
+  "onset": 0.13,
+  "peak": 0.33,
+  "end": 0.59,
+  "level": -6
+ },
+ "swoosh-fast": {
+  "file": "swoosh-fast.mp3",
+  "onset": 0.07,
+  "peak": 0.11,
+  "end": 0.24,
+  "level": -14
+ },
+ "tech-alert": {
+  "file": "tech-alert.mp3",
+  "onset": 0.13,
+  "peak": 0.69,
+  "end": 3.51,
+  "level": -14.1
+ },
+ "tech-slide": {
+  "file": "tech-slide.mp3",
+  "onset": 0.01,
+  "peak": 0.17,
+  "end": 0.48,
+  "level": -20.4
+ },
+ "tone-digital": {
+  "file": "tone-digital.mp3",
+  "onset": 0,
+  "peak": 0.12,
+  "end": 0.36,
+  "level": -7.9
+ },
+ "typing-fast": {
+  "file": "typing-fast.mp3",
+  "onset": 0.12,
+  "peak": 11.72,
+  "end": 24.91,
+  "level": -9.8
+ },
+ "typing-soft": {
+  "file": "typing-soft.mp3",
+  "onset": 0.09,
+  "peak": 13.27,
+  "end": 25.1,
+  "level": -15.3
+ },
+ "typing": {
+  "file": "typing.mp3",
+  "onset": 0.3,
+  "peak": 14.01,
+  "end": 26.19,
+  "level": -13.4
+ },
+ "whoosh-air": {
+  "file": "whoosh-air.mp3",
+  "onset": 0.31,
+  "peak": 0.71,
+  "end": 1.27,
+  "level": -4.2
+ },
+ "whoosh-cine": {
+  "file": "whoosh-cine.mp3",
+  "onset": 0.52,
+  "peak": 1.07,
+  "end": 1.22,
+  "level": -11.1
+ },
+ "whoosh-fast": {
+  "file": "whoosh-fast.mp3",
+  "onset": 0.42,
+  "peak": 0.72,
+  "end": 0.75,
+  "level": -11.6
+ },
+ "whoosh-hit": {
+  "file": "whoosh-hit.mp3",
+  "onset": 1.85,
+  "peak": 3.15,
+  "end": 3.33,
+  "level": -4.3
+ },
+ "whoosh-rocket": {
+  "file": "whoosh-rocket.mp3",
+  "onset": 0.69,
+  "peak": 1.08,
+  "end": 2.6,
+  "level": -2.7
+ },
+ "whoosh-stutter": {
+  "file": "whoosh-stutter.mp3",
+  "onset": 0.86,
+  "peak": 2.04,
+  "end": 2.25,
+  "level": -2.2
+ },
+ "zoom-vacuum": {
+  "file": "zoom-vacuum.mp3",
+  "onset": 0.32,
+  "peak": 0.45,
+  "end": 0.52,
+  "level": -7
+ }
+}
