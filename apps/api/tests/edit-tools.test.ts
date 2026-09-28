@@ -253,6 +253,31 @@ describe("remove_question", () => {
   });
 });
 
+describe("remove_ending", () => {
+  const withSpare = () =>
+    FormDoc.parse({
+      ...baseForm(),
+      endings: [...baseForm().endings, { id: "end_0000000002", ref: "end_android", title: "Android list", kind: "success" }],
+    });
+
+  it("removes an ending", async () => {
+    const { ctx, call } = harness(withSpare());
+    expect(await call("remove_ending", { ref: "end_android" })).not.toContain("Rejected");
+    expect(ctx.draft.removeRefs).toEqual(["end_android"]);
+    expect(ctx.endings.has("end_android")).toBe(false);
+  });
+
+  it("refuses the only success ending", async () => {
+    const { call } = harness();
+    expect(await call("remove_ending", { ref: "end_thanks" })).toContain("only success ending");
+  });
+
+  it("refuses a ref that is not an ending", async () => {
+    const { call } = harness();
+    expect(await call("remove_ending", { ref: "q_email" })).toContain("Rejected");
+  });
+});
+
 describe("set_branch", () => {
   it("routes an answer at a question below the decider", async () => {
     const { ctx, call } = harness();

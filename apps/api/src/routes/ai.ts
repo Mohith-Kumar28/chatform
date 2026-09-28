@@ -32,7 +32,7 @@ import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, EDIT_T
 import { draftToDoc, pruneOrphanEndings } from "../lib/draft-normalize.js";
 import { applySourceForm, applySourceFormToDoc, mergeSourceForms, sourceFormPrompt, type SourceForm } from "../lib/form-import.js";
 import { withDefaultPaymentAccount } from "../lib/payments/default-account.js";
-import { applyEditDraft, introducedFlowProblems, describeEditChanges } from "../lib/edit-apply.js";
+import { applyEditDraft, dropEndings, introducedFlowProblems, describeEditChanges } from "../lib/edit-apply.js";
 import { buildEditContext, buildEditTools, type EditOutcome } from "../lib/edit-tools.js";
 import { extractUrls, readSites } from "../lib/research.js";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
@@ -1139,6 +1139,18 @@ Answer the same request again, addressing that.`,
         // Flattened: Workers Logs serialise an Error object to `{}`.
         console.error("edit_form_retry_failed", { message: err instanceof Error ? err.message : String(err) });
       }
+    }
+    // The last resort, as on a generated form: an ending the model wrote and
+    // still never routed to is dropped rather than handed to the author as a
+    // warning. Nobody could have reached it, so nobody loses anything.
+    const strays = introduced(attempt.doc)
+      .filter((i) => i.code === "ending_unreachable")
+      .flatMap((i) => i.refs ?? []);
+    if (strays.length > 0) {
+      const pruned = structuredClone(attempt.doc);
+      const dropped = new Set(dropEndings(pruned, strays));
+      attempt = { ...attempt, doc: pruned, endingChanges: attempt.endingChanges.filter((r) => !dropped.has(r)) };
+      problems = problems.filter((i) => !(i.code === "ending_unreachable" && i.refs?.every((r) => dropped.has(r))));
     }
     const { doc, added, removed, updated, newRules, rewired, endingChanges } = attempt;
 

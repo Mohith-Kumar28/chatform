@@ -65,6 +65,14 @@ export function applyEditDraft(base: FormDoc, draft: EditDraft): EditApplication
       (r) => !(r.action_kind === "goto" && ((r.from && gone.has(r.from)) || ((r.targetKind ?? "block") === "block" && gone.has(r.target)))),
     );
   }
+  // Endings go through the same list. "Drop the second path" means its outcome
+  // too, and an edit that could only remove questions left that outcome behind
+  // for the author to find, flagged, on the canvas.
+  const endingsGone = dropEndings(
+    doc,
+    draft.removeRefs.filter((ref) => !removable.has(ref)),
+  );
+  removed.push(...endingsGone);
 
   /**
    * ─── settings changed on questions that are already here ───
@@ -217,7 +225,56 @@ export function applyEditDraft(base: FormDoc, draft: EditDraft): EditApplication
     doc.logic = FormDoc.parse({ ...doc, logic: [...kept, ...newRules] }).logic;
   }
   const rewired = supersededCount;
+
+  /**
+   * An outcome this edit cut off goes with the path that led to it.
+   *
+   * Removing the questions of one arm leaves its ending with nothing pointing
+   * at it: a screen nobody will ever see, which the builder then flags as
+   * needing attention on a form the author just asked the AI to tidy. Only
+   * endings that were reachable before this edit: one that was already
+   * orphaned is the author's to deal with, and one this edit ADDED without a
+   * route is a slip the model is told about (see `introducedFlowProblems`).
+   */
+  const orphanedBefore = new Set(orphanEndingRefs(base));
+  const cutOff = orphanEndingRefs(doc).filter(
+    (ref) => !orphanedBefore.has(ref) && base.endings.some((e) => e.ref === ref),
+  );
+  removed.push(...dropEndings(doc, cutOff));
+
   return { doc, added, removed, updated, newRules, rewired, endingChanges };
+}
+
+/** Endings no route or rule sends anybody to, by the linter's own reckoning. */
+function orphanEndingRefs(doc: FormDoc): string[] {
+  return lintFormDoc(doc)
+    .filter((i) => i.code === "ending_unreachable")
+    .flatMap((i) => i.refs ?? []);
+}
+
+/**
+ * Take endings out of the document, and every rule that points at them.
+ *
+ * Never the last ending that accepts a response: a form whose every outcome
+ * refuses is a form nobody can finish. Returns the refs actually removed.
+ */
+export function dropEndings(doc: FormDoc, refs: string[]): string[] {
+  const gone = new Set<string>();
+  for (const ref of refs) {
+    const ending = doc.endings.find((e) => e.ref === ref);
+    if (!ending || gone.has(ref)) continue;
+    const accepting = doc.endings.some((e) => e.ref !== ref && !gone.has(e.ref) && e.kind !== "screen_out");
+    if (!accepting) continue;
+    gone.add(ref);
+  }
+  if (gone.size === 0) return [];
+  const pointsAtGone = (r: FormDoc["logic"][number]) =>
+    r.action_kind === "goto" && (r.targetKind ?? "block") === "ending" && gone.has(r.target);
+  doc.endings = doc.endings.filter((e) => !gone.has(e.ref));
+  doc.logic = doc.logic.filter((r) => !pointsAtGone(r));
+  doc.endingRules = doc.endingRules.filter((r) => !pointsAtGone(r));
+  for (const ref of gone) delete doc.layout[ref];
+  return [...gone];
 }
 
 /**

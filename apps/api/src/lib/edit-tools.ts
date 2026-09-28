@@ -411,6 +411,33 @@ export function buildEditTools(
       },
     }),
 
+    remove_ending: tool({
+      description:
+        "Take an outcome out of the form, with every route that pointed at it. When the request drops a path, its ending " +
+        "goes too: an ending nothing leads to is never shown to anybody. A form must keep at least one success ending.",
+      inputSchema: z.object({ ref: z.string().describe("An ending ref already in the form.") }),
+      execute: async ({ ref }) => {
+        const stop = blocked("remove_ending");
+        if (stop) return stop;
+
+        const ending = ctx.endings.get(ref);
+        if (!ending) {
+          return reject("remove_ending", `there is no ending with ref "${ref}". Endings: ${[...ctx.endings.keys()].join(", ")}.`);
+        }
+        const otherSuccess = [...ctx.endings.entries()].some(([r, e]) => r !== ref && e.kind === "success");
+        if (!otherSuccess) {
+          return reject("remove_ending", `"${ref}" is this form's only success ending, and a form needs one to be finishable.`);
+        }
+        if (ctx.draft.removeRefs.length >= LIMITS.removeRefs) {
+          return reject("remove_ending", `an edit may remove at most ${LIMITS.removeRefs} questions and endings.`);
+        }
+
+        ctx.draft.removeRefs.push(ref);
+        ctx.endings.delete(ref);
+        return accept("remove_ending", `Removed ending ${ref} ("${ending.title}").`);
+      },
+    }),
+
     set_branch: tool({
       description:
         "Route one answer to one destination.\n\n" +
@@ -617,7 +644,8 @@ export function buildEditTools(
           "finish_edit",
           `your changes broke the flow. The form checker reported:\n` +
             introduced.map((i) => `  - ${i.message}`).join("\n") +
-            `\nFix it with set_branch and call finish_edit again. Remember that answers you do not branch fall through to the ` +
+            `\nFix it with set_branch, or remove_ending for an ending the request no longer needs, and call finish_edit ` +
+            `again. Remember that answers you do not branch fall through to the ` +
             `question directly below.`,
         );
       },

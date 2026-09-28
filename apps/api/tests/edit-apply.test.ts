@@ -106,6 +106,53 @@ describe("applyEditDraft", () => {
     expect(out.doc.logic.filter((r) => r.action_kind === "goto" && r.from === "q_platform")).toHaveLength(0);
   });
 
+  describe("endings", () => {
+    /** Android users finish on their own ending; everybody else on the default. */
+    function twoOutcomes(): FormDoc {
+      return applyEditDraft(
+        baseForm(),
+        edit({
+          endings: [{ ref: "end_android", title: "Android list", body: "", kind: "success", requirements: "", redirectUrl: "" }],
+          branches: [{ whenRef: "q_platform", op: "eq", value: "Android", then: "end_android" }],
+        }),
+      ).doc;
+    }
+
+    it("drops an ending whose only route this edit removed", () => {
+      // The reported case: "only keep the first path, delete the other one".
+      // The questions went, the ending stayed, and the builder flagged it.
+      const base = twoOutcomes();
+      expect(introducedFlowProblems(baseForm(), base)).toEqual([]);
+
+      const out = applyEditDraft(base, edit({ removeRefs: ["q_platform"] }));
+      expect(out.doc.endings.map((e) => e.ref)).toEqual(["end_thanks"]);
+      expect(out.removed).toEqual(["q_platform", "end_android"]);
+      expect(introducedFlowProblems(base, out.doc)).toEqual([]);
+    });
+
+    it("removes an ending named in removeRefs, with the routes that pointed at it", () => {
+      const out = applyEditDraft(twoOutcomes(), edit({ removeRefs: ["end_android"] }));
+      expect(out.doc.endings.map((e) => e.ref)).toEqual(["end_thanks"]);
+      expect(out.removed).toEqual(["end_android"]);
+      expect(out.doc.logic.filter((r) => r.action_kind === "goto" && r.target === "end_android")).toEqual([]);
+    });
+
+    it("never removes the last ending that accepts a response", () => {
+      const out = applyEditDraft(baseForm(), edit({ removeRefs: ["end_thanks"] }));
+      expect(out.doc.endings.map((e) => e.ref)).toEqual(["end_thanks"]);
+      expect(out.removed).toEqual([]);
+    });
+
+    it("leaves an ending that was already unreachable to the author", () => {
+      const base = FormDoc.parse({
+        ...baseForm(),
+        endings: [...baseForm().endings, { id: "end_0000000002", ref: "end_spare", title: "Spare", kind: "success" }],
+      });
+      const out = applyEditDraft(base, edit({ removeRefs: ["q_email"] }));
+      expect(out.doc.endings.map((e) => e.ref)).toContain("end_spare");
+    });
+  });
+
   it("never removes the welcome block", () => {
     const out = applyEditDraft(baseForm(), edit({ removeRefs: ["welcome"] }));
     expect(out.doc.blocks[0]?.ref).toBe("welcome");
