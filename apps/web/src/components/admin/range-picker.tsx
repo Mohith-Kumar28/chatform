@@ -43,9 +43,9 @@ export const COMPARED_TO: Record<Range, string> = {
 };
 
 /** The range in the URL, defaulted and validated. Never trust a hand-typed param. */
-export function useRange(): Range {
+export function useRange(allowed: readonly Range[] = RANGES, fallback: Range = "30d"): Range {
   const value = useSearchParams().get("range");
-  return (RANGES as readonly string[]).includes(value ?? "") ? (value as Range) : "30d";
+  return (allowed as readonly string[]).includes(value ?? "") ? (value as Range) : fallback;
 }
 
 /**
@@ -56,11 +56,18 @@ export function useRange(): Range {
  * chart carries its own period is a page where two charts get compared that
  * cannot be. One parameter, every chart on the page reads it.
  */
-export function RangePicker() {
+export function RangePicker({
+  ranges = RANGES,
+  fallback = "30d",
+}: {
+  /** A page whose data does not reach back a year offers fewer periods (Traffic keeps 90 days). */
+  ranges?: readonly Range[];
+  fallback?: Range;
+} = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const range = useRange();
+  const range = useRange(ranges, fallback);
 
   return (
     <SegmentedControl
@@ -74,7 +81,7 @@ export function RangePicker() {
         // were reading is the fastest way to make a control feel broken.
         router.replace(`${pathname}?${q.toString()}`, { scroll: false });
       }}
-      options={RANGES.map((r) => ({ value: r, label: LABELS[r] }))}
+      options={ranges.map((r) => ({ value: r, label: LABELS[r] }))}
       ariaLabel="Date range"
     />
   );

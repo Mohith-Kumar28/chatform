@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/auth-client";
 import { purgePersistedCache } from "@/lib/api/persist";
+import { setTrackedUser } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/button";
 import { currentPath, UNAUTHORIZED_EVENT } from "@/lib/safe-next";
 
@@ -71,6 +72,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isPending || transportFailure) return;
     const userId = session?.user?.id ?? null;
+    setTrackedUser(userId);
     if (lastUserId.current !== null && lastUserId.current !== userId) {
       purgePersistedCache();
       queryClient.clear();

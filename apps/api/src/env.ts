@@ -20,6 +20,8 @@ export interface Bindings {
   ANALYTICS: AnalyticsEngineDataset;
   /** Per-request API telemetry. Optional: Miniflare does not always provide it. */
   ANALYTICS_API?: AnalyticsEngineDataset;
+  /** First-party page views, one row shape only. See `lib/traffic.ts`. */
+  TRAFFIC?: AnalyticsEngineDataset;
   /**
    * Burst limiters, keyed by the presented key's digest and by IP.
    *
@@ -153,6 +155,14 @@ export interface Bindings {
    * false for everyone and every `/api/admin` route answers 404.
    */
   PLATFORM_ADMIN_EMAILS?: string;
+  /**
+   * Reads the traffic dataset back for the platform console, through the
+   * Analytics Engine SQL API. The token needs Account Analytics Read and
+   * nothing else. Absent, the Traffic page says so and the rest of the
+   * console is unaffected. The account defaults to `AI_GATEWAY_ACCOUNT_ID`.
+   */
+  CF_ANALYTICS_TOKEN?: string;
+  CF_ACCOUNT_ID?: string;
 
   BETTER_AUTH_SECRET: string;
   OPENROUTER_API_KEY?: string;

@@ -20,6 +20,7 @@ import { computeAnalytics } from "../lib/analytics-service.js";
 import { computeFollowUpStats } from "../lib/followup-analytics.js";
 import { buildXlsx } from "../lib/xlsx.js";
 import { bindChunks, holesFor } from "../lib/d1-bindings.js";
+import { readBeacon, writeTraffic } from "../lib/traffic.js";
 
 export const resultsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
@@ -299,6 +300,12 @@ viewsRouter.post("/forms/:slug/view", async (c) => {
   const slug = c.req.param("slug");
   const form = await c.env.DB.prepare(`SELECT id FROM forms WHERE slug = ? AND deleted_at IS NULL`).bind(slug).first<{ id: string }>();
   if (!form) return c.json({ ok: false }, 404);
+  // The same view, for the platform's traffic pages. Older clients post no body,
+  // and they still count below.
+  const beacon = await readBeacon(c.req.raw);
+  if (beacon && (beacon.a === "form" || beacon.a === "embed")) {
+    writeTraffic(c.env, c.req.raw, { ...beacon, e: "view", p: `/f/${slug}` });
+  }
   const date = new Date().toISOString().slice(0, 10);
   await c.env.DB.prepare(
     `INSERT INTO analytics_rollup_daily (id, date, form_id, views) VALUES (?, ?, ?, 1)

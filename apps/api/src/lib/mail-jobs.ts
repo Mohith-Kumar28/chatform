@@ -75,6 +75,23 @@ import { meter } from "./entitlements.js";
  * that mailed somebody through a transport that does not exist. See
  * `MailJobOutcome`.
  */
+/**
+ * Tags a link in a mail we send, so the visit it starts is credited to Email and
+ * to the mail it came from (`utm_campaign` is the mail's kind) on the console's
+ * Traffic and Campaigns pages. Existing query parameters are kept.
+ */
+export function withUtm(url: string, kind: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.set("utm_source", "chatform");
+    u.searchParams.set("utm_medium", "email");
+    u.searchParams.set("utm_campaign", kind);
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOutcome> {
   switch (job.kind) {
     case "invitation": {
@@ -85,7 +102,7 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOu
         inviterName: job.inviterName,
         inviterEmail: job.inviterEmail,
         role: job.role,
-        acceptUrl: job.acceptUrl,
+        acceptUrl: withUtm(job.acceptUrl, "invitation"),
         expiresAt: job.expiresAt,
       });
       // Replies go to the person who invited them, not to `noreply@`. Someone
@@ -137,7 +154,7 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOu
         cycle: job.cycle,
         endsAt: job.endsAt,
         gifted: job.gifted,
-        dashboardUrl: `${webOrigins(env)[0]!}/dashboard`,
+        dashboardUrl: withUtm(`${webOrigins(env)[0]!}/dashboard`, job.kind),
       });
       return oneMessage(who.email, await sendMail(env, { to: who.email, ...msg }));
     }
@@ -155,7 +172,7 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOu
         endsAt: job.endsAt,
         forms,
         moreForms: more,
-        planUrl: `${webOrigins(env)[0]!}/usage`,
+        planUrl: withUtm(`${webOrigins(env)[0]!}/usage`, "plan_lapse"),
       });
       return oneMessage(who.email, await sendMail(env, { to: who.email, ...msg }));
     }
@@ -171,7 +188,7 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOu
         recipientName: who.name,
         grants: job.grants,
         expiresAt: job.expiresAt,
-        dashboardUrl: `${webOrigins(env)[0]!}/dashboard`,
+        dashboardUrl: withUtm(`${webOrigins(env)[0]!}/dashboard`, job.kind),
       });
       return oneMessage(who.email, await sendMail(env, { to: who.email, ...msg }));
     }
@@ -244,7 +261,7 @@ async function runInvitationAcceptedJob(
     invitedAt: row.invitedAt,
     joinedAt: row.joinedAt ?? Date.now(),
     teamSize: team?.n ?? 1,
-    teamUrl: `${webOrigins(env)[0]!}/settings/team`,
+    teamUrl: withUtm(`${webOrigins(env)[0]!}/settings/team`, "invitation_accepted"),
   });
   const res = await sendMail(env, { to: row.inviterEmail, ...msg, replyTo: row.memberEmail });
   return oneMessage(row.inviterEmail, res);
@@ -911,7 +928,7 @@ async function runFollowUpJob(
      * half-finished form. The id on its own grants nothing — `recordFollowUpClick`
      * only accepts it alongside the resume token for the same response.
      */
-    resumeUrl: `${origin}/f/${encodeURIComponent(await slugOf(env, row.form_id))}?resume=${resumeToken}&fu=${row.id}`,
+    resumeUrl: withUtm(`${origin}/f/${encodeURIComponent(await slugOf(env, row.form_id))}?resume=${resumeToken}&fu=${row.id}`, "followup"),
     unsubscribeUrl: `${origin}/p/unsubscribe/${unsubToken}`,
     ...(progress ? { progress: { answered: progress.answered, total: progress.totalEstimate } } : {}),
     /*
@@ -1010,7 +1027,7 @@ async function meterEmail(env: Bindings, orgId: string, n = 1): Promise<void> {
 async function submitAgainUrl(env: Bindings, doc: FormDoc, origin: string, formId: string): Promise<string | null> {
   if (doc.settings.allowResubmissions === false) return null;
   const slug = await slugOf(env, formId);
-  return slug ? `${origin}/f/${encodeURIComponent(slug)}` : null;
+  return slug ? withUtm(`${origin}/f/${encodeURIComponent(slug)}`, "submission_receipt") : null;
 }
 
 /** The form's public slug, for the resume link. */
@@ -1124,7 +1141,7 @@ async function runSubmissionJob(
   }
 
   const origin = webOrigins(env)[0]!;
-  const responseUrl = `${origin}/forms/${job.formId}/results`;
+  const responseUrl = withUtm(`${origin}/forms/${job.formId}/results`, "submission");
   const errors: unknown[] = [];
   const tally = mailTally();
 

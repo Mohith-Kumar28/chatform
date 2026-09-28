@@ -1,4 +1,5 @@
 import type { Bindings } from "../env.js";
+import { dailyTrafficRollup } from "./traffic-query.js";
 
 /**
  * The platform's own counting, done on the cron so the console can read rows.
@@ -701,4 +702,40 @@ export async function rollupFormStructure(env: Bindings, batchSize = 300): Promi
   }
   await env.KV_CONFIG.put(CURSOR_KEY, batch[batch.length - 1]!.organization_id);
   return false;
+}
+
+const TRAFFIC_ROLLED_KEY = "traffic_rollup:last_day";
+/** Analytics Engine keeps about three months; older days cannot be rolled up, only kept. */
+const TRAFFIC_HISTORY_DAYS = 85;
+
+/**
+ * Yesterday's traffic, copied out of Analytics Engine before its three months
+ * are up, as `traffic_*` metrics beside everything else in `platform_metrics_daily`.
+ *
+ * Whole UTC days only, and never today: a day is rolled once it is over, and
+ * Analytics Engine's rows can land a minute or two late, so nothing before
+ * 00:10. Up to three days per tick, oldest first, from the last day done, so
+ * a cron that was down for a few days catches up.
+ * A missing `CF_ANALYTICS_TOKEN` makes this a no-op.
+ */
+export async function rollupTrafficDaily(env: Bindings, now = Date.now()): Promise<number> {
+  if (!env.CF_ANALYTICS_TOKEN) return 0;
+  const minutesToday = (now % DAY_MS) / 60_000;
+  if (minutesToday < 10) return 0;
+  const yesterday = utcDay(now - DAY_MS);
+  const last = await env.KV_CONFIG.get(TRAFFIC_ROLLED_KEY);
+  const earliest = utcDay(now - TRAFFIC_HISTORY_DAYS * DAY_MS);
+  // The first run starts at yesterday, not three months back: before this
+  // shipped there was no traffic recorded, and a row of zeros would claim
+  // there were no visitors rather than that nobody was counting.
+  let day = last && last >= earliest ? utcDay(Date.parse(`${last}T00:00:00Z`) + DAY_MS) : yesterday;
+  let done = 0;
+  while (day <= yesterday && done < 3) {
+    const rows = await dailyTrafficRollup(env, day);
+    await writeMetrics(env, day, rows);
+    await env.KV_CONFIG.put(TRAFFIC_ROLLED_KEY, day);
+    day = utcDay(Date.parse(`${day}T00:00:00Z`) + DAY_MS);
+    done++;
+  }
+  return done;
 }

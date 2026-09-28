@@ -11,6 +11,7 @@ import publicRouter from "./routes/public.js";
 import uploadsRouter, { filesAdminRouter, assetsRouter } from "./routes/uploads.js";
 import { downloadRouter } from "./routes/download.js";
 import { viewsRouter } from "./routes/results.js";
+import { trackRouter } from "./routes/track.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { formsRouter } from "./routes/forms.js";
 import { knowledgeRouter } from "./routes/knowledge.js";
@@ -348,6 +349,7 @@ export function createApp() {
   publicRouter.route("/", assetsRouter);
   app.route("/p", feedRouter);
   app.route("/p", viewsRouter);
+  app.route("/p", trackRouter);
   app.route("/p", publicRouter);
   app.route("/api", dashboardRouter);
   app.route("/api", formsRouter);

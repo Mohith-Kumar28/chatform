@@ -164,6 +164,12 @@
     {
       "binding": "ANALYTICS_API",
       "dataset": "chatform_api_requests"
+    },
+    // First-party page views from every surface. One row shape, written only by
+    // `lib/traffic.ts` and read back by `lib/traffic-query.ts`.
+    {
+      "binding": "TRAFFIC",
+      "dataset": "chatform_traffic"
     }
   ],
   // Burst protection only. The `simple` config is per-binding and per-colo, so

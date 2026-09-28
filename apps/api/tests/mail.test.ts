@@ -430,7 +430,8 @@ describe("submission notifications", () => {
       isTest: false,
     });
     expect(open.sent[0]!.html).toContain("Submit another response");
-    expect(open.sent[0]!.html).toContain(`/f/${slug}"`);
+    // Tagged, so the visit it starts is credited to this mail (`withUtm`).
+    expect(open.sent[0]!.html).toContain(`/f/${slug}?utm_source=chatform`);
     expect(open.sent[0]!.text).toContain(`Submit another response: `);
 
     await publish({ ...DOC, settings: { ...(DOC as { settings?: object }).settings, allowResubmissions: false } });

@@ -55,9 +55,41 @@ export const userSignIns = sqliteTable(
     /** "email", "email-otp", "google": how they proved who they are. */
     method: text("method"),
     contextJson: text("context_json").notNull(),
+    /**
+     * Attribution, sign-ups only: the web tracker's visitor id and the last
+     * touch that was not direct (else the first). `channel` NULL means not yet
+     * classified; see migration 0050.
+     */
+    visitorId: text("visitor_id"),
+    channel: text("channel"),
+    source: text("source"),
+    medium: text("medium"),
+    campaign: text("campaign"),
+    landingPath: text("landing_path"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
   },
-  (t) => [index("idx_user_sign_ins_user").on(t.userId, t.createdAt)],
+  (t) => [
+    index("idx_user_sign_ins_user").on(t.userId, t.createdAt),
+    index("idx_user_sign_ins_kind_created").on(t.kind, t.createdAt),
+  ],
+);
+
+/** A link made in the console's campaign builder. The UTMs live on the link; this names it. */
+export const campaignLinks = sqliteTable(
+  "campaign_links",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    destination: text("destination").notNull(),
+    source: text("source").notNull(),
+    medium: text("medium").notNull(),
+    campaign: text("campaign").notNull(),
+    content: text("content"),
+    createdBy: text("created_by"),
+    createdAt: ts("created_at").notNull(),
+    archivedAt: ts("archived_at"),
+  },
+  (t) => [index("idx_campaign_links_campaign").on(t.campaign)],
 );
 
 export const accounts = sqliteTable(

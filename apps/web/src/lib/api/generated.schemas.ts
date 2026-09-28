@@ -1854,6 +1854,394 @@ export type PostApiAdminImpersonateStop200 = {
   ok: boolean;
 };
 
+export type GetApiAdminTrafficParams = {
+range?: GetApiAdminTrafficRange;
+};
+
+export type GetApiAdminTrafficRange = typeof GetApiAdminTrafficRange[keyof typeof GetApiAdminTrafficRange];
+
+
+export const GetApiAdminTrafficRange = {
+  '1d': '1d',
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+} as const;
+
+export type GetApiAdminTraffic200Range = typeof GetApiAdminTraffic200Range[keyof typeof GetApiAdminTraffic200Range];
+
+
+export const GetApiAdminTraffic200Range = {
+  '1d': '1d',
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+} as const;
+
+export type GetApiAdminTraffic200Bucket = typeof GetApiAdminTraffic200Bucket[keyof typeof GetApiAdminTraffic200Bucket];
+
+
+export const GetApiAdminTraffic200Bucket = {
+  hour: 'hour',
+  day: 'day',
+} as const;
+
+export type GetApiAdminTraffic200Totals = {
+  visitors: number;
+  visits: number;
+  views: number;
+  newVisitors: number;
+  bounced: number;
+  engagedMs: number;
+};
+
+export type GetApiAdminTraffic200Previous = {
+  visitors: number;
+  visits: number;
+  views: number;
+  newVisitors: number;
+  bounced: number;
+  engagedMs: number;
+};
+
+export type GetApiAdminTraffic200Signups = {
+  value: number;
+  previous: number;
+};
+
+export type GetApiAdminTraffic200SeriesItem = {
+  at: number;
+  visitors: number;
+  visits: number;
+  views: number;
+  newVisitors: number;
+};
+
+export type GetApiAdminTraffic200SignupSeriesItem = {
+  at: number;
+  signups: number;
+};
+
+export type GetApiAdminTraffic200Hourly = {
+  at: number;
+  visitors: number;
+}[] | null;
+
+export type GetApiAdminTraffic200ChannelsItem = {
+  key: string;
+  visitors: number;
+  visits: number;
+  views: number;
+};
+
+export type GetApiAdminTraffic200SourcesItem = {
+  source: string;
+  channel: string;
+  visitors: number;
+  visits: number;
+  views: number;
+};
+
+export type GetApiAdminTraffic200SignupsBySourceItem = {
+  channel: string;
+  source: string;
+  signups: number;
+};
+
+export type GetApiAdminTraffic200ReferrersItem = {
+  key: string;
+  visitors: number;
+  visits: number;
+  views: number;
+};
+
+export type GetApiAdminTraffic200CampaignsItem = {
+  key: string;
+  visitors: number;
+  visits: number;
+  views: number;
+};
+
+export type GetApiAdminTraffic200AreasItem = {
+  key: string;
+  visitors: number;
+  visits: number;
+  views: number;
+};
+
+export type GetApiAdminTraffic200PagesItem = {
+  area: string;
+  path: string;
+  visitors: number;
+  visits: number;
+  views: number;
+};
+
+export type GetApiAdminTraffic200EntriesItem = {
+  area: string;
+  path: string;
+  visitors: number;
+  visits: number;
+  views: number;
+};
+
+export type GetApiAdminTraffic200ExitsItem = {
+  area: string;
+  path: string;
+  visits: number;
+};
+
+export type GetApiAdminTraffic200GeoItem = {
+  country: string;
+  region: string;
+  city: string;
+  lat: number;
+  lon: number;
+  visitors: number;
+  visits: number;
+};
+
+export type GetApiAdminTraffic200DevicesItem = {
+  key: string;
+  visitors: number;
+  visits: number;
+  views: number;
+};
+
+export type GetApiAdminTraffic200BrowsersItem = {
+  key: string;
+  visitors: number;
+  visits: number;
+  views: number;
+};
+
+export type GetApiAdminTraffic200OsesItem = {
+  key: string;
+  visitors: number;
+  visits: number;
+  views: number;
+};
+
+export type GetApiAdminTraffic200LanguagesItem = {
+  key: string;
+  visitors: number;
+  visits: number;
+  views: number;
+};
+
+export type GetApiAdminTraffic200VitalsByAreaItem = {
+  key: string;
+  samples: number;
+  lcp: number | null;
+  inp: number | null;
+  ttfb: number | null;
+  cls: number | null;
+};
+
+export type GetApiAdminTraffic200VitalsByCountryItem = {
+  key: string;
+  samples: number;
+  lcp: number | null;
+  inp: number | null;
+  ttfb: number | null;
+  cls: number | null;
+};
+
+export type GetApiAdminTraffic200Vitals = {
+  byArea: GetApiAdminTraffic200VitalsByAreaItem[];
+  byCountry: GetApiAdminTraffic200VitalsByCountryItem[];
+};
+
+export type GetApiAdminTraffic200ActiveUsers = {
+  day: number;
+  week: number;
+  month: number;
+};
+
+export type GetApiAdminTraffic200 = {
+  configured: boolean;
+  range: GetApiAdminTraffic200Range;
+  bucket: GetApiAdminTraffic200Bucket;
+  totals: GetApiAdminTraffic200Totals;
+  previous: GetApiAdminTraffic200Previous;
+  signups: GetApiAdminTraffic200Signups;
+  series: GetApiAdminTraffic200SeriesItem[];
+  signupSeries: GetApiAdminTraffic200SignupSeriesItem[];
+  hourly: GetApiAdminTraffic200Hourly;
+  channels: GetApiAdminTraffic200ChannelsItem[];
+  sources: GetApiAdminTraffic200SourcesItem[];
+  signupsBySource: GetApiAdminTraffic200SignupsBySourceItem[];
+  referrers: GetApiAdminTraffic200ReferrersItem[];
+  campaigns: GetApiAdminTraffic200CampaignsItem[];
+  areas: GetApiAdminTraffic200AreasItem[];
+  pages: GetApiAdminTraffic200PagesItem[];
+  entries: GetApiAdminTraffic200EntriesItem[];
+  exits: GetApiAdminTraffic200ExitsItem[];
+  geo: GetApiAdminTraffic200GeoItem[];
+  devices: GetApiAdminTraffic200DevicesItem[];
+  browsers: GetApiAdminTraffic200BrowsersItem[];
+  oses: GetApiAdminTraffic200OsesItem[];
+  languages: GetApiAdminTraffic200LanguagesItem[];
+  vitals: GetApiAdminTraffic200Vitals;
+  activeUsers: GetApiAdminTraffic200ActiveUsers;
+  generatedAt: number;
+};
+
+export type GetApiAdminTrafficLive200PagesItem = {
+  area: string;
+  path: string;
+  visitors: number;
+};
+
+export type GetApiAdminTrafficLive200SourcesItem = {
+  key: string;
+  visitors: number;
+  visits: number;
+  views: number;
+};
+
+export type GetApiAdminTrafficLive200CountriesItem = {
+  key: string;
+  visitors: number;
+  visits: number;
+  views: number;
+};
+
+export type GetApiAdminTrafficLive200 = {
+  configured: boolean;
+  minutes: number;
+  until: number;
+  online: number;
+  visitors: number[];
+  views: number[];
+  pages: GetApiAdminTrafficLive200PagesItem[];
+  sources: GetApiAdminTrafficLive200SourcesItem[];
+  countries: GetApiAdminTrafficLive200CountriesItem[];
+};
+
+export type GetApiAdminCampaignsParams = {
+range?: GetApiAdminCampaignsRange;
+};
+
+export type GetApiAdminCampaignsRange = typeof GetApiAdminCampaignsRange[keyof typeof GetApiAdminCampaignsRange];
+
+
+export const GetApiAdminCampaignsRange = {
+  '1d': '1d',
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+} as const;
+
+export type GetApiAdminCampaigns200Range = typeof GetApiAdminCampaigns200Range[keyof typeof GetApiAdminCampaigns200Range];
+
+
+export const GetApiAdminCampaigns200Range = {
+  '1d': '1d',
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+} as const;
+
+export type GetApiAdminCampaigns200LinksItem = {
+  id: string;
+  name: string;
+  destination: string;
+  source: string;
+  medium: string;
+  campaign: string;
+  content: string | null;
+  createdAt: number;
+};
+
+export type GetApiAdminCampaigns200StatsItemStages = {[key: string]: number};
+
+export type GetApiAdminCampaigns200StatsItem = {
+  campaign: string;
+  visitors: number;
+  visits: number;
+  views: number;
+  formViews: number;
+  stages: GetApiAdminCampaigns200StatsItemStages;
+};
+
+export type GetApiAdminCampaigns200StageLabelsItem = {
+  key: string;
+  label: string;
+};
+
+export type GetApiAdminCampaigns200EmailItem = {
+  kind: string;
+  sent: number;
+  visitors: number;
+  visits: number;
+};
+
+export type GetApiAdminCampaigns200Followups = {
+  sent: number;
+  clicked: number;
+  recovered: number;
+};
+
+export type GetApiAdminCampaigns200 = {
+  configured: boolean;
+  range: GetApiAdminCampaigns200Range;
+  links: GetApiAdminCampaigns200LinksItem[];
+  stats: GetApiAdminCampaigns200StatsItem[];
+  stageLabels: GetApiAdminCampaigns200StageLabelsItem[];
+  email: GetApiAdminCampaigns200EmailItem[];
+  followups: GetApiAdminCampaigns200Followups;
+  generatedAt: number;
+};
+
+export type PostApiAdminCampaignsBody = {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name: string;
+  /**
+     * @maxLength 300
+     * @pattern ^\/[^\s]*$
+     */
+  destination: string;
+  /**
+     * @minLength 1
+     * @maxLength 60
+     */
+  source: string;
+  /**
+     * @minLength 1
+     * @maxLength 60
+     */
+  medium: string;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  campaign: string;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  content?: string;
+};
+
+export type PostApiAdminCampaigns200 = {
+  id: string;
+  name: string;
+  destination: string;
+  source: string;
+  medium: string;
+  campaign: string;
+  content: string | null;
+  createdAt: number;
+};
+
+export type DeleteApiAdminCampaignsById200 = {
+  ok: boolean;
+};
+
 export type GetHealth200 = {
   ok: boolean;
   env: string;

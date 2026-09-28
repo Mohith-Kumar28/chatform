@@ -10,6 +10,7 @@ import { aiRouter } from "./ai.js";
 import { latencyRouter } from "./latency.js";
 import { healthRouter } from "./health.js";
 import { opsRouter } from "./ops.js";
+import { trafficRouter } from "./traffic.js";
 
 /**
  * The platform console — the founders' view of the whole business.
@@ -49,3 +50,4 @@ adminRouter.route("/", aiRouter);
 adminRouter.route("/", latencyRouter);
 adminRouter.route("/", healthRouter);
 adminRouter.route("/", opsRouter);
+adminRouter.route("/", trafficRouter);

@@ -55,9 +55,49 @@ export function clientContextHeader(): string | null {
       language: navigator.language?.slice(0, 35),
       screen: window.screen?.width ? `${window.screen.width}x${window.screen.height}` : undefined,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      ...trackedTouch(),
     };
     return encodeURIComponent(JSON.stringify(payload));
   } catch {
     return null;
+  }
+}
+
+/**
+ * The page-view tracker's ids and the visit's own source (`lib/analytics/track.ts`),
+ * so a sign-up joins to the visits before it and is credited to the campaign
+ * that brought this visit, not only to the first page ever seen.
+ */
+function trackedTouch(): { visitorId?: string; lastTouch?: { referrer?: string; utm?: Record<string, string>; ad?: string } } {
+  try {
+    const visitorId = localStorage.getItem("cf_vid") ?? undefined;
+    const visit = JSON.parse(sessionStorage.getItem("cf_visit") ?? "null") as {
+      r?: string;
+      u?: Record<string, string>;
+      ad?: string;
+    } | null;
+    const lastTouch = visit && (visit.r || visit.u || visit.ad) ? { referrer: visit.r, utm: visit.u, ad: visit.ad } : undefined;
+    return { visitorId, lastTouch };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The same payload as a cookie, for a Google sign-up.
+ *
+ * That account is created on the OAuth callback, a redirect from Google that
+ * carries no custom header, so the header alone left every Google sign-up
+ * without a source. Set on the parent domain so the API host receives it, for
+ * fifteen minutes, which is longer than any consent screen.
+ */
+export function stashClientContextCookie(value: string): void {
+  try {
+    const host = window.location.hostname;
+    const parent = /^(localhost|\d+\.\d+\.\d+\.\d+)$/.test(host) ? "" : `; domain=${host.split(".").slice(-2).join(".")}`;
+    const secure = window.location.protocol === "https:" ? "; secure" : "";
+    document.cookie = `cf_client=${value}; path=/; max-age=900; samesite=lax${parent}${secure}`;
+  } catch {
+    // The sign-up still happens, without a source.
   }
 }

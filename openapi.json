@@ -7912,6 +7912,1320 @@
         ]
       }
     },
+    "/api/admin/traffic": {
+      "get": {
+        "operationId": "getApiAdminTraffic",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "schema": {
+              "default": "7d",
+              "type": "string",
+              "enum": [
+                "1d",
+                "7d",
+                "30d",
+                "90d"
+              ]
+            }
+          }
+        ],
+        "tags": [
+          "admin"
+        ],
+        "summary": "Visitors, sources, pages, places and speed for a period",
+        "responses": {
+          "200": {
+            "description": "Traffic",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "range": {
+                      "type": "string",
+                      "enum": [
+                        "1d",
+                        "7d",
+                        "30d",
+                        "90d"
+                      ]
+                    },
+                    "bucket": {
+                      "type": "string",
+                      "enum": [
+                        "hour",
+                        "day"
+                      ]
+                    },
+                    "totals": {
+                      "type": "object",
+                      "properties": {
+                        "visitors": {
+                          "type": "number"
+                        },
+                        "visits": {
+                          "type": "number"
+                        },
+                        "views": {
+                          "type": "number"
+                        },
+                        "newVisitors": {
+                          "type": "number"
+                        },
+                        "bounced": {
+                          "type": "number"
+                        },
+                        "engagedMs": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "visitors",
+                        "visits",
+                        "views",
+                        "newVisitors",
+                        "bounced",
+                        "engagedMs"
+                      ]
+                    },
+                    "previous": {
+                      "type": "object",
+                      "properties": {
+                        "visitors": {
+                          "type": "number"
+                        },
+                        "visits": {
+                          "type": "number"
+                        },
+                        "views": {
+                          "type": "number"
+                        },
+                        "newVisitors": {
+                          "type": "number"
+                        },
+                        "bounced": {
+                          "type": "number"
+                        },
+                        "engagedMs": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "visitors",
+                        "visits",
+                        "views",
+                        "newVisitors",
+                        "bounced",
+                        "engagedMs"
+                      ]
+                    },
+                    "signups": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "number"
+                        },
+                        "previous": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "previous"
+                      ]
+                    },
+                    "series": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "number"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          },
+                          "newVisitors": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "visitors",
+                          "visits",
+                          "views",
+                          "newVisitors"
+                        ]
+                      }
+                    },
+                    "signupSeries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "number"
+                          },
+                          "signups": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "signups"
+                        ]
+                      }
+                    },
+                    "hourly": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "visitors": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "visitors"
+                            ]
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "channels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "visitors",
+                          "visits",
+                          "views"
+                        ]
+                      }
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "type": "string"
+                          },
+                          "channel": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "source",
+                          "channel",
+                          "visitors",
+                          "visits",
+                          "views"
+                        ]
+                      }
+                    },
+                    "signupsBySource": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "channel": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "signups": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "channel",
+                          "source",
+                          "signups"
+                        ]
+                      }
+                    },
+                    "referrers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "visitors",
+                          "visits",
+                          "views"
+                        ]
+                      }
+                    },
+                    "campaigns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "visitors",
+                          "visits",
+                          "views"
+                        ]
+                      }
+                    },
+                    "areas": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "visitors",
+                          "visits",
+                          "views"
+                        ]
+                      }
+                    },
+                    "pages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "area": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "area",
+                          "path",
+                          "visitors",
+                          "visits",
+                          "views"
+                        ]
+                      }
+                    },
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "area": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "area",
+                          "path",
+                          "visitors",
+                          "visits",
+                          "views"
+                        ]
+                      }
+                    },
+                    "exits": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "area": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "visits": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "area",
+                          "path",
+                          "visits"
+                        ]
+                      }
+                    },
+                    "geo": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "country": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": "string"
+                          },
+                          "city": {
+                            "type": "string"
+                          },
+                          "lat": {
+                            "type": "number"
+                          },
+                          "lon": {
+                            "type": "number"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "country",
+                          "region",
+                          "city",
+                          "lat",
+                          "lon",
+                          "visitors",
+                          "visits"
+                        ]
+                      }
+                    },
+                    "devices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "visitors",
+                          "visits",
+                          "views"
+                        ]
+                      }
+                    },
+                    "browsers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "visitors",
+                          "visits",
+                          "views"
+                        ]
+                      }
+                    },
+                    "oses": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "visitors",
+                          "visits",
+                          "views"
+                        ]
+                      }
+                    },
+                    "languages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "visitors",
+                          "visits",
+                          "views"
+                        ]
+                      }
+                    },
+                    "vitals": {
+                      "type": "object",
+                      "properties": {
+                        "byArea": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string"
+                              },
+                              "samples": {
+                                "type": "number"
+                              },
+                              "lcp": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "inp": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "ttfb": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "cls": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "samples",
+                              "lcp",
+                              "inp",
+                              "ttfb",
+                              "cls"
+                            ]
+                          }
+                        },
+                        "byCountry": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string"
+                              },
+                              "samples": {
+                                "type": "number"
+                              },
+                              "lcp": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "inp": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "ttfb": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "cls": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "samples",
+                              "lcp",
+                              "inp",
+                              "ttfb",
+                              "cls"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "byArea",
+                        "byCountry"
+                      ]
+                    },
+                    "activeUsers": {
+                      "type": "object",
+                      "properties": {
+                        "day": {
+                          "type": "number"
+                        },
+                        "week": {
+                          "type": "number"
+                        },
+                        "month": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "day",
+                        "week",
+                        "month"
+                      ]
+                    },
+                    "generatedAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "configured",
+                    "range",
+                    "bucket",
+                    "totals",
+                    "previous",
+                    "signups",
+                    "series",
+                    "signupSeries",
+                    "hourly",
+                    "channels",
+                    "sources",
+                    "signupsBySource",
+                    "referrers",
+                    "campaigns",
+                    "areas",
+                    "pages",
+                    "entries",
+                    "exits",
+                    "geo",
+                    "devices",
+                    "browsers",
+                    "oses",
+                    "languages",
+                    "vitals",
+                    "activeUsers",
+                    "generatedAt"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/traffic/live": {
+      "get": {
+        "operationId": "getApiAdminTrafficLive",
+        "tags": [
+          "admin"
+        ],
+        "summary": "Visitors a minute at a time for the last half hour, and who is here now",
+        "responses": {
+          "200": {
+            "description": "Live traffic",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "minutes": {
+                      "type": "number"
+                    },
+                    "until": {
+                      "type": "number"
+                    },
+                    "online": {
+                      "type": "number"
+                    },
+                    "visitors": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    "views": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    "pages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "area": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "area",
+                          "path",
+                          "visitors"
+                        ]
+                      }
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "visitors",
+                          "visits",
+                          "views"
+                        ]
+                      }
+                    },
+                    "countries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "visitors",
+                          "visits",
+                          "views"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "configured",
+                    "minutes",
+                    "until",
+                    "online",
+                    "visitors",
+                    "views",
+                    "pages",
+                    "sources",
+                    "countries"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/campaigns": {
+      "get": {
+        "operationId": "getApiAdminCampaigns",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "schema": {
+              "default": "7d",
+              "type": "string",
+              "enum": [
+                "1d",
+                "7d",
+                "30d",
+                "90d"
+              ]
+            }
+          }
+        ],
+        "tags": [
+          "admin"
+        ],
+        "summary": "Campaign links, their traffic and the accounts they brought, plus mail we sent",
+        "responses": {
+          "200": {
+            "description": "Campaigns",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "range": {
+                      "type": "string",
+                      "enum": [
+                        "1d",
+                        "7d",
+                        "30d",
+                        "90d"
+                      ]
+                    },
+                    "links": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "destination": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "medium": {
+                            "type": "string"
+                          },
+                          "campaign": {
+                            "type": "string"
+                          },
+                          "content": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "destination",
+                          "source",
+                          "medium",
+                          "campaign",
+                          "content",
+                          "createdAt"
+                        ]
+                      }
+                    },
+                    "stats": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "campaign": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          },
+                          "formViews": {
+                            "type": "number"
+                          },
+                          "stages": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "required": [
+                          "campaign",
+                          "visitors",
+                          "visits",
+                          "views",
+                          "formViews",
+                          "stages"
+                        ]
+                      }
+                    },
+                    "stageLabels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "label"
+                        ]
+                      }
+                    },
+                    "email": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string"
+                          },
+                          "sent": {
+                            "type": "number"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "sent",
+                          "visitors",
+                          "visits"
+                        ]
+                      }
+                    },
+                    "followups": {
+                      "type": "object",
+                      "properties": {
+                        "sent": {
+                          "type": "number"
+                        },
+                        "clicked": {
+                          "type": "number"
+                        },
+                        "recovered": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "sent",
+                        "clicked",
+                        "recovered"
+                      ]
+                    },
+                    "generatedAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "configured",
+                    "range",
+                    "links",
+                    "stats",
+                    "stageLabels",
+                    "email",
+                    "followups",
+                    "generatedAt"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postApiAdminCampaigns",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "destination": {
+                    "type": "string",
+                    "maxLength": 300,
+                    "pattern": "^\\/[^\\s]*$"
+                  },
+                  "source": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "medium": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "campaign": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "content": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "name",
+                  "destination",
+                  "source",
+                  "medium",
+                  "campaign"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "summary": "Save a campaign link",
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "destination": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "medium": {
+                      "type": "string"
+                    },
+                    "campaign": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "destination",
+                    "source",
+                    "medium",
+                    "campaign",
+                    "content",
+                    "createdAt"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/campaigns/{id}": {
+      "delete": {
+        "operationId": "deleteApiAdminCampaignsById",
+        "tags": [
+          "admin"
+        ],
+        "summary": "Archive a campaign link. Its traffic stays counted.",
+        "responses": {
+          "200": {
+            "description": "Archived",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "getHealth",

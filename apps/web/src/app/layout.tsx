@@ -6,6 +6,7 @@ import { JsonLd } from "@/components/seo/json-ld";
 import { Clarity } from "@/components/analytics/clarity";
 import { GoogleTagManager } from "@/components/analytics/google-tag-manager";
 import { FirstTouch } from "@/components/analytics/first-touch";
+import { Track } from "@/components/analytics/track";
 import { SITE_ORIGIN, organizationLd, webSiteLd } from "@/lib/seo";
 import "./globals.css";
 
@@ -178,6 +179,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <GoogleTagManager />
         {/* Where this browser first landed, sent with its sign-up. See lib/auth/client-context.ts. */}
         <FirstTouch />
+        {/* Our own page views, for the console's Traffic page. See lib/analytics/track.ts. */}
+        <Track apiOrigin={API_ORIGIN} />
         {/*
           Theme and toasts are the only two things the whole site shares.
 

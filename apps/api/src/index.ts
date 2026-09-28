@@ -35,7 +35,8 @@ import {
   sweepPaymentTokens,
 } from "./lib/sweeps.js";
 import { sweepPlanNotices } from "./lib/plan-notices.js";
-import { rollupPlatformDaily, rollupFormStructure, backfillPlatformDaily } from "./lib/platform-rollup.js";
+import { rollupPlatformDaily, rollupFormStructure, backfillPlatformDaily, rollupTrafficDaily } from "./lib/platform-rollup.js";
+import { backfillSignupAttribution } from "./lib/user-context.js";
 
 export { SessionDO };
 
@@ -298,6 +299,17 @@ export default {
        * cursor does not already give.
        */
       await rollupFormStructure(env).catch((err) => console.error("form_structure_rollup_failed", err));
+      /**
+       * Traffic history, copied out of Analytics Engine a finished day at a
+       * time before its three months are up; and sign-ups from before
+       * migration 0050, classified by source a page per tick.
+       */
+      await rollupTrafficDaily(env).catch((err) =>
+        console.error("traffic_rollup_failed", { error: err instanceof Error ? err.message : String(err) }),
+      );
+      await backfillSignupAttribution(env).catch((err) =>
+        console.error("signup_attribution_backfill_failed", { error: err instanceof Error ? err.message : String(err) }),
+      );
     }
   },
 } satisfies ExportedHandler<Bindings>;

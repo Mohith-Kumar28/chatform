@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowUpRight } from "lucide-react";
@@ -11,6 +12,7 @@ import { LogoMark } from "@/components/brand/logo";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { markInternalBrowser } from "@/lib/analytics/track";
 
 /**
  * The console's frame, and its front door.
@@ -59,6 +61,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       staleTime: 5 * 60 * 1000,
     },
   });
+
+  // An admin's own browsing is not traffic: this browser stops counting from here on.
+  useEffect(() => {
+    if (data) markInternalBrowser();
+  }, [data]);
 
   if (isPending) {
     return (

@@ -2,7 +2,7 @@
 
 import { createAuthClient } from "better-auth/react";
 import { emailOTPClient, multiSessionClient, organizationClient } from "better-auth/client/plugins";
-import { clientContextHeader } from "./client-context";
+import { clientContextHeader, stashClientContextCookie } from "./client-context";
 import { readImpersonation, stopImpersonation } from "@/lib/impersonation";
 
 export const API_ORIGIN =
@@ -23,6 +23,8 @@ export const authClient = createAuthClient({
       if (/\/(sign-up|sign-in|email-otp|verify-email)/.test(String(context.url))) {
         const header = clientContextHeader();
         if (header) context.headers.set("x-chatform-client", header);
+        // A Google sign-up is created on the callback, which carries cookies only.
+        if (header && /\/sign-in\/social/.test(String(context.url))) stashClientContextCookie(header);
       }
       return context;
     },
