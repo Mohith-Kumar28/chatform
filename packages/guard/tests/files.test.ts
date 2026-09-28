@@ -88,7 +88,7 @@ describe("checkFileBytes", () => {
   });
 
   it("refuses a type that is not on the list at all, whatever the bytes say", async () => {
-    const verdict = await upload("image/svg+xml", ascii("<svg onload=\"alert(1)\"/>"));
+    const verdict = await upload("text/html", ascii("<script>alert(1)</script>"));
     expect(verdict).toMatchObject({ ok: false, reason: "not_allowed" });
   });
 

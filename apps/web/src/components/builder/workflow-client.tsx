@@ -58,6 +58,7 @@ import { toast } from "sonner";
 import { useBuilderStore } from "@/stores/builder-store";
 import type { Block, FormDoc, LogicRule } from "@repo/form-schema";
 import {
+  ANY_FILE,
   DEFAULT_REDIRECT_DELAY_SEC,
   Block as BlockSchema,
   bridgeDeletedBlocks,
@@ -1960,7 +1961,7 @@ function defaultBlock(type: BlockType): Block {
     case "opinion_scale":
       return BlockSchema.parse({ ...base, type, title: "Your opinion", steps: 10, startAt: 1 });
     case "file_upload":
-      return BlockSchema.parse({ ...base, type, title: "Upload a file", accept: ["image/png", "image/jpeg", "application/pdf"], maxFiles: 1, maxSizeMB: 10 });
+      return BlockSchema.parse({ ...base, type, title: "Upload a file", accept: [ANY_FILE], maxFiles: 1, maxSizeMB: 10 });
     case "payment":
       return BlockSchema.parse({ ...base, type, title: "Complete payment", method: "link", amountMode: "fixed", amount: 10, currency: "USD" });
     case "legal_consent":

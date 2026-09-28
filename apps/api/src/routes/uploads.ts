@@ -2,7 +2,7 @@ import { Hono, type Context } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../lib/validator.js";
 import { z } from "zod";
-import { readFormDoc } from "@repo/form-schema";
+import { acceptsMime, describeAccept, readFormDoc } from "@repo/form-schema";
 import { ALLOWED_UPLOAD_MIME, SNIFF_BYTES, checkFileBytes, safeFilename, sniffMime } from "@repo/guard/files";
 import type { Bindings } from "../env.js";
 import {
@@ -184,9 +184,9 @@ uploadsRouter.post(
     if (sess?.schema_json) {
       const block = readFormDoc(JSON.parse(sess.schema_json)).blocks.find((b) => b.ref === ref);
       if (block?.type === "file_upload") {
-        if (!block.accept.includes(mime)) {
+        if (!acceptsMime(block.accept, mime)) {
           return c.json(
-            { error: { code: "unsupported_type", message: `This question accepts ${block.accept.join(", ")}` } },
+            { error: { code: "unsupported_type", message: `This question takes ${describeAccept(block.accept)}` } },
             415,
           );
         }

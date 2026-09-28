@@ -1,5 +1,7 @@
 "use client";
 
+import { uploadMimeOf } from "@repo/form-schema";
+
 /**
  * The three-step upload the session API expects: register an intent, PUT the
  * bytes, confirm.
@@ -30,18 +32,21 @@ export async function uploadToSession({
   respondentToken: string;
 }): Promise<UploadedFile> {
   const headers = { "x-respondent-token": respondentToken };
+  // Named by extension where we know it: browsers disagree about a .csv or a
+  // .mov, and the server checks this against the question and the bytes.
+  const mime = uploadMimeOf(file.name, file.type);
 
   const intent = await fetch(`${uploadBase}/intent`, {
     method: "POST",
     headers: { ...headers, "content-type": "application/json" },
-    body: JSON.stringify({ ref: blockRef, filename: file.name, mime: file.type, size: file.size }),
+    body: JSON.stringify({ ref: blockRef, filename: file.name, mime, size: file.size }),
   });
   if (!intent.ok) throw new Error(await errorMessage(intent, "Upload rejected"));
   const { fileId } = (await intent.json()) as { fileId: string };
 
   const put = await fetch(`${uploadBase}/${fileId}`, {
     method: "PUT",
-    headers: { ...headers, "content-type": file.type || "application/octet-stream" },
+    headers: { ...headers, "content-type": mime || "application/octet-stream" },
     body: file,
   });
   if (!put.ok) throw new Error(await errorMessage(put, "Upload failed"));

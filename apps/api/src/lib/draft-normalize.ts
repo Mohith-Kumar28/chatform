@@ -15,6 +15,8 @@ import {
   buildFlowRules,
   orderBlocksForBranches,
   DEFAULT_REDIRECT_DELAY_SEC,
+  ANY_FILE,
+  parseAcceptList,
   type Block,
   type BlockType,
   type DraftBranch,
@@ -474,6 +476,12 @@ function clampScale(value: number | undefined, min: number, max: number, fallbac
   return value;
 }
 
+/** A file question's `accept=`, read as kinds or formats; any file when it names none. */
+function acceptOf(raw: string | undefined): string[] {
+  const list = raw ? parseAcceptList(raw) : [];
+  return list.length > 0 ? list : [ANY_FILE];
+}
+
 /** A block as the draft describes it, in the shape both drafts share. */
 export interface LooseBlock {
   ref: string;
@@ -655,7 +663,15 @@ export function normalizeBlock(draft: LooseBlock, ref: string, isFirst: boolean)
           }),
         );
       case "file_upload":
-        return done(BlockSchema.parse({ ...base, type, accept: ["image/*", "application/pdf"], maxFiles: 1, maxSizeMB: 10 }));
+        return done(
+          BlockSchema.parse({
+            ...base,
+            type,
+            accept: acceptOf(config.get("accept")),
+            maxFiles: clampScale(num(config.get("maxfiles")), 1, 10, 1),
+            maxSizeMB: clampScale(num(config.get("maxsizemb")), 0.1, 100, 10),
+          }),
+        );
       case "single_select":
       case "poll":
       case "multi_select":
@@ -936,11 +952,11 @@ export function applyBlockConfig(block: Block, raw: string | undefined): Block |
     }
     case "file_upload":
       set("accept", "accept", (v) => {
-        const list = v.split(/[|,]/).map((a) => a.trim()).filter(Boolean);
-        return list.length > 0 ? list.slice(0, 20) : undefined;
+        const list = parseAcceptList(v);
+        return list.length > 0 ? list : undefined;
       });
-      set("maxfiles", "maxFiles", (v) => num(v));
-      set("maxsizemb", "maxSizeMB", (v) => num(v));
+      set("maxfiles", "maxFiles", (v) => clampScale(num(v), 1, 10, block.maxFiles));
+      set("maxsizemb", "maxSizeMB", (v) => clampScale(num(v), 0.1, 100, block.maxSizeMB));
       break;
     case "payment": {
       const upi = config.get("upi") ?? config.get("upiid") ?? config.get("vpa");

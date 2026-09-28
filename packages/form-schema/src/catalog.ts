@@ -136,7 +136,8 @@ export const BLOCK_CATALOG: Record<BlockType, BlockCatalogEntry> = {
 
   file_upload: {
     summary: "A file or image: a CV, a screenshot, a receipt.",
-    config: "accept=<image/*|application/pdf>, maxFiles=<1-10>, maxSizeMB=<0.1-100>",
+    config:
+      "accept=<any, or some of images|pdf|documents|spreadsheets|presentations|audio|video, or formats like png|docx>, maxFiles=<1-10>, maxSizeMB=<0.1-100>. Leave accept out unless the request limits which files are allowed, then name only the kinds it allows.",
     configKeys: ["accept", "maxfiles", "maxsizemb"],
   },
   signature: { summary: "A signature drawn with a finger or mouse, for agreements." },

@@ -5,6 +5,9 @@ import Link from "next/link";
 import { ArrowUpRight, TriangleAlert } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  FILE_KINDS,
+  acceptForKinds,
+  acceptedKinds,
   isPriceSource,
   isValidUpiId,
   priceChoices,
@@ -489,19 +492,11 @@ export function TypeFields({
       return (
         <>
           <CheckboxGroup
-            label="Accepted types"
-            value={block.accept}
-            onChange={(accept) => patch({ accept } as Partial<Block>)}
-            options={[
-              { value: "image/png", label: "PNG" },
-              { value: "image/jpeg", label: "JPEG" },
-              { value: "application/pdf", label: "PDF" },
-              { value: "text/csv", label: "CSV" },
-              { value: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", label: "Word" },
-              { value: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", label: "Excel" },
-              { value: "audio/mpeg", label: "MP3" },
-              { value: "video/mp4", label: "MP4" },
-            ]}
+            label="File types"
+            value={acceptedKinds(block.accept).map((k) => k.id)}
+            // At least one kind stays on; all of them is stored as "any file".
+            onChange={(ids) => ids.length > 0 && patch({ accept: acceptForKinds(ids) } as Partial<Block>)}
+            options={FILE_KINDS.map((k) => ({ value: k.id, label: k.label }))}
           />
           <div className="grid grid-cols-2 gap-3">
             <NumberField

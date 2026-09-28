@@ -2,6 +2,15 @@
 
 import { useRef, useState } from "react";
 import { Check, FileText, FileUp, ImageUp, Loader2, TriangleAlert, X } from "lucide-react";
+import {
+  acceptedKinds,
+  acceptsMime,
+  describeAccept,
+  describeMime,
+  isAnyFile,
+  pickerAccept,
+  uploadMimeOf,
+} from "@repo/form-schema";
 import { uploadToSession, type UploadedFile } from "./upload-transport";
 import { cn } from "@/lib/utils";
 
@@ -80,13 +89,15 @@ export function FileUploadControl({
         });
         continue;
       }
-      if (accept.length > 0 && file.type && !accept.includes(file.type)) {
+      const mime = uploadMimeOf(file.name, file.type);
+      if (!acceptsMime(accept, mime)) {
+        const what = mime ? `${describeMime(mime)} files` : "This kind of file";
         push({
           key,
           name: file.name,
           size: file.size,
           state: "error",
-          error: `${describeType(file.type)} files aren't accepted here. Try ${describeAccept(accept)}.`,
+          error: `${what} can't be used here. Try ${isAnyFile(accept) ? "an image, a PDF or a document" : describeAccept(accept)}.`,
         });
         continue;
       }
@@ -107,7 +118,7 @@ export function FileUploadControl({
   // "Up to 3MB" answered the question nobody asked. What a respondent about to
   // dig through their files wants first is which files are even allowed.
   const limits = [
-    describeFormats(accept),
+    describeAccept(accept),
     `up to ${maxSizeMB}MB`,
     maxFiles > 1 ? `${maxFiles} files max` : "",
   ]
@@ -181,7 +192,7 @@ export function FileUploadControl({
           type="file"
           hidden
           multiple={maxFiles > 1}
-          accept={accept.join(",")}
+          accept={pickerAccept(accept)}
           onChange={(e) => {
             void upload(Array.from(e.target.files ?? []));
             e.target.value = "";
@@ -258,35 +269,13 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** "PNG", "PDF" — a MIME type means nothing to a respondent. */
-function describeType(mime: string): string {
-  const sub = mime.split("/")[1] ?? mime;
-  if (sub.includes("wordprocessing")) return "Word";
-  if (sub.includes("spreadsheet")) return "Excel";
-  return sub.split(/[.+-]/).pop()!.toUpperCase();
-}
+const DOCUMENT_KINDS = new Set(["pdf", "documents", "spreadsheets", "presentations"]);
 
 /** The upload glyph, matched to what the block actually takes. */
 function dropIcon(accept: string[]) {
   const props = { className: "size-5", strokeWidth: 1.75 };
-  if (accept.length === 0) return <FileUp {...props} />;
-  if (accept.every((a) => a.startsWith("image/"))) return <ImageUp {...props} />;
-  if (accept.every((a) => a === "application/pdf" || a.startsWith("text/") || /word|sheet/.test(a)))
-    return <FileText {...props} />;
+  const kinds = acceptedKinds(accept).map((k) => k.id);
+  if (kinds.length === 1 && kinds[0] === "images") return <ImageUp {...props} />;
+  if (kinds.every((k) => DOCUMENT_KINDS.has(k))) return <FileText {...props} />;
   return <FileUp {...props} />;
-}
-
-/** "PNG, JPG or PDF" — the formats line under the prompt. */
-function describeFormats(accept: string[]): string {
-  const names = [...new Set(accept.map(describeType))];
-  if (names.length === 0) return "";
-  if (names.length > 3) return `${names.slice(0, 3).join(", ")} +${names.length - 3} more`;
-  if (names.length === 1) return names[0];
-  return `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
-}
-
-function describeAccept(accept: string[]): string {
-  const names = [...new Set(accept.map(describeType))];
-  if (names.length === 1) return `a ${names[0]} file`;
-  return `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
 }

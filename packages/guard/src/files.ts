@@ -4,23 +4,35 @@ import { cleanLine } from "./text";
 /**
  * The respondent-upload allowlist: what a person may attach as an answer.
  *
- * `image/svg+xml` is deliberately absent. An SVG is a script container, and
- * these bytes are served back from an origin we own.
+ * `image/svg+xml` is here even though an SVG is a script container, because
+ * respondent bytes are never served renderable: every route that returns them
+ * sends `application/octet-stream`, `attachment` and a sandbox CSP. Serve one
+ * inline anywhere and this entry has to go.
+ *
+ * `FILE_KINDS` in `@repo/form-schema` is what an author picks from, and every
+ * type it lists has to be here.
  */
 export const ALLOWED_UPLOAD_MIME: ReadonlySet<string> = new Set([
   "image/png",
   "image/jpeg",
   "image/gif",
   "image/webp",
+  "image/svg+xml",
   "application/pdf",
   "text/plain",
   "text/csv",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "audio/mpeg",
   "audio/wav",
+  "audio/mp4",
+  "audio/x-m4a",
   "video/mp4",
+  "video/quicktime",
   "video/webm",
 ]);
 
@@ -105,6 +117,7 @@ const SNIFFED_ALIASES: Readonly<Record<string, readonly string[]>> = {
   "application/zip": [
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "application/vnd.oasis.opendocument.text",
     "application/vnd.oasis.opendocument.spreadsheet",
   ],
@@ -113,6 +126,9 @@ const SNIFFED_ALIASES: Readonly<Record<string, readonly string[]>> = {
   "audio/mp4": ["audio/mp4", "audio/m4a", "audio/x-m4a"],
   "audio/x-m4a": ["audio/mp4", "audio/m4a", "audio/x-m4a"],
   "video/webm": ["video/webm", "audio/webm"],
+  // Phones write .mp4 and .mov in the same ISO container, and label them freely.
+  "video/mp4": ["video/mp4", "video/quicktime"],
+  "video/quicktime": ["video/quicktime", "video/mp4"],
   "audio/webm": ["video/webm", "audio/webm"],
 };
 

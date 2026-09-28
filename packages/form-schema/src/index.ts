@@ -4,6 +4,7 @@ export * from "./conditions";
 export * from "./identity-fields";
 export * from "./blocks";
 export * from "./catalog";
+export * from "./file-types";
 export * from "./logic";
 export * from "./respondent";
 export * from "./feedback-scale";

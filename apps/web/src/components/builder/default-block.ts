@@ -1,4 +1,4 @@
-import { Block as BlockSchema, type Block } from "@repo/form-schema";
+import { ANY_FILE, Block as BlockSchema, type Block } from "@repo/form-schema";
 
 const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
 
@@ -77,7 +77,7 @@ export function defaultBlock(type: Block["type"], existingRefs: Set<string>): Bl
     case "opinion_scale":
       return BlockSchema.parse({ ...base, type, title: "How much do you agree?", steps: 5, startAt: 1, labelLow: "Disagree", labelHigh: "Agree" });
     case "file_upload":
-      return BlockSchema.parse({ ...base, type, title: "Upload a file", accept: ["image/png", "image/jpeg", "application/pdf"], maxFiles: 1, maxSizeMB: 10 });
+      return BlockSchema.parse({ ...base, type, title: "Upload a file", accept: [ANY_FILE], maxFiles: 1, maxSizeMB: 10 });
     case "signature":
       return BlockSchema.parse({ ...base, type, title: "Please sign here" });
     case "payment":
