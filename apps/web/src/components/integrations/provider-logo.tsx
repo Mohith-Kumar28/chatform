@@ -19,6 +19,17 @@ const MARKS: Partial<Record<PaymentProviderName, { color: string; path: string }
   },
 };
 
+/** The bare mark in the gateway's colour, for a trust line. Null where there is none. */
+export function ProviderMark({ provider, className }: { provider: PaymentProviderName; className?: string }) {
+  const mark = MARKS[provider];
+  if (!mark) return null;
+  return (
+    <svg viewBox="0 0 24 24" className={cn("size-3 shrink-0", className)} fill={mark.color} aria-hidden>
+      <path d={mark.path} />
+    </svg>
+  );
+}
+
 export function ProviderLogo({ provider, className }: { provider: PaymentProviderName; className?: string }) {
   const mark = MARKS[provider];
   return (

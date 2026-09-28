@@ -14,6 +14,7 @@ import { PhoneInput } from "./composers/phone";
 import { Chip } from "./composers/primitives";
 import type { PaymentState } from "./use-chat";
 import { qrSvg } from "@/lib/qr";
+import { ProviderMark } from "@/components/integrations/provider-logo";
 
 /**
  * What the gateway card can ask the session to do. Absent where there is no
@@ -110,7 +111,15 @@ export function GatewayPaymentAffordance({
   // after it has been worked out from the respondent's answers.
   const price = payment?.display ?? (fixed !== undefined ? formatAmount(fixed, currency) : null);
   const provider = payment?.provider ?? block.paymentProvider ?? null;
-  const secureLine = provider ? `Secure checkout by ${PAYMENT_PROVIDER_LABELS[provider]}` : "Secure checkout";
+  const secureLine = provider ? (
+    <>
+      <span className="opacity-60">Secure checkout by</span>
+      <ProviderMark provider={provider} className="ml-0.5" />
+      <span className="font-medium opacity-80">{PAYMENT_PROVIDER_LABELS[provider]}</span>
+    </>
+  ) : (
+    <span className="opacity-60">Secure checkout</span>
+  );
   const phase = payment?.phase ?? "idle";
   const canAct = Boolean(actions) && !disabled;
   const skip = block.required ? null : (
@@ -336,13 +345,13 @@ function PaymentCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="animate-message-in w-full max-w-md space-y-3 rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] p-4">
-      {note && <p className="text-xs font-medium opacity-60">{note}</p>}
+    <div className="animate-message-in w-full max-w-md space-y-3 rounded-[var(--cf-radius-card)] border border-[color-mix(in_oklab,var(--cf-accent)_25%,var(--cf-chip-border))] bg-[color-mix(in_oklab,var(--cf-accent)_7%,var(--cf-chip-bg))] p-4">
+      {note && <p className="text-center text-xs font-medium opacity-60">{note}</p>}
+      {/* Centred like a receipt: one figure, and the question above already says what it is for. */}
       {price && (
-        <div>
-          <p className="text-xs opacity-60">Amount to pay</p>
-          <p className="text-2xl font-semibold tracking-tight tabular-nums">{price}</p>
-          {breakdown && <p className="text-xs tabular-nums opacity-60">{breakdown}</p>}
+        <div className="py-1 text-center">
+          <p className="text-3xl font-semibold tracking-tight tabular-nums">{price}</p>
+          {breakdown && <p className="mt-0.5 text-xs tabular-nums opacity-60">{breakdown}</p>}
         </div>
       )}
       {children}
@@ -350,11 +359,11 @@ function PaymentCard({
   );
 }
 
-function CardFooter({ secureLine, skip }: { secureLine: string; skip: React.ReactNode }) {
+function CardFooter({ secureLine, skip }: { secureLine: React.ReactNode; skip: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <p className="flex items-center gap-1.5 text-xs opacity-60">
-        <Lock className="size-3" aria-hidden />
+    <div className="flex flex-col items-center gap-1.5">
+      <p className="flex items-center gap-1 text-xs">
+        <Lock className="mr-0.5 size-3 opacity-60" aria-hidden />
         {secureLine}
       </p>
       {skip}
