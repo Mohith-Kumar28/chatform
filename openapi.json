@@ -31289,6 +31289,59 @@
                       },
                       "secretPreview": {
                         "type": "string"
+                      },
+                      "health": {
+                        "type": "string",
+                        "enum": [
+                          "untested",
+                          "healthy",
+                          "failing",
+                          "off"
+                        ]
+                      },
+                      "lastOutcome": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "ok": {
+                                "type": "boolean"
+                              },
+                              "status": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "error": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "at": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "ok",
+                              "status",
+                              "error",
+                              "at"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
                     },
                     "required": [
@@ -31297,7 +31350,9 @@
                       "events",
                       "formId",
                       "active",
-                      "createdAt"
+                      "createdAt",
+                      "health",
+                      "lastOutcome"
                     ]
                   }
                 }
@@ -31408,6 +31463,59 @@
                     "secretPreview": {
                       "type": "string"
                     },
+                    "health": {
+                      "type": "string",
+                      "enum": [
+                        "untested",
+                        "healthy",
+                        "failing",
+                        "off"
+                      ]
+                    },
+                    "lastOutcome": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "ok": {
+                              "type": "boolean"
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "error": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "at": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "ok",
+                            "status",
+                            "error",
+                            "at"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "secret": {
                       "type": "string"
                     }
@@ -31419,6 +31527,8 @@
                     "formId",
                     "active",
                     "createdAt",
+                    "health",
+                    "lastOutcome",
                     "secret"
                   ]
                 }
@@ -31764,6 +31874,51 @@
                   "required": [
                     "ok",
                     "queued"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/webhooks/{id}/reveal-secret": {
+      "post": {
+        "operationId": "postApiWebhooksByIdRevealSecret",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Reveal a webhook's signing secret",
+        "responses": {
+          "200": {
+            "description": "Secret",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "secret": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "secret"
                   ]
                 }
               }

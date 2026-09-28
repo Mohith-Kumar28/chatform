@@ -7584,6 +7584,23 @@ export type DeleteApiKeysById200 = {
   ok: boolean;
 };
 
+export type GetApiWebhooks200ItemHealth = typeof GetApiWebhooks200ItemHealth[keyof typeof GetApiWebhooks200ItemHealth];
+
+
+export const GetApiWebhooks200ItemHealth = {
+  untested: 'untested',
+  healthy: 'healthy',
+  failing: 'failing',
+  off: 'off',
+} as const;
+
+export type GetApiWebhooks200ItemLastOutcome = {
+  ok: boolean;
+  status: number | null;
+  error: string | null;
+  at: number;
+} | null;
+
 export type GetApiWebhooks200Item = {
   id: string;
   url: string;
@@ -7592,6 +7609,8 @@ export type GetApiWebhooks200Item = {
   active: boolean;
   createdAt: number;
   secretPreview?: string;
+  health: GetApiWebhooks200ItemHealth;
+  lastOutcome: GetApiWebhooks200ItemLastOutcome;
 };
 
 export type PostApiWebhooksBodyEventsItem = typeof PostApiWebhooksBodyEventsItem[keyof typeof PostApiWebhooksBodyEventsItem];
@@ -7619,6 +7638,23 @@ export type PostApiWebhooksBody = {
   formId?: string | null;
 };
 
+export type PostApiWebhooks200Health = typeof PostApiWebhooks200Health[keyof typeof PostApiWebhooks200Health];
+
+
+export const PostApiWebhooks200Health = {
+  untested: 'untested',
+  healthy: 'healthy',
+  failing: 'failing',
+  off: 'off',
+} as const;
+
+export type PostApiWebhooks200LastOutcome = {
+  ok: boolean;
+  status: number | null;
+  error: string | null;
+  at: number;
+} | null;
+
 export type PostApiWebhooks200 = {
   id: string;
   url: string;
@@ -7627,6 +7663,8 @@ export type PostApiWebhooks200 = {
   active: boolean;
   createdAt: number;
   secretPreview?: string;
+  health: PostApiWebhooks200Health;
+  lastOutcome: PostApiWebhooks200LastOutcome;
   secret: string;
 };
 
@@ -7671,6 +7709,10 @@ export type PostApiWebhooksByIdDeliveriesByDeliveryIdRetry200 = {
 export type PostApiWebhooksByIdRetryFailed200 = {
   ok: boolean;
   queued: number;
+};
+
+export type PostApiWebhooksByIdRevealSecret200 = {
+  secret: string;
 };
 
 export type PostApiWebhooksByIdTest200 = {

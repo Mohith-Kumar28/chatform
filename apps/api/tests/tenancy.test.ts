@@ -157,6 +157,43 @@ describe("webhook admin is org-scoped", () => {
     }
   });
 
+  it("reveals the secret to the owner and not to another tenant", async () => {
+    const [hook] = await (await fetchApi("/api/webhooks", { headers: auth(alice) })).json<{ id: string }[]>();
+    const mine = await fetchApi(`/api/webhooks/${hook!.id}/reveal-secret`, { method: "POST", headers: auth(alice) });
+    expect(mine.status).toBe(200);
+    expect((await mine.json<{ secret: string }>()).secret).toMatch(/^whsec_[0-9a-f]{32}$/);
+    const theirs = await fetchApi(`/api/webhooks/${hook!.id}/reveal-secret`, { method: "POST", headers: auth(bob) });
+    expect(theirs.status).toBe(404);
+  });
+
+  it("reports health from the last delivery, not from being switched on", async () => {
+    const { env } = await import("cloudflare:test");
+    const [hook] = await (await fetchApi("/api/webhooks", { headers: auth(alice) })).json<{ id: string; health: string }[]>();
+    expect(hook!.health).toBe("untested");
+
+    const insert = (id: string, status: string, code: number | null, error: string | null, at: number) =>
+      env.DB.prepare(
+        `INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, attempt, status, response_status, last_error, created_at, updated_at)
+         VALUES (?, ?, 'test', '{}', 1, ?, ?, ?, ?, ?)`,
+      )
+        .bind(id, hook!.id, status, code, error, at, at)
+        .run();
+    const healthNow = async () =>
+      (await (await fetchApi("/api/webhooks", { headers: auth(alice) })).json<{ id: string; health: string; lastOutcome: { status: number | null } | null }[]>()).find(
+        (h) => h.id === hook!.id,
+      )!;
+
+    await insert("whd_health_1", "dead", 404, "HTTP 404", Date.now() - 2000);
+    expect(await healthNow()).toMatchObject({ health: "failing", lastOutcome: { status: 404 } });
+
+    await insert("whd_health_2", "success", 200, null, Date.now() - 1000);
+    expect((await healthNow()).health).toBe("healthy");
+
+    // Queued but not yet tried: says nothing, so the last outcome stands.
+    await insert("whd_health_3", "pending", null, null, Date.now());
+    expect((await healthNow()).health).toBe("healthy");
+  });
+
   it("another tenant cannot delete a webhook", async () => {
     const list = await fetchApi("/api/webhooks", { headers: auth(alice) });
     const [hook] = await list.json<{ id: string }[]>();

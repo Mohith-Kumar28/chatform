@@ -97,7 +97,34 @@ const WebhookRow = z.object({
   active: z.boolean(),
   createdAt: z.number(),
   secretPreview: z.string().optional(),
+  health: z.enum(["untested", "healthy", "failing", "off"]),
+  lastOutcome: z
+    .object({ ok: z.boolean(), status: z.number().nullable(), error: z.string().nullable(), at: z.number() })
+    .nullable(),
 });
+
+/**
+ * Whether the endpoint works, from what it last did rather than from `active`.
+ *
+ * `active` only means "not switched off after repeated failures", so an
+ * endpoint that had never answered once still showed a green dot. The latest
+ * delivery that reached an outcome (tests included) decides it; a queued one
+ * that has not been tried yet says nothing either way.
+ */
+const LAST_OUTCOME = `
+  (SELECT json_object('status', d.status, 'code', d.response_status, 'error', d.last_error, 'at', COALESCE(d.updated_at, d.created_at))
+     FROM webhook_deliveries d
+    WHERE d.webhook_id = w.id AND (d.status IN ('success', 'dead') OR d.last_error IS NOT NULL)
+    ORDER BY d.created_at DESC LIMIT 1) AS last_outcome`;
+
+function healthOf(active: number, raw: string | null) {
+  const last = raw ? (JSON.parse(raw) as { status: string; code: number | null; error: string | null; at: number }) : null;
+  const ok = last?.status === "success";
+  return {
+    health: active !== 1 ? ("off" as const) : !last ? ("untested" as const) : ok ? ("healthy" as const) : ("failing" as const),
+    lastOutcome: last ? { ok, status: last.code, error: ok ? null : last.error, at: last.at } : null,
+  };
+}
 
 webhooksRouter.get(
   "/webhooks",
@@ -111,13 +138,23 @@ webhooksRouter.get(
     const filter = workspaceFilter(access, "f.workspace_id");
     const rows = await c.env.DB.prepare(
       access.admin
-        ? `SELECT id, url, secret, events, form_id, active, created_at FROM webhooks WHERE organization_id = ? ORDER BY created_at DESC`
-        : `SELECT w.id, w.url, w.secret, w.events, w.form_id, w.active, w.created_at
+        ? `SELECT w.id, w.url, w.secret, w.events, w.form_id, w.active, w.created_at, ${LAST_OUTCOME}
+             FROM webhooks w WHERE w.organization_id = ? ORDER BY w.created_at DESC`
+        : `SELECT w.id, w.url, w.secret, w.events, w.form_id, w.active, w.created_at, ${LAST_OUTCOME}
              FROM webhooks w JOIN forms f ON f.id = w.form_id
             WHERE w.organization_id = ?${filter.sql} ORDER BY w.created_at DESC`,
     )
       .bind(orgId, ...filter.binds)
-      .all<{ id: string; url: string; secret: string; events: string; form_id: string | null; active: number; created_at: number }>();
+      .all<{
+        id: string;
+        url: string;
+        secret: string;
+        events: string;
+        form_id: string | null;
+        active: number;
+        created_at: number;
+        last_outcome: string | null;
+      }>();
     return c.json(
       (rows.results ?? []).map((r) => ({
         id: r.id,
@@ -126,9 +163,10 @@ webhooksRouter.get(
         formId: r.form_id,
         active: r.active === 1,
         createdAt: r.created_at,
-        // Never return the full signing secret on a list. It is shown exactly
-        // once, at creation, the same way API keys are handled.
+        // Never the full signing secret on a list; reveal-secret hands it out
+        // one endpoint at a time.
         secretPreview: `${r.secret.slice(0, 11)}…`,
+        ...healthOf(r.active, r.last_outcome),
       })),
     );
   },
@@ -183,7 +221,17 @@ webhooksRouter.post(
     )
       .bind(id, orgId, formId ?? null, url, secret, JSON.stringify(events), Date.now())
       .run();
-    return c.json({ id, url, events, formId: formId ?? null, active: true, createdAt: Date.now(), secret });
+    return c.json({
+      id,
+      url,
+      events,
+      formId: formId ?? null,
+      active: true,
+      createdAt: Date.now(),
+      secret,
+      health: "untested" as const,
+      lastOutcome: null,
+    });
   },
 );
 
@@ -277,6 +325,26 @@ webhooksRouter.post(
   async (c) => {
     const queued = await retryAllFailed(c.env, c.get("orgId") ?? "", c.req.param("id"));
     return c.json({ ok: true, queued });
+  },
+);
+
+/**
+ * The full signing secret, on demand, as Stripe and Svix show theirs.
+ *
+ * It used to be shown once at creation and never again, so anyone who closed
+ * the panel before copying it had to delete the endpoint and start over. The
+ * secret is stored in the clear anyway (it signs every delivery), so hiding it
+ * protected nothing. A POST, so it needs `webhook:update`, not just read.
+ */
+webhooksRouter.post(
+  "/webhooks/:id/reveal-secret",
+  describeRoute({ tags: ["dashboard"], summary: "Reveal a webhook's signing secret", responses: { 200: { description: "Secret", content: { "application/json": { schema: resolver(z.object({ secret: z.string() })) } } } } }),
+  async (c) => {
+    const row = await c.env.DB.prepare(`SELECT secret FROM webhooks WHERE id = ? AND organization_id = ?`)
+      .bind(c.req.param("id"), c.get("orgId") ?? "")
+      .first<{ secret: string }>();
+    if (!row) return c.json({ error: { code: "not_found", message: "Webhook not found" } }, 404);
+    return c.json({ secret: row.secret });
   },
 );
 

@@ -278,6 +278,9 @@ const DASHBOARD_ONLY: Record<string, string> = {
     "TODO: no /v1 equivalent for deleting responses in bulk. It would give the declared-but-unused " +
     "`response:delete` scope its first endpoint. Left out deliberately for now: irreversible bulk " +
     "deletion of respondent data over an API key wants a deliberate product decision, not a symmetry fix.",
+  "/api/webhooks/{id}/reveal-secret":
+    "A key-holder receives the secret in the create response; revealing it later is a dashboard " +
+    "convenience for a person who closed the panel before copying it.",
   "/api/webhooks/{id}/test":
     "TODO: no /v1 equivalent. `POST /v1/webhooks/{id}/deliveries/{id}/replay` covers debugging a delivery " +
     "that happened; firing a synthetic one to check a new endpoint is not reachable by key yet.",

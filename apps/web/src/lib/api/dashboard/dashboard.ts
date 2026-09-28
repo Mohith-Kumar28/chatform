@@ -141,6 +141,7 @@ import type {
   PostApiWebhooksBody,
   PostApiWebhooksByIdDeliveriesByDeliveryIdRetry200,
   PostApiWebhooksByIdRetryFailed200,
+  PostApiWebhooksByIdRevealSecret200,
   PostApiWebhooksByIdTest200,
   PostApiWorkspaces200,
   PostApiWorkspacesBody,
@@ -5300,6 +5301,89 @@ export const usePostApiWebhooksByIdRetryFailed = <TError = unknown,
         TContext
       > => {
       return useMutation(getPostApiWebhooksByIdRetryFailedMutationOptions(options));
+    }
+    export type postApiWebhooksByIdRevealSecretResponse200 = {
+  data: PostApiWebhooksByIdRevealSecret200
+  status: 200
+}
+
+export type postApiWebhooksByIdRevealSecretResponseSuccess = (postApiWebhooksByIdRevealSecretResponse200) & {
+  headers: Headers;
+};
+;
+
+export type postApiWebhooksByIdRevealSecretResponse = (postApiWebhooksByIdRevealSecretResponseSuccess)
+
+export const getPostApiWebhooksByIdRevealSecretUrl = (id: string,) => {
+
+
+
+
+  return `/api/webhooks/${id}/reveal-secret`
+}
+
+/**
+ * @summary Reveal a webhook's signing secret
+ */
+export const postApiWebhooksByIdRevealSecret = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postApiWebhooksByIdRevealSecretResponse> => {
+
+  return customFetch<postApiWebhooksByIdRevealSecretResponse>(getPostApiWebhooksByIdRevealSecretUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiWebhooksByIdRevealSecretMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiWebhooksByIdRevealSecret>>, TError,PostApiWebhooksByIdRevealSecretMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiWebhooksByIdRevealSecret>>, TError,PostApiWebhooksByIdRevealSecretMutationVariables, TContext> => {
+
+const mutationKey = ['postApiWebhooksByIdRevealSecret'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiWebhooksByIdRevealSecret>>, PostApiWebhooksByIdRevealSecretMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postApiWebhooksByIdRevealSecret(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiWebhooksByIdRevealSecretMutationResult = NonNullable<Awaited<ReturnType<typeof postApiWebhooksByIdRevealSecret>>>
+
+    export type PostApiWebhooksByIdRevealSecretMutationError = unknown
+    export type PostApiWebhooksByIdRevealSecretMutationVariables = {id: string}
+
+    /**
+ * @summary Reveal a webhook's signing secret
+ */
+export const usePostApiWebhooksByIdRevealSecret = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiWebhooksByIdRevealSecret>>, TError,PostApiWebhooksByIdRevealSecretMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiWebhooksByIdRevealSecret>>,
+        TError,
+        PostApiWebhooksByIdRevealSecretMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiWebhooksByIdRevealSecretMutationOptions(options));
     }
     export type postApiWebhooksByIdTestResponse200 = {
   data: PostApiWebhooksByIdTest200
