@@ -561,9 +561,9 @@ function MockConversation({
               type="button"
               onClick={onClose}
               aria-label="Close the panel"
-              className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-full opacity-45 transition-opacity hover:opacity-90"
+              className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] shadow-sm transition-[filter] hover:brightness-95"
             >
-              <X className="size-4" />
+              <X className="size-[18px]" strokeWidth={2.25} />
             </button>
           )}
         </div>

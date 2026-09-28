@@ -1121,15 +1121,20 @@ function ChatHeader({
           control on the web and needs no word. Only drawn where there is
           something to close: never inline, and not on a desktop popup, whose
           launcher is the close.
+
+          A bordered button, not a bare glyph: a faint 16px X on a full-screen
+          phone sheet was missed, and respondents hunted for a way out. It
+          takes the form's own control corners, so it matches the buttons
+          below it.
         */}
         {onClose && (
           <button
             type="button"
             onClick={onClose}
             aria-label="Close the form"
-            className="grid size-7 shrink-0 place-items-center rounded-full opacity-45 transition-opacity hover:opacity-90 focus-visible:opacity-90"
+            className="grid size-9 shrink-0 place-items-center rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] shadow-sm transition-[transform,filter] hover:brightness-95 focus-visible:ring-2 focus-visible:ring-[var(--cf-accent)] focus-visible:outline-none active:scale-95 motion-reduce:active:scale-100"
           >
-            <X className="size-4" />
+            <X className="size-[18px]" strokeWidth={2.25} />
           </button>
         )}
       </div>
