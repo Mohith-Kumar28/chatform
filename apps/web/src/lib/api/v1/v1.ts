@@ -75,6 +75,8 @@ import type {
   PatchV1PaymentAccountsByIdBody,
   PatchV1WebhooksById200,
   PatchV1WebhooksByIdBody,
+  PostPSessionsByIdAuthEmailStart200,
+  PostPSessionsByIdAuthEmailVerify200,
   PostPSessionsByIdAuthGoogle200,
   PostPSessionsByIdAuthPhoneToken200,
   PostPSessionsByIdVerifyPhoneToken200,
@@ -92,6 +94,8 @@ import type {
   PostV1AiGenerateFormBody,
   PostV1ChatSessionsBySidActions200,
   PostV1ChatSessionsBySidActionsBody,
+  PostV1ChatSessionsBySidAuthEmailStart200,
+  PostV1ChatSessionsBySidAuthEmailVerify200,
   PostV1ChatSessionsBySidAuthGoogle200,
   PostV1ChatSessionsBySidAuthPhoneToken200,
   PostV1ChatSessionsBySidMessages200,
@@ -147,6 +151,8 @@ import type {
   PostV1ResponsesByIdCompleteBody,
   PostV1SessionsBySidActions200,
   PostV1SessionsBySidActionsBody,
+  PostV1SessionsBySidAuthEmailStart200,
+  PostV1SessionsBySidAuthEmailVerify200,
   PostV1SessionsBySidAuthGoogle200,
   PostV1SessionsBySidAuthPhoneToken200,
   PostV1SessionsBySidMessages200,
@@ -383,6 +389,191 @@ export const usePostPSessionsByIdAuthPhoneToken = <TError = void,
         TContext
       > => {
       return useMutation(getPostPSessionsByIdAuthPhoneTokenMutationOptions(options));
+    }
+    export type postPSessionsByIdAuthEmailStartResponse200 = {
+  data: PostPSessionsByIdAuthEmailStart200
+  status: 200
+}
+
+export type postPSessionsByIdAuthEmailStartResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postPSessionsByIdAuthEmailStartResponseSuccess = (postPSessionsByIdAuthEmailStartResponse200) & {
+  headers: Headers;
+};
+export type postPSessionsByIdAuthEmailStartResponseError = (postPSessionsByIdAuthEmailStartResponse400) & {
+  headers: Headers;
+};
+
+export type postPSessionsByIdAuthEmailStartResponse = (postPSessionsByIdAuthEmailStartResponseSuccess | postPSessionsByIdAuthEmailStartResponseError)
+
+export const getPostPSessionsByIdAuthEmailStartUrl = (id: string,) => {
+
+
+
+
+  return `/p/sessions/${id}/auth/email/start`
+}
+
+/**
+ * @summary Email a respondent a sign-in code
+ */
+export const postPSessionsByIdAuthEmailStart = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postPSessionsByIdAuthEmailStartResponse> => {
+
+  return customFetch<postPSessionsByIdAuthEmailStartResponse>(getPostPSessionsByIdAuthEmailStartUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostPSessionsByIdAuthEmailStartMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdAuthEmailStart>>, TError,PostPSessionsByIdAuthEmailStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdAuthEmailStart>>, TError,PostPSessionsByIdAuthEmailStartMutationVariables, TContext> => {
+
+const mutationKey = ['postPSessionsByIdAuthEmailStart'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postPSessionsByIdAuthEmailStart>>, PostPSessionsByIdAuthEmailStartMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postPSessionsByIdAuthEmailStart(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostPSessionsByIdAuthEmailStartMutationResult = NonNullable<Awaited<ReturnType<typeof postPSessionsByIdAuthEmailStart>>>
+
+    export type PostPSessionsByIdAuthEmailStartMutationError = void
+    export type PostPSessionsByIdAuthEmailStartMutationVariables = {id: string}
+
+    /**
+ * @summary Email a respondent a sign-in code
+ */
+export const usePostPSessionsByIdAuthEmailStart = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdAuthEmailStart>>, TError,PostPSessionsByIdAuthEmailStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postPSessionsByIdAuthEmailStart>>,
+        TError,
+        PostPSessionsByIdAuthEmailStartMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostPSessionsByIdAuthEmailStartMutationOptions(options));
+    }
+    export type postPSessionsByIdAuthEmailVerifyResponse200 = {
+  data: PostPSessionsByIdAuthEmailVerify200
+  status: 200
+}
+
+export type postPSessionsByIdAuthEmailVerifyResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postPSessionsByIdAuthEmailVerifyResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postPSessionsByIdAuthEmailVerifyResponseSuccess = (postPSessionsByIdAuthEmailVerifyResponse200) & {
+  headers: Headers;
+};
+export type postPSessionsByIdAuthEmailVerifyResponseError = (postPSessionsByIdAuthEmailVerifyResponse400 | postPSessionsByIdAuthEmailVerifyResponse409) & {
+  headers: Headers;
+};
+
+export type postPSessionsByIdAuthEmailVerifyResponse = (postPSessionsByIdAuthEmailVerifyResponseSuccess | postPSessionsByIdAuthEmailVerifyResponseError)
+
+export const getPostPSessionsByIdAuthEmailVerifyUrl = (id: string,) => {
+
+
+
+
+  return `/p/sessions/${id}/auth/email/verify`
+}
+
+/**
+ * @summary Verify a respondent with the emailed sign-in code
+ */
+export const postPSessionsByIdAuthEmailVerify = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postPSessionsByIdAuthEmailVerifyResponse> => {
+
+  return customFetch<postPSessionsByIdAuthEmailVerifyResponse>(getPostPSessionsByIdAuthEmailVerifyUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostPSessionsByIdAuthEmailVerifyMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdAuthEmailVerify>>, TError,PostPSessionsByIdAuthEmailVerifyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdAuthEmailVerify>>, TError,PostPSessionsByIdAuthEmailVerifyMutationVariables, TContext> => {
+
+const mutationKey = ['postPSessionsByIdAuthEmailVerify'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postPSessionsByIdAuthEmailVerify>>, PostPSessionsByIdAuthEmailVerifyMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postPSessionsByIdAuthEmailVerify(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostPSessionsByIdAuthEmailVerifyMutationResult = NonNullable<Awaited<ReturnType<typeof postPSessionsByIdAuthEmailVerify>>>
+
+    export type PostPSessionsByIdAuthEmailVerifyMutationError = void
+    export type PostPSessionsByIdAuthEmailVerifyMutationVariables = {id: string}
+
+    /**
+ * @summary Verify a respondent with the emailed sign-in code
+ */
+export const usePostPSessionsByIdAuthEmailVerify = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPSessionsByIdAuthEmailVerify>>, TError,PostPSessionsByIdAuthEmailVerifyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postPSessionsByIdAuthEmailVerify>>,
+        TError,
+        PostPSessionsByIdAuthEmailVerifyMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostPSessionsByIdAuthEmailVerifyMutationOptions(options));
     }
     export type postPSessionsByIdVerifyPhoneTokenResponse200 = {
   data: PostPSessionsByIdVerifyPhoneToken200
@@ -7544,6 +7735,191 @@ export const usePostV1SessionsBySidAuthPhoneToken = <TError = void,
       > => {
       return useMutation(getPostV1SessionsBySidAuthPhoneTokenMutationOptions(options));
     }
+    export type postV1SessionsBySidAuthEmailStartResponse200 = {
+  data: PostV1SessionsBySidAuthEmailStart200
+  status: 200
+}
+
+export type postV1SessionsBySidAuthEmailStartResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postV1SessionsBySidAuthEmailStartResponseSuccess = (postV1SessionsBySidAuthEmailStartResponse200) & {
+  headers: Headers;
+};
+export type postV1SessionsBySidAuthEmailStartResponseError = (postV1SessionsBySidAuthEmailStartResponse400) & {
+  headers: Headers;
+};
+
+export type postV1SessionsBySidAuthEmailStartResponse = (postV1SessionsBySidAuthEmailStartResponseSuccess | postV1SessionsBySidAuthEmailStartResponseError)
+
+export const getPostV1SessionsBySidAuthEmailStartUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}/auth/email/start`
+}
+
+/**
+ * @summary Email a respondent a sign-in code
+ */
+export const postV1SessionsBySidAuthEmailStart = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidAuthEmailStartResponse> => {
+
+  return customFetch<postV1SessionsBySidAuthEmailStartResponse>(getPostV1SessionsBySidAuthEmailStartUrl(sid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1SessionsBySidAuthEmailStartMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidAuthEmailStart>>, TError,PostV1SessionsBySidAuthEmailStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidAuthEmailStart>>, TError,PostV1SessionsBySidAuthEmailStartMutationVariables, TContext> => {
+
+const mutationKey = ['postV1SessionsBySidAuthEmailStart'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1SessionsBySidAuthEmailStart>>, PostV1SessionsBySidAuthEmailStartMutationVariables> = (props) => {
+          const {sid} = props ?? {};
+
+          return  postV1SessionsBySidAuthEmailStart(sid,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1SessionsBySidAuthEmailStartMutationResult = NonNullable<Awaited<ReturnType<typeof postV1SessionsBySidAuthEmailStart>>>
+
+    export type PostV1SessionsBySidAuthEmailStartMutationError = void
+    export type PostV1SessionsBySidAuthEmailStartMutationVariables = {sid: string}
+
+    /**
+ * @summary Email a respondent a sign-in code
+ */
+export const usePostV1SessionsBySidAuthEmailStart = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidAuthEmailStart>>, TError,PostV1SessionsBySidAuthEmailStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1SessionsBySidAuthEmailStart>>,
+        TError,
+        PostV1SessionsBySidAuthEmailStartMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1SessionsBySidAuthEmailStartMutationOptions(options));
+    }
+    export type postV1SessionsBySidAuthEmailVerifyResponse200 = {
+  data: PostV1SessionsBySidAuthEmailVerify200
+  status: 200
+}
+
+export type postV1SessionsBySidAuthEmailVerifyResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postV1SessionsBySidAuthEmailVerifyResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postV1SessionsBySidAuthEmailVerifyResponseSuccess = (postV1SessionsBySidAuthEmailVerifyResponse200) & {
+  headers: Headers;
+};
+export type postV1SessionsBySidAuthEmailVerifyResponseError = (postV1SessionsBySidAuthEmailVerifyResponse400 | postV1SessionsBySidAuthEmailVerifyResponse409) & {
+  headers: Headers;
+};
+
+export type postV1SessionsBySidAuthEmailVerifyResponse = (postV1SessionsBySidAuthEmailVerifyResponseSuccess | postV1SessionsBySidAuthEmailVerifyResponseError)
+
+export const getPostV1SessionsBySidAuthEmailVerifyUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/sessions/${sid}/auth/email/verify`
+}
+
+/**
+ * @summary Verify a respondent with the emailed sign-in code
+ */
+export const postV1SessionsBySidAuthEmailVerify = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1SessionsBySidAuthEmailVerifyResponse> => {
+
+  return customFetch<postV1SessionsBySidAuthEmailVerifyResponse>(getPostV1SessionsBySidAuthEmailVerifyUrl(sid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1SessionsBySidAuthEmailVerifyMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidAuthEmailVerify>>, TError,PostV1SessionsBySidAuthEmailVerifyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidAuthEmailVerify>>, TError,PostV1SessionsBySidAuthEmailVerifyMutationVariables, TContext> => {
+
+const mutationKey = ['postV1SessionsBySidAuthEmailVerify'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1SessionsBySidAuthEmailVerify>>, PostV1SessionsBySidAuthEmailVerifyMutationVariables> = (props) => {
+          const {sid} = props ?? {};
+
+          return  postV1SessionsBySidAuthEmailVerify(sid,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1SessionsBySidAuthEmailVerifyMutationResult = NonNullable<Awaited<ReturnType<typeof postV1SessionsBySidAuthEmailVerify>>>
+
+    export type PostV1SessionsBySidAuthEmailVerifyMutationError = void
+    export type PostV1SessionsBySidAuthEmailVerifyMutationVariables = {sid: string}
+
+    /**
+ * @summary Verify a respondent with the emailed sign-in code
+ */
+export const usePostV1SessionsBySidAuthEmailVerify = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1SessionsBySidAuthEmailVerify>>, TError,PostV1SessionsBySidAuthEmailVerifyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1SessionsBySidAuthEmailVerify>>,
+        TError,
+        PostV1SessionsBySidAuthEmailVerifyMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1SessionsBySidAuthEmailVerifyMutationOptions(options));
+    }
     export type postV1SessionsBySidVerifyPhoneTokenResponse200 = {
   data: PostV1SessionsBySidVerifyPhoneToken200
   status: 200
@@ -8509,6 +8885,191 @@ export const usePostV1ChatSessionsBySidAuthPhoneToken = <TError = void,
         TContext
       > => {
       return useMutation(getPostV1ChatSessionsBySidAuthPhoneTokenMutationOptions(options));
+    }
+    export type postV1ChatSessionsBySidAuthEmailStartResponse200 = {
+  data: PostV1ChatSessionsBySidAuthEmailStart200
+  status: 200
+}
+
+export type postV1ChatSessionsBySidAuthEmailStartResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postV1ChatSessionsBySidAuthEmailStartResponseSuccess = (postV1ChatSessionsBySidAuthEmailStartResponse200) & {
+  headers: Headers;
+};
+export type postV1ChatSessionsBySidAuthEmailStartResponseError = (postV1ChatSessionsBySidAuthEmailStartResponse400) & {
+  headers: Headers;
+};
+
+export type postV1ChatSessionsBySidAuthEmailStartResponse = (postV1ChatSessionsBySidAuthEmailStartResponseSuccess | postV1ChatSessionsBySidAuthEmailStartResponseError)
+
+export const getPostV1ChatSessionsBySidAuthEmailStartUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/chat/sessions/${sid}/auth/email/start`
+}
+
+/**
+ * @summary Email a respondent a sign-in code
+ */
+export const postV1ChatSessionsBySidAuthEmailStart = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatSessionsBySidAuthEmailStartResponse> => {
+
+  return customFetch<postV1ChatSessionsBySidAuthEmailStartResponse>(getPostV1ChatSessionsBySidAuthEmailStartUrl(sid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1ChatSessionsBySidAuthEmailStartMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthEmailStart>>, TError,PostV1ChatSessionsBySidAuthEmailStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthEmailStart>>, TError,PostV1ChatSessionsBySidAuthEmailStartMutationVariables, TContext> => {
+
+const mutationKey = ['postV1ChatSessionsBySidAuthEmailStart'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthEmailStart>>, PostV1ChatSessionsBySidAuthEmailStartMutationVariables> = (props) => {
+          const {sid} = props ?? {};
+
+          return  postV1ChatSessionsBySidAuthEmailStart(sid,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ChatSessionsBySidAuthEmailStartMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthEmailStart>>>
+
+    export type PostV1ChatSessionsBySidAuthEmailStartMutationError = void
+    export type PostV1ChatSessionsBySidAuthEmailStartMutationVariables = {sid: string}
+
+    /**
+ * @summary Email a respondent a sign-in code
+ */
+export const usePostV1ChatSessionsBySidAuthEmailStart = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthEmailStart>>, TError,PostV1ChatSessionsBySidAuthEmailStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthEmailStart>>,
+        TError,
+        PostV1ChatSessionsBySidAuthEmailStartMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ChatSessionsBySidAuthEmailStartMutationOptions(options));
+    }
+    export type postV1ChatSessionsBySidAuthEmailVerifyResponse200 = {
+  data: PostV1ChatSessionsBySidAuthEmailVerify200
+  status: 200
+}
+
+export type postV1ChatSessionsBySidAuthEmailVerifyResponse400 = {
+  data: void
+  status: 400
+}
+
+export type postV1ChatSessionsBySidAuthEmailVerifyResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postV1ChatSessionsBySidAuthEmailVerifyResponseSuccess = (postV1ChatSessionsBySidAuthEmailVerifyResponse200) & {
+  headers: Headers;
+};
+export type postV1ChatSessionsBySidAuthEmailVerifyResponseError = (postV1ChatSessionsBySidAuthEmailVerifyResponse400 | postV1ChatSessionsBySidAuthEmailVerifyResponse409) & {
+  headers: Headers;
+};
+
+export type postV1ChatSessionsBySidAuthEmailVerifyResponse = (postV1ChatSessionsBySidAuthEmailVerifyResponseSuccess | postV1ChatSessionsBySidAuthEmailVerifyResponseError)
+
+export const getPostV1ChatSessionsBySidAuthEmailVerifyUrl = (sid: string,) => {
+
+
+
+
+  return `/v1/chat/sessions/${sid}/auth/email/verify`
+}
+
+/**
+ * @summary Verify a respondent with the emailed sign-in code
+ */
+export const postV1ChatSessionsBySidAuthEmailVerify = async (sid: string, options?: Parameters<typeof customFetch>[1]): Promise<postV1ChatSessionsBySidAuthEmailVerifyResponse> => {
+
+  return customFetch<postV1ChatSessionsBySidAuthEmailVerifyResponse>(getPostV1ChatSessionsBySidAuthEmailVerifyUrl(sid),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostV1ChatSessionsBySidAuthEmailVerifyMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthEmailVerify>>, TError,PostV1ChatSessionsBySidAuthEmailVerifyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthEmailVerify>>, TError,PostV1ChatSessionsBySidAuthEmailVerifyMutationVariables, TContext> => {
+
+const mutationKey = ['postV1ChatSessionsBySidAuthEmailVerify'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthEmailVerify>>, PostV1ChatSessionsBySidAuthEmailVerifyMutationVariables> = (props) => {
+          const {sid} = props ?? {};
+
+          return  postV1ChatSessionsBySidAuthEmailVerify(sid,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ChatSessionsBySidAuthEmailVerifyMutationResult = NonNullable<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthEmailVerify>>>
+
+    export type PostV1ChatSessionsBySidAuthEmailVerifyMutationError = void
+    export type PostV1ChatSessionsBySidAuthEmailVerifyMutationVariables = {sid: string}
+
+    /**
+ * @summary Verify a respondent with the emailed sign-in code
+ */
+export const usePostV1ChatSessionsBySidAuthEmailVerify = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthEmailVerify>>, TError,PostV1ChatSessionsBySidAuthEmailVerifyMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1ChatSessionsBySidAuthEmailVerify>>,
+        TError,
+        PostV1ChatSessionsBySidAuthEmailVerifyMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ChatSessionsBySidAuthEmailVerifyMutationOptions(options));
     }
     export type postV1ChatSessionsBySidVerifyPhoneTokenResponse200 = {
   data: PostV1ChatSessionsBySidVerifyPhoneToken200

@@ -776,6 +776,8 @@ export function ChatSurface({
               onForgetHint={chat.forgetRespondentHint}
               onGoogle={(t) => void chat.signInWithGoogle(t)}
               onPhoneToken={(t) => void chat.signInWithPhoneToken(t)}
+              onEmailStart={chat.startEmailSignIn}
+              onEmailCode={(code) => void chat.signInWithEmailCode(code)}
             />
           )}
 

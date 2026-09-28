@@ -98,6 +98,7 @@ const PRO: Plan = {
     "multi_language",
     "respondent_auth_google",
     "respondent_auth_phone",
+    "respondent_auth_email",
     "collect_payments",
     "partial_responses",
     "advanced_analytics",

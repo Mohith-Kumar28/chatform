@@ -373,8 +373,9 @@ export type MailJob =
         | "email-verification"
         | "forget-password"
         | "change-email"
-        | "answer-verification";
-      /** The form that asked, for `answer-verification`. Named in the message. */
+        | "answer-verification"
+        | "respondent-sign-in";
+      /** The form that asked, for the two respondent purposes. Named in the message. */
       formTitle?: string;
     }
   | {

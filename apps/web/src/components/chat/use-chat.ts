@@ -151,7 +151,7 @@ export interface SubmittedState {
 
 /** The sign-in gate, while it is blocking the conversation. */
 export interface AuthState {
-  method: "google" | "phone";
+  method: "google" | "phone" | "email";
   message: string;
   pending: boolean;
   error: string | null;
@@ -181,7 +181,7 @@ export interface VerifyState {
 
 /** Who the respondent turned out to be, once the gate is cleared. */
 export interface VerifiedIdentity {
-  provider: "google" | "phone";
+  provider: "google" | "phone" | "email";
   label: string;
   name: string | null;
   pictureUrl: string | null;
@@ -2496,6 +2496,52 @@ export function useChat({
   );
 
   /**
+   * Email sign-in, step one: ask the server to mail a code.
+   *
+   * Local to the card rather than in `auth`, like the phone flow's first step:
+   * nothing about the conversation changes until a code comes back, so the
+   * result is returned for the card to show and `auth` is left alone except
+   * for its pending flag.
+   */
+  const startEmailSignIn = useCallback(
+    async (email: string): Promise<{ ok: true; sentTo: string; devCode?: string } | { ok: false; message: string }> => {
+      setAuth((a) => (a ? { ...a, pending: true, error: null } : a));
+      const { ok, data } = await sessionPost("auth/email/start", { email });
+      setAuth((a) => (a ? { ...a, pending: false } : a));
+      if (ok && typeof data.sentTo === "string") {
+        return {
+          ok: true,
+          sentTo: data.sentTo,
+          ...(typeof data.devCode === "string" ? { devCode: data.devCode } : {}),
+        };
+      }
+      return { ok: false, message: authError(data) };
+    },
+    [sessionPost],
+  );
+
+  /**
+   * Email sign-in, step two: the code back, and the gate clears in one call.
+   * Same ordering as `signInWithGoogle`, for the same reason.
+   */
+  const signInWithEmailCode = useCallback(
+    async (code: string) => {
+      setAuth((a) => (a ? { ...a, pending: true, error: null } : a));
+      setThinking(true);
+      const { ok, data } = await sessionPost("auth/email/verify", { code });
+      if (ok) {
+        setIdentity(data.identity as VerifiedIdentity);
+        setAuth(null);
+        return;
+      }
+      setThinking(false);
+      if (settledAsAnswered(data)) return;
+      setAuth((a) => (a ? { ...a, pending: false, error: authError(data) } : a));
+    },
+    [sessionPost, settledAsAnswered],
+  );
+
+  /**
    * A number proved by Firebase, offered against the answer that is waiting.
    *
    * The token, not a code: Firebase sent the SMS and checked the code in this
@@ -2904,6 +2950,8 @@ export function useChat({
     switchAccount,
     signInWithGoogle,
     signInWithPhoneToken,
+    startEmailSignIn,
+    signInWithEmailCode,
     submitVerifyCode,
     submitVerifyPhoneToken,
     resendVerifyCode,

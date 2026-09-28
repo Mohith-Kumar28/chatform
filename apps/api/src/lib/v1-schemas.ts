@@ -216,6 +216,13 @@ export const RotatedTokenView = z.object({ respondentToken: z.string(), rotatedA
 
 export const RespondentAuthView = z.object({ ok: z.boolean() }).loose();
 
+/** A sign-in code went out. `devCode` only ever appears in development. */
+export const EmailCodeSentView = z.object({
+  ok: z.boolean(),
+  sentTo: z.string(),
+  devCode: z.string().optional(),
+});
+
 export const FormSummaryView = z.object({
   id: z.string(),
   title: z.string(),

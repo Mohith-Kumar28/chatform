@@ -63,11 +63,11 @@ export const PLAN_HIGHLIGHTS: Record<string, readonly string[]> = {
   // agent_persona · agent_knowledge · agent_guardrails · followup_email ·
   // partial_responses + advanced_analytics + conversation_analytics ·
   // brand_logo + custom_fonts + remove_branding ·
-  // respondent_auth_google + respondent_auth_phone
+  // respondent_auth_google + respondent_auth_phone + respondent_auth_email
   pro: [
     "2,000 AI conversations a month",
     "Persona, goal and a knowledge base",
-    "Verified respondents — Google or SMS",
+    "Verified respondents by Google, email or SMS",
     "Partial responses, analytics and follow-up emails",
     "Your logo and fonts, no chatform badge",
   ],

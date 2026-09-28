@@ -490,8 +490,10 @@ export type OtpPurpose =
   | "email-verification"
   | "forget-password"
   | "change-email"
-  /** Proving one answer on a customer's form. The only one not about an account. */
-  | "answer-verification";
+  /** Proving one answer on a customer's form. Not about an account. */
+  | "answer-verification"
+  /** Signing in to a customer's form that asks who is answering. Not about an account either. */
+  | "respondent-sign-in";
 
 export function otpEmail(a: { code: string; purpose: OtpPurpose; formTitle?: string }): Omit<MailMessage, "to"> {
   const copy = OTP_COPY[a.purpose];
@@ -500,7 +502,9 @@ export function otpEmail(a: { code: string; purpose: OtpPurpose; formTitle?: str
   const lead =
     a.purpose === "answer-verification" && a.formTitle
       ? `Enter this code to confirm your email address on “${a.formTitle}”.`
-      : copy.lead;
+      : a.purpose === "respondent-sign-in" && a.formTitle
+        ? `Enter this code to continue with “${a.formTitle}”.`
+        : copy.lead;
 
   const body = [
     h1(copy.heading),
@@ -555,6 +559,15 @@ const OTP_COPY: Record<OtpPurpose, { heading: string; lead: string; disclaimer: 
     heading: "Confirm your email address",
     lead: "Enter this code back in the form to confirm this address.",
     disclaimer: "Didn't fill in a form? Ignore this email — nothing is recorded without the code.",
+  },
+  /*
+   * The form's sign-in gate. Like the one above it goes to a respondent with no
+   * account, so it names the form and never mentions a chatform account.
+   */
+  "respondent-sign-in": {
+    heading: "Your sign-in code",
+    lead: "Enter this code back in the form to continue.",
+    disclaimer: "Didn't try to open a form? Ignore this email. Nobody gets in without the code.",
   },
 };
 

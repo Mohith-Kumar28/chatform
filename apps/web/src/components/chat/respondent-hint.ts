@@ -19,8 +19,8 @@
  */
 
 export interface RespondentHint {
-  provider: "google" | "phone";
-  /** Email for Google, E.164 for phone — what the card shows. */
+  provider: "google" | "phone" | "email";
+  /** The address for Google and email, E.164 for phone — what the card shows. */
   label: string;
   name: string | null;
   pictureUrl: string | null;
@@ -43,7 +43,7 @@ export function loadRespondentHint(): RespondentHint | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const p = JSON.parse(raw) as Partial<RespondentHint>;
-    if (p.provider !== "google" && p.provider !== "phone") return null;
+    if (p.provider !== "google" && p.provider !== "phone" && p.provider !== "email") return null;
     if (typeof p.label !== "string" || !p.label) return null;
     if (typeof p.at !== "number" || Date.now() - p.at > TTL_MS) return null;
     return {

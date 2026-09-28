@@ -176,7 +176,10 @@ export function toChatState(snapshot: ChatSnapshot): ChatState {
           resumed: false,
           auth: snapshot.auth
             ? {
-                method: snapshot.auth.method === "phone" ? "phone" : "google",
+                method:
+                  snapshot.auth.method === "phone" || snapshot.auth.method === "email"
+                    ? snapshot.auth.method
+                    : "google",
                 message: snapshot.auth.message,
                 pending: false,
                 error: snapshot.auth.error,
@@ -199,6 +202,9 @@ export function toChatState(snapshot: ChatSnapshot): ChatState {
     switchAccount: noopAsync,
     signInWithGoogle: noopAsync,
     signInWithPhoneToken: noopAsync,
+    // A still frame sends nothing; the card is drawn, never used.
+    startEmailSignIn: async () => ({ ok: false as const, message: "" }),
+    signInWithEmailCode: noopAsync,
     submitVerifyCode: noopAsync,
     submitVerifyPhoneToken: noopAsync,
     resendVerifyCode: noopAsync,

@@ -50,6 +50,7 @@ const GROUPS: {
       { feature: "multi_language" },
       { feature: "respondent_auth_google" },
       { feature: "respondent_auth_phone" },
+      { feature: "respondent_auth_email" },
       { feature: "verified_answers" },
       { feature: "collect_payments" },
     ],

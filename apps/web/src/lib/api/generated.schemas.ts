@@ -2133,6 +2133,17 @@ export type PostPSessionsByIdAuthPhoneToken200 = {
   [key: string]: unknown;
 };
 
+export type PostPSessionsByIdAuthEmailStart200 = {
+  ok: boolean;
+  sentTo: string;
+  devCode?: string;
+};
+
+export type PostPSessionsByIdAuthEmailVerify200 = {
+  ok: boolean;
+  [key: string]: unknown;
+};
+
 export type PostPSessionsByIdVerifyPhoneToken200 = {
   ok: boolean;
   [key: string]: unknown;
@@ -7160,6 +7171,17 @@ export type PostV1SessionsBySidAuthPhoneToken200 = {
   [key: string]: unknown;
 };
 
+export type PostV1SessionsBySidAuthEmailStart200 = {
+  ok: boolean;
+  sentTo: string;
+  devCode?: string;
+};
+
+export type PostV1SessionsBySidAuthEmailVerify200 = {
+  ok: boolean;
+  [key: string]: unknown;
+};
+
 export type PostV1SessionsBySidVerifyPhoneToken200 = {
   ok: boolean;
   [key: string]: unknown;
@@ -7400,6 +7422,17 @@ export type PostV1ChatSessionsBySidAuthGoogle200 = {
 };
 
 export type PostV1ChatSessionsBySidAuthPhoneToken200 = {
+  ok: boolean;
+  [key: string]: unknown;
+};
+
+export type PostV1ChatSessionsBySidAuthEmailStart200 = {
+  ok: boolean;
+  sentTo: string;
+  devCode?: string;
+};
+
+export type PostV1ChatSessionsBySidAuthEmailVerify200 = {
   ok: boolean;
   [key: string]: unknown;
 };

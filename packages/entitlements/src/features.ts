@@ -24,6 +24,7 @@ export const FEATURE_MIN_PLAN = {
   multi_language: "pro",
   respondent_auth_google: "pro",
   respondent_auth_phone: "pro",
+  respondent_auth_email: "pro",
   verified_answers: "business",
   one_response_per_identity: "business",
   collect_payments: "pro",
@@ -86,6 +87,7 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
   multi_language: { label: "Multiple languages", blurb: "Serve one form in several languages.", soon: true },
   respondent_auth_google: { label: "Google verification", blurb: "Ask respondents to verify who they are." },
   respondent_auth_phone: { label: "Phone verification", blurb: "Verify respondents by SMS code." },
+  respondent_auth_email: { label: "Email verification", blurb: "Verify respondents with a code sent to their email." },
   verified_answers: {
     label: "Verified answers",
     blurb: "Send a code to an email or phone answer, and only keep it once they type the code back.",

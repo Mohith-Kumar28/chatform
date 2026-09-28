@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { ChevronRight, Loader2, Phone, ShieldCheck } from "lucide-react";
+import { ArrowRight, ChevronRight, Loader2, Lock, Mail, Phone, ShieldCheck } from "lucide-react";
 import type { AuthState } from "./use-chat";
 import { firebasePhoneConfigured, sendPhoneCode, type PhoneCodeSent } from "./firebase-phone";
 import { asEmail, type RespondentHint } from "./respondent-hint";
@@ -31,6 +31,8 @@ export function AuthCard({
   hint,
   onGoogle,
   onPhoneToken,
+  onEmailStart,
+  onEmailCode,
   onForgetHint,
 }: {
   auth: AuthState;
@@ -38,51 +40,233 @@ export function AuthCard({
   hint: RespondentHint | null;
   onGoogle: (idToken: string) => void;
   onPhoneToken: (idToken: string) => void;
+  onEmailStart: (email: string) => Promise<EmailStartResult>;
+  onEmailCode: (code: string) => void;
   onForgetHint: () => void;
 }) {
   const showGoogle = auth.method === "google";
   const showPhone = auth.method === "phone";
+  const showEmail = auth.method === "email";
 
   // A hint is only worth showing when this form actually takes that method: a
   // form that asks for a phone number has no use for a remembered Google
   // account, and offering one would be a dead end.
   const googleHint = showGoogle && hint?.provider === "google" ? hint : null;
   const phoneHint = showPhone && hint?.provider === "phone" ? hint : null;
+  const emailHint = showEmail && hint?.provider === "email" ? hint : null;
+
+  const Icon = showEmail ? Mail : showPhone ? Phone : ShieldCheck;
 
   return (
-    <div className="animate-message-in space-y-3 rounded-2xl bg-[var(--cf-chip-bg)] p-4">
-      <p className="flex items-center gap-2 text-xs font-medium opacity-60">
-        <ShieldCheck className="size-3.5" />
-        Verify to continue
+    <div className="animate-message-in overflow-hidden rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)]">
+      <div className="flex items-center gap-3 px-4 pt-4">
+        <span
+          aria-hidden
+          className="grid size-9 shrink-0 place-items-center rounded-full"
+          style={{
+            background: "color-mix(in srgb, var(--cf-accent) 16%, transparent)",
+            color: "var(--cf-accent)",
+          }}
+        >
+          <Icon className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">Verify it&apos;s you</p>
+          <p className="text-xs opacity-60">
+            {showEmail ? "We'll email you a 6-digit code." : showPhone ? "We'll text you a 6-digit code." : "Continue with your Google account."}
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-3 p-4">
+        {showGoogle && (
+          <GoogleSignIn
+            hint={googleHint}
+            onToken={onGoogle}
+            onUseAnother={onForgetHint}
+            disabled={auth.pending}
+          />
+        )}
+
+        {/*
+          Firebase carries the SMS — there is no second phone path, so a
+          deployment without it says so plainly instead of drawing a form that
+          cannot send anything.
+        */}
+        {showPhone &&
+          (firebasePhoneConfigured ? (
+            <FirebasePhoneFlow auth={auth} hint={phoneHint} onPhoneToken={onPhoneToken} />
+          ) : (
+            <PhoneUnavailable />
+          ))}
+
+        {showEmail && (
+          <EmailFlow auth={auth} hint={emailHint} onStart={onEmailStart} onCode={onEmailCode} />
+        )}
+
+        {auth.error && (
+          <p role="alert" className="text-destructive text-xs">
+            {auth.error}
+          </p>
+        )}
+      </div>
+
+      <p className="flex items-center gap-1.5 border-t border-[var(--cf-chip-border)] px-4 py-2.5 text-[0.6875rem] opacity-50">
+        <Lock className="size-3" />
+        Only used to confirm who&apos;s answering.
       </p>
+    </div>
+  );
+}
 
-      {showGoogle && (
-        <GoogleSignIn
-          hint={googleHint}
-          onToken={onGoogle}
-          onUseAnother={onForgetHint}
-          disabled={auth.pending}
+export type EmailStartResult = { ok: true; sentTo: string; devCode?: string } | { ok: false; message: string };
+
+/**
+ * Email sign-in: the address, then the code.
+ *
+ * The code is ours, sent through the same queue as every other code in the
+ * product; the server holds what it has to match, so the only state here is
+ * which of the two steps is on screen.
+ */
+function EmailFlow({
+  auth,
+  hint,
+  onStart,
+  onCode,
+}: {
+  auth: AuthState;
+  hint: RespondentHint | null;
+  onStart: (email: string) => Promise<EmailStartResult>;
+  onCode: (code: string) => void;
+}) {
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [sentAt, setSentAt] = useState<number | null>(null);
+  const [devCode, setDevCode] = useState<string | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+
+  const send = useCallback(
+    async (email: string) => {
+      setError(null);
+      const res = await onStart(email);
+      if (!res.ok) {
+        setError(res.message);
+        return;
+      }
+      setSentTo(res.sentTo);
+      setSentAt(Date.now());
+      setDevCode(res.devCode);
+    },
+    [onStart],
+  );
+
+  return (
+    <div className="space-y-2">
+      {sentTo ? (
+        <CodeForm
+          sentTo={sentTo}
+          sentAt={sentAt}
+          pending={auth.pending}
+          devCode={devCode}
+          onSubmit={onCode}
+          onResend={() => void send(sentTo)}
+          onChangeNumber={() => {
+            setSentTo(null);
+            setSentAt(null);
+            setDevCode(undefined);
+            setError(null);
+          }}
+          changeLabel="Use a different email"
         />
+      ) : (
+        <EmailForm pending={auth.pending} initialEmail={hint?.label} onSubmit={(e) => void send(e)} />
       )}
-
-      {/*
-        Firebase carries the SMS — there is no second phone path, so a
-        deployment without it says so plainly instead of drawing a form that
-        cannot send anything.
-      */}
-      {showPhone &&
-        (firebasePhoneConfigured ? (
-          <FirebasePhoneFlow auth={auth} hint={phoneHint} onPhoneToken={onPhoneToken} />
-        ) : (
-          <PhoneUnavailable />
-        ))}
-
-      {auth.error && (
+      {error && (
         <p role="alert" className="text-destructive text-xs">
-          {auth.error}
+          {error}
         </p>
       )}
     </div>
+  );
+}
+
+/** The address step. Prefilled with the address this device verified last time. */
+function EmailForm({
+  pending,
+  initialEmail,
+  onSubmit,
+}: {
+  pending: boolean;
+  initialEmail?: string;
+  onSubmit: (email: string) => void;
+}) {
+  const [email, setEmail] = useState(initialEmail ?? "");
+  const emailId = useId();
+  const ready = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (ready && !pending) onSubmit(email.trim());
+      }}
+      className="space-y-2"
+    >
+      <label htmlFor={emailId} className="sr-only">
+        Email address
+      </label>
+      <div className="relative">
+        <Mail className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 opacity-40" />
+        <input
+          id={emailId}
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          autoCapitalize="off"
+          spellCheck={false}
+          value={email}
+          // Guarded rather than `disabled`, for the same keyboard reason as
+          // the code box below.
+          onChange={(e) => !pending && setEmail(e.target.value)}
+          placeholder="you@example.com"
+          aria-busy={pending}
+          className="h-11 w-full rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] bg-[var(--cf-bg)] pr-3 pl-10 text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--cf-accent)]"
+        />
+      </div>
+      <PrimaryButton pending={pending} disabled={!ready}>
+        Send code
+      </PrimaryButton>
+    </form>
+  );
+}
+
+/** The card's one filled button, so every step presses the same way. */
+function PrimaryButton({
+  pending,
+  disabled,
+  children,
+}: {
+  pending: boolean;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="submit"
+      // Pressing must not blur the field and close a phone's keyboard.
+      onMouseDown={(e) => e.preventDefault()}
+      disabled={pending || disabled}
+      className="flex h-11 w-full items-center justify-center gap-1.5 rounded-[var(--cf-radius-control)] text-sm font-medium transition-[transform,opacity] active:scale-[0.98] disabled:opacity-50 motion-reduce:active:scale-100"
+      style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
+    >
+      {pending ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : (
+        <>
+          {children}
+          <ArrowRight className="size-4" />
+        </>
+      )}
+    </button>
   );
 }
 
@@ -407,34 +591,26 @@ function NumberForm({
       <label htmlFor={phoneId} className="sr-only">
         Phone number
       </label>
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Phone className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 opacity-40" />
-          <input
-            id={phoneId}
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            value={phone}
-            // Guarded rather than `disabled`: see the code box below. A number
-            // the server turns down re-enables an input nobody is in, so the
-            // correction starts with a tap to get the keyboard back.
-            onChange={(e) => !pending && setPhone(e.target.value)}
-            placeholder="+1 415 555 0132"
-            aria-busy={pending}
-            className="h-11 w-full rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-bg)] pr-3 pl-9 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--cf-accent)]"
-          />
-        </div>
-        <button
-          type="submit"
-          onMouseDown={(e) => e.preventDefault()}
-          disabled={pending || !phone.trim()}
-          className="h-11 shrink-0 rounded-full px-4 text-sm font-medium transition-transform active:scale-[0.98] disabled:opacity-50 motion-reduce:active:scale-100"
-          style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
-        >
-          {pending ? <Loader2 className="size-4 animate-spin" /> : "Send code"}
-        </button>
+      <div className="relative">
+        <Phone className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 opacity-40" />
+        <input
+          id={phoneId}
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          value={phone}
+          // Guarded rather than `disabled`: see the code box below. A number
+          // the server turns down re-enables an input nobody is in, so the
+          // correction starts with a tap to get the keyboard back.
+          onChange={(e) => !pending && setPhone(e.target.value)}
+          placeholder="+1 415 555 0132"
+          aria-busy={pending}
+          className="h-11 w-full rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] bg-[var(--cf-bg)] pr-3 pl-10 text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-[var(--cf-accent)]"
+        />
       </div>
+      <PrimaryButton pending={pending} disabled={!phone.trim()}>
+        Send code
+      </PrimaryButton>
       <p className="text-[0.6875rem] opacity-45">Include your country code.</p>
     </form>
   );
@@ -521,18 +697,42 @@ export function CodeForm({
     [pending, onSubmit],
   );
 
+  const [focused, setFocused] = useState(false);
+
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
         submit(code);
       }}
-      className="space-y-2"
+      className="space-y-3"
     >
       <label htmlFor={codeId} className="block text-xs opacity-60">
-        Enter the code sent to {sentTo}
+        Enter the code sent to <span className="font-medium opacity-100">{sentTo}</span>
       </label>
-      <div className="flex gap-2">
+      {/*
+        One real input under six drawn boxes. The boxes are only paint: the
+        input keeps paste, the SMS and email one-time-code autofill, and the
+        phone's numeric keyboard working exactly as a plain field does, which
+        six separate inputs would each have to reimplement.
+      */}
+      <div className="relative" onClick={() => codeRef.current?.focus()}>
+        <div aria-hidden className="grid grid-cols-6 gap-1.5">
+          {Array.from({ length: 6 }, (_, i) => {
+            const active = focused && !pending && i === Math.min(code.length, 5);
+            return (
+              <span
+                key={i}
+                className={
+                  "grid h-12 place-items-center rounded-[min(var(--cf-radius-control),0.75rem)] border bg-[var(--cf-bg)] font-mono text-lg font-semibold transition-colors " +
+                  (active ? "border-[var(--cf-accent)] ring-2 ring-[var(--cf-accent)]/30" : "border-[var(--cf-chip-border)]")
+                }
+              >
+                {code[i] ?? (active ? <span className="h-5 w-px animate-pulse bg-current opacity-60" /> : "")}
+              </span>
+            );
+          })}
+        </div>
         <input
           id={codeId}
           ref={codeRef}
@@ -541,6 +741,8 @@ export function CodeForm({
           autoComplete="one-time-code"
           maxLength={6}
           value={code}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           onChange={(e) => {
             /*
               Ignored rather than `disabled` while the code is in flight.
@@ -559,20 +761,13 @@ export function CodeForm({
             if (next.length === 6) submit(next);
           }}
           aria-busy={pending}
-          className="h-11 w-32 rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-bg)] px-4 text-center font-mono text-lg tracking-[0.3em] outline-none focus-visible:ring-2 focus-visible:ring-[var(--cf-accent)]"
+          className="absolute inset-0 h-full w-full cursor-text text-transparent caret-transparent opacity-0 outline-none"
         />
-        <button
-          type="submit"
-          // Same reason as the box above: verifying must not close the keyboard.
-          onMouseDown={(e) => e.preventDefault()}
-          disabled={pending || code.length < 4}
-          className="h-11 flex-1 rounded-full text-sm font-medium transition-transform active:scale-[0.98] disabled:opacity-50 motion-reduce:active:scale-100"
-          style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
-        >
-          {pending ? <Loader2 className="mx-auto size-4 animate-spin" /> : "Verify"}
-        </button>
       </div>
-      <div className="flex items-center gap-3 text-[0.6875rem]">
+      <PrimaryButton pending={pending} disabled={code.length < 4}>
+        Verify
+      </PrimaryButton>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[0.6875rem]">
         {secondsLeft > 0 ? (
           // Plain text, not a disabled button: there is nothing to press yet,
           // and the number is the useful part — it says the wait is finite
@@ -594,8 +789,8 @@ export function CodeForm({
         <button type="button" onClick={onChangeNumber} className="underline opacity-55 hover:opacity-100">
           {changeLabel}
         </button>
-        {devCode && <span className="font-mono opacity-40">dev code: {devCode}</span>}
       </div>
+      {devCode && <p className="font-mono text-[0.6875rem] opacity-40">dev code: {devCode}</p>}
     </form>
   );
 }

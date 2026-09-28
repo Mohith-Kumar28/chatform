@@ -14281,6 +14281,123 @@
         ]
       }
     },
+    "/v1/sessions/{sid}/auth/email/start": {
+      "post": {
+        "operationId": "postV1SessionsBySidAuthEmailStart",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Email a respondent a sign-in code",
+        "responses": {
+          "200": {
+            "description": "Code sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "sentTo": {
+                      "type": "string"
+                    },
+                    "devCode": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "sentTo"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not an address, too many codes, or this form does not sign in by email"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/sessions/{sid}/auth/email/verify": {
+      "post": {
+        "operationId": "postV1SessionsBySidAuthEmailVerify",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Verify a respondent with the emailed sign-in code",
+        "responses": {
+          "200": {
+            "description": "Verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Wrong, expired or used code"
+          },
+          "409": {
+            "description": "This identity has already answered"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
     "/v1/sessions/{sid}/verify/phone-token": {
       "post": {
         "operationId": "postV1SessionsBySidVerifyPhoneToken",
@@ -15435,6 +15552,123 @@
           },
           "400": {
             "description": "The token did not check out"
+          },
+          "409": {
+            "description": "This identity has already answered"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/chat/sessions/{sid}/auth/email/start": {
+      "post": {
+        "operationId": "postV1ChatSessionsBySidAuthEmailStart",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Email a respondent a sign-in code",
+        "responses": {
+          "200": {
+            "description": "Code sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "sentTo": {
+                      "type": "string"
+                    },
+                    "devCode": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "sentTo"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not an address, too many codes, or this form does not sign in by email"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sid",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/chat/sessions/{sid}/auth/email/verify": {
+      "post": {
+        "operationId": "postV1ChatSessionsBySidAuthEmailVerify",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Verify a respondent with the emailed sign-in code",
+        "responses": {
+          "200": {
+            "description": "Verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Wrong, expired or used code"
           },
           "409": {
             "description": "This identity has already answered"

@@ -167,7 +167,11 @@ export function stripForPublish(input: FormDoc, ent: Entitlements): StripResult 
     // the plan cannot actually complete, and switching them to a method the author did not
     // choose would change who the form collects.
     const feature: FeatureKey =
-      s.requireAuth.method === "phone" ? "respondent_auth_phone" : "respondent_auth_google";
+      s.requireAuth.method === "phone"
+        ? "respondent_auth_phone"
+        : s.requireAuth.method === "email"
+          ? "respondent_auth_email"
+          : "respondent_auth_google";
     if (!can(ent, feature)) {
       s.requireAuth.enabled = false;
       note(stripped, "settings.requireAuth.enabled", feature);

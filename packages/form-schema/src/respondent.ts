@@ -11,8 +11,8 @@ import { z } from "zod";
  * durable to key on.
  */
 export const RespondentIdentity = z.object({
-  provider: z.enum(["google", "phone"]),
-  /** Stable per-provider id: Google's `sub`, or the E.164 number. */
+  provider: z.enum(["google", "phone", "email"]),
+  /** Stable per-provider id: Google's `sub`, the E.164 number, or the lower-cased address. */
   subject: z.string().min(1).max(200),
   email: z.string().max(320).nullable().default(null),
   phone: z.string().max(20).nullable().default(null),
@@ -22,7 +22,7 @@ export const RespondentIdentity = z.object({
 });
 export type RespondentIdentity = z.infer<typeof RespondentIdentity>;
 
-export const RespondentAuthMethod = z.enum(["google", "phone"]);
+export const RespondentAuthMethod = z.enum(["google", "phone", "email"]);
 export type RespondentAuthMethod = z.infer<typeof RespondentAuthMethod>;
 
 /** What the client needs to render the sign-in card, and nothing more. */

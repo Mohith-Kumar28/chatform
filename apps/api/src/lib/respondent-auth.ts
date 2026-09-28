@@ -323,8 +323,12 @@ const MAX_ATTEMPTS = 5;
 const MAX_SENDS_PER_SCOPE = 5;
 const RESEND_COOLDOWN_MS = 30 * 1000;
 
-/** What a code proves. One `verify` answer, named by its block ref. */
-export type OtpScope = `block:${string}`;
+/**
+ * What a code proves. One `verify` answer, named by its block ref, or the
+ * form's sign-in gate. Separate scopes, so a code sent to prove an answer can
+ * never be spent signing in, nor the other way round.
+ */
+export type OtpScope = `block:${string}` | "signin";
 
 const CHALLENGE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -355,6 +359,8 @@ export interface ChallengeRequest {
   destination: string;
   /** Named in the message, so a code arriving out of context still makes sense. */
   formTitle?: string;
+  /** Which email it is. An answer being proved unless said otherwise. */
+  purpose?: "answer-verification" | "respondent-sign-in";
 }
 
 /**
@@ -429,7 +435,13 @@ export async function startEmailChallenge(env: Bindings, req: ChallengeRequest):
    * already makes; sending inline would put an outbound call on the
    * respondent's turn.
    */
-  await enqueueMail(env, { kind: "otp", to: destination, code, purpose: "answer-verification", formTitle: req.formTitle });
+  await enqueueMail(env, {
+    kind: "otp",
+    to: destination,
+    code,
+    purpose: req.purpose ?? "answer-verification",
+    formTitle: req.formTitle,
+  });
 
   // In development the code comes back so the flow is testable without waiting
   // on a mailbox. Guarded on ENVIRONMENT alone — a production deploy must never
@@ -502,6 +514,27 @@ export async function verifyEmailChallenge(
     .run();
 
   return { ok: true, destination: row.destination };
+}
+
+/**
+ * The identity an emailed sign-in code proves.
+ *
+ * The address is the subject, lower-cased, so the same person signing in twice
+ * with different capitalisation is one person to the one-per-person rule. And
+ * it is the verified email too, which is what makes a reminder go to it rather
+ * than to anything typed later.
+ */
+export function emailIdentity(destination: string): RespondentIdentity {
+  const address = destination.trim().toLowerCase();
+  return {
+    provider: "email",
+    subject: address,
+    email: address,
+    phone: null,
+    name: null,
+    pictureUrl: null,
+    verifiedAt: Date.now(),
+  };
 }
 
 /** Sweep consumed and expired challenges. Called from the existing cron. */

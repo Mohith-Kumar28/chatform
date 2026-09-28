@@ -30,8 +30,9 @@ the form.
 
 The first of these that yields an address wins:
 
-1. **A verified respondent.** If the form requires sign-in, we already have an
-   address they proved they control.
+1. **A verified respondent.** If the form signs people in with Google or an
+   email code, we already have an address they proved they control. Phone
+   sign-in proves a number, not an address, so the steps below apply.
 2. **An `email` question**, or the email field of a `contact_info` question, in
    the order they appear in the form.
 3. **A hidden field**, if you name one under *Address from a hidden field*. This

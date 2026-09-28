@@ -1,5 +1,5 @@
 import type { Context, Hono } from "hono";
-import { RespondentAuthView } from "../lib/v1-schemas.js";
+import { EmailCodeSentView, RespondentAuthView } from "../lib/v1-schemas.js";
 import { describeRoute, resolver } from "hono-openapi";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
@@ -16,7 +16,13 @@ import {
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { SessionDO } from "../do/session-do.js";
-import { verifyGoogleIdToken, verifyFirebasePhoneToken } from "../lib/respondent-auth.js";
+import {
+  emailIdentity,
+  startEmailChallenge,
+  verifyEmailChallenge,
+  verifyGoogleIdToken,
+  verifyFirebasePhoneToken,
+} from "../lib/respondent-auth.js";
 import { findHeldResumable, findIdentityHistory } from "../lib/respondent-history.js";
 import { clampForRuntime } from "../lib/doc-entitlements.js";
 import { getEntitlements } from "../lib/entitlements.js";
@@ -34,6 +40,38 @@ import { can } from "@repo/entitlements";
 
 const googleSchema = z.object({ idToken: z.string().min(10).max(8000) });
 const phoneTokenSchema = z.object({ idToken: z.string().min(10).max(8000) });
+const emailStartSchema = z.object({ email: z.string().min(3).max(320) });
+const emailVerifySchema = z.object({ code: z.string().min(4).max(12) });
+
+/**
+ * Whether this session's form signs people in by email, and what it is called.
+ *
+ * Asked before a code goes out, so the endpoint cannot be used to mail codes
+ * from our domain on behalf of a form that never asked for them. Read from the
+ * version the session runs, and through the plan, as the gate itself is: a
+ * form whose plan lost email sign-in shows no card, so it sends no code.
+ */
+async function emailGateFor(
+  env: Bindings,
+  sessionId: string,
+): Promise<{ title: string } | null> {
+  const row = await env.DB.prepare(
+    `SELECT s.organization_id AS organization_id, s.status AS status, fv.schema_json AS schema_json
+       FROM chat_sessions s JOIN form_versions fv ON fv.id = s.form_version_id
+      WHERE s.id = ?1`,
+  )
+    .bind(sessionId)
+    .first<{ organization_id: string; status: string; schema_json: string }>();
+  if (!row || row.status !== "active") return null;
+  try {
+    const ent = await getEntitlements(env, row.organization_id);
+    const doc = clampForRuntime(readFormDoc(JSON.parse(row.schema_json)), ent);
+    const gate = doc.settings.requireAuth;
+    return gate.enabled && gate.method === "email" ? { title: doc.title } : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * These handlers read `c.env` and `c.req`, and nothing from Variables, so the
@@ -387,6 +425,78 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
       const result = await verifyFirebasePhoneToken(c.env, c.req.valid("json").idToken);
       if (!result.ok) return c.json({ error: { code: result.code, message: result.message } }, 400);
       return attach(c, result.identity, sessionId);
+    },
+  );
+
+  /**
+   * Email sign-in, step one: send a six-digit code.
+   *
+   * Ours rather than a provider's, like the codes that prove an email answer,
+   * and through the same table and caps: five sends per session, a resend
+   * cooldown for the same address only, ten minutes to use it. The scope is
+   * `signin`, so a code sent for an answer can never be spent here.
+   */
+  router.post(
+    `${base}/auth/email/start`,
+    describeRoute({
+      tags: ["v1"],
+      summary: "Email a respondent a sign-in code",
+      responses: {
+        200: { description: "Code sent", content: { "application/json": { schema: resolver(EmailCodeSentView) } } },
+        400: { description: "Not an address, too many codes, or this form does not sign in by email" },
+      },
+    }),
+    zValidator("json", emailStartSchema),
+    async (c) => {
+      const sessionId = await resolve(c);
+      if (!sessionId) return unauthorized(c);
+      const gate = await emailGateFor(c.env, sessionId);
+      if (!gate) {
+        return c.json(
+          { error: { code: "email_signin_off", message: "This form doesn't sign in by email." } },
+          400,
+        );
+      }
+      const started = await startEmailChallenge(c.env, {
+        sessionId,
+        scope: "signin",
+        destination: c.req.valid("json").email,
+        formTitle: gate.title,
+        purpose: "respondent-sign-in",
+      });
+      if (!started.ok) return c.json({ error: { code: started.code, message: started.message } }, 400);
+      return c.json({
+        ok: true,
+        sentTo: started.destination,
+        ...(started.devCode ? { devCode: started.devCode } : {}),
+      });
+    },
+  );
+
+  /**
+   * Email sign-in, step two: the code back, and the gate clears.
+   *
+   * From here it is the same as the other two doors: an identity, the same
+   * `assessIdentity` verdict, the same adoption of an open response.
+   */
+  router.post(
+    `${base}/auth/email/verify`,
+    describeRoute({
+      tags: ["v1"],
+      summary: "Verify a respondent with the emailed sign-in code",
+      responses: {
+        200: { description: "Verified", content: { "application/json": { schema: resolver(RespondentAuthView) } } },
+        400: { description: "Wrong, expired or used code" },
+        409: { description: "This identity has already answered" },
+      },
+    }),
+    zValidator("json", emailVerifySchema),
+    async (c) => {
+      const sessionId = await resolve(c);
+      if (!sessionId) return unauthorized(c);
+      const result = await verifyEmailChallenge(c.env, sessionId, "signin", c.req.valid("json").code);
+      if (!result.ok) return c.json({ error: { code: result.code, message: result.message } }, 400);
+      return attach(c, emailIdentity(result.destination), sessionId);
     },
   );
 

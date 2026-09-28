@@ -227,7 +227,7 @@ export function SettingsPanel({
               */}
               <SettingRow label="Verify with">
                 <div role="radiogroup" aria-label="Sign-in method" className="flex gap-1.5">
-                  {(["google", "phone"] as const).map((m) => {
+                  {(["google", "email", "phone"] as const).map((m) => {
                     const on = settings.requireAuth.method === m;
                     return (
                       <button
@@ -243,7 +243,7 @@ export function SettingsPanel({
                             : "border-border text-muted-foreground hover:bg-muted",
                         )}
                       >
-                        {m === "google" ? "Google" : "Phone (SMS)"}
+                        {m === "google" ? "Google" : m === "email" ? "Email code" : "Phone (SMS)"}
                       </button>
                     );
                   })}
