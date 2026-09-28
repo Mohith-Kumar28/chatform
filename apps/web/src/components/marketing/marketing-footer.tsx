@@ -90,6 +90,7 @@ const COLUMNS = [
       { href: "/signin", label: "Sign in" },
       { href: "/signin", label: "Create an account" },
       { href: "/dashboard", label: "Dashboard" },
+      { href: "/contact", label: "Contact us" },
     ],
   },
 ] as const;

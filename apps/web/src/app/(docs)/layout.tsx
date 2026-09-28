@@ -6,6 +6,7 @@ import { source } from "@/lib/source";
 import { Logo } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
+import { ChatformEmbed } from "@/components/marketing/chatform-embed";
 
 /**
  * The documentation shell.
@@ -112,6 +113,12 @@ export default function DocsRootLayout({ children }: { children: ReactNode }) {
         {children}
       </DocsLayout>
       <MarketingFooter />
+      {/* The contact form behind a corner button. Opens on click only: a reader
+          halfway down a reference page did not ask to be interrupted. */}
+      <ChatformEmbed
+        form="contact-us-673e52"
+        attributes={{ label: "Need help?", "open-on": "click" }}
+      />
     </RootProvider>
   );
 }

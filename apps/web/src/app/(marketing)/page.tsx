@@ -8,6 +8,7 @@ import { WhatItDoes } from "@/components/marketing/what-it-does";
 import { Developers } from "@/components/marketing/developers";
 import { PricingSection } from "@/components/marketing/pricing-section";
 import { CtaBand } from "@/components/marketing/cta-band";
+import { ChatformEmbed } from "@/components/marketing/chatform-embed";
 import { Band, BandTitle, BandLede } from "@/components/marketing/band";
 import { InView } from "@/components/marketing/in-view";
 import { ArrowMark, HandNote } from "@/components/marketing/annotate";
@@ -170,6 +171,9 @@ export default function LandingPage() {
       </Band>
 
       <CtaBand />
+
+      {/* The contact form as a corner button, with the dashboard's own settings. */}
+      <ChatformEmbed form="contact-us-673e52" />
     </>
   );
 }

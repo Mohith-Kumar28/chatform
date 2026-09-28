@@ -17,4 +17,5 @@ export const MARKETING_LINKS = [
   { href: "/compare", label: "Compare" },
   { href: "/pricing", label: "Pricing" },
   { href: "/docs", label: "Docs" },
+  { href: "/contact", label: "Contact" },
 ] as const;

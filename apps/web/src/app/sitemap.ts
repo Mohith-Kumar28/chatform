@@ -34,6 +34,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_ORIGIN}/form-templates`, changeFrequency: "monthly", priority: 0.9 },
     { url: `${SITE_ORIGIN}/blog`, changeFrequency: "weekly", priority: 0.7 },
     { url: `${SITE_ORIGIN}/ai-info`, changeFrequency: "monthly", priority: 0.4 },
+    { url: `${SITE_ORIGIN}/contact`, changeFrequency: "yearly", priority: 0.3 },
     { url: `${SITE_ORIGIN}/signin`, changeFrequency: "yearly", priority: 0.3 },
 
     ...USE_CASES.map((entry) => ({
