@@ -19,6 +19,15 @@ export type EmbedMode = "inline" | "popup" | "side-tab" | "fullpage";
 export type EmbedPosition = "bottom-right" | "bottom-left" | "top-right" | "top-left";
 export type ButtonShape = "round" | "rounded" | "square";
 export type ButtonSize = "small" | "medium" | "large";
+/** When an overlay opens by itself. `scroll:<pct>` is a share of the page, 1 to 100. */
+export type OpenOn = "click" | "load" | "exit-intent" | `scroll:${number}`;
+
+/** The percentage in a `scroll:<pct>` trigger, or null for any other trigger. */
+export function scrollPercent(openOn: OpenOn): number | null {
+  if (!openOn.startsWith("scroll:")) return null;
+  const pct = Number(openOn.slice("scroll:".length));
+  return Number.isFinite(pct) ? pct : null;
+}
 
 export const EMBED_MODES: { mode: EmbedMode; label: string; blurb: string }[] = [
   { mode: "popup", label: "Popup", blurb: "A button in the corner that opens the form." },
@@ -58,7 +67,7 @@ export interface EmbedConfig {
   /** The corner button. Off means the form opens from the page's own element. */
   launcher: boolean;
   theme: "auto" | "light" | "dark";
-  openOn: "click" | "load" | "exit-intent" | "scroll:50";
+  openOn: OpenOn;
   /** Panel width for overlays. */
   width: number;
   /** Panel height for overlays; inline grows to fit unless this is set. */
@@ -264,19 +273,48 @@ const MODE_WORDS: Record<EmbedMode, string> = {
   fullpage: "full page",
 };
 
-const OPEN_WORDS: Record<EmbedConfig["openOn"], string> = {
-  click: "when a button is clicked",
-  load: "as soon as the page loads",
-  "exit-intent": "when the visitor is about to leave",
-  "scroll:50": "after scrolling halfway down the page",
-};
+function openWords(openOn: OpenOn): string {
+  if (openOn === "click") return "when a button is clicked";
+  if (openOn === "load") return "as soon as the page loads";
+  if (openOn === "exit-intent") return "when the visitor is about to leave";
+  return `after scrolling ${scrollPercent(openOn)}% of the page`;
+}
+
+/**
+ * Every setting the tag can override, with its values and what the dashboard
+ * has now. Must stay in step with `configure()` in `public/embed.js` and its
+ * ranges with `EmbedDoc`.
+ */
+function settingsTable(config: EmbedConfig): string {
+  const rows: [string, string, string, string][] = [
+    ["data-mode", "popup, side-tab, inline, fullpage", "How it appears on the page", config.mode],
+    ["data-position", "bottom-right, bottom-left, top-right, top-left", "Popup: the corner for the button and panel. Side tab: the side.", config.position],
+    ["data-offset", "0 to 200 (px)", "Gap between the button and the screen edges", String(config.offset)],
+    ["data-width", "240 to 1200 (px)", "Panel width (popup, side tab)", String(config.width)],
+    ["data-height", "240 to 2000 (px), or auto", "Panel height. Inline with auto grows to fit the conversation.", config.mode === "inline" && config.autoHeight ? "auto" : String(config.height)],
+    ["data-open-on", "click, load, exit-intent, scroll:1 to scroll:100", "When a popup or side tab opens by itself. click means only when clicked. scroll:40 opens after 40% of the page is scrolled.", config.openOn],
+    ["data-launcher", "show, none", "The corner button. none hides it; open the form from your own button instead.", config.launcher ? "show" : "none"],
+    ["data-label", "text, up to 60 characters", "The corner button's text. Empty (data-label=\"\") makes an icon-only round button.", config.label ? `"${config.label}"` : "empty (icon only)"],
+    ["data-icon", "chat, none", "The chat icon on the corner button", config.icon ? "chat" : "none"],
+    ["data-button-color", "hex colour, e.g. #FD6F29", "The corner button's colour", config.color],
+    ["data-button-text-color", "hex colour, e.g. #ffffff", "The corner button's text and icon colour", config.buttonTextColor || "#ffffff"],
+    ["data-button-shape", "round, rounded, square", "The corner button's corners", config.buttonShape],
+    ["data-button-size", "small, medium, large", "The corner button's size", config.buttonSize],
+    ["data-theme", "auto, light, dark", "The panel's colour scheme. auto follows the visitor's device.", config.theme],
+  ];
+  return [
+    "| Attribute | Values | What it does | Dashboard now |",
+    "| --- | --- | --- | --- |",
+    ...rows.map((r) => `| ${r.join(" | ")} |`),
+  ].join("\n");
+}
 
 /**
  * A prompt for an AI coding tool that adds the embed to someone's site.
  *
- * The look and behaviour are published with the form, so the agent only has
- * to place the tag; it is told not to pin settings with attributes, and to
- * ask about placement before it builds. Written without em
+ * The look and behaviour are published with the form, so by default the agent
+ * only places the tag. Every setting is listed with its range and current value
+ * so it can override one per tag when asked, and it asks before it builds. Written without em
  * dashes on purpose: the agent copies the prompt's voice into the site.
  */
 export function aiPrompt(options: SnippetOptions): string {
@@ -292,15 +330,16 @@ Script: ${origin}/embed.js
 
 ## Step 1: ask me first
 
-How the form looks and when it opens (popup or inline, corner, button text, button colour, shape and size, auto open, panel size, fonts and colours) is set in Chatform and loaded by the script, so do not ask about those or add attributes for them. Currently: ${MODE_WORDS[config.mode]}${overlay ? `, ${config.launcher ? `${config.buttonSize} ${config.buttonShape} corner button "${config.label || "icon only"}" at ${config.position}` : "no corner button, opened from my own button"}, opens ${OPEN_WORDS[config.openOn]}` : ""}.
+How the form looks and when it opens is set in the Chatform dashboard and loaded by the script, so by default the tag needs no settings at all. Currently: ${MODE_WORDS[config.mode]}${overlay ? `, ${config.launcher ? `${config.buttonSize} ${config.buttonShape} corner button "${config.label || "icon only"}" at ${config.position}` : "no corner button, opened from my own button"}, opens ${openWords(config.openOn)}` : ""}. Any of it can be changed for one tag with a data attribute (see Settings below), so the same form can be inline on one page and a popup on another.
 
-If my site already has a Chatform script tag, reuse it: remove any data-mode, data-position, data-label, data-button-color or other look and behaviour attributes from it rather than updating their values.
+If my site already has a Chatform script tag, reuse it and keep the attributes it already has unless I ask to change them.
 
 Before you write any code, ask me these questions one at a time and wait for my reply:
 
 1. Which page or pages should it be on?${config.mode === "inline" ? " Which section of the page should it go in?" : ""}
 2. ${overlay ? `Should it also open from a button that is already on my site? If so, which one? ${suggested(config.launcher ? "no, the corner button is enough" : "yes, my own button")}` : "Anything that should sit above or below it?"}
 3. Should any hidden values be passed in, like the plan a visitor is on or where they came from? These are saved with each response.
+4. Should it look or behave differently here from the dashboard settings above (for example inline on this page, a different button colour, or opening after less scrolling)? ${suggested("no, use the dashboard settings")}
 
 ## Step 2: add it
 
@@ -314,17 +353,36 @@ Do not install any npm package for this. The script is all it needs.
 
 ## Settings
 
-The form's look and behaviour come from Chatform and update when I press Publish there, with no code change. That includes the corner button's text, colour, text colour, shape, size and font (the button uses the form's own font). Do not add data-mode, data-position, data-label, data-open-on, data-button-color, data-button-text-color, data-button-shape, data-button-size or similar attributes: an attribute on the tag overrides the Chatform setting on this site for good. When one does, the browser console says so with a line starting "[chatform]".
+Every setting below comes from the Chatform dashboard (the form's Integrate tab) and updates on every site when I press Publish there, with no code change. That is the default, and a tag with only data-form uses it.
 
-The only attributes to use:
+To make one tag different, add the attribute. An attribute overrides the dashboard for that tag only, and keeps overriding it after later dashboard changes, so add one only when I ask for something different on that page. The browser console then prints a line starting "[chatform]" naming the override; that is expected, not an error.
+
+Required:
 
 | Attribute | What it does |
 | --- | --- |
-| data-form | Which form to show. Required. |
-| data-target | Inline only: CSS selector of the element to put the form in |
-| data-hidden-<name> | A hidden value saved with each response, e.g. data-hidden-plan="pro" |
+| data-form | Which form to show: ${slug} |
+
+Optional overrides:
+
+${settingsTable(config)}
+
+Also optional, not set in the dashboard:
+
+| Attribute | Values | What it does |
+| --- | --- | --- |
+| data-target | CSS selector | Inline only: the element to put the form in. Without it the form is added at the end of the page. |
+| data-hidden-<name> | any text | A hidden value saved with each response, e.g. data-hidden-plan="pro" |
+| data-lazy | true, false | When the form loads. Default: once the page is idle. "false" loads it at once, "true" only on hover or click. |
+| data-nonce | your CSP nonce | Copied onto the styles the script adds, for sites with a strict Content Security Policy. |
+
+The panel font and colours come from the form's own design in Chatform and cannot be set on the tag.
 
 An automatic open happens at most once a day per visitor, and never again after they submit. On screens narrower than 520px the popup and side tab fill the whole screen, and an automatic open only draws attention to the corner button instead of covering the page.
+
+## Reading the current settings from code
+
+window.Chatform.settings() returns { dashboard, overrides, current }: what the dashboard says, the attributes on this tag, and what the tag is actually using. It returns null until the settings have loaded; window.Chatform.on("settings", (s) => { ... }) fires once they have. Use it to check what a page would change before adding an override.
 
 ## Opening it from my own button
 
@@ -332,7 +390,7 @@ Add the attribute data-chatform-open to any button or link. Clicking it opens th
 
 <button type="button" data-chatform-open>Join the waitlist</button>
 
-Whether the round corner button shows is set in Chatform. If one page has two forms, name the form: data-chatform-open="${slug}".
+Whether the round corner button shows is set in Chatform, or per tag with data-launcher. If one page has two forms, name the form: data-chatform-open="${slug}".
 
 ## Controlling it from JavaScript
 
@@ -340,9 +398,10 @@ window.Chatform.open()
 window.Chatform.close()
 window.Chatform.toggle()
 window.Chatform.prefill({ plan: "pro" })   // hidden values, set at runtime
+window.Chatform.settings()                  // { dashboard, overrides, current }
 window.Chatform.on("complete", (event) => { /* the visitor finished the form */ })
 
-Other events: open, close, ready, question, answer. Calls made before the script has loaded are queued if you push them to window.ChatformQueue, for example window.ChatformQueue = [["open"]].
+Other events: open, close, ready, settings, question, answer. Calls made before the script has loaded are queued if you push them to window.ChatformQueue, for example window.ChatformQueue = [["open"]].
 
 ## The snippet
 
@@ -354,5 +413,5 @@ ${embedSnippet(options)}
 
 - Only one script tag per form per page.
 - If the site sets a Content Security Policy, add: frame-src ${origin}; script-src ${origin};
-- Tell me how to check it works: which page to open and what I should see, and that the browser console shows no "[chatform]" override notes.`;
+- Tell me how to check it works: which page to open and what I should see. The browser console should show a "[chatform]" override note only for attributes I asked for.`;
 }

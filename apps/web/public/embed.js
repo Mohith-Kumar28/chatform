@@ -23,9 +23,9 @@
  *   data-mode        popup | side-tab | inline | fullpage        default popup
  *   data-position    bottom-right | bottom-left | top-right |
  *                    top-left                                    default bottom-right
- *   data-offset      px between the launcher and the edges       default 20
- *   data-width       panel width in px (popup, side tab)         default 400 / 440
- *   data-height      panel height in px; inline takes "auto"     default 600 / auto
+ *   data-offset      px between the launcher and the edges, 0-200 default 20
+ *   data-width       panel width in px (popup, side tab), 240-1200 default 400 / 440
+ *   data-height      panel height in px, 240-2000; inline takes "auto" default 600 / auto
  *   data-target      CSS selector for inline mode                default appends
  *   data-app         the Chatform origin                         default this script's origin
  *   data-button-color launcher colour (data-color still works)  default #FD6F29
@@ -37,7 +37,7 @@
  *   data-launcher    "none" hides the corner button; open it from
  *                    your own element instead (see below)
  *   data-theme       light | dark | auto                         default auto
- *   data-open-on     click | load | exit-intent | scroll:<pct>   default click
+ *   data-open-on     click | load | exit-intent | scroll:<1-100> default click
  *                    (on a phone, the automatic ones shake the launcher
  *                    instead of covering the page)
  *                    (the automatic ones never fire again once this
@@ -54,6 +54,8 @@
  *
  * Programmatic:
  *   window.Chatform.open() / .close() / .toggle() / .prefill({}) / .on(event, fn) / .destroy()
+ *   window.Chatform.settings()         { dashboard, overrides, current }; the
+ *                                      "settings" event fires when they arrive
  *   window.Chatform.get(slug)          two forms on one page
  *   window.ChatformQueue = [["open"]]  calls made before this loads are replayed
  */
@@ -93,8 +95,12 @@
   /** How much room each launcher size takes: its circle plus a 12px gap. */
   var BUTTON_SIZES = { small: 56, medium: 68, large: 80 };
 
+  /** `Chatform.settings()`: what the dashboard says, what the tag overrode, and what is in use. */
+  var settings = null;
+
   function configure(published) {
     var r = published || {};
+    var overridden = {};
     /**
      * Say so when the tag overrides a published setting.
      *
@@ -111,6 +117,7 @@
     }
     function pick(name, key) {
       if (script.hasAttribute(name)) {
+        overridden[name] = script.getAttribute(name);
         overrides(name, key, script.getAttribute(name), String(r[key]));
         return script.getAttribute(name);
       }
@@ -118,6 +125,7 @@
     }
     function flag(name, key) {
       if (script.hasAttribute(name)) {
+        overridden[name] = script.getAttribute(name);
         overrides(name, key, script.getAttribute(name) !== "none", r[key] !== false);
         return script.getAttribute(name) !== "none";
       }
@@ -126,6 +134,7 @@
 
     mode = pick("data-mode", "mode") || "popup";
     var colorAttr = script.hasAttribute("data-button-color") ? "data-button-color" : script.hasAttribute("data-color") ? "data-color" : null;
+    if (colorAttr) overridden[colorAttr] = script.getAttribute(colorAttr);
     if (colorAttr) overrides(colorAttr, "color", script.getAttribute(colorAttr).toLowerCase(), String(r.color).toLowerCase());
     color = (colorAttr && script.getAttribute(colorAttr)) || r.color || "#FD6F29";
     textColor = pick("data-button-text-color", "textColor") || "#fff";
@@ -145,6 +154,7 @@
     openOn = pick("data-open-on", "openOn") || "click";
     if (script.hasAttribute("data-height")) {
       heightAttr = script.getAttribute("data-height");
+      overridden["data-height"] = heightAttr;
       overrides("data-height", "height", heightAttr, String(r.height));
     }
     else if (mode === "inline") heightAttr = r.autoHeight === false && r.height ? String(r.height) : "auto";
@@ -166,14 +176,40 @@
     vertical = position.indexOf("top") === 0 ? "top" : "bottom";
     horizontal = position.indexOf("left") > -1 ? "left" : "right";
 
+    // The same ranges the studio allows: 0 to 200, 240 to 1200, 240 to 2000.
     offset = parseInt(pick("data-offset", "offset"), 10);
     if (isNaN(offset) || offset < 0) offset = 20;
+    offset = Math.min(offset, 200);
 
     panelWidth = parseInt(pick("data-width", "width"), 10);
     if (isNaN(panelWidth) || panelWidth < 240) panelWidth = mode === "side-tab" ? 440 : 400;
+    panelWidth = Math.min(panelWidth, 1200);
 
     panelHeight = parseInt(heightAttr, 10);
     if (isNaN(panelHeight) || panelHeight < 240) panelHeight = 600;
+    panelHeight = Math.min(panelHeight, 2000);
+
+    /**
+     * Readable from code, so a page that wants to differ from the dashboard
+     * can see what it is differing from. `dashboard` is what the form
+     * publishes (empty when unpublished or unreachable), `overrides` is the
+     * attributes on this tag, `current` is what this tag is actually using.
+     */
+    settings = {
+      dashboard: {
+        mode: r.mode, position: r.position, offset: r.offset, width: r.width, height: r.height,
+        autoHeight: r.autoHeight, buttonColor: r.color, buttonTextColor: r.textColor, label: r.label,
+        icon: r.icon, launcher: r.launcher, buttonShape: r.buttonShape, buttonSize: r.buttonSize,
+        theme: r.theme, openOn: r.openOn,
+      },
+      overrides: overridden,
+      current: {
+        mode: mode, position: position, offset: offset, width: panelWidth,
+        height: heightAttr === "auto" ? "auto" : panelHeight, buttonColor: color, buttonTextColor: textColor,
+        label: label, icon: showIcon, launcher: showLauncher, buttonShape: buttonShape,
+        buttonSize: buttonSize, theme: theme, openOn: openOn,
+      },
+    };
   }
 
   /**
@@ -943,20 +979,30 @@
       return;
     }
     if (openOn.indexOf("scroll:") === 0) {
-      var pct = parseInt(openOn.slice(7), 10) || 50;
+      var pct = Math.min(100, Math.max(1, parseInt(openOn.slice(7), 10) || 50));
       // How far down this page the visitor is, as a share of how far it can
-      // scroll. A page too short to scroll counts as read to the end.
+      // scroll. A page too short to scroll counts as read to the end. The 2px
+      // slack lets 100% fire on a zoomed page that stops a fraction short.
       var check = function () {
         var room = document.documentElement.scrollHeight - window.innerHeight;
-        var scrolled = room > 0 ? (window.scrollY / room) * 100 : 100;
-        if (scrolled >= pct) {
-          window.removeEventListener("scroll", check);
+        if (room <= 0 || window.scrollY + 2 >= (room * pct) / 100) {
+          window.removeEventListener("scroll", onScroll);
           autoOpen();
           return true;
         }
         return false;
       };
-      if (!check()) window.addEventListener("scroll", check, { passive: true });
+      var onScroll = function () {
+        check();
+      };
+      if (check()) return;
+      window.addEventListener("scroll", onScroll, { passive: true });
+      // Load the form now, not after the page's `load` and an idle moment. The
+      // popup waits for the form's "already answered?" check, and a frame
+      // still loading at the mark held it back for seconds: someone still
+      // scrolling was at the bottom by the time it showed, so halfway opened
+      // at the end.
+      if (!frame && panel && !destroyed && lazyAttr !== "true") panel.appendChild(buildFrame());
     }
   }
 
@@ -986,6 +1032,7 @@
     loadPublished(function (published) {
       if (destroyed) return;
       configure(published);
+      emit("settings", api.settings());
       build();
       mounted = true;
       for (var p = 0; p < pending.length; p++) pending[p]();
@@ -1052,6 +1099,10 @@
     toggle: whenMounted(toggle),
     prefill: prefill,
     destroy: destroy,
+    /** A copy, or null until the settings have arrived; `on("settings")` fires then. */
+    settings: function () {
+      return settings ? JSON.parse(JSON.stringify(settings)) : null;
+    },
     on: function (name, fn) {
       (listeners[name] = listeners[name] || []).push(fn);
       return api;

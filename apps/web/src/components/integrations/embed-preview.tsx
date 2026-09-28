@@ -52,7 +52,7 @@ const LAUNCHER = {
 /** `embed.js`'s `.cf-r-*` corners. */
 const LAUNCHER_RADIUS = { round: 9999, rounded: 12, square: 4 } as const;
 
-/** The browser bar and the phone's status bar are both 44px (`top-11`). */
+/** The phone's status bar, 44px (`top-11`). */
 const CHROME_BAR = 44;
 
 /**
@@ -95,6 +95,7 @@ export function EmbedPreview({
   device,
   open,
   onToggle,
+  toolbar,
   className,
 }: {
   config: EmbedConfig;
@@ -106,11 +107,18 @@ export function EmbedPreview({
   device: PreviewDevice;
   open: boolean;
   onToggle: () => void;
+  /** Controls drawn at full size in the browser bar, on the right. */
+  toolbar?: React.ReactNode;
   className?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState({ width: 0, height: 0 });
-  const stage = STAGES[device];
+  // The desktop page takes the pane's proportions, so it fills the frame edge
+  // to edge instead of sitting letterboxed inside it. Still 1280 real pixels wide.
+  const stage =
+    device === "desktop" && fit.width > 0 && fit.height > 0
+      ? { width: STAGES.desktop.width, height: Math.round(Math.min(1100, Math.max(560, (STAGES.desktop.width * fit.height) / fit.width))) }
+      : STAGES[device];
   // The launcher is set in the form's body font, as `embed.js` sets it.
   useThemeFonts(theme);
 
@@ -132,8 +140,8 @@ export function EmbedPreview({
     fit.height > 0 ? fit.height / stage.height : 0.5,
   );
 
-  /** The page area under the browser bar or the status bar. */
-  const viewport = { width: stage.width, height: stage.height - CHROME_BAR };
+  /** The page area: the whole desktop stage, or a phone's screen under its status bar. */
+  const viewport = { width: stage.width, height: stage.height - (device === "mobile" ? CHROME_BAR : 0) };
   const vertical = config.position.startsWith("top") ? "top" : "bottom";
   const horizontal = config.position.endsWith("left") ? "left" : "right";
   const hasLauncher = config.launcher;
@@ -164,7 +172,9 @@ export function EmbedPreview({
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [showLauncher]);
+    // `device` too: the phone and the browser are different frames, so the
+    // launcher remounts and the old observer kept watching a detached node.
+  }, [showLauncher, device]);
 
   const launcherBox: React.CSSProperties = launcherSize
     ? {
@@ -217,7 +227,32 @@ export function EmbedPreview({
         };
 
   return (
-    <div ref={box} className={cn("relative min-h-0 w-full flex-1", className)}>
+    <div
+      className={cn(
+        "bg-background ring-border/60 flex min-h-0 w-full flex-col overflow-hidden rounded-2xl ring-1",
+        className,
+      )}
+    >
+      {/*
+        The browser bar sits outside the scaled page, so the controls in it are
+        real size rather than shrunk with the picture.
+      */}
+      <div className="bg-muted/60 border-border/70 flex h-11 shrink-0 items-center gap-3 border-b px-3">
+        <div className="flex shrink-0 gap-1.5 pl-1" aria-hidden>
+          {[0, 1, 2].map((i) => (
+            <span key={i} className="bg-muted-foreground/20 size-3 rounded-full" />
+          ))}
+        </div>
+        <div className="flex min-w-0 flex-1 justify-center">
+          <div className="bg-background text-muted-foreground ring-border/60 hidden h-6 w-full max-w-[380px] items-center justify-center gap-1.5 rounded-md text-[12px] ring-1 md:flex">
+            <Lock className="size-3" strokeWidth={2.25} />
+            yoursite.com
+            <span className="sr-only">{formTitle}</span>
+          </div>
+        </div>
+        {toolbar && <div className="flex shrink-0 items-center gap-1">{toolbar}</div>}
+      </div>
+    <div ref={box} className={cn("relative min-h-0 w-full flex-1", device === "mobile" && "bg-muted/30 p-5")}>
       <div
         className="absolute top-1/2 left-1/2 origin-center"
         style={{
@@ -226,7 +261,7 @@ export function EmbedPreview({
           transform: `translate(-50%, -50%) scale(${scale})`,
         }}
       >
-        <Chrome device={device} title={formTitle}>
+        <Chrome device={device}>
           <style>{ATTENTION_CSS}</style>
           {/* The page scrolls inside the viewport, the way a page does — so a
               1200px inline embed is tall, not clipped. */}
@@ -363,6 +398,7 @@ export function EmbedPreview({
         </Chrome>
       </div>
     </div>
+    </div>
   );
 }
 
@@ -374,15 +410,7 @@ export function EmbedPreview({
  * proportion against the window it is sitting in. Kept quiet on purpose: no
  * traffic-light colours, nothing saturated but the form.
  */
-function Chrome({
-  device,
-  title,
-  children,
-}: {
-  device: PreviewDevice;
-  title: string;
-  children: React.ReactNode;
-}) {
+function Chrome({ device, children }: { device: PreviewDevice; children: React.ReactNode }) {
   if (device === "mobile") {
     return (
       <div className="bg-background relative h-full w-full overflow-hidden rounded-[44px] ring-[10px] ring-neutral-900">
@@ -396,25 +424,8 @@ function Chrome({
     );
   }
 
-  return (
-    <div className="bg-background ring-border relative h-full w-full overflow-hidden rounded-2xl ring-1">
-      <div className="bg-muted/60 border-border/70 absolute inset-x-0 top-0 z-20 flex h-11 items-center gap-3 border-b px-4">
-        <div className="flex gap-1.5" aria-hidden>
-          {[0, 1, 2].map((i) => (
-            <span key={i} className="bg-muted-foreground/20 size-3 rounded-full" />
-          ))}
-        </div>
-        <div className="bg-background text-muted-foreground ring-border/60 mx-auto flex h-6 w-[380px] items-center justify-center gap-1.5 rounded-md text-[12px] ring-1">
-          <Lock className="size-3" strokeWidth={2.25} />
-          yoursite.com
-        </div>
-        <div className="w-14" aria-hidden>
-          <span className="sr-only">{title}</span>
-        </div>
-      </div>
-      <div className="absolute inset-0 top-11">{children}</div>
-    </div>
-  );
+  // The browser bar is drawn outside the scaled stage; see `EmbedPreview`.
+  return <div className="bg-background relative h-full w-full overflow-hidden">{children}</div>;
 }
 
 /**

@@ -33,7 +33,17 @@ export const EmbedDoc = z.object({
   icon: z.boolean().optional().catch(undefined),
   launcher: z.boolean().optional().catch(undefined),
   theme: z.enum(["auto", "light", "dark"]).optional().catch(undefined),
-  openOn: z.enum(["click", "load", "exit-intent", "scroll:50"]).optional().catch(undefined),
+  /** `scroll:<pct>` opens once the visitor has scrolled that share of the page, 1 to 100. */
+  openOn: z
+    .union([
+      z.enum(["click", "load", "exit-intent"]),
+      z.templateLiteral(["scroll:", z.number().int()]).refine((v) => {
+        const pct = Number(v.slice("scroll:".length));
+        return pct >= 1 && pct <= 100;
+      }),
+    ])
+    .optional()
+    .catch(undefined),
   width: z.number().int().min(240).max(1200).optional().catch(undefined),
   height: z.number().int().min(240).max(2000).optional().catch(undefined),
   autoHeight: z.boolean().optional().catch(undefined),

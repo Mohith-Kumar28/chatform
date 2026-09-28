@@ -44,6 +44,8 @@ import {
   type ButtonSize,
   type EmbedConfig,
   type EmbedPosition,
+  type OpenOn,
+  scrollPercent,
 } from "@/lib/embed-snippet";
 import { BufferedInput } from "@/components/ui/buffered-input";
 import { InfoHint } from "@/components/ui/info-hint";
@@ -76,9 +78,10 @@ type Target = "html" | "react" | "email" | "ai";
 /**
  * What the studio starts from. The loader's own default is click-only, but a
  * popup nobody notices collects nothing, so the studio suggests opening it
- * halfway down the page. The snippet spells that out as data-open-on.
+ * once the visitor has scrolled half the page.
  */
-const STUDIO_DEFAULTS: EmbedConfig = { ...EMBED_DEFAULTS, openOn: "scroll:50", icon: false };
+const DEFAULT_SCROLL: OpenOn = "scroll:50";
+const STUDIO_DEFAULTS: EmbedConfig = { ...EMBED_DEFAULTS, openOn: DEFAULT_SCROLL, icon: false };
 
 function stripUndefined<T extends object>(o: T): Partial<T> {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
@@ -117,8 +120,9 @@ const BUTTON_SIZES: { value: ButtonSize; label: string }[] = [
   { value: "large", label: "Large" },
 ];
 
-const TRIGGERS: { value: EmbedConfig["openOn"]; label: string }[] = [
-  { value: "scroll:50", label: "Halfway down the page" },
+/** "scroll" stands for every `scroll:<pct>`; the percentage has its own box. */
+const TRIGGERS: { value: "scroll" | Exclude<OpenOn, `scroll:${number}`>; label: string }[] = [
+  { value: "scroll", label: "After scrolling" },
   { value: "load", label: "On page load" },
   { value: "exit-intent", label: "When they're about to leave" },
   { value: "click", label: "Off" },
@@ -189,6 +193,8 @@ export function EmbedStudio({
   const ownButtonHtml = `<button type="button" data-chatform-open>${config.label || EMBED_DEFAULTS.label}</button>`;
   const unpublished = status !== undefined && status !== "published";
   const modeBlurb = EMBED_MODES.find((m) => m.mode === config.mode)?.blurb;
+  const scrollPct = scrollPercent(config.openOn);
+  const trigger = scrollPct === null ? config.openOn : "scroll";
   const modified = JSON.stringify(chosen) !== JSON.stringify(STUDIO_DEFAULTS);
 
   return (
@@ -207,56 +213,54 @@ export function EmbedStudio({
         the page around it.
       */}
       <div className="grid gap-4 lg:h-[min(46rem,calc(100svh-17rem))] lg:min-h-[30rem] lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="bg-muted/30 ring-border/60 flex h-[26rem] min-h-0 flex-col overflow-hidden rounded-2xl ring-1 lg:h-auto">
-          <div className="border-border/60 flex shrink-0 items-center gap-2 border-b px-3 py-2">
-            <SegmentedControl
-              size="sm"
-              options={[
-                { value: "desktop", label: "Desktop", icon: Monitor },
-                { value: "mobile", label: "Phone", icon: Smartphone },
-              ]}
-              value={device}
-              onChange={(next) => {
-                setDevice(next);
-                // `embed.js` never auto-opens on a phone, so the phone preview
-                // starts closed: what a visitor sees is the button calling out.
-                if (next === "mobile" && config.openOn !== "click" && isOverlay(config.mode)) {
-                  setPreviewOpen(false);
-                }
-              }}
-              ariaLabel="Preview size"
-            />
-            {overlay && (
-              <Button
-                variant="ghost"
+        <EmbedPreview
+          className="h-[26rem] lg:h-auto"
+          config={config}
+          formTitle={formTitle}
+          slug={slug}
+          theme={theme}
+          blocks={blocks}
+          device={device}
+          open={previewOpen}
+          onToggle={() => setPreviewOpen((v) => !v)}
+          toolbar={
+            <>
+              <SegmentedControl
                 size="sm"
-                shape="pill"
-                className="shrink-0"
-                onClick={() => setPreviewOpen((v) => !v)}
-              >
-                {previewOpen ? (
-                  <PanelRightClose className="size-3.5" />
-                ) : (
-                  <PanelRightOpen className="size-3.5" />
-                )}
-                {previewOpen ? "Close" : "Open"}
-              </Button>
-            )}
-          </div>
-
-          <div className="flex min-h-0 flex-1 p-4">
-            <EmbedPreview
-              config={config}
-              formTitle={formTitle}
-              slug={slug}
-              theme={theme}
-              blocks={blocks}
-              device={device}
-              open={previewOpen}
-              onToggle={() => setPreviewOpen((v) => !v)}
-            />
-          </div>
-        </div>
+                options={[
+                  { value: "desktop", label: "Desktop", icon: Monitor },
+                  { value: "mobile", label: "Phone", icon: Smartphone },
+                ]}
+                value={device}
+                onChange={(next) => {
+                  setDevice(next);
+                  // `embed.js` never auto-opens on a phone, so the phone preview
+                  // starts closed: what a visitor sees is the button calling out.
+                  if (next === "mobile" && config.openOn !== "click" && isOverlay(config.mode)) {
+                    setPreviewOpen(false);
+                  }
+                }}
+                ariaLabel="Preview size"
+              />
+              {overlay && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  shape="pill"
+                  className="shrink-0"
+                  onClick={() => setPreviewOpen((v) => !v)}
+                >
+                  {previewOpen ? (
+                    <PanelRightClose className="size-3.5" />
+                  ) : (
+                    <PanelRightOpen className="size-3.5" />
+                  )}
+                  {previewOpen ? "Close" : "Open"}
+                </Button>
+              )}
+            </>
+          }
+        />
 
         <div className="bg-card flex max-h-[32rem] min-h-0 flex-col overflow-hidden rounded-2xl lg:max-h-none">
           {/*
@@ -292,7 +296,7 @@ export function EmbedStudio({
                         ...prev,
                         mode: m.mode,
                         // A popup auto-opens halfway down by default.
-                        openOn: m.mode === "popup" && prev.mode !== "popup" ? "scroll:50" : prev.openOn,
+                        openOn: m.mode === "popup" && prev.mode !== "popup" ? DEFAULT_SCROLL : prev.openOn,
                       }))
                     }
                   />
@@ -304,24 +308,51 @@ export function EmbedStudio({
               <>
                 <Section
                   title="Auto open"
-                  hint="Opens by itself at most once a day per visitor. Closed, it won't open again on any page of your site for 24 hours, and on a phone the button shakes instead. Clicking a button always opens it."
+                  hint="Opens by itself at most once a day per visitor. Closed, it won't open again on any page of your site for 24 hours, and on a phone the button shakes instead. Clicking a button always opens it. After scrolling counts from the top: 100% is the bottom of the page."
                 >
-                  <Select
-                    value={config.openOn}
-                    onValueChange={(v) => set("openOn", v as EmbedConfig["openOn"])}
-                  >
-                    <SelectTrigger className="w-full">
-                      {/* Spelled out: SelectValue renders empty until the list has opened once. */}
-                      <SelectValue>{TRIGGERS.find((t) => t.value === config.openOn)?.label}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TRIGGERS.map((t) => (
-                        <SelectItem key={t.value} value={t.value}>
-                          {t.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={trigger}
+                      onValueChange={(v) =>
+                        // Back to scrolling keeps the percentage it had, if any.
+                        set("openOn", v === "scroll" ? `scroll:${scrollPct ?? 50}` : (v as OpenOn))
+                      }
+                    >
+                      <SelectTrigger className="min-w-0 flex-1">
+                        {/* Spelled out: SelectValue renders empty until the list has opened once. */}
+                        <SelectValue>{TRIGGERS.find((t) => t.value === trigger)?.label}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TRIGGERS.map((t) => (
+                          <SelectItem key={t.value} value={t.value}>
+                            {t.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {scrollPct !== null && (
+                      <div className="relative w-20 shrink-0">
+                        <BufferedInput
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          max={100}
+                          aria-label="Scroll percentage"
+                          value={String(scrollPct)}
+                          onCommit={(v) => {
+                            const n = Math.round(Number(v));
+                            // Empty or nonsense puts the last good value back.
+                            if (!v.trim() || !Number.isFinite(n)) return set("openOn", `scroll:${scrollPct}`);
+                            set("openOn", `scroll:${Math.min(100, Math.max(1, n))}`);
+                          }}
+                          className="pr-7"
+                        />
+                        <span className="text-muted-foreground pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-sm">
+                          %
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </Section>
 
                 <Section
