@@ -2,6 +2,7 @@ import { andList, contactFieldBlock, contactFieldPhrase, groupFieldBlock, safePa
 import { cleanLine, cleanText, safeHref } from "@repo/guard";
 import type { AnswerValue } from "../answers";
 import { fromMinorUnits, type PaymentProviderName } from "../payment-link";
+import { normalizeLocation } from "../location";
 
 /**
  * Every reason an answer can be refused.
@@ -650,6 +651,25 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
         out[field] = cleanLine(String(v)).slice(0, CONTACT_FIELD_MAX);
       }
 
+      /*
+        The location an address card can also collect. Never one of `fields`,
+        so it is read on its own: a maps link or coordinates, stored as a maps
+        URL. Asked for only by a block that turned it on, so a stray key from a
+        client never reaches the answer.
+      */
+      let badLocation = false;
+      if (block.type === "address" && block.location !== "off") {
+        const given = rec.location;
+        const url = typeof given === "string" ? normalizeLocation(given) : null;
+        if (url) out.location = url;
+        else if (typeof given === "string" && given.trim()) badLocation = true;
+        // Required means required once the card is being answered at all: an
+        // optional address left empty is still a skip.
+        else if (block.location === "required" && (block.required || Object.keys(out).length > 0)) {
+          missing.push("location");
+        }
+      }
+
       /**
        * Email and phone go through the real validators, for the reason
        * `groupFieldBlock` exists: the moment the logic is written twice, one
@@ -680,6 +700,10 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
           // E.164 — so what is stored matches what a standalone block stores.
           out[field] = String(res.value);
         }
+      }
+
+      if (badLocation) {
+        bad = { field: "location", code: "invalid_url", hint: "That location link doesn't look right. Paste a maps link, or share your location instead." };
       }
 
       if (bad) {

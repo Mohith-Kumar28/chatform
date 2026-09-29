@@ -501,8 +501,9 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
     codes: ["required", "type", "incomplete", "invalid_email"],
   },
   address: {
-    shape: "A map of the block's address fields to their values.",
-    tsType: "Record<'street' | 'city' | 'state' | 'postal' | 'country', string>",
+    shape:
+      "A map of the block's address fields to their values. When the block's `location` is on, a `location` key holds a maps URL: coordinates the respondent shared, or a maps link they pasted.",
+    tsType: "Partial<Record<'street' | 'city' | 'state' | 'postal' | 'country' | 'location', string>>",
     block: {
       id: "blk_addr0001", ref: "q_address", type: "address", title: "Where do we ship?", required: true,
       fields: ["city", "country"],

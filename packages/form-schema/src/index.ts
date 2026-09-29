@@ -16,6 +16,7 @@ export * from "./payment-link";
 export * from "./payment-columns";
 export * from "./respondent-columns";
 export * from "./display";
+export * from "./location";
 export * from "./rich-text";
 export * from "./form-doc";
 export * from "./engine/index";

@@ -279,6 +279,7 @@ export const CONTACT_FIELD_LABELS: Record<string, string> = {
   state: "State / region",
   postal: "Postal code",
   country: "Country",
+  location: "Location",
 };
 
 /** The label, or the key made readable — a field added later still reads. */
@@ -300,6 +301,7 @@ const CONTACT_FIELD_PHRASES: Record<string, string> = {
   state: "state or region",
   postal: "postal code",
   street: "street address",
+  location: "current location",
 };
 
 export function contactFieldPhrase(field: string): string {
@@ -683,6 +685,17 @@ export const Block = z.discriminatedUnion("type", [
     type: z.literal("address"),
     fields: z.array(AddressField).min(1),
     countryWhitelist: z.array(z.string().length(2)).optional(),
+    /**
+     * Also ask for where the respondent is right now: a "Share my location"
+     * button on the card, with a box for a maps link when the browser can't or
+     * won't say. Stored beside the typed fields as `location`, a maps URL.
+     *
+     * Beside `fields` rather than in it, because it is not a line of the
+     * address and every consumer that walks `fields` as text boxes would draw
+     * one. Caught to "off", so a document with a value this build doesn't know
+     * still parses.
+     */
+    location: z.enum(["off", "optional", "required"]).default("off").catch("off"),
   }),
   /**
    * A small form inside one question, repeated as many times as the answer needs.

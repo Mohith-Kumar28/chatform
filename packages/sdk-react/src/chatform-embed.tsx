@@ -132,7 +132,7 @@ export function ChatformEmbed({
       title="Form"
       className={className}
       style={{ width: "100%", border: 0, height: measured, ...style }}
-      allow="clipboard-write; camera; microphone"
+      allow="clipboard-write; camera; microphone; geolocation"
       referrerPolicy="strict-origin-when-cross-origin"
     />
   );

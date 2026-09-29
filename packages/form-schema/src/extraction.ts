@@ -123,6 +123,10 @@ export function extractionSchema(block: Block): z.ZodTypeAny | null {
       const shape = Object.fromEntries(
         block.fields.map((f) => [f, z.string().max(300).optional()]),
       );
+      // A maps link or coordinates typed into the chat, when the card asks.
+      if (block.type === "address" && block.location !== "off") {
+        shape.location = z.string().max(500).optional();
+      }
       return envelope(z.object(shape));
     }
 

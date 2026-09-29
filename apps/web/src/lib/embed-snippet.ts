@@ -172,6 +172,8 @@ export function embedSnippet(options: SnippetOptions): string {
       `  height="${config.height}"`,
       `  style="border:0;border-radius:16px"`,
       `  title="Form"`,
+      // An address question can ask for the respondent's location.
+      `  allow="geolocation"`,
       `></iframe>`,
     ].join("\n");
   }

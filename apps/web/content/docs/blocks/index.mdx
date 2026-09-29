@@ -39,7 +39,7 @@ against, so if a page says a value is valid, it is.
 | [Payment](/docs/blocks/payment) `payment` | Advanced | arrives out of band (an upload, a payment, or a booking) | `{ status: "pending" \| "paid"; method?: "link" \| "upi"; reference?: string; amount?: number }` |
 | [Scheduling](/docs/blocks/scheduling) `scheduling` | Advanced | arrives out of band (an upload, a payment, or a booking) | `{ provider: string; url: string; slotIso?: string; confirmedAt?: number }` |
 | [Contact info](/docs/blocks/contact_info) `contact_info` | Contact | extracted from free text by the agent, then re-validated | `Record<'first_name' \| 'last_name' \| 'email' \| 'phone', string>` |
-| [Address](/docs/blocks/address) `address` | Contact | extracted from free text by the agent, then re-validated | `Record<'street' \| 'city' \| 'state' \| 'postal' \| 'country', string>` |
+| [Address](/docs/blocks/address) `address` | Contact | extracted from free text by the agent, then re-validated | `Partial<Record<'street' \| 'city' \| 'state' \| 'postal' \| 'country' \| 'location', string>>` |
 | [Field group](/docs/blocks/field_group) `field_group` | Advanced | extracted from free text by the agent, then re-validated | `Record<string, string \| number \| boolean>[]` |
 | [Consent](/docs/blocks/legal_consent) `legal_consent` | Advanced | matched exactly — never sent to a model | `boolean` |
 

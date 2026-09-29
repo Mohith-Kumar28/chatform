@@ -47,7 +47,9 @@ export function displayAnswer(block: Block, value: unknown): string {
     case "contact_info":
     case "address": {
       if (typeof value !== "object" || Array.isArray(value)) break;
-      return Object.values(value as Record<string, string>).filter(Boolean).join(", ");
+      // The location is a maps URL; left last so the typed lines read first.
+      const { location, ...lines } = value as Record<string, string>;
+      return [...Object.values(lines), location].filter(Boolean).join(", ");
     }
 
     /**

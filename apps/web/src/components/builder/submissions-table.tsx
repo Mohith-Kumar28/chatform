@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  coordsFromMapsUrl,
   countryFlag,
   RESPONDENT_COLUMNS,
   respondentCells,
@@ -28,12 +29,12 @@ import {
   Download,
   Fingerprint,
   Globe,
+  MapPin,
   Hourglass,
   Info,
   Languages,
   Link2,
   ListChecks,
-  MapPin,
   Maximize2,
   MessageSquare,
   Minimize2,
@@ -2476,6 +2477,46 @@ function MetaCell({ column, row }: { column: RespondentColumn; row: SubmissionRe
  * Keyed on the response id by its caller, so stepping to the next response
  * arrives collapsed instead of inheriting the last one's open disclosure.
  */
+/** An address answer's shared location, split from the lines typed beside it. */
+function locationOf(b: ResultColumn, value: unknown): { url: string; lines: Record<string, string> } | null {
+  if (b.type !== "address" || typeof value !== "object" || value === null) return null;
+  const { location, ...lines } = value as Record<string, string>;
+  return typeof location === "string" && location ? { url: location, lines } : null;
+}
+
+/**
+ * Where the respondent was, on a map, with the link that opens it.
+ *
+ * Google's keyless embed, so there is nothing to configure. A pasted link that
+ * carries no coordinates (a short maps.app.goo.gl link) can't be drawn and
+ * gets the link alone.
+ */
+function LocationPreview({ url }: { url: string }) {
+  const coords = coordsFromMapsUrl(url);
+  return (
+    <div className="mt-2 space-y-1.5">
+      {coords && (
+        <iframe
+          title="Shared location"
+          src={`https://maps.google.com/maps?q=${coords.lat},${coords.lng}&z=15&output=embed`}
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
+          className="border-border/60 h-40 w-full rounded-md border"
+        />
+      )}
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary inline-flex items-center gap-1 text-sm font-medium hover:underline"
+      >
+        <MapPin className="size-3.5" />
+        Open in Maps
+      </a>
+    </div>
+  );
+}
+
 function AnswerList({
   formId,
   submissionId,
@@ -2515,7 +2556,9 @@ function AnswerList({
    */
   const line = (b: ResultColumn) => {
     const meta = blockMeta(b.type);
-    const value = valueOf(b);
+    const location = locationOf(b, byRef.get(b.ref));
+    // The typed lines as text; the location gets its own map below them.
+    const value = location ? displayCell(b, location.lines) || "" : valueOf(b);
     return (
       <div key={b.ref} className="flex gap-3 py-3 first:pt-0 last:pb-0">
         <span className={cn("mt-0.5 grid size-5 shrink-0 place-items-center rounded", TONE_CLASSES[meta.tone])}>
@@ -2536,6 +2579,7 @@ function AnswerList({
           </dd>
           {/* Answered or not: an unanswered payment question is where money with nothing
               counting it shows up. See `PaymentAnswerDetails`. */}
+          {location && <LocationPreview url={location.url} />}
           {b.type === "payment" && (
             <PaymentAnswerDetails
               formId={formId}

@@ -462,6 +462,7 @@ function AffordanceControls({
           fields={block.fields ?? []}
           required={block.required}
           countryHint={block.countryHint}
+          location={block.type === "address" ? block.location : undefined}
           prefill={prefill}
           onSubmit={onStructured}
         />

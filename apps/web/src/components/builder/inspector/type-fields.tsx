@@ -608,18 +608,30 @@ export function TypeFields({
 
     case "address":
       return (
-        <CheckboxGroup
-          label="Fields to collect"
-          value={block.fields}
-          onChange={(fields) => patch({ fields } as Partial<Block>)}
-          options={[
-            { value: "street", label: "Street" },
-            { value: "city", label: "City" },
-            { value: "state", label: "State" },
-            { value: "postal", label: "Postal code" },
-            { value: "country", label: "Country" },
-          ]}
-        />
+        <>
+          <CheckboxGroup
+            label="Fields to collect"
+            value={block.fields}
+            onChange={(fields) => patch({ fields } as Partial<Block>)}
+            options={[
+              { value: "street", label: "Street" },
+              { value: "city", label: "City" },
+              { value: "state", label: "State" },
+              { value: "postal", label: "Postal code" },
+              { value: "country", label: "Country" },
+            ]}
+          />
+          <SelectField
+            label="Current location"
+            value={block.location}
+            onChange={(v) => patch({ location: v } as Partial<Block>)}
+            options={[
+              { value: "off", label: "Don't ask" },
+              { value: "optional", label: "Optional" },
+              { value: "required", label: "Required" },
+            ]}
+          />
+        </>
       );
 
     case "field_group":

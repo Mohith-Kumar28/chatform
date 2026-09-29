@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { GripVertical, Plus, X } from "lucide-react";
+import { Check, GripVertical, Loader2, MapPin, Plus, X } from "lucide-react";
 import {
   DndContext,
   KeyboardSensor,
@@ -19,7 +19,13 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { contactFieldLabel, type PublicBlock, type PublicGroupField } from "@repo/form-schema";
+import {
+  contactFieldLabel,
+  mapsUrlFor,
+  normalizeLocation,
+  type PublicBlock,
+  type PublicGroupField,
+} from "@repo/form-schema";
 import { cn } from "@/lib/utils";
 import { KeyHint } from "./primitives";
 import { FIELD_SEMANTICS, inputSemanticsFor } from "./input-semantics";
@@ -99,6 +105,7 @@ export function FieldsComposer({
   fields,
   required,
   countryHint,
+  location = "off",
   prefill,
   onSubmit,
 }: {
@@ -107,6 +114,8 @@ export function FieldsComposer({
   required?: boolean;
   /** Where the phone cell's country picker opens, where the author said. */
   countryHint?: string;
+  /** An address card's "share my location", when the author turned it on. */
+  location?: "off" | "optional" | "required";
   /** The fields an earlier attempt got right, kept rather than asked for twice. */
   prefill?: Record<string, string>;
   onSubmit: (value: Record<string, string>, display: string) => void;
@@ -130,8 +139,13 @@ export function FieldsComposer({
     [],
   );
 
+  const asksLocation = location !== "off";
+  const locationGiven = asksLocation && Boolean(values.location?.trim());
+  // A pasted link is checked here so the button can't send one the server refuses.
+  const locationValid = !locationGiven || normalizeLocation(values.location ?? "") !== null;
   const filled = fields.filter((f) => values[f]?.trim());
   const missing = required ? fields.filter((f) => !values[f]?.trim()) : [];
+  if (location === "required" && !locationGiven && (required || filled.length > 0)) missing.push("location");
   /*
     The number's own plan, checked here rather than by the server.
 
@@ -142,13 +156,18 @@ export function FieldsComposer({
   */
   const phone = values.phone?.trim() ?? "";
   const phoneReady = phone === "" || isSendablePhone(phone);
-  const canSubmit = filled.length > 0 && missing.length === 0 && phoneReady;
+  const canSubmit =
+    (filled.length > 0 || locationGiven) && missing.length === 0 && phoneReady && locationValid;
 
   const submit = () => {
     const clean = Object.fromEntries(
-      Object.entries(values).filter(([, v]) => v.trim()).map(([k, v]) => [k, v.trim()]),
+      Object.entries(values)
+        .filter(([k, v]) => v.trim() && (k !== "location" || asksLocation))
+        .map(([k, v]) => [k, v.trim()]),
     );
-    onSubmit(clean, Object.values(clean).join(", "));
+    const { location: shared, ...lines } = clean;
+    const display = [...Object.values(lines), shared ? "Location shared" : ""].filter(Boolean).join(", ");
+    onSubmit(clean, display);
   };
   const onKeyDown = enterSubmits(canSubmit, submit);
 
@@ -176,7 +195,15 @@ export function FieldsComposer({
           ),
         )}
       </div>
-      {missing.length > 0 && filled.length > 0 && (
+      {asksLocation && (
+        <LocationField
+          value={values.location ?? ""}
+          required={location === "required"}
+          invalid={!locationValid}
+          onChange={(v) => setValues((prev) => ({ ...prev, location: v }))}
+        />
+      )}
+      {missing.length > 0 && (filled.length > 0 || locationGiven) && (
         <p className="px-1 text-xs opacity-55">
           Still needed: {missing.map((f) => contactFieldLabel(f).toLowerCase()).join(", ")}.
         </p>
@@ -190,6 +217,116 @@ export function FieldsComposer({
         Continue
         <KeyHint tone="inverse">↵</KeyHint>
       </button>
+    </div>
+  );
+}
+
+/**
+ * "Share my location", with a box for a maps link beside it.
+ *
+ * The browser's own permission prompt does the asking. When it is refused,
+ * times out, or the page is framed without the permission, the respondent is
+ * not stuck: the link box opens, because a pin copied out of a maps app is
+ * just as good an answer.
+ */
+function LocationField({
+  value,
+  required,
+  invalid,
+  onChange,
+}: {
+  value: string;
+  required: boolean;
+  invalid: boolean;
+  onChange: (v: string) => void;
+}) {
+  const [status, setStatus] = useState<"idle" | "locating" | "failed">("idle");
+  const [typing, setTyping] = useState(false);
+  const shared = value !== "" && !typing;
+
+  const locate = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setStatus("failed");
+      setTyping(true);
+      return;
+    }
+    setStatus("locating");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setStatus("idle");
+        setTyping(false);
+        onChange(mapsUrlFor(pos.coords.latitude, pos.coords.longitude));
+      },
+      () => {
+        setStatus("failed");
+        setTyping(true);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
+    );
+  };
+
+  return (
+    <div className="space-y-1">
+      <span className="block text-xs opacity-60">
+        {contactFieldLabel("location")}
+        {!required && " (optional)"}
+      </span>
+      {shared ? (
+        <div className="flex h-11 items-center gap-2 rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] px-3 text-sm">
+          <Check className="size-4 shrink-0 text-[var(--cf-accent)]" />
+          <a href={value} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate underline-offset-2 hover:underline">
+            Location shared
+          </a>
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="text-xs opacity-60 transition-opacity hover:opacity-100"
+          >
+            Remove
+          </button>
+        </div>
+      ) : typing ? (
+        <div className="space-y-1">
+          <input
+            value={value}
+            name="location"
+            type="url"
+            inputMode="url"
+            autoComplete="off"
+            autoCapitalize="none"
+            placeholder="Paste a Google Maps link"
+            onChange={(e) => onChange(e.target.value)}
+            className={cn(
+              "h-11 w-full rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-3 text-[0.9375rem] outline-none focus:border-[var(--cf-accent)]",
+            )}
+          />
+          <p className="px-1 text-xs opacity-55">
+            {invalid ? "Paste a maps link or coordinates. " : status === "failed" ? "Couldn't get your location. " : ""}
+            <button type="button" onClick={locate} className="underline underline-offset-2">
+              {status === "failed" ? "Try again" : "Use my current location"}
+            </button>
+          </p>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={locate}
+            disabled={status === "locating"}
+            className="inline-flex h-11 items-center gap-1.5 rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] px-4 text-sm font-medium transition-colors hover:border-[var(--cf-accent)] disabled:opacity-60"
+          >
+            {status === "locating" ? <Loader2 className="size-4 animate-spin" /> : <MapPin className="size-4" />}
+            {status === "locating" ? "Locating…" : "Share my location"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTyping(true)}
+            className="text-xs opacity-60 underline-offset-2 transition-opacity hover:underline hover:opacity-100"
+          >
+            Paste a link
+          </button>
+        </div>
+      )}
     </div>
   );
 }

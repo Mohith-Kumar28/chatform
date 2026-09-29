@@ -50,6 +50,15 @@ Fields specific to `address`. The [fields every block has](/docs/blocks/common-f
         "minLength": 2,
         "maxLength": 2
       }
+    },
+    "location": {
+      "default": "off",
+      "type": "string",
+      "enum": [
+        "off",
+        "optional",
+        "required"
+      ]
     }
   },
   "required": [
@@ -227,16 +236,17 @@ In a generated draft these arrive as `config` pairs: `fields=<street|city|state|
   "fields": [
     "city",
     "country"
-  ]
+  ],
+  "location": "off"
 }
 ```
 
 ## What you send
 
-A map of the block's address fields to their values.
+A map of the block's address fields to their values. When the block's `location` is on, a `location` key holds a maps URL: coordinates the respondent shared, or a maps link they pasted.
 
 ```ts
-type Answer = Record<'street' | 'city' | 'state' | 'postal' | 'country', string>;
+type Answer = Partial<Record<'street' | 'city' | 'state' | 'postal' | 'country' | 'location', string>>;
 ```
 
 <Tabs items={['curl', '@chatformhq/js', 'Python']}>

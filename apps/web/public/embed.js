@@ -490,7 +490,7 @@
     frame = document.createElement("iframe");
     frame.src = frameUrl();
     frame.title = "Form";
-    frame.setAttribute("allow", "clipboard-write; camera; microphone");
+    frame.setAttribute("allow", "clipboard-write; camera; microphone; geolocation");
     // See the note in packages/sdk-react/src/chatform-embed.tsx: the origin,
     // never the embedder's full URL. A `sandbox` attribute is deliberately not
     // set — that needs a browser pass, not reasoning.

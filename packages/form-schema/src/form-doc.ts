@@ -186,6 +186,8 @@ export interface PublicBlock {
    * what lets the field agree with the rule it will be judged by.
    */
   countryHint?: string;
+  /** address: whether the card asks for the respondent's current location. */
+  location?: "off" | "optional" | "required";
   /** url: only `https://` links are accepted, so the composer locks its scheme. */
   httpsOnly?: boolean;
   /**
@@ -325,6 +327,7 @@ export function toPublicBlock(b: Block): PublicBlock {
       break;
     case "address":
       pub.fields = b.fields;
+      pub.location = b.location;
       break;
     case "field_group":
       pub.groupFields = b.fields.map((f) => ({
