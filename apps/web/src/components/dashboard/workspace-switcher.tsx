@@ -100,16 +100,14 @@ export function WorkspaceSwitcher({
   const current = showingAll ? undefined : (list.find((w) => w.slug === slug) ?? list[0]);
 
   /**
-   * One workspace and no permission to make another is not a switcher, it is a
-   * label — so it renders nothing at all rather than a menu with one dead row.
-   * Most accounts are in exactly this state and the header should not carry a
-   * control for a feature they are not using.
+   * Shown even with one workspace and no permission to make another. It used to
+   * hide in that state, which meant a member invited into a single workspace
+   * lost the only thing on the page naming the folder they were looking at.
    */
   if (isLoading || list.length === 0) return null;
   const canCreate = allows("workspace", "create");
   const canManageAccess = allows("member", "update");
   const canManage = allows("workspace", "update") || allows("workspace", "delete");
-  if (list.length === 1 && !canCreate) return null;
 
   function switchTo(next: string) {
     // Always explicit: with no `?ws=` the dashboard opens the last workspace
