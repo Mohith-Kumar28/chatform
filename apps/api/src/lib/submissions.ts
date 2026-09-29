@@ -556,7 +556,8 @@ export async function reopenAbandonedResponse(
 export async function restartResponse(
   env: Bindings,
   responseId: string,
-  at: { sessionId: string; startedAt: number },
+  /** `formVersionId`: the version the fresh start is on, when it differs from the row's. */
+  at: { sessionId: string; startedAt: number; formVersionId?: string },
 ): Promise<void> {
   try {
     await env.DB.batch([
@@ -564,11 +565,12 @@ export async function restartResponse(
       env.DB.prepare(
         `UPDATE submissions
             SET status = 'in_progress', session_id = ?2, started_at = ?3, updated_at = ?3,
+                form_version_id = coalesce(?4, form_version_id),
                 completed_at = NULL, duration_ms = NULL, active_ms = 0, partial_notified_at = NULL,
                 meta = json_set(coalesce(meta,'{}'), '$.endingRef', NULL, '$.abandonReason', NULL,
                                 '$.restartedAt', ?3)
           WHERE id = ?1`,
-      ).bind(responseId, at.sessionId, at.startedAt),
+      ).bind(responseId, at.sessionId, at.startedAt, at.formVersionId ?? null),
     ]);
     /*
       Outside the batch because it is somebody else's table and its own module's

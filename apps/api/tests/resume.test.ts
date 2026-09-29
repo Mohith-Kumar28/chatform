@@ -318,6 +318,60 @@ describe("resuming a response the form has since outgrown", () => {
   });
 });
 
+describe("resuming a response started on an older version", () => {
+  /**
+   * The dental-intake bug: a draft from version 1 was picked up on version 12
+   * with its answers, so questions this respondent never saw counted as given,
+   * and one changed answer walked them past all of them to the ending.
+   */
+  async function seedOnOldVersion(id: string): Promise<void> {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO form_versions (id, form_id, version, schema_json, checksum, published_at, created_by, created_at)
+       VALUES ('ver_resume_old', ?1, 0, ?2, 'ck', 0, ?3, 0)`,
+    )
+      .bind(t.formId, JSON.stringify(DOC), t.userId)
+      .run();
+    await seedAbandoned(id);
+    await env.DB.prepare(`UPDATE submissions SET form_version_id = 'ver_resume_old' WHERE id = ?`).bind(id).run();
+  }
+
+  it("starts over from the top in the same response, and says why", async () => {
+    await publish();
+    await seedOnOldVersion("sbm_resume30");
+    const res = await open({ resumeToken: await token("sbm_resume30") });
+    expect(res.status).toBe(200);
+    const { sessionId } = (await res.json()) as { sessionId: string };
+    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+
+    const status = await stub.getStatus();
+    expect(status?.answers).toEqual({});
+    expect(status?.currentRef).toBe("q_name");
+
+    // One open response per person: the same row, emptied and moved to this version.
+    const subs = await env.DB.prepare(`SELECT id, status, form_version_id FROM submissions`).all();
+    expect(subs.results).toEqual([{ id: "sbm_resume30", status: "in_progress", form_version_id: VERSION_ID }]);
+    const kept = await env.DB.prepare(`SELECT count(*) AS n FROM submission_answers WHERE submission_id = ?`)
+      .bind("sbm_resume30")
+      .first<{ n: number }>();
+    expect(kept?.n).toBe(0);
+
+    const said = (await stub.getTranscript()).map((m) => m.content).join("\n");
+    expect(said).toContain("This form has been updated since you last visited");
+  });
+
+  it("still resumes a response from the version that is live", async () => {
+    await publish();
+    await seedAbandoned("sbm_resume31");
+    const res = await open({ resumeToken: await token("sbm_resume31") });
+    const { sessionId } = (await res.json()) as { sessionId: string };
+    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+    const status = await stub.getStatus();
+    expect(status?.currentRef).toBe("q_team");
+    const said = (await stub.getTranscript()).map((m) => m.content).join("\n");
+    expect(said).not.toContain("has been updated");
+  });
+});
+
 describe("resuming when it should not work", () => {
   it("starts a fresh session for a token that does not verify", async () => {
     await seedAbandoned("sbm_resume05");

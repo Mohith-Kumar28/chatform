@@ -496,6 +496,9 @@ const FALLBACK_TOKEN_BUDGET = 1_000_000;
  */
 const MAX_EXTRACTION_CALLS = 40;
 
+/** Said to a returning respondent whose earlier answers were on another version. */
+const FORM_UPDATED_TEXT = "This form has been updated since you last visited, so we're starting again from the top.";
+
 /**
  * Whether an extracted card holds anything at all. An empty object or list is
  * the extractor finding nothing, and recording it would only earn a "please
@@ -599,6 +602,12 @@ export class SessionDO extends DurableObject<Bindings> {
   private loaded = false;
   /** This conversation continues a response somebody abandoned. */
   private resumed = false;
+  /**
+   * Their earlier response was on another version and was started over
+   * (`startDraftOver`). Said once, before the first question. In memory: an
+   * eviction before then only loses the sentence.
+   */
+  private formUpdatedNotice = false;
   /**
    * Whether the carried-over questions and answers have been put on the stream.
    *
@@ -783,7 +792,11 @@ export class SessionDO extends DurableObject<Bindings> {
      * finish a *second* response and the first would stay abandoned forever —
      * which is the whole thing this feature exists to prevent.
      */
-    if (params.resume) {
+    if (params.resume && (await this.draftIsStale(params.resume.submissionId))) {
+      await this.ctx.storage.put("submission_id", params.resume.submissionId);
+      await this.startDraftOver(params.resume.submissionId);
+      if (params.resume.identity) this.meta.identity = params.resume.identity;
+    } else if (params.resume) {
       await this.ctx.storage.put("submission_id", params.resume.submissionId);
       this.state.answers = { ...(params.resume.answers as EvalState["answers"]) };
       this.collectedCount = this.liveAnswerCount(params.resume.answers);
@@ -833,6 +846,10 @@ export class SessionDO extends DurableObject<Bindings> {
   /** Ask the first question. Split out so the auth gate can defer it. */
   private async beginInterview(): Promise<void> {
     if (!this.doc) return;
+    if (this.formUpdatedNotice) {
+      this.formUpdatedNotice = false;
+      await this.emitMessage(FORM_UPDATED_TEXT);
+    }
     if (this.resumed) {
       /**
        * Where a resumed conversation picks up.
@@ -874,6 +891,46 @@ export class SessionDO extends DurableObject<Bindings> {
    * form gates before the first question exactly as before; above 0 the gate
    * stays open until that many answers are in.
    */
+  /**
+   * Whether a response being picked up was started on another version of the form.
+   *
+   * Its answers belong to that version's questions and that version's flow.
+   * Carried into this one they were counted as given: a respondent who came
+   * back to a dental intake after it was republished had date of birth, insurance
+   * and appointment answers from the old version, never saw those questions,
+   * and one changed answer walked them past all of it to the ending. So a draft
+   * from another version starts over on this one instead, in the same row.
+   *
+   * A failed read is not stale: it leaves the resume working as it always has.
+   */
+  private async draftIsStale(submissionId: string): Promise<boolean> {
+    if (!this.meta || this.meta.formVersionId === "preview") return false;
+    try {
+      const row = await this.env.DB.prepare(`SELECT form_version_id FROM submissions WHERE id = ?1`)
+        .bind(submissionId)
+        .first<{ form_version_id: string | null }>();
+      return !!row?.form_version_id && row.form_version_id !== this.meta.formVersionId;
+    } catch (err) {
+      console.error("draft_version_read_failed", { sessionId: this.meta.sessionId, submissionId, ...errorInfo(err) });
+      return false;
+    }
+  }
+
+  /**
+   * Empty the adopted row and move it to this version, the way "Start over"
+   * does. The row is kept, not replaced: a respondent holds one open response.
+   */
+  private async startDraftOver(submissionId: string): Promise<void> {
+    if (!this.meta) return;
+    await restartResponse(this.env, submissionId, {
+      sessionId: this.meta.sessionId,
+      startedAt: this.meta.startedAt,
+      formVersionId: this.meta.formVersionId,
+    });
+    this.formUpdatedNotice = true;
+    console.log("draft_started_over", { sessionId: this.meta.sessionId, submissionId });
+  }
+
   /**
    * How many of a resumed response's answers this document still has a question
    * for.
@@ -1162,16 +1219,21 @@ export class SessionDO extends DurableObject<Bindings> {
      */
     if (resume && this.collectedCount === 0 && !this.meta.currentRef) {
       await this.ctx.storage.put("submission_id", resume.submissionId);
-      await this.reopenAdopted(resume.submissionId);
-      this.state.answers = { ...(resume.answers as EvalState["answers"]) };
-      this.collectedCount = this.liveAnswerCount(resume.answers);
-      this.resumed = true;
-      await this.persistMeta();
-      // The thread they left, not a sentence about it. `beginInterview` below
-      // would replay it anyway; doing it here as well costs nothing, because
-      // the replay only ever runs once, and covers the branches that reach a
-      // question without going through `beginInterview` at all.
-      await this.replayAnswerHistory();
+      if (await this.draftIsStale(resume.submissionId)) {
+        await this.startDraftOver(resume.submissionId);
+        await this.persistMeta();
+      } else {
+        await this.reopenAdopted(resume.submissionId);
+        this.state.answers = { ...(resume.answers as EvalState["answers"]) };
+        this.collectedCount = this.liveAnswerCount(resume.answers);
+        this.resumed = true;
+        await this.persistMeta();
+        // The thread they left, not a sentence about it. `beginInterview` below
+        // would replay it anyway; doing it here as well costs nothing, because
+        // the replay only ever runs once, and covers the branches that reach a
+        // question without going through `beginInterview` at all.
+        await this.replayAnswerHistory();
+      }
       if (
         held &&
         held.submissionId === resume.submissionId &&
