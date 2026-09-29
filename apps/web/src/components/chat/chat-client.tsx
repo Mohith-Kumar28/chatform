@@ -1381,7 +1381,7 @@ function AlreadySubmittedCard({
         the same person with one line of grey text looks like it lost the
         response, and the link they came back for is in that card.
 
-        `allowRepeat` is false: the restart link belongs to a live
+        `allowRepeat` is false: the restart button belongs to a live
         conversation, and this is a return visit to a decision.
       */}
       {submitted.ending && (
@@ -1448,29 +1448,13 @@ function AlreadySubmittedCard({
         </div>
 
         {/*
-          A quiet link, not a filled button — the same one the ending card uses,
-          and for the same reason.
-
-          It was drawn in the accent as the only control on the screen, which is
-          how it ended up being the loudest thing on a screen whose message is
-          "you have already done this". Filling it in the brand colour makes
-          answering twice look like the next step of the form: somebody coming
-          back to check their registration met a big purple button under a green
-          receipt, and a second response is the one outcome nobody on this
-          screen wants. Everything of consequence here — the confirmation, the
-          group link in the body, the receipt — is something to read. This is an
-          escape hatch for the few who want it, and it should be exactly as loud
-          as one.
+          The same button the ending card draws, from the same component. This
+          used to be its own copy of the markup, a faded underline, and it was
+          left behind when the ending card's one became an outline button, so
+          the two screens offered the same action in two different styles.
+          Outline (never filled) keeps it quieter than the receipt above.
         */}
-        {allowRepeat && (
-          <button
-            type="button"
-            onClick={onResubmit}
-            className="text-sm underline opacity-55 transition-opacity hover:opacity-100"
-          >
-            Submit another response
-          </button>
-        )}
+        {allowRepeat && <SubmitAnotherButton onClick={onResubmit} screenedOut={screenedOut} />}
       </div>
     </>
   );
@@ -2047,25 +2031,45 @@ function EndingCard({
           the text colour, since a pale accent (yellow, mint) is unreadable as
           text; the accent carries the border and the icon.
         */}
-        {allowRepeat && (
-          <button
-            type="button"
-            onClick={onRestart}
-            className="mt-6 inline-flex h-11 items-center gap-2 rounded-[var(--cf-radius-control)] border border-[var(--cf-accent)] bg-[color-mix(in_oklab,var(--cf-accent)_6%,transparent)] px-6 text-sm font-medium transition-[background-color,transform] hover:bg-[color-mix(in_oklab,var(--cf-accent)_14%,transparent)] active:scale-[0.98] motion-reduce:active:scale-100"
-          >
-            <RotateCcw className="size-4 text-[var(--cf-accent)]" strokeWidth={2} aria-hidden />
-            {/*
-              "Submit another response" is wrong on a refusal in both halves:
-              nothing was submitted, and the offer sounds like an invitation to
-              file a duplicate. Someone screened out is usually here because of
-              one answer, sometimes a mis-tap, so starting over is exactly the
-              right escape hatch — it just has to be named honestly.
-            */}
-            {screenedOut ? "Start over" : "Submit another response"}
-          </button>
-        )}
+        {allowRepeat && <SubmitAnotherButton onClick={onRestart} screenedOut={screenedOut} className="mt-6" />}
       </div>
     </>
+  );
+}
+
+/**
+ * "Submit another response": the one control for filing a second response,
+ * shared by the ending card and the already-answered screen so the two can
+ * never drift apart again.
+ */
+function SubmitAnotherButton({
+  onClick,
+  screenedOut,
+  className,
+}: {
+  onClick: () => void;
+  screenedOut: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-11 items-center gap-2 rounded-[var(--cf-radius-control)] border border-[var(--cf-accent)] bg-[color-mix(in_oklab,var(--cf-accent)_6%,transparent)] px-6 text-sm font-medium transition-[background-color,transform] hover:bg-[color-mix(in_oklab,var(--cf-accent)_14%,transparent)] active:scale-[0.98] motion-reduce:active:scale-100",
+        className,
+      )}
+    >
+      <RotateCcw className="size-4 text-[var(--cf-accent)]" strokeWidth={2} aria-hidden />
+      {/*
+        "Submit another response" is wrong on a refusal in both halves:
+        nothing was submitted, and the offer sounds like an invitation to
+        file a duplicate. Someone screened out is usually here because of
+        one answer, sometimes a mis-tap, so starting over is the right
+        escape hatch; it just has to be named honestly.
+      */}
+      {screenedOut ? "Start over" : "Submit another response"}
+    </button>
   );
 }
 
