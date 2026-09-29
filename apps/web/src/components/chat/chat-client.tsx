@@ -15,7 +15,7 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import { DEFAULT_REDIRECT_DELAY_SEC, stripRichText } from "@repo/form-schema";
+import { stripRichText } from "@repo/form-schema";
 import { safeHref, safeMediaSrc } from "@repo/guard";
 import { QuestionDescription, RichText, SAFE_ELEMENTS } from "./rich-text";
 import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
@@ -45,7 +45,6 @@ import { captureSnapshot } from "./chat-snapshot";
 import { ClosingNotice } from "./closing-notice";
 import {
   autoSubmitTick,
-  secondsUntil,
   AUTO_SUBMIT_MS,
   AUTO_SUBMIT_TICK_MS,
 } from "./countdown";
@@ -318,7 +317,7 @@ export function ChatSurface({
    * on this screen when they come back from it: the confirmation, the link
    * spelled out in the body, the "you already answered this" record.
    *
-   * A pop-up opened seconds after the last tap has no user gesture behind it,
+   * A pop-up opened from a streamed event has no user gesture of its own,
    * and Safari in particular will refuse it — as will every in-app browser,
    * which is where a link shared in a chat group is opened. That is not a
    * failure worth hiding: `blocked` puts a real button on the ending, and on a
@@ -327,17 +326,16 @@ export function ChatSurface({
    */
   const [redirectBlocked, setRedirectBlocked] = useState(false);
   /*
-   * Read off the ending as two primitives, because this effect is a five-second
-   * timeout and its dependencies decide whether that timeout ever finishes.
+   * No wait before it fires. It used to count down the ending's
+   * `redirectDelaySec` (4s on every form) first, and that pause was the
+   * complaint: somebody who has just submitted wants the next page. Firing at
+   * once also keeps it inside the browser's user-activation window from the
+   * submit tap, so the new tab is refused less often than it was four seconds
+   * later. The stored delay is left in the documents and ignored.
    *
-   * It depended on `chat.ending` itself, which is a fresh object every time the
-   * stream hands one over — and the stream replays the `ending` event on every
-   * reconnect (see `use-chat`). Each replay was a new identity, so the effect
-   * tore down and re-armed: `clearTimeout` on a countdown four seconds in, then
-   * five fresh seconds. A form whose stream reconnected inside the window never
-   * redirected at all, and the only symptom was a screen that said it was about
-   * to and then sat there. A URL and a delay are values, so a replay of the same
-   * ending is now a no-op.
+   * Keyed on the URL string rather than on `chat.ending`: the stream replays
+   * the `ending` event on every reconnect as a fresh object, and a new
+   * identity here would open the target again.
    */
   /**
    * The ending's redirect, refused unless it is a link a browser should follow.
@@ -352,11 +350,11 @@ export function ChatSurface({
    * turn a live form into a 500 instead of a form with one dead button.
    */
   const redirectTarget = safeHref(chat.ending?.redirectUrl);
-  const redirectDelaySec = chat.ending?.redirectDelaySec ?? DEFAULT_REDIRECT_DELAY_SEC;
   useEffect(() => {
     const target = redirectTarget;
     if (!target || previewMode) return;
-    const delay = redirectDelaySec * 1000;
+    // A zero timeout, not a synchronous call: the cleanup cancels it when a
+    // re-run of this effect would otherwise open a second tab.
     const t = setTimeout(() => {
       /*
        * `noopener` goes on the handle, not in the feature string. Passing it
@@ -394,9 +392,9 @@ export function ChatSurface({
        * can see, which is the thing that differs — not the screen's width.
        */
       if (window.matchMedia?.("(pointer: coarse)").matches) window.location.assign(target);
-    }, delay);
+    }, 0);
     return () => clearTimeout(t);
-  }, [redirectTarget, redirectDelaySec, previewMode]);
+  }, [redirectTarget, previewMode]);
 
   // The slug is the pattern seed, so the background tile a respondent sees is
   // the one the dashboard card and the builder preview already showed.
@@ -1859,43 +1857,9 @@ function EndingCard({
   const screenedOut = ending.kind === "screen_out";
   const requirements = ending.requirements ?? [];
 
-  /**
-   * The redirect countdown, actually counting.
-   *
-   * It said "in 5s…" and meant it once — a constant printed into the copy while
-   * the timeout it was describing ran down behind it, so anybody who read the
-   * line after the first second was reading a number that had stopped being
-   * true. On the one screen whose next event is the page moving, that is the
-   * number worth getting right.
-   *
-   * The deadline is this card's own, set when the countdown starts rather than
-   * handed down from the effect that schedules the redirect. Those are two
-   * clocks for one event, which is worth being uneasy about — but they are
-   * started by the same commit, the gap between them is the length of an effect
-   * queue, and the alternative is either reading the clock during render or
-   * writing state from inside an effect. What has to be exact is the *firing*,
-   * and that is the timeout's; what this owns is a digit somebody reads.
-   *
-   * `secondsLeft` is null until the first tick, so nothing reads a clock while
-   * rendering: the first paint shows the delay the author configured, which is
-   * what the countdown says at that instant anyway.
-   */
-  const delaySec = ending.redirectDelaySec ?? DEFAULT_REDIRECT_DELAY_SEC;
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
-  const counting = redirectArmed && !replay && !redirectBlocked;
-  useEffect(() => {
-    if (!counting) return;
-    const deadline = Date.now() + delaySec * 1000;
-    /*
-     * Four reads a second, not one. A second boundary crossed just after a tick
-     * leaves the old digit up for the rest of that tick, which is the stutter
-     * that makes a countdown look stuck — and a tab that was backgrounded comes
-     * back to the right number rather than to wherever a counter got to.
-     */
-    const id = setInterval(() => setSecondsLeft(secondsUntil(deadline, Date.now())), 250);
-    return () => clearInterval(id);
-  }, [counting, delaySec]);
-  const secondsToRedirect = secondsLeft ?? delaySec;
+  // The redirect fires the moment the ending lands; this line is what shows
+  // while the new tab opens. Not on a replay, which fires nothing.
+  const redirecting = redirectArmed && !replay && !redirectBlocked;
   /**
    * The same guard the effect that fires the redirect applies, applied to the
    * anchors that stand in for it. A `javascript:` URL stored on an ending runs
@@ -2044,30 +2008,17 @@ function EndingCard({
               Continue to the next step
               <ArrowUpRight className="size-4" strokeWidth={2} />
             </a>
-          ) : counting ? (
-            <p className="mt-4 text-xs tabular-nums opacity-50">
-              {secondsToRedirect > 0
-                ? `Opening the next step in ${secondsToRedirect}s…`
-                : "Opening the next step…"}
-            </p>
+          ) : redirecting ? (
+            <p className="mt-4 text-xs opacity-50">Opening the next step…</p>
           ) : (
             /*
               A redirect on the ending, but nothing armed to fire it — which is
               the builder preview, the one place with a URL and no session to
-              open it from.
-
-              It used to print the counting sentence here anyway, so the preview
-              said "Opening the next step in 5s…" and then held that digit for
-              ever: the count needs `counting` to tick, and the preview never
-              sets it. An author reading their own form saw the exact screen a
-              respondent would see, frozen, with nothing to distinguish "this is
-              not wired up in here" from "this is broken in production". So the
-              preview describes the behaviour instead of pretending to perform
-              it — no digit, because a number nobody is counting is the whole
-              bug.
+              open it from. So it describes the behaviour instead of pretending
+              to perform it.
             */
             <p className="mt-4 max-w-xs text-xs opacity-50">
-              Opens the next step automatically after {delaySec}s. Not in the preview.
+              Opens the next step as soon as they finish. Not in the preview.
             </p>
           ))}
 
