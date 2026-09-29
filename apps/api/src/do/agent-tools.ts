@@ -323,6 +323,27 @@ export interface ToolOutcome {
   message: string;
 }
 
+export type ToolEffect = NonNullable<ToolOutcome["effect"]>;
+
+/**
+ * The order a turn's effects are applied in, and which of them are.
+ *
+ * A change to an earlier answer goes last. It moves the cursor back and leaves
+ * an edit bookmark; anything applied after it that answers or skips the
+ * question the turn started on would walk the cursor off the reopened one and
+ * drop the bookmark with it.
+ *
+ * A clarify beside a record_answer or a skip means the model was of two minds:
+ * it asked them to say more and moved on anyway, so the follow-up sat above the
+ * next question's buttons. Asking wins. They were just asked something, and the
+ * question stays on screen for their reply.
+ */
+export function orderEffects(effects: readonly ToolEffect[]): ToolEffect[] {
+  const clarifying = effects.some((e) => e.kind === "clarify");
+  const kept = clarifying ? effects.filter((e) => e.kind !== "record" && e.kind !== "skip") : effects;
+  return [...kept.filter((e) => e.kind !== "revise"), ...kept.filter((e) => e.kind === "revise")];
+}
+
 /**
  * Builds the toolset. `collect` receives every outcome so the DO can apply
  * effects in order after the model's turn finishes — tools never mutate state
@@ -610,7 +631,8 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
 
     clarify: tool({
       description:
-        "Ask the respondent to rephrase or give more detail, when their reply does not answer the current question.",
+        "Ask the respondent to rephrase or give more detail, when their reply does not answer the current question. " +
+        "Never together with record_answer or skip_current: a follow-up means the question is not answered yet.",
       inputSchema: z.object({ reason: z.string().describe("What is unclear.") }),
       execute: async ({ reason }) => {
         const cap = ctx.doc.settings.agent.maxClarificationsPerBlock;

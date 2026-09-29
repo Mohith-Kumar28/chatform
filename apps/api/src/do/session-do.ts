@@ -98,6 +98,7 @@ import {
   buildAgentTools,
   settledInOneStep,
   nextStepAfter,
+  orderEffects,
   resumeAfterChange,
   revisionOf,
   type NextStep,
@@ -3651,16 +3652,7 @@ export class SessionDO extends DurableObject<Bindings> {
    * deterministic.
    */
   private async applyPendingEffects(): Promise<void> {
-    /*
-     * A change to an earlier answer goes last. It moves the cursor back and
-     * leaves an edit bookmark; anything applied after it that answers or skips
-     * the question the turn started on would walk the cursor off the reopened
-     * one and drop the bookmark with it.
-     */
-    const effects = [
-      ...this.pendingEffects.filter((e) => e.kind !== "revise"),
-      ...this.pendingEffects.filter((e) => e.kind === "revise"),
-    ];
+    const effects = orderEffects(this.pendingEffects);
     this.pendingEffects = [];
     if (!this.doc || !this.meta) return;
 
@@ -4300,7 +4292,8 @@ export class SessionDO extends DurableObject<Bindings> {
       return (
         `3. Then, if you recorded an answer, the next question is ref=${next.ref} — "${next.title}". ` +
         `Ask it in this same response, straight after your acknowledgement and before the record_answer ` +
-        `call, so they get both at once. `
+        `call, so they get both at once. If instead you call clarify, do not call record_answer and do not ` +
+        `mention the next question: ask only the follow-up. `
       );
     }
     if (!next.screenOut && this.doc?.settings.onComplete.requireSubmit) {

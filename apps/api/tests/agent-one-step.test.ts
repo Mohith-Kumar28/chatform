@@ -4,6 +4,7 @@ import {
   answerSteersFlow,
   buildAgentTools,
   nextStepAfter,
+  orderEffects,
   settledInOneStep,
   type NextStep,
   type ToolOutcome,
@@ -197,5 +198,26 @@ describe("record_answer after an announced question", () => {
     ).execute({ ref: "q_name", value: "Asha" })) as string;
     expect(out).toContain("already asks it");
     expect(out).toContain("write nothing more");
+  });
+});
+
+describe("orderEffects", () => {
+  it("keeps the question on screen when the model both asked a follow-up and recorded", () => {
+    // Seen live: "na" to "Where is the pain?" got "Could you tell me which tooth? ...
+    // how would you rate that pain?" with the rating buttons already up.
+    const out = orderEffects([
+      { kind: "record", ref: "q_name", value: "na" },
+      { kind: "clarify", reason: "no location given" },
+    ]);
+    expect(out).toEqual([{ kind: "clarify", reason: "no location given" }]);
+    expect(orderEffects([{ kind: "skip" }, { kind: "clarify", reason: "x" }])).toEqual([{ kind: "clarify", reason: "x" }]);
+  });
+
+  it("records as before without a follow-up, and a change to an earlier answer still goes last", () => {
+    const out = orderEffects([
+      { kind: "revise", ref: "q_name" },
+      { kind: "record", ref: "q_team", value: "Rocket" },
+    ]);
+    expect(out.map((e) => e.kind)).toEqual(["record", "revise"]);
   });
 });
