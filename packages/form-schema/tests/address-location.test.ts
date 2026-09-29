@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Block, coordsFromMapsUrl, displayAnswer, normalizeLocation, validateAnswer } from "../src/index";
+import { Block, coordsFromMapsUrl, displayAnswer, normalizeLocation, respondentAnswer, validateAnswer } from "../src/index";
 
 /**
  * The current location an address card can also collect.
@@ -60,6 +60,13 @@ describe("address location", () => {
     expect(displayAnswer(block, { location: "https://www.google.com/maps?q=1.000000,2.000000", city: "Pune" })).toBe(
       "Pune, https://www.google.com/maps?q=1.000000,2.000000",
     );
+  });
+
+  it("reads back to the respondent without the URL", () => {
+    const block = address({ location: "optional" });
+    const value = { city: "Pune", location: "https://www.google.com/maps?q=1.000000,2.000000" };
+    expect(respondentAnswer(block, value)).toBe("Pune, Location shared");
+    expect(respondentAnswer(block, { city: "Pune" })).toBe("Pune");
   });
 
   it("round-trips coordinates through the URL", () => {

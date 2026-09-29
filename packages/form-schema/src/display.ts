@@ -16,6 +16,22 @@ import { formatAmount } from "./payment-link";
  * value. `(skipped)` is deliberate: an empty cell cannot distinguish "declined
  * to answer" from "never asked".
  */
+/**
+ * One answer, as the person who gave it reads it back.
+ *
+ * `displayAnswer` with one difference: an address's shared location reads
+ * "Location shared" rather than the maps URL. The URL is what an admin, an
+ * export and a webhook want; in a chat bubble or the review card it is a long
+ * string the respondent never typed.
+ */
+export function respondentAnswer(block: Block, value: unknown): string {
+  if (block.type === "address" && typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const { location, ...lines } = value as Record<string, string>;
+    if (location) return [...Object.values(lines), "Location shared"].filter(Boolean).join(", ");
+  }
+  return displayAnswer(block, value);
+}
+
 export function displayAnswer(block: Block, value: unknown): string {
   if (value === undefined || value === null || value === "") return "(skipped)";
 

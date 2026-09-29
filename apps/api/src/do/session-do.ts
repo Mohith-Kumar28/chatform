@@ -21,7 +21,7 @@ import {
   extractionGuidance,
   resolveEnding,
   answerability,
-  displayAnswer as summarizeAnswer,
+  respondentAnswer as summarizeAnswer,
   isRequirementUnmet,
   defaultEnding,
   normalizeE164,

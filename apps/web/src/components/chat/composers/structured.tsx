@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, GripVertical, Loader2, MapPin, Plus, X } from "lucide-react";
 import {
   DndContext,
@@ -243,6 +243,18 @@ function LocationField({
   const [status, setStatus] = useState<"idle" | "locating" | "failed">("idle");
   const [typing, setTyping] = useState(false);
   const shared = value !== "" && !typing;
+  /*
+    The browser's own timeout only starts once permission is granted, so a
+    permission prompt nobody answers leaves "Locating…" up forever. After a
+    while the link box opens beside it; the request stays live, and an Allow
+    that arrives later still fills the location in.
+  */
+  const slow = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settle = () => {
+    if (slow.current) clearTimeout(slow.current);
+    slow.current = null;
+  };
+  useEffect(() => settle, []);
 
   const locate = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -251,13 +263,17 @@ function LocationField({
       return;
     }
     setStatus("locating");
+    settle();
+    slow.current = setTimeout(() => setTyping(true), 10000);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        settle();
         setStatus("idle");
         setTyping(false);
         onChange(mapsUrlFor(pos.coords.latitude, pos.coords.longitude));
       },
       () => {
+        settle();
         setStatus("failed");
         setTyping(true);
       },
@@ -301,10 +317,18 @@ function LocationField({
             )}
           />
           <p className="px-1 text-xs opacity-55">
-            {invalid ? "Paste a maps link or coordinates. " : status === "failed" ? "Couldn't get your location. " : ""}
-            <button type="button" onClick={locate} className="underline underline-offset-2">
-              {status === "failed" ? "Try again" : "Use my current location"}
-            </button>
+            {invalid
+              ? "Paste a maps link or coordinates. "
+              : status === "failed"
+                ? "Couldn't get your location. "
+                : status === "locating"
+                  ? "Waiting for your browser to share it… "
+                  : ""}
+            {status !== "locating" && (
+              <button type="button" onClick={locate} className="underline underline-offset-2">
+                {status === "failed" ? "Try again" : "Use my current location"}
+              </button>
+            )}
           </p>
         </div>
       ) : (

@@ -6,7 +6,7 @@ import { z } from "zod";
 import {
   readFormDoc,
   toPublicEnding,
-  displayAnswer,
+  respondentAnswer,
   isRequirementUnmet,
   type AnswerMap,
   type ConditionGroup,
@@ -299,7 +299,7 @@ async function assessIdentity(
         answers: doc.blocks
           .filter((b) => !["welcome", "statement"].includes(b.type))
           .filter((b) => answers[b.ref] !== undefined)
-          .map((b) => ({ ref: b.ref, title: b.title, display: displayAnswer(b, answers[b.ref]) })),
+          .map((b) => ({ ref: b.ref, title: b.title, display: respondentAnswer(b, answers[b.ref]) })),
         canRepeat: !oncePerPerson,
       },
       resume: null,
