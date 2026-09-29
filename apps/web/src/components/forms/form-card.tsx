@@ -11,6 +11,7 @@ import {
   Copy,
   CopyPlus,
   ExternalLink,
+  FileDown,
   Link2,
   MoreHorizontal,
   Folder,
@@ -20,6 +21,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { toast } from "sonner";
+import { exportFormPdf } from "@/components/forms/export-pdf/export-form-pdf";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -367,6 +369,11 @@ export function FormCard({
             </M.Sub>
           </>
         )}
+      <M.Separator />
+      <M.Item onSelect={() => void exportFormPdf({ formId: form.id })}>
+        <FileDown className="size-3.5" />
+        Export as PDF
+      </M.Item>
       {onDuplicate && (
         <>
           <M.Separator />

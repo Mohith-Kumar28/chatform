@@ -11,6 +11,7 @@ import {
   CopyPlus,
   ExternalLink,
   FileClock,
+  FileDown,
   Link2,
   Loader2,
   MoreVertical,
@@ -26,6 +27,7 @@ import { toast } from "sonner";
 import { deleteApiFormsById } from "@/lib/api/dashboard/dashboard";
 import { invalidateForms } from "@/lib/query-keys";
 import { useDuplicateForm } from "@/components/forms/use-duplicate-form";
+import { exportFormPdf } from "@/components/forms/export-pdf/export-form-pdf";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -400,6 +402,15 @@ export function BuilderHeader({
                 <DropdownMenuItem onSelect={showHistory}>
                   <FileClock className="size-3.5" />
                   Version history
+                </DropdownMenuItem>
+                {/* The document in the store, so edits not yet saved are in the file too. */}
+                <DropdownMenuItem
+                  onSelect={() =>
+                    void exportFormPdf({ formId, doc: useBuilderStore.getState().doc ?? undefined })
+                  }
+                >
+                  <FileDown className="size-3.5" />
+                  Export as PDF
                 </DropdownMenuItem>
                 {!readOnly && (
                   <DropdownMenuItem onSelect={() => void duplicateHere()}>

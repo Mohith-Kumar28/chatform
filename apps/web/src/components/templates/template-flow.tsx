@@ -335,8 +335,19 @@ function fitted(el: HTMLElement, gw: number, gh: number, whole = true) {
   return { x: (w - gw * k) / 2, y: Math.max(PAD, (h - gh * k) / 2), k };
 }
 
+/**
+ * The flow placed and wired at 1:1, ready for `FlowDrawing`.
+ *
+ * Exported for the PDF export, which draws this same picture onto a page-sized
+ * canvas instead of into a viewport.
+ */
+export function layoutFlow(doc: FormDoc) {
+  const graph = deriveGraph(doc, doc.logic.filter(isGoto), undefined, "TB");
+  return measure(graph.nodes, graph.edges);
+}
+
 /** The boxes and wires at 1:1, in graph coordinates. Both viewports scale this. */
-function FlowDrawing({ placed, wires, width, height }: { placed: Placed[]; wires: Wire[]; width: number; height: number }) {
+export function FlowDrawing({ placed, wires, width, height }: { placed: Placed[]; wires: Wire[]; width: number; height: number }) {
   // Unique per drawing: the inline flow and the expanded one are both on the
   // page at once, and a duplicate marker id resolves to whichever came first.
   const markerBase = `cf-arrow-${useId().replace(/:/g, "")}`;
