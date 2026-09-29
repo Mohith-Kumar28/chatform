@@ -167,3 +167,23 @@ export function conditionIsAlwaysFalse(
 function isEmptyStringTest(condition: Condition): boolean {
   return (condition.op === "eq" || condition.op === "neq") && condition.value === "";
 }
+
+/**
+ * The value a condition uses to mean "answered Other".
+ *
+ * A choice question with `allowOther` stores a typed answer as the text itself,
+ * not as an option id, so there was no way to route on it: a branch written as
+ * `eq "Other"` waited for someone to type the word "Other", and everybody who
+ * actually picked Other fell through to whatever block happened to sit next in
+ * the list. This sentinel names the choice rather than the text. `eq` and
+ * `includes` hold when the answer (or, for a multi-select, any part of it) is
+ * something other than one of the question's options; `neq` and `not_includes`
+ * are the complement. It only means anything on a question that allows Other,
+ * and lint says so everywhere else.
+ */
+export const OTHER_ANSWER = "__other__";
+
+/** Does this condition value name the Other answer? */
+export function mentionsOther(value: unknown): boolean {
+  return value === OTHER_ANSWER || (Array.isArray(value) && value.includes(OTHER_ANSWER));
+}

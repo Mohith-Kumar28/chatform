@@ -4,3 +4,4 @@ export * from "./lint";
 export * from "./flow-rules";
 export * from "./flow-order";
 export * from "./replay";
+export * from "./tidy-branches";

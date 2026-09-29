@@ -3,6 +3,7 @@ import type { Block } from "../blocks";
 import {
   conditionIsAlwaysFalse,
   conditionIsAlwaysTrue,
+  OTHER_ANSWER,
   opsRequiringValue,
   type Condition,
   type ConditionGroup,
@@ -153,6 +154,19 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
     }
 
     if (typeof c.value !== "string" || c.value === "") return;
+
+    // ── 2a. "Answered Other" on a question that has no Other to answer.
+    if (c.value === OTHER_ANSWER) {
+      if (about && "allowOther" in about && about.allowOther) return;
+      issues.push({
+        level: "warning",
+        code: "value_not_an_option",
+        message: `On "${named}", this route is for "Other", but that question doesn't allow Other, so it can never match.`,
+        path,
+        refs,
+      });
+      return;
+    }
 
     // ── 2. A value that is not one of the question's own options. The answer
     //    stored for a choice question is the option *id*, so a condition
@@ -490,8 +504,10 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
     const spans = rules.map((r) => numericSpan(r, from));
     for (let later = 1; later < rules.length; later++) {
       const mine = spans[later];
-      if (!mine) continue;
-      const shadow = spans.findIndex((s, earlier) => earlier < later && s !== null && covers(s, mine));
+      // A route of any other shape still dies under one that takes everyone.
+      const shadow = mine
+        ? spans.findIndex((s, earlier) => earlier < later && s !== null && covers(s, mine))
+        : spans.findIndex((s, earlier) => earlier < later && s !== null && !s.low && !s.high);
       if (shadow === -1) continue;
       const block = doc.blocks.find((b) => b.ref === from);
       const catchAll = !spans[shadow]!.low && !spans[shadow]!.high;
@@ -713,6 +729,27 @@ export function lintFormDoc(doc: FormDoc): LintIssue[] {
   return issues;
 }
 
+/**
+ * Lint codes about the flow's wiring: a route that is broken, or one drawn on
+ * the canvas that never runs.
+ *
+ * One list, because the builder draws these on the flow and the AI's edit
+ * check has to see the same ones. It used to keep four of the nine, so the AI
+ * was told "the flow checks out" while the canvas showed an alert on the very
+ * route it had just written.
+ */
+export const FLOW_PROBLEM_CODES: ReadonlySet<string> = new Set([
+  "unreachable_blocks",
+  "no_route_to_ending",
+  "dangling_target",
+  "unreachable_route",
+  "always_true_route",
+  "never_true_route",
+  "value_not_an_option",
+  "exact_match_on_free_text",
+  "ending_unreachable",
+]);
+
 export function hasErrors(issues: LintIssue[]): boolean {
   return issues.some((i) => i.level === "error");
 }
@@ -739,12 +776,12 @@ export function rulesAreExhaustive(block: Block, rules: GotoRule[]): boolean {
   const conds: { op: string; value: unknown }[] = [];
   for (const r of rules) {
     const w = r.when;
+    // An unconditional rule leaving this block takes everyone with it, in
+    // either spelling: `evalGroup` reads a null `when` as true, and dragging
+    // the canvas's "otherwise" handle writes one.
+    if (!w || (w.groups.length === 0 && w.conditions.length === 0)) return true;
     // Anything compound is beyond what this is willing to reason about.
-    if (!w || w.groups.length > 0 || w.conditions.length !== 1) {
-      // An unconditional rule leaving this block takes everyone with it.
-      if (w && w.groups.length === 0 && w.conditions.length === 0) return true;
-      return false;
-    }
+    if (w.groups.length > 0 || w.conditions.length !== 1) return false;
     const c = w.conditions[0]!;
     if (c.left.kind !== "ref" || c.left.ref !== block.ref) return false;
     conds.push({ op: c.op, value: c.value });
@@ -754,7 +791,9 @@ export function rulesAreExhaustive(block: Block, rules: GotoRule[]): boolean {
   const options = "options" in block ? block.options : undefined;
   if (options && options.length > 0 && conds.every((c) => c.op === "eq")) {
     const covered = new Set(conds.map((c) => String(c.value)));
-    return options.every((o) => covered.has(o.id));
+    // A typed Other answer is an answer too, and it matches no option.
+    const other = "allowOther" in block && block.allowOther;
+    return options.every((o) => covered.has(o.id)) && (!other || covered.has(OTHER_ANSWER));
   }
 
   /**

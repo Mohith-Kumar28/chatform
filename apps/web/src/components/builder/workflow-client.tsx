@@ -47,6 +47,7 @@ import {
   deriveGraph,
   finishRef,
   isGoto,
+  naturalNext,
   OTHERWISE,
   OTHERWISE_COLOR,
   routeColor,
@@ -523,30 +524,30 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
   const [menuEdge, setMenuEdge] = useState<MenuEdge | null>(null);
 
   /**
-   * Aim the "everything else" route by hand.
+   * Where answers that match none of a branch's routes go.
    *
-   * Opt-in, and that is the whole point of it being a button. An unmatched
-   * answer already goes somewhere — the next question, or the ending — so the
-   * canvas has always drawn that path, marked `auto`, to say where. What it
-   * could not do was let anybody CHANGE it: the only way to redirect the
-   * leftovers was to write out a case for each of them. This writes the
-   * unconditional rule that `applyLogicRules` treats as the default, so the
-   * fall-through becomes a decision instead of a consequence.
+   * They always go somewhere: the next question, or the ending past the last
+   * one. So the panel always shows that destination in a picker instead of a
+   * button that reveals one. Picking somewhere else writes the unconditional
+   * rule `applyLogicRules` treats as the default; picking the natural next step
+   * again removes it, so the document only holds an "otherwise" when it
+   * changes something.
    *
-   * Never offered on a branch that already covers every answer. There is
-   * nothing left to catch, and a control that adds a dead route is worse than
-   * no control.
+   * The rule is appended after the branch's cases, and `addCase` inserts new
+   * cases above it: first match wins, and a catch-all above a case kills it.
    */
-  const addElse = useCallback(
-    (fromRef: string) => {
-      if (doc.logic.some((r) => isGoto(r) && r.from === fromRef && !condOf(r))) return;
-      const sourceIndex = doc.blocks.findIndex((b) => b.ref === fromRef);
-      // Defaults to where the leftovers were already going, so adding the route
-      // changes nothing until it is pointed somewhere else. Adding a control
-      // must not quietly re-route anybody.
-      // The accepting ending past the last question, as the runtime does.
-      const current = doc.blocks[sourceIndex + 1]?.ref ?? finishRef(doc);
-      if (!current) return;
+  const setElse = useCallback(
+    (fromRef: string, target: string, kind: "block" | "ending") => {
+      const existing = doc.logic.find((r): r is GotoRule => isGoto(r) && r.from === fromRef && !condOf(r));
+      const natural = naturalNext(doc, fromRef);
+      if (natural && target === natural.ref) {
+        if (existing) setRules(doc.logic.filter((r) => r.id !== existing.id));
+        return;
+      }
+      if (existing) {
+        setRules(doc.logic.map((r) => (r.id === existing.id ? { ...existing, target, targetKind: kind } : r)));
+        return;
+      }
       setRules([
         ...doc.logic,
         {
@@ -554,8 +555,8 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
           action_kind: "goto",
           from: fromRef,
           when: { op: "and", conditions: [], groups: [] },
-          target: current,
-          targetKind: doc.blocks.some((b) => b.ref === current) ? "block" : "ending",
+          target,
+          targetKind: kind,
         } satisfies GotoRule,
       ]);
     },
@@ -1108,7 +1109,7 @@ function WorkflowEditor({ doc, onChange, focusRef, toolbar, dock }: WorkflowClie
                 answerableBlocks={answerableBlocks}
                 onPatch={patchRule}
                 onAddCase={() => addCase(selBranchRef)}
-                onAddElse={() => addElse(selBranchRef)}
+                onSetElse={(ref, kind) => setElse(selBranchRef, ref, kind)}
                 onDeleteCase={(id) => onEdgesDelete([{ id: `case_${id}` } as Edge])}
                 onDelete={() => onNodesDelete([{ id: `branch_${selBranchRef}` } as Node])}
               />
@@ -1460,21 +1461,20 @@ function BranchNode({ id, data, selected }: NodeProps) {
             When every answer is already spoken for there is no path left for
             "otherwise" to take, so offering one is a wire to nowhere.
 
-            Otherwise it is drawn, but never as a peer of the cases above it.
-            Nobody authored this row — it is derived, and it read as a branch
-            someone had written and then abandoned, which is why it kept getting
-            reported as a mistake. So: its own rule above it, marked `auto`, and
-            worded as a consequence rather than as an option label. It cannot be
-            removed, because it is the half of a conditional question that does
-            the skipping: delete it and every "only ask this sometimes" question
-            is asked of everyone.
+            Otherwise it is drawn, set apart from the cases above it and worded
+            as a consequence rather than an option label, and it looks the same
+            whether it is the natural next step or one somebody aimed: it used
+            to come in two looks, and "why is there an otherwise here and not
+            there" had no answer an author could see. It cannot be removed,
+            because it is the half of a conditional question that does the
+            skipping.
           */}
           {fallback && (
             <BranchRow
               label="otherwise"
               destination={fallback.title}
               color={OTHERWISE_COLOR}
-              derived={!fallback.explicit}
+              derived
               title={
                 fallback.explicit
                   ? `Every other answer goes to "${fallback.title}", because you aimed it there.`
@@ -1524,7 +1524,7 @@ function BranchRow({
   color: string;
   /** Where this route lands, named on the row when it is worth naming. */
   destination?: string;
-  /** Not authored — the fall-through this branch implies. Drawn as such. */
+  /** The "otherwise" row, set apart from the cases above it. */
   derived?: boolean;
   /** Its destination is gone: this really is an unconnected output. */
   missing?: boolean;
@@ -1544,7 +1544,7 @@ function BranchRow({
           "min-w-0 truncate text-[10px]",
           !destination && "flex-1",
           missing && "text-destructive font-medium",
-          derived && "text-muted-foreground italic",
+          derived && "text-muted-foreground",
           !missing && !derived && "font-medium",
         )}
       >
@@ -1553,11 +1553,6 @@ function BranchRow({
       {/* The destination, so a finished route reads as finished. */}
       {destination && !missing && (
         <span className="text-muted-foreground/80 min-w-0 flex-1 truncate text-[9px]">→ {destination}</span>
-      )}
-      {derived && !missing && (
-        <span className="text-muted-foreground/70 shrink-0 rounded bg-[color-mix(in_oklch,currentColor_12%,transparent)] px-1 font-mono text-[8px] leading-[1.4] tracking-wide uppercase">
-          auto
-        </span>
       )}
       {/* The one state n8n would call an unconnected output — and here, unlike
           n8n, the respondent cannot just be dropped, so it is an error. */}
@@ -1591,7 +1586,7 @@ function BranchInspector({
   answerableBlocks,
   onPatch,
   onAddCase,
-  onAddElse,
+  onSetElse,
   onDeleteCase,
   onDelete,
 }: {
@@ -1601,18 +1596,14 @@ function BranchInspector({
   answerableBlocks: Block[];
   onPatch: (ruleId: string, patch: RulePatch) => void;
   onAddCase: () => void;
-  onAddElse: () => void;
+  onSetElse: (ref: string, kind: "block" | "ending") => void;
   onDeleteCase: (ruleId: string) => void;
   onDelete: () => void;
 }) {
   const sourceBlock = doc.blocks.find((b) => b.ref === sourceRef) ?? null;
-  const sourceIndex = doc.blocks.findIndex((b) => b.ref === sourceRef);
-  const fallthrough = doc.blocks[sourceIndex + 1];
   const explicitElse = doc.logic.find((r): r is GotoRule => isGoto(r) && r.from === sourceRef && !condOf(r));
   const exhaustive = rulesAreExhaustive(sourceBlock as Block, rules);
-  const elseTarget = explicitElse
-    ? (doc.blocks.find((b) => b.ref === explicitElse.target)?.title ?? doc.endings.find((e) => e.ref === explicitElse.target)?.title ?? explicitElse.target)
-    : (fallthrough?.title ?? "the ending");
+  const elseTarget = explicitElse?.target ?? naturalNext(doc, sourceRef)?.ref ?? "";
 
   return (
     <div className="space-y-5">
@@ -1641,54 +1632,19 @@ function BranchInspector({
       </Button>
 
       {/*
-        Three states, and the first one is the one that was missing.
-
-        Exhaustive: say so and offer nothing. A Yes/No with both answers routed
-        has no leftovers, so an "otherwise" control here would add a route no
-        respondent can reach — which is exactly the dead row this used to draw
-        on the canvas.
-
-        Leftovers, unaimed: say where they already go, and offer to take it
-        over. Nobody has to; it is what happens anyway.
-
-        Leftovers, aimed: it is a real rule now, so it gets a real row — a
-        target picker and a way to remove it, like every other route.
+        Two states. When the routes cover every answer (Other included, when
+        the question allows it) there is nothing left over and no row. When
+        they don't, the leftovers go somewhere, and the row names where and
+        lets you change it.
       */}
       {exhaustive ? (
         <p className="text-muted-foreground text-xs">Every answer is routed</p>
-      ) : explicitElse ? (
-        <div className="bg-muted/40 space-y-2 rounded-xl p-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-              Otherwise
-            </span>
-            <button
-              type="button"
-              onClick={() => onDeleteCase(explicitElse.id)}
-              aria-label="Remove the otherwise route"
-              className="text-muted-foreground hover:text-destructive shrink-0"
-            >
-              <X className="size-3" />
-            </button>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">Go to</span>
-            <FlowTargetCombobox
-              doc={doc}
-              value={explicitElse.target}
-              onChange={(ref, kind) => onPatch(explicitElse.id, { target: ref, targetKind: kind })}
-              className="min-w-0 flex-1"
-            />
-          </div>
-        </div>
       ) : (
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-muted-foreground min-w-0 truncate text-xs">
-            Otherwise → <span className="text-foreground">{elseTarget}</span>
-          </p>
-          <Button variant="ghost" size="sm" className="text-muted-foreground shrink-0" onClick={onAddElse}>
-            Change
-          </Button>
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground shrink-0 text-[10px] font-medium tracking-wide uppercase">
+            Otherwise
+          </span>
+          <FlowTargetCombobox doc={doc} value={elseTarget} onChange={onSetElse} className="min-w-0 flex-1" />
         </div>
       )}
 

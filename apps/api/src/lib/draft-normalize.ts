@@ -14,6 +14,8 @@ import {
   lintFormDoc,
   buildFlowRules,
   orderBlocksForBranches,
+  tidyBranches,
+  OTHER_ANSWER,
   DEFAULT_REDIRECT_DELAY_SEC,
   ANY_FILE,
   parseAcceptList,
@@ -504,6 +506,11 @@ export interface NormalizedBlock {
 
 /** "Other", "Others", "Other (please specify)", "Something else". Not "None of the above": that is an answer. */
 const OTHER_LABEL = /^\s*(others?|something else|anything else)\b.*$/i;
+
+/** Is this option label really the Allow "Other" switch? See `normalizeBlock`. */
+export function isOtherLabel(label: string): boolean {
+  return OTHER_LABEL.test(label);
+}
 
 /**
  * Map one loose block onto the strict Block schema.
@@ -1243,7 +1250,10 @@ export function resolveBranches(
         opts.find((o) => o.id.toLowerCase() === raw.toLowerCase()) ??
         opts.find((o) => o.label.toLowerCase() === raw.toLowerCase()) ??
         opts.find((o) => o.label.toLowerCase().includes(raw.toLowerCase()) && raw.length > 2);
-      value = hit ? hit.id : raw;
+      // "Other" is not an option but the Allow "Other" switch (see
+      // `normalizeBlock`), and a typed Other answer is routed by name.
+      const other = "allowOther" in block && block.allowOther && (raw === OTHER_ANSWER || OTHER_LABEL.test(raw));
+      value = hit ? hit.id : other ? OTHER_ANSWER : raw;
     } else if (block.type === "yes_no" || block.type === "legal_consent") {
       // A consent answer is stored as an object and compared on its `accepted`
       // flag (see `answerOperand`), so a branch on one reads as a boolean here
@@ -1416,7 +1426,7 @@ export function draftToDoc(draft: GenerationDraft): NormalizedDraft {
 
   const logic = buildFlowRules(branches, ordered, endings.map((e) => e.ref));
 
-  const doc = FormDoc.parse({
+  const parsed = FormDoc.parse({
     schemaVersion: 1,
     title: draft.title,
     description: draft.description,
@@ -1429,8 +1439,9 @@ export function draftToDoc(draft: GenerationDraft): NormalizedDraft {
     settings: {},
     theme: {},
   } satisfies FormDocInput);
+  const doc = tidyBranches(parsed, { prune: true });
 
-  return { doc, issues: lintFormDoc(doc), blocks: ordered, ruleCount: logic.length };
+  return { doc, issues: lintFormDoc(doc), blocks: ordered, ruleCount: doc.logic.length };
 }
 
 /**

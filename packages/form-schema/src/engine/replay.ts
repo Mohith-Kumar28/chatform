@@ -4,6 +4,7 @@ import {
   applyLogicRules,
   isBlockVisible,
   resolveNext,
+  withChoices,
 } from "./evaluate";
 
 /**
@@ -57,7 +58,7 @@ export function replayState(
   answers: AnswerMap,
   hidden: Record<string, string> = {},
 ): ReplayResult {
-  const state: EvalState = { answers: {}, variables: {}, hidden };
+  const state: EvalState = withChoices(doc, { answers: {}, variables: {}, hidden });
   for (const v of doc.variables) state.variables[v.name] = v.initial;
 
   const path: string[] = [];

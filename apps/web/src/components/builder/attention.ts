@@ -1,21 +1,4 @@
-import { lintFormDoc, type FormDoc, type LintIssue } from "@repo/form-schema";
-
-/**
- * Lint codes about the flow's wiring. The canvas already draws those as routes
- * that are broken or pointless; everything else with a ref is a question
- * missing something it needs, which is what "needs attention" is for.
- */
-const FLOW_CODES = new Set([
-  "unreachable_blocks",
-  "no_route_to_ending",
-  "dangling_target",
-  "unreachable_route",
-  "always_true_route",
-  "never_true_route",
-  "value_not_an_option",
-  "exact_match_on_free_text",
-  "ending_unreachable",
-]);
+import { FLOW_PROBLEM_CODES, lintFormDoc, type FormDoc, type LintIssue } from "@repo/form-schema";
 
 export interface Attention {
   messages: string[];
@@ -31,7 +14,7 @@ export interface Attention {
 export function setupAttention(doc: FormDoc): Map<string, Attention> {
   const out = new Map<string, Attention>();
   for (const issue of lintFormDoc(doc)) {
-    if (issue.level !== "error" || !issue.refs?.length || FLOW_CODES.has(issue.code)) continue;
+    if (issue.level !== "error" || !issue.refs?.length || FLOW_PROBLEM_CODES.has(issue.code)) continue;
     const ref = issue.refs[0]!;
     const entry = out.get(ref) ?? { messages: [], codes: [] };
     entry.messages.push(issue.message);
@@ -69,34 +52,9 @@ export function publishProblems(doc: FormDoc): Map<string, NodeProblem> {
   const out = new Map<string, NodeProblem>();
   for (const issue of lintFormDoc(doc)) {
     if (!issue.refs?.length) continue;
-    if (
-      issue.code !== "unreachable_blocks" &&
-      issue.code !== "no_route_to_ending" &&
-      issue.code !== "dangling_target" &&
-      // A route that can never run is a problem about this question's own
-      // list of routes, so it belongs on this question's node and nowhere
-      // else — it is the one warning the canvas can point at precisely.
-      issue.code !== "unreachable_route" &&
-      /*
-       * And the four that are the same kind of thing: a route drawn on this
-       * node whose condition cannot do what it says. A condition that is
-       * always true, one that can never be true, one comparing a choice
-       * question against something that is not one of its options, and an
-       * exact match on a box the respondent types into freely. None of them
-       * breaks the form, so none is an error — but each is an arm the author
-       * believes in and the flow never takes, and the node is the only place
-       * that can say so.
-       */
-      issue.code !== "always_true_route" &&
-      issue.code !== "never_true_route" &&
-      issue.code !== "value_not_an_option" &&
-      issue.code !== "exact_match_on_free_text" &&
-      // An ending nobody is sent to. The one thing worth saying about an
-      // ending, and it belongs on the ending.
-      issue.code !== "ending_unreachable"
-    ) {
-      continue;
-    }
+    // Routes that are broken or never run, drawn on the node they hang off.
+    // Setup problems are added below.
+    if (!FLOW_PROBLEM_CODES.has(issue.code)) continue;
     for (const ref of issue.refs) {
       const existing = out.get(ref);
       if (existing) {

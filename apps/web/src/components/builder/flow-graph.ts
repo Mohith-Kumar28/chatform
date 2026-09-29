@@ -146,6 +146,20 @@ export function finishRef(doc: Pick<FormDoc, "endings">): string | undefined {
 }
 
 /**
+ * Where an answer that no route catches goes when nobody aimed it: the next
+ * question, or the finish past the last one.
+ */
+export function naturalNext(
+  doc: Pick<FormDoc, "blocks" | "endings">,
+  fromRef: string,
+): { ref: string; kind: "block" | "ending" } | null {
+  const next = doc.blocks[doc.blocks.findIndex((b) => b.ref === fromRef) + 1];
+  if (next) return { ref: next.ref, kind: "block" };
+  const finish = finishRef(doc);
+  return finish ? { ref: finish, kind: "ending" } : null;
+}
+
+/**
  * A branch node's payload, typed.
  *
  * React Flow types `node.data` as `Record<string, unknown>`, so every reader

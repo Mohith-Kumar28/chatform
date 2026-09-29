@@ -1,3 +1,5 @@
+import { OTHER_ANSWER } from "./conditions";
+
 /**
  * Where a respondent is sent to pay, and where they are sent to book.
  *
@@ -191,10 +193,12 @@ export function resolvePaymentAmount(
 ): ResolvedPaymentAmount {
   let raw: unknown;
   if (block.amountMode === "answer") {
-    // The option they picked, looked up in the author's price list. An "Other"
-    // answer, or an option given no price, has nothing to charge.
+    // The option they picked, looked up in the author's price list. A typed
+    // "Other" answer matches no option and takes the Other price, when the
+    // author set one; an option given no price has nothing to charge.
     const key = block.priceFrom ? priceKeyOf(answers[block.priceFrom.ref]) : null;
-    raw = key !== null ? block.priceFrom?.prices[key] : undefined;
+    const prices = block.priceFrom?.prices;
+    raw = key === null || !prices ? undefined : Object.hasOwn(prices, key) ? prices[key] : prices[OTHER_ANSWER];
   } else if (block.amountMode === "variable") {
     if (!block.amountVariable) return { ok: false, code: "payment_no_amount" };
     raw = variables[block.amountVariable];
@@ -310,6 +314,7 @@ export function isMeetingRoom(url: string): boolean {
 export interface PriceSourceLike {
   type: string;
   multiSelect?: boolean;
+  allowOther?: boolean;
   options?: { id: string; label: string }[];
   yesLabel?: string;
   noLabel?: string;
@@ -340,7 +345,8 @@ export function priceChoices(block: PriceSourceLike): { key: string; label: stri
       { key: "no", label: block.noLabel || "No" },
     ];
   }
-  return (block.options ?? []).map((o) => ({ key: o.id, label: o.label }));
+  const options = (block.options ?? []).map((o) => ({ key: o.id, label: o.label }));
+  return block.allowOther ? [...options, { key: OTHER_ANSWER, label: "Other" }] : options;
 }
 
 /** A stored answer as a `priceFrom.prices` key, or null when it cannot have a price. */

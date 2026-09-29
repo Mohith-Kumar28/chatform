@@ -1,6 +1,6 @@
 import { FENCE_RULE, fence, fenceNonce } from "@repo/guard";
 import { mediaUrls } from "./research.js";
-import { ADDABLE_BLOCK_TYPES, andList, enforcesUnique, renderBlockCatalog, type Block, type FormDoc } from "@repo/form-schema";
+import { ADDABLE_BLOCK_TYPES, andList, enforcesUnique, OTHER_ANSWER, renderBlockCatalog, type Block, type FormDoc } from "@repo/form-schema";
 
 /**
  * The interview agent's prompts.
@@ -755,7 +755,8 @@ export function buildEditPrompt(
         source && "options" in source && source.options
           ? (source.options as { id: string; label: string }[]).find((o) => o.id === value)
           : undefined;
-      how = `${r.from} ${c.op} ${option ? `"${option.label}"` : JSON.stringify(value)} →`;
+      const shown = option ? `"${option.label}"` : value === OTHER_ANSWER ? '"Other"' : JSON.stringify(value);
+      how = `${r.from} ${c.op} ${shown} →`;
     }
     const list = reachedBy.get(r.target);
     if (list) list.push(how);
@@ -765,7 +766,11 @@ export function buildEditPrompt(
   const blocks = doc.blocks
     .map((b, i) => {
       const options = "options" in b && b.options?.length
-        ? ` options: [${(b.options as { id: string; label: string }[]).map((o) => `"${o.label}"`).join(", ")}]`
+        ? ` options: [${[
+            ...(b.options as { id: string; label: string }[]).map((o) => `"${o.label}"`),
+            // A typed answer, routable by the name "Other".
+            ...("allowOther" in b && b.allowOther ? ['"Other"'] : []),
+          ].join(", ")}]`
         : "";
       const routed = reachedBy.get(b.ref);
       const reach = routed?.length ? `  ← reached by: ${routed.join("; ")}` : "";

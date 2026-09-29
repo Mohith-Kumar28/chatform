@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { FormDoc } from "@repo/form-schema";
+import { FormDoc, lintFormDoc, OTHER_ANSWER } from "@repo/form-schema";
 import { applyEditDraft, introducedFlowProblems } from "../src/lib/edit-apply.js";
 import type { EditDraft } from "../src/lib/ai.js";
 
@@ -331,5 +331,46 @@ describe("introducedFlowProblems", () => {
     // Same breakage on both sides now: the edit introduced nothing new.
     const next = applyEditDraft(broken, edit({ updateBlocks: [{ ref: "q_email", config: "unique=true", description: "" }] }));
     expect(introducedFlowProblems(broken, next.doc)).toEqual([]);
+  });
+});
+
+/**
+ * The dental intake: the AI added a question whose last option was "Other",
+ * then routed "Other" somewhere. The option became the Allow "Other" switch,
+ * the route kept the literal word, and nothing told the model.
+ */
+describe("routing Other in an edit", () => {
+  const withOther = edit({
+    addBlocks: [
+      add({ ref: "q_reason", type: "single_select", title: "Reason?", options: ["Pain", "Cleaning", "Checkup", "Other"], insertAfter: "q_platform" }),
+      add({ ref: "q_tell", title: "Tell us more", insertAfter: "q_reason" }),
+    ],
+    branches: [
+      { whenRef: "q_reason", op: "eq", value: "Pain", then: "q_email", rejoin: "" },
+      { whenRef: "q_reason", op: "eq", value: "Other", then: "q_tell", rejoin: "q_email" },
+    ],
+  });
+
+  it("routes the Other answer rather than the word", () => {
+    const out = applyEditDraft(baseForm(), withOther);
+    const reason = out.doc.blocks.find((b) => b.ref === "q_reason");
+    expect(reason && "allowOther" in reason && reason.allowOther).toBe(true);
+    const values = out.doc.logic.flatMap((r) => r.when?.conditions.map((c) => c.value) ?? []);
+    expect(values).toContain(OTHER_ANSWER);
+    expect(values).not.toContain("Other");
+    expect(lintFormDoc(out.doc).filter((i) => i.code === "value_not_an_option")).toEqual([]);
+  });
+
+  it("tells the model about a route that can never match", () => {
+    const out = applyEditDraft(baseForm(), withOther);
+    const broken = FormDoc.parse({
+      ...out.doc,
+      logic: out.doc.logic.map((r) =>
+        r.when?.conditions[0]?.value === OTHER_ANSWER
+          ? { ...r, when: { ...r.when, conditions: [{ ...r.when.conditions[0]!, value: "Other" }] } }
+          : r,
+      ),
+    });
+    expect(introducedFlowProblems(baseForm(), broken).map((i) => i.code)).toContain("value_not_an_option");
   });
 });

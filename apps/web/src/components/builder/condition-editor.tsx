@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Plus, X } from "lucide-react";
-import type { Block, Condition, ConditionGroup } from "@repo/form-schema";
+import { OTHER_ANSWER, type Block, type Condition, type ConditionGroup } from "@repo/form-schema";
 import { OPS, type Op, opsValueNeeded } from "./branch-layout";
 import { BufferedInput } from "@/components/ui/buffered-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -327,6 +327,7 @@ export function ConditionValueInput({
             {o.label}
           </SelectItem>
         ))}
+        {"allowOther" in block && block.allowOther && <SelectItem value={OTHER_ANSWER}>Other</SelectItem>}
       </Picker>
     );
   }

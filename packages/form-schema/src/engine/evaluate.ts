@@ -1,6 +1,6 @@
 import type { AnswerMap } from "../answers";
 import type { Block } from "../blocks";
-import type { Condition, ConditionGroup, ConditionOp } from "../conditions";
+import { OTHER_ANSWER, mentionsOther, type Condition, type ConditionGroup, type ConditionOp } from "../conditions";
 import type { Ending, LogicRule } from "../logic";
 import type { ValueExprT } from "../logic";
 import type { FormDoc } from "../form-doc";
@@ -9,6 +9,63 @@ export interface EvalState {
   answers: AnswerMap;
   variables: Record<string, string | number>;
   hidden: Record<string, string>;
+  /**
+   * The option ids of every question that allows Other, so a condition on
+   * `OTHER_ANSWER` can tell a typed answer from a picked one. Filled in by
+   * `withChoices`; without it no answer counts as Other.
+   */
+  choices?: ReadonlyMap<string, ReadonlySet<string>>;
+}
+
+const choiceCache = new WeakMap<FormDoc, ReadonlyMap<string, ReadonlySet<string>>>();
+
+/**
+ * `state`, able to recognise an Other answer on this form.
+ *
+ * The answers are shared, not copied: `applyLogicRules` writes variables into
+ * the state it is handed, and those writes have to land where the caller will
+ * read them.
+ */
+export function withChoices(doc: FormDoc, state: EvalState): EvalState {
+  if (state.choices) return state;
+  let choices = choiceCache.get(doc);
+  if (!choices) {
+    const map = new Map<string, ReadonlySet<string>>();
+    for (const b of doc.blocks) {
+      if ((b.type === "single_select" || b.type === "multi_select") && b.allowOther) {
+        map.set(b.ref, new Set(b.options.map((o) => o.id)));
+      }
+    }
+    choices = map;
+    choiceCache.set(doc, choices);
+  }
+  return { ...state, choices };
+}
+
+/** Did the respondent type their own answer instead of picking an option? */
+function answeredOther(left: Primitive, ids: ReadonlySet<string> | undefined): boolean {
+  if (!ids) return false;
+  if (typeof left === "string") return left.trim() !== "" && !ids.has(left);
+  if (Array.isArray(left)) return left.some((v) => !ids.has(v));
+  return false;
+}
+
+/** `evalCondition` for a condition that names `OTHER_ANSWER`. */
+function evalOtherCondition(cond: Condition, left: Primitive, state: EvalState): boolean {
+  const ids = cond.left.kind === "ref" ? state.choices?.get(cond.left.ref) : undefined;
+  const other = answeredOther(left, ids);
+  const holds = (v: string) => (v === OTHER_ANSWER ? other : Array.isArray(left) ? left.includes(v) : left === v);
+  const values = Array.isArray(cond.value) ? cond.value : [String(cond.value)];
+  switch (cond.op) {
+    case "eq":
+    case "includes":
+      return values.every(holds);
+    case "neq":
+    case "not_includes":
+      return !values.every(holds);
+    default:
+      return false;
+  }
 }
 
 type Primitive = string | number | boolean | string[] | undefined | null;
@@ -64,6 +121,7 @@ function toComparableNumber(v: Primitive): number | null {
 export function evalCondition(cond: Condition, state: EvalState): boolean {
   const left = resolveOperand(cond.left, state);
   const value = cond.value;
+  if (mentionsOther(value)) return evalOtherCondition(cond, left, state);
 
   switch (cond.op as ConditionOp) {
     case "eq":
@@ -297,6 +355,7 @@ export function firstVisibleBlock(doc: FormDoc, state: EvalState): Block | null 
  * success ending at all, which `lintFormDoc` refuses to publish.
  */
 export function resolveEnding(doc: FormDoc, state: EvalState): Ending {
+  state = withChoices(doc, state);
   const result = applyLogicRules(doc.endingRules, state);
   if (result.gotoKind === "ending" && result.gotoRef) {
     const e = doc.endings.find((x) => x.ref === result.gotoRef);
@@ -320,6 +379,7 @@ export function resolveNext(
   answeredRef: string | null,
   state: EvalState,
 ): { kind: "block"; block: Block } | { kind: "ending"; ending: Ending } {
+  state = withChoices(doc, state);
   if (answeredRef !== null) {
     const branch = applyLogicRules(doc.logic, state, answeredRef);
     if (branch.gotoKind === "ending" && branch.gotoRef) {

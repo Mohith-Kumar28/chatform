@@ -3,7 +3,7 @@ import { APICallError } from "ai";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../lib/validator.js";
 import { z } from "zod";
-import { FormDoc, buildFlowRules, lintFormDoc, hasErrors, migrateFormDoc, type Block } from "@repo/form-schema";
+import { FLOW_PROBLEM_CODES, FormDoc, buildFlowRules, lintFormDoc, hasErrors, migrateFormDoc, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, assertFormAccess, keyOwnsForm, type GuardVars } from "../lib/guards.js";
 import { requirePermission, requireQuota, requireGauge, assertPermission, type AuthzVars } from "../lib/authorize.js";
@@ -238,11 +238,11 @@ async function generateWithRetry(opts: {
       continue;
     }
 
-    // Errors, and the one warning that is always the model's slip rather than
-    // the author's choice: an ending it wrote and then never sent anybody to.
-    // Left alone it reached the builder as "1 step may not do what it says"
-    // on a form the author had not touched yet.
-    const repairable = normalized.issues.filter((i) => i.level === "error" || i.code === "ending_unreachable");
+    // Errors, and every flow warning the builder draws on the canvas: on a
+    // form the author has not touched yet, a route that never runs or an
+    // ending nobody reaches is always the model's slip. Left alone it reached
+    // the builder as "1 step may not do what it says".
+    const repairable = normalized.issues.filter((i) => i.level === "error" || FLOW_PROBLEM_CODES.has(i.code));
     if (repairable.length === 0 || attempt === 1) {
       // On the second attempt, whatever is left ships: the document parsed, so
       // the author is better served by a form with a flagged issue in the

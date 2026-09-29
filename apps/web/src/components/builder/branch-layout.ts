@@ -1,4 +1,4 @@
-import type { Block, FormDoc } from "@repo/form-schema";
+import { OTHER_ANSWER, type Block, type FormDoc } from "@repo/form-schema";
 
 /**
  * What the question list can honestly say about the flow.
@@ -52,6 +52,7 @@ function valueWords(block: Block | undefined, value: unknown): string {
     const hit = block.options.find((o) => o.id === value);
     if (hit) return hit.label;
   }
+  if (value === OTHER_ANSWER) return "Other";
   if (typeof value === "boolean") return value ? "yes" : "no";
   return String(value ?? "");
 }
@@ -324,6 +325,7 @@ export function edgeLabel(block: Block | null, cond: { op: string; value?: unkno
       const other = options.length === 2 ? options.find((o) => o.id !== opt.id) : undefined;
       return other ? other.label : `not ${opt.label}`;
     }
+    if (cond.value === OTHER_ANSWER) return negated ? "not Other" : "Other";
   }
   return conditionText(cond);
 }

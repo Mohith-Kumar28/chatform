@@ -128,9 +128,14 @@ export function buildEditContext(
       ref: b.ref,
       type: b.type,
       title: b.title,
+      // "Other" is routable on a question that allows it; `resolveBranches`
+      // turns it into `OTHER_ANSWER`.
       optionLabels:
         "options" in b && Array.isArray(b.options)
-          ? (b.options as { label: string }[]).map((o) => o.label)
+          ? [
+              ...(b.options as { label: string }[]).map((o) => o.label),
+              ...("allowOther" in b && b.allowOther ? ["Other"] : []),
+            ]
           : [],
       existing: true,
     });
