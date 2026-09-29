@@ -1,7 +1,7 @@
 import { cleanLine, fence, fenceNonce } from "@repo/guard";
 import { z } from "zod";
 import { tool, type ToolSet } from "ai";
-import { answerability, resolveNext, validateAnswer, type Block, type EvalState, type FormDoc } from "@repo/form-schema";
+import { answerability, answerIsRecord, resolveNext, validateAnswer, type Block, type EvalState, type FormDoc } from "@repo/form-schema";
 import type { KnowledgeHit } from "../lib/knowledge/index.js";
 import { looksLikeQuestion } from "../lib/phrasing.js";
 
@@ -63,7 +63,8 @@ export function nextStepAfter(
   block: Block,
   state: EvalState,
   value?: unknown,
-  opts: { resume?: boolean } = {},
+  /** `walked`: see `resumeAfterChange`. */
+  opts: { resume?: boolean; walked?: ReadonlySet<string> | null } = {},
 ): NextStep | null {
   const probe: EvalState = {
     answers: { ...state.answers },
@@ -77,7 +78,7 @@ export function nextStepAfter(
     // the branch reads no answer, because there is none.
     if (validated.value !== undefined) probe.answers[block.ref] = validated.value;
   }
-  return stepOf(opts.resume ? resumeAfterChange(doc, probe, block.ref) : resolveNext(doc, block.ref, probe));
+  return stepOf(opts.resume ? resumeAfterChange(doc, probe, block.ref, opts.walked) : resolveNext(doc, block.ref, probe));
 }
 
 /**
@@ -89,6 +90,14 @@ export function nextStepAfter(
  * change that opens a path they have not been down stops at the first
  * unanswered question on it.
  *
+ * `walked` is the questions the respondent went through before they went back,
+ * up to the one they were on. Only those count as settled. A stored answer is
+ * not enough on its own: a draft resumed from an earlier visit, or from an
+ * older version of the form, carries answers to questions this conversation
+ * never asked. Counting those sent a respondent who changed "Tooth pain" to
+ * "Other" past date of birth and five more questions, straight to the ending.
+ * Absent (an old session, from before this was kept) falls back to the answers.
+ *
  * Mutates `state.variables` the way `resolveNext` always has — pass a copy when
  * probing.
  */
@@ -96,10 +105,13 @@ export function resumeAfterChange(
   doc: FormDoc,
   state: EvalState,
   fromRef: string,
+  walked?: ReadonlySet<string> | null,
 ): ReturnType<typeof resolveNext> {
   let cursor = resolveNext(doc, fromRef, state);
   for (let hops = 0; cursor.kind === "block" && hops <= doc.blocks.length; hops += 1) {
-    const settled = state.answers[cursor.block.ref] !== undefined || PASSIVE_TYPES.has(cursor.block.type);
+    const ref = cursor.block.ref;
+    const settled =
+      PASSIVE_TYPES.has(cursor.block.type) || (state.answers[ref] !== undefined && (!walked || walked.has(ref)));
     if (!settled) return cursor;
     cursor = resolveNext(doc, cursor.block.ref, state);
   }
@@ -130,7 +142,7 @@ export function settledInOneStep(
   block: Block | null,
   steps: ReadonlyArray<{ text: string; toolCalls: ReadonlyArray<{ toolName: string }> }>,
   outcomes: ToolOutcome[],
-  opts: { announced?: NextStep | null; userText?: string; editing?: boolean },
+  opts: { announced?: NextStep | null; userText?: string; editing?: boolean; walked?: ReadonlySet<string> | null },
 ): boolean {
   if (steps.length !== 1 || !block) return false;
   const step = steps[0]!;
@@ -142,7 +154,7 @@ export function settledInOneStep(
   if (step.toolCalls.length !== 1 || step.toolCalls[0]!.toolName !== "record_answer") return false;
   const recorded = outcomes.find((o) => o.name === "record_answer");
   if (!recorded?.ok || recorded.effect?.kind !== "record") return false;
-  const next = nextStepAfter(doc, block, state, recorded.effect.value, { resume: opts.editing });
+  const next = nextStepAfter(doc, block, state, recorded.effect.value, { resume: opts.editing, walked: opts.walked });
   if (!next) return false;
   const said = step.text.trim();
   if (doc.settings.agent.rephraseQuestions === false) return said.length > 0;
@@ -590,9 +602,19 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
   const currentBlock = ctx.currentBlock;
   if (!currentBlock) return { ...knowledgeTools, ...reviseTools };
 
+  /*
+   * A contact card, address, group of rows or grid is a record, and this tool
+   * carries one value. Offered anyway, the model recorded the typed line as a
+   * string, the tool said "accepted", the model asked the next question, and
+   * the card was then refused and asked again under it. Those replies are read
+   * by the extractor before the agent is reached (`handleFreeText`); the agent
+   * only answers what is left and points back to the card.
+   */
+  const recordable = !answerIsRecord(currentBlock);
+
   return {
     ...knowledgeTools,
-    record_answer: tool({
+    ...(recordable ? { record_answer: tool({
       description:
         "Record the respondent's answer to the question you are currently asking. Only call this when they have actually answered it.",
       inputSchema: z.object({
@@ -618,6 +640,23 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
             message: "Rejected: you just reopened an earlier question. Ask for that answer and nothing else this turn.",
           });
         }
+        /*
+         * Checked before saying yes, because the model acts on the yes: it
+         * goes on to ask the next question. An answer the DO then refused left
+         * that question on screen above this one, asked again. `record()`
+         * still checks it a second time; this only makes the reply honest.
+         */
+        const checked = validateAnswer(currentBlock, value);
+        if (!checked.ok) {
+          return record({
+            name: "record_answer",
+            ok: false,
+            message:
+              `Rejected: ${(checked.hint ?? "that value does not fit this question").replace(/[.!\s]*$/, "")}. Nothing was recorded. ` +
+              `If they did give a valid answer, call record_answer again with it in the right shape. Otherwise do not ` +
+              `move on: say what is missing and ask "${currentBlock.title}" again.`,
+          });
+        }
         return record({
           name: "record_answer",
           ok: true,
@@ -625,7 +664,7 @@ export function buildAgentTools(ctx: ToolContext, collect: (outcome: ToolOutcome
           message: route("Answer accepted.", ctx.nextAfter(value)),
         });
       },
-    }),
+    }) } : {}),
 
     ...reviseTools,
 

@@ -17,6 +17,7 @@ import {
   unsatisfiedRequired,
   progressOf,
   needsExtraction,
+  answerIsRecord,
   extractionSchema,
   extractionGuidance,
   resolveEnding,
@@ -390,6 +391,7 @@ interface StoredSession {
   phrasingTokensUsed?: number;
   extractionCalls?: number;
   editingRef?: string | null;
+  editWalked?: string[] | null;
   degraded?: boolean;
   pendingEndingRef?: string | null;
   gatedAtRef?: string | null;
@@ -493,6 +495,19 @@ const FALLBACK_TOKEN_BUDGET = 1_000_000;
  * question at all.
  */
 const MAX_EXTRACTION_CALLS = 40;
+
+/**
+ * Whether an extracted card holds anything at all. An empty object or list is
+ * the extractor finding nothing, and recording it would only earn a "please
+ * fill in the card" that ignores whatever they actually said.
+ */
+function hasContent(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (Array.isArray(value)) return value.some(hasContent);
+  if (typeof value === "object") return Object.values(value).some(hasContent);
+  if (typeof value === "string") return value.trim().length > 0;
+  return true;
+}
 
 /**
  * SessionDO — one instance per chat session. Owns the interview FSM,
@@ -650,6 +665,12 @@ export class SessionDO extends DurableObject<Bindings> {
    * answering it — long enough for the durable object to be evicted.
    */
   private editingRef: string | null = null;
+  /**
+   * The questions they had gone through before going back, in order, up to the
+   * one they were on. Where an edit may resume (`resumeAfterChange`). Kept and
+   * cleared with `editingRef`.
+   */
+  private editWalked: string[] | null = null;
   private pendingUserTextPersisted = false;
   /** The transcript row an in-flight answer belongs to, so `answer_recorded` can name it. */
   private pendingUserMessageId: string | null = null;
@@ -2833,6 +2854,7 @@ export class SessionDO extends DurableObject<Bindings> {
     this.meteredTokens = stored.meteredTokens ?? 0;
     this.extractionCalls = stored.extractionCalls ?? 0;
     this.editingRef = stored.editingRef ?? null;
+    this.editWalked = stored.editWalked ?? null;
     this.degraded = stored.degraded ?? false;
     this.pendingEndingRef = stored.pendingEndingRef ?? null;
     this.gatedAtRef = stored.gatedAtRef ?? null;
@@ -2857,6 +2879,7 @@ export class SessionDO extends DurableObject<Bindings> {
       meteredTokens: this.meteredTokens,
       extractionCalls: this.extractionCalls,
       editingRef: this.editingRef,
+      editWalked: this.editWalked,
       degraded: this.degraded,
       pendingEndingRef: this.pendingEndingRef,
       gatedAtRef: this.gatedAtRef,
@@ -3353,7 +3376,10 @@ export class SessionDO extends DurableObject<Bindings> {
           currentBlock: block ?? null,
           nextAfter: (value?: unknown) =>
             block
-              ? nextStepAfter(this.doc!, block, this.state, value, { resume: this.editingRef === block.ref })
+              ? nextStepAfter(this.doc!, block, this.state, value, {
+                  resume: this.editingRef === block.ref,
+                  walked: this.walkedSet(),
+                })
               : null,
           revise: (ref: string, value?: unknown) => revisionOf(this.doc!, this.state, block?.ref ?? null, ref, value),
           verbatimQuestions: this.doc.settings.agent.rephraseQuestions === false,
@@ -3417,6 +3443,7 @@ export class SessionDO extends DurableObject<Bindings> {
             settledInOneStep(this.doc!, this.state, block ?? null, steps, outcomes, {
               ...opts,
               editing: !!block && this.editingRef === block.ref,
+              walked: this.walkedSet(),
             }),
         ],
         // The author's setting governs the visible reply; reasoning gets its
@@ -4182,6 +4209,21 @@ export class SessionDO extends DurableObject<Bindings> {
       if (/^-?\d+(\.\d+)?$/.test(bare)) return this.record(block, Number(bare));
     }
 
+    // ── 1b. A card typed out as a message: "Asha Rao, asha@x.com, 98765 43210"
+    //    for a contact card, a street address for an address card. The agent
+    //    cannot record these (see `answerIsRecord`), and the gate does not know
+    //    them, so the extractor reads the reply into the card's own fields.
+    //    `record` then decides: a whole card is taken, and a partial one is
+    //    refused with the good fields kept and shown back filled in, so only
+    //    what is missing is asked for. A question, or a reply the extractor
+    //    cannot place, goes on to the agent, which answers and points back to
+    //    the card.
+    const readAsCard = answerIsRecord(block) && !looksLikeQuestion(text);
+    if (readAsCard) {
+      const extracted = await this.extractTypedAnswer(block, text);
+      if (hasContent(extracted)) return this.record(block, extracted);
+    }
+
     const direct = validateAnswer(block, text);
 
     // ── 2. Hybrid and Scripted: is this simply the answer?
@@ -4218,6 +4260,12 @@ export class SessionDO extends DurableObject<Bindings> {
       const shape = needsExtraction(block)
         ? extractionGuidance(block, new Date().toISOString().slice(0, 10))
         : "";
+      // The card could not be read from their reply (1b), and the agent has no
+      // way to record one: it answers what they said and hands back the card.
+      const cardStep =
+        `1. "${block.title}" is answered with the fields on screen under your message, and you cannot record it. ` +
+        `Nothing from their reply was taken as the answer. Do not move on to any other question: ask them to fill in ` +
+        `the fields, or to type the details out plainly, in one short sentence.\n`;
       const options =
         "options" in block && block.options
           ? ` The allowed values are: ${block.options.map((o) => `${o.id} (${o.label})`).join(", ")}. Use the id.`
@@ -4227,7 +4275,9 @@ export class SessionDO extends DurableObject<Bindings> {
       const ok = await this.aiStreamMessage(
         `The respondent replied: "${text}"\n\n` +
           `Their message may contain an answer, a question of their own, or both, so handle everything in it.\n` +
-          `1. If any part of it answers "${block.title}", call record_answer with ref=${block.ref}.${shape}${options}\n` +
+          (answerIsRecord(block)
+            ? cardStep
+            : `1. If any part of it answers "${block.title}", call record_answer with ref=${block.ref}.${shape}${options}\n`) +
           `2. If they also asked something, answer that too, in one or two sentences.\n` +
           `   If instead they want to change an answer they gave EARLIER, call change_earlier_answer for that ` +
           `question and follow its result rather than steps 1 and 3.\n` +
@@ -4256,7 +4306,8 @@ export class SessionDO extends DurableObject<Bindings> {
     // stored as the name whenever the agent it was sent to could not reply.
     if (direct.ok && !notAnAnswer) return this.record(block, text);
 
-    const extracted = notAnAnswer ? null : await this.extractTypedAnswer(block, text);
+    // Not twice: a card has already been through the extractor at 1b.
+    const extracted = notAnAnswer || readAsCard ? null : await this.extractTypedAnswer(block, text);
     if (extracted !== null) return this.record(block, extracted);
 
     /**
@@ -4317,6 +4368,8 @@ export class SessionDO extends DurableObject<Bindings> {
   private announceableNext(block: Block): NextStep | null {
     if (!this.doc || this.editingRef === block.ref) return null;
     if (this.doc.settings.agent.rephraseQuestions === false) return null;
+    // Never answered by the agent, so there is nothing to announce.
+    if (answerIsRecord(block)) return null;
     if (answerSteersFlow(this.doc, block.ref)) return null;
     return nextStepAfter(this.doc, block, this.state);
   }
@@ -4777,7 +4830,11 @@ export class SessionDO extends DurableObject<Bindings> {
   private resumeAfterEdit(
     fromRef: string,
   ): { kind: "block"; block: Block } | { kind: "ending"; ending: Ending } {
-    return resumeAfterChange(this.doc!, this.state, fromRef);
+    return resumeAfterChange(this.doc!, this.state, fromRef, this.walkedSet());
+  }
+
+  private walkedSet(): Set<string> | null {
+    return this.editWalked ? new Set(this.editWalked) : null;
   }
 
   /**
@@ -4790,6 +4847,18 @@ export class SessionDO extends DurableObject<Bindings> {
   private reopenQuestion(target: Block): void {
     if (!this.meta) return;
     this.invalidCounts.delete(target.ref);
+    /*
+     * The route they had actually taken, up to where they were: the replayed
+     * path, cut at the question they were on (or all of it, from the review).
+     * The replay alone would run on through answers carried in from an earlier
+     * visit, which is the thing this exists to exclude. A second edit before
+     * the first is finished keeps the first one's route, which reaches further.
+     */
+    if (this.editingRef === null || this.editWalked === null) {
+      const { path } = replayState(this.doc!, this.state.answers, this.state.hidden);
+      const at = this.meta.currentRef ? path.indexOf(this.meta.currentRef) : -1;
+      this.editWalked = at >= 0 ? path.slice(0, at) : path;
+    }
     this.meta.currentRef = target.ref;
     this.meta.status = "active";
     // Remembered so `advanceTo` can put them back where they were instead of
@@ -4813,8 +4882,9 @@ export class SessionDO extends DurableObject<Bindings> {
     let next = target;
     if (this.editingRef !== null && fromRef !== undefined) {
       const wasEditing = this.editingRef === fromRef;
-      this.editingRef = null;
       if (wasEditing) next = this.resumeAfterEdit(fromRef);
+      this.editingRef = null;
+      this.editWalked = null;
     }
     /**
      * A deferred gate closes here, between two questions.
@@ -5050,6 +5120,7 @@ export class SessionDO extends DurableObject<Bindings> {
     this.pendingEndingRef = null;
     this.meta.currentRef = target.ref;
     this.editingRef = null;
+    this.editWalked = null;
     await this.persistMeta();
     await this.emitMessage(
       missing.length === 1
@@ -5677,6 +5748,7 @@ export class SessionDO extends DurableObject<Bindings> {
       // and a stale edit bookmark would resume past questions not yet asked.
       this.pendingEndingRef = null;
       this.editingRef = null;
+      this.editWalked = null;
       this.invalidCounts.clear();
       this.followUps.clear();
       this.partials.clear();

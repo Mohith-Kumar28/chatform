@@ -46,6 +46,20 @@ export function needsExtraction(block: Block): boolean {
 }
 
 /**
+ * Block types whose answer is a record (a contact card, an address, a group of
+ * rows, a grid), not one value.
+ *
+ * The interview agent's `record_answer` carries a string, a number, a boolean
+ * or a list of ids, so it cannot write one of these. A reply typed out for them
+ * goes to the extractor instead, which fills the card's own fields.
+ */
+export const RECORD_ANSWER_TYPES = new Set<Block["type"]>(["contact_info", "address", "field_group", "matrix"]);
+
+export function answerIsRecord(block: Block): boolean {
+  return RECORD_ANSWER_TYPES.has(block.type);
+}
+
+/**
  * The envelope every extraction returns. `confident: false` routes to a
  * clarify turn rather than recording a guess — a wrong answer recorded
  * silently is far worse than one extra question.

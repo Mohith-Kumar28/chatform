@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FormDoc, type EvalState } from "@repo/form-schema";
-import { buildAgentTools, nextStepAfter, type ToolOutcome } from "../src/do/agent-tools.js";
+import { buildAgentTools, nextStepAfter, resumeAfterChange, type ToolOutcome } from "../src/do/agent-tools.js";
 
 /**
  * Which question the agent is told to ask next, once an answer is in.
@@ -136,9 +136,77 @@ describe("record_answer names where the flow goes", () => {
     expect(out).not.toContain("ref=q_awareness");
   });
 
+  it("refuses a value the question would refuse, instead of saying it was accepted", async () => {
+    // Told "accepted", the model goes straight on to the next question; the DO
+    // then refused the value and asked this one again underneath it.
+    const { tools, outcomes } = toolsFor();
+    const out = await recordAnswer(tools, 200);
+    expect(out).toContain("Rejected");
+    expect(out).toContain("Nothing was recorded");
+    expect(outcomes.at(-1)).toMatchObject({ ok: false });
+    expect(outcomes.at(-1)?.effect).toBeUndefined();
+  });
+
+  it("is not offered for a card the agent cannot write", () => {
+    const card = FormDoc.parse({
+      title: "Card",
+      blocks: [
+        { id: "blk_card0001", ref: "q_contact", type: "contact_info", title: "Your details", required: true, fields: ["first_name", "email"] },
+      ],
+      endings: [{ id: "end_card0001", ref: "end_thanks", title: "Thanks" }],
+    });
+    const tools = buildAgentTools(
+      { doc: card, currentBlock: card.blocks[0]!, nextAfter: () => null, clarifications: 0 },
+      () => {},
+    );
+    expect(tools.record_answer).toBeUndefined();
+    expect(tools.clarify).toBeDefined();
+  });
+
   it("still records the answer when there is no next question to name", async () => {
     const { tools, outcomes } = toolsFor({ nextAfter: () => null });
     await recordAnswer(tools, 23);
     expect(outcomes.at(-1)).toMatchObject({ ok: true, effect: { kind: "record", ref: "q_age", value: 23 } });
+  });
+});
+
+describe("resuming after a changed answer", () => {
+  // The dental-intake bug: the draft carried answers from an earlier visit, so
+  // every question on the new branch already had one, and the walk went past
+  // all of them to the ending.
+  const flow = FormDoc.parse({
+    title: "Branch",
+    blocks: [
+      { id: "blk_rs000001", ref: "q_reason", type: "short_text", title: "Why are you here?", required: true },
+      { id: "blk_rs000002", ref: "q_pain", type: "short_text", title: "Where does it hurt?", required: true },
+      { id: "blk_rs000003", ref: "q_dob", type: "short_text", title: "Date of birth?", required: true },
+      { id: "blk_rs000004", ref: "q_ins", type: "short_text", title: "Insurance?", required: true },
+    ],
+    endings: [{ id: "end_rs000001", ref: "end_thanks", title: "Thanks" }],
+  });
+  const carried = (): EvalState => ({
+    answers: { q_reason: "cavity", q_dob: "1990-01-01", q_ins: "Delta" },
+    variables: {},
+    hidden: {},
+  });
+
+  it("stops at the first question they have not been through in this conversation", () => {
+    const next = resumeAfterChange(flow, carried(), "q_reason", new Set(["q_reason"]));
+    expect(next).toMatchObject({ kind: "block", block: { ref: "q_pain" } });
+  });
+
+  it("never counts a carried answer as settled, however many there are", () => {
+    const answered = { ...carried(), answers: { ...carried().answers, q_pain: "molar" } };
+    // They went back from q_pain: q_dob and q_ins were never asked here.
+    expect(resumeAfterChange(flow, answered, "q_reason", new Set(["q_reason", "q_pain"]))).toMatchObject({
+      kind: "block",
+      block: { ref: "q_dob" },
+    });
+  });
+
+  it("still goes back to where they were when they had been through the rest", () => {
+    const answered = { ...carried(), answers: { ...carried().answers, q_pain: "molar" } };
+    const walked = new Set(["q_reason", "q_pain", "q_dob", "q_ins"]);
+    expect(resumeAfterChange(flow, answered, "q_reason", walked)).toMatchObject({ kind: "ending" });
   });
 });
