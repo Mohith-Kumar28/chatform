@@ -20,6 +20,9 @@ export const DEFAULT_CONFIRMATION_SUBJECT = "Thanks for your response";
 export const DEFAULT_CONFIRMATION_BODY =
   "Thanks for taking the time to fill in {{form.title}}. We've got your response, and this email is your copy of it.";
 
+/** How many addresses a form may notify about each new response. */
+export const MAX_NOTIFICATION_EMAILS = 5;
+
 /**
  * What a closed form says when the author has not written anything else.
  *
@@ -213,7 +216,12 @@ export const SettingsDoc = z.object({
       // Cleaned on read, not rejected — see the note on `Ending.ctaUrl`.
       redirectUrl: storedUrlOptional(1000),
       delaySec: z.number().int().min(0).max(120).default(DEFAULT_REDIRECT_DELAY_SEC),
-      notificationEmails: z.array(z.string().email()).max(10).default([]),
+      /**
+       * Who hears about each new response, one address per box in the builder.
+       * Five, not ten: the builder draws a box per address, and no stored
+       * document held more than one when this came down (2026-09-29).
+       */
+      notificationEmails: z.array(z.string().email()).max(MAX_NOTIFICATION_EMAILS).default([]),
       /**
        * The receipt the respondent gets, and the only email in this product
        * that defaults to on.

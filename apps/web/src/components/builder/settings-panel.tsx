@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { CircleX, Plus } from "lucide-react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   DEFAULT_CONFIRMATION_BODY,
   DEFAULT_CONFIRMATION_SUBJECT,
+  MAX_NOTIFICATION_EMAILS,
   type FormDoc,
 } from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
@@ -455,20 +457,10 @@ export function SettingsPanel({
             description="We email you each new response. Leave it empty to stop."
             issuePath="settings.onComplete.notificationEmails"
           >
-            <BufferedInput
-              className={CONTROL_WIDTH}
-              value={settings.onComplete.notificationEmails.join(", ")}
-              placeholder="you@company.com"
-              onCommit={(v) =>
-                patch({
-                  onComplete: {
-                    ...settings.onComplete,
-                    notificationEmails: v
-                      .split(",")
-                      .map((x) => x.trim())
-                      .filter(Boolean),
-                  },
-                })
+            <NotificationEmailsInput
+              emails={settings.onComplete.notificationEmails}
+              onChange={(notificationEmails) =>
+                patch({ onComplete: { ...settings.onComplete, notificationEmails } })
               }
             />
           </SettingRow>
@@ -653,6 +645,111 @@ function ConfirmationEmailSettings({
   );
 }
 
+/**
+ * One box per address, up to `MAX_NOTIFICATION_EMAILS`.
+ *
+ * The first box is always there, so clearing it leaves an empty box rather than
+ * nothing to type into; every other box goes away with its address. A box added
+ * with the plus holds no address until something is typed, because an empty
+ * string in the list would fail the document's email check on the next save.
+ */
+function NotificationEmailsInput({
+  emails,
+  onChange,
+}: {
+  emails: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const showBlank = emails.length === 0 || adding;
+  const canAdd = !showBlank && emails.length < MAX_NOTIFICATION_EMAILS;
+
+  function set(i: number, raw: string) {
+    const v = raw.trim();
+    const taken = emails.some((e, j) => j !== i && e.toLowerCase() === v.toLowerCase());
+    if (!v || taken) return onChange(emails.filter((_, j) => j !== i));
+    onChange(emails.map((e, j) => (j === i ? v : e)));
+  }
+
+  function append(raw: string) {
+    const v = raw.trim();
+    if (!v) return;
+    setAdding(false);
+    if (emails.some((e) => e.toLowerCase() === v.toLowerCase())) return;
+    onChange([...emails, v]);
+  }
+
+  return (
+    <div className={cn(CONTROL_WIDTH, "space-y-2")}>
+      {emails.map((email, i) => (
+        <EmailBox
+          key={i}
+          value={email}
+          onCommit={(v) => set(i, v)}
+          onClear={() => onChange(emails.filter((_, j) => j !== i))}
+        />
+      ))}
+      {showBlank && (
+        <EmailBox
+          key={emails.length}
+          value=""
+          autoFocus={adding}
+          onCommit={append}
+          onClear={emails.length > 0 ? () => setAdding(false) : undefined}
+        />
+      )}
+      {canAdd && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground h-7 px-2 text-xs"
+          onClick={() => setAdding(true)}
+        >
+          <Plus className="size-3.5" />
+          Add email
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function EmailBox({
+  value,
+  onCommit,
+  onClear,
+  autoFocus,
+}: {
+  value: string;
+  onCommit: (v: string) => void;
+  /** Absent on the one box that has nothing to clear and nowhere to go. */
+  onClear?: () => void;
+  autoFocus?: boolean;
+}) {
+  return (
+    <div className="relative">
+      <BufferedInput
+        type="email"
+        className={cn("w-full", onClear && "pr-9")}
+        value={value}
+        placeholder="you@company.com"
+        autoFocus={autoFocus}
+        onCommit={onCommit}
+      />
+      {onClear && (
+        <button
+          type="button"
+          aria-label={value ? `Remove ${value}` : "Remove"}
+          className="text-background absolute top-1/2 right-2.5 -translate-y-1/2 rounded-full"
+          onClick={onClear}
+        >
+          <CircleX className="fill-muted-foreground hover:fill-foreground size-4 transition-colors" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function SettingSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <>
@@ -709,8 +806,8 @@ function SettingRow({
    * The document path this row edits, so a schema refusal lands under it.
    *
    * Matched as a prefix: `settings.onComplete.notificationEmails` catches the
-   * `…​.0` the server actually complains about, which is an index into a list
-   * this row edits as one comma-separated string.
+   * `…​.0` the server actually complains about, an index into the list of boxes
+   * this row draws.
    */
   issuePath?: string;
 }) {
