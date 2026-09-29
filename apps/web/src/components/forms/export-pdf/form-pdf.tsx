@@ -113,6 +113,7 @@ export function FormPdf({
   icons,
   flowPages,
   liveUrl,
+  builderUrl,
   status,
   exportedAt,
   siteOrigin,
@@ -121,6 +122,8 @@ export function FormPdf({
   icons: Map<BlockType, IconShape[]>;
   flowPages: string[];
   liveUrl: string | null;
+  /** Where the form opens in ChatForm: the builder, for anyone with access. */
+  builderUrl: string;
   status: "live" | "draft";
   exportedAt: Date;
   siteOrigin: string;
@@ -135,7 +138,7 @@ export function FormPdf({
         <Footer title={outline.title} site={site} siteOrigin={siteOrigin} />
 
         {/* Masthead */}
-        <View style={[s.row, { justifyContent: "space-between", marginBottom: 22 }]}>
+        <View style={[s.row, { justifyContent: "space-between", marginBottom: 16 }]}>
           <Link src={siteOrigin} style={{ textDecoration: "none" }}>
             <View style={s.row}>
               <Mark size={20} />
@@ -146,7 +149,7 @@ export function FormPdf({
         </View>
 
         {/* Title block */}
-        <View style={{ borderRadius: 14, backgroundColor: CREAM, borderWidth: 1, borderColor: BORDER, padding: 22, overflow: "hidden" }}>
+        <View style={{ borderRadius: 14, backgroundColor: CREAM, borderWidth: 1, borderColor: BORDER, padding: 18, overflow: "hidden" }}>
           <Svg width={200} height={200} style={{ position: "absolute", right: -56, top: -64 }} viewBox="0 0 32 32">
             <Path d="M19.7 25 L18.8 25 L10.4 28.1 L11.6 25 L11 25 A6 6 0 0 1 5 19 L5 13 A6 6 0 0 1 11 7 L11.3 7 Z" fill={ORANGE} fillOpacity={0.1} />
             <Path d="M12.3 7 L13.2 7 L21.6 3.9 L20.4 7 L21 7 A6 6 0 0 1 27 13 L27 19 A6 6 0 0 1 21 25 L20.7 25 Z" fill={VIOLET} fillOpacity={0.1} />
@@ -162,55 +165,55 @@ export function FormPdf({
               {status === "live" ? "Live" : "Draft"}
             </Text>
           </View>
-          <Text style={[s.display, { fontSize: 26, lineHeight: 1.15, marginTop: 8, maxWidth: 420 }]}>{outline.title}</Text>
+          <Text style={[s.display, { fontSize: 22, lineHeight: 1.15, marginTop: 6, maxWidth: 420 }]}>{outline.title}</Text>
           {outline.description && (
             <Text style={{ fontSize: 10, color: MUTED, marginTop: 8, lineHeight: 1.45, maxWidth: 420 }}>{outline.description}</Text>
           )}
-          {liveUrl && (
-            <Link src={liveUrl} style={{ marginTop: 12, fontSize: 9, color: "#c2410c", textDecoration: "none" }}>
-              {liveUrl.replace(/^https?:\/\//, "")}
+          <View style={[s.row, { marginTop: 12, gap: 12 }]}>
+            <Link src={builderUrl} style={{ textDecoration: "none" }}>
+              <View style={[s.row, { backgroundColor: ORANGE, borderRadius: 99, paddingVertical: 6, paddingHorizontal: 12 }]}>
+                <Mark size={10} light />
+                <Text style={{ fontSize: 9, fontWeight: 600, color: INK, marginLeft: 5 }}>Open in ChatForm</Text>
+              </View>
             </Link>
-          )}
+            {liveUrl && (
+              <Link src={liveUrl} style={{ fontSize: 9, color: "#c2410c", textDecoration: "none" }}>
+                {liveUrl.replace(/^https?:\/\//, "")}
+              </Link>
+            )}
+          </View>
         </View>
 
         {/* At a glance */}
-        <View style={[s.row, { marginTop: 12, gap: 8 }]}>
+        <View style={[s.row, { marginTop: 10, gap: 8 }]}>
           {outline.stats.map((stat, i) => (
             <View
               key={stat.label}
-              style={{ flex: 1, borderWidth: 1, borderColor: BORDER, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12 }}
+              style={{ flex: 1, borderWidth: 1, borderColor: BORDER, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12 }}
             >
               <Text style={s.factLabel}>{stat.label}</Text>
-              <Text style={[s.display, { fontSize: 20, color: i === 0 ? ORANGE : INK }]}>{stat.value}</Text>
+              <Text style={[s.display, { fontSize: 17, color: i === 0 ? ORANGE : INK }]}>{stat.value}</Text>
             </View>
           ))}
         </View>
 
-        <SectionHead title="Questions" count={`${asked} question${asked === 1 ? "" : "s"}, in order`} />
-        {outline.questions.map((q) => (
-          <QuestionCard key={q.number} q={q} icon={icons.get(q.type)} />
-        ))}
-
-        <SectionHead title="Endings" count={`${outline.endings.length}`} />
-        {outline.endings.map((e, i) => (
-          <EndingCard key={i} ending={e} />
-        ))}
-
-        <View wrap={false}>
-          <SectionHead title="Settings" />
-          <View style={[s.card, { padding: 14 }]}>
-            <FactGrid facts={outline.settings} columns={3} />
-          </View>
-        </View>
-
-        {outline.hiddenFields.length > 0 && (
-          <View wrap={false}>
-            <SectionHead title="Hidden fields" count="Read from the link, never asked" />
-            <View style={[s.card, { padding: 14 }]}>
-              <FactGrid facts={outline.hiddenFields} columns={3} />
+        <SectionHead title="Overview" count="How this form behaves" tight />
+        <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 8 }}>
+          {outline.overview.map((group) => (
+            <View key={group.title} wrap={false} style={{ width: "49%", borderWidth: 1, borderColor: BORDER, borderRadius: 10, padding: 10 }}>
+              <Text style={{ fontFamily: "Bricolage", fontWeight: 600, fontSize: 10, marginBottom: 5 }}>{group.title}</Text>
+              <View style={{ gap: 4 }}>
+                {group.facts.map((f, i) => (
+                  // One line per setting, label beside value: the whole overview has to fit one page.
+                  <View key={i} style={{ flexDirection: "row" }}>
+                    <Text style={{ width: "42%", fontSize: 7.5, color: MUTED, lineHeight: 1.35, paddingRight: 6 }}>{f.label}</Text>
+                    <Text style={{ flex: 1, fontSize: 8, lineHeight: 1.35 }}>{f.value}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
-          </View>
-        )}
+          ))}
+        </View>
       </Page>
 
       {/*
@@ -230,6 +233,19 @@ export function FormPdf({
           )}
         </Page>
       ))}
+
+      <Page size="A4" style={s.page}>
+        <Footer title={outline.title} site={site} siteOrigin={siteOrigin} />
+        <SectionHead title="Questions" count={`${asked} question${asked === 1 ? "" : "s"}, in order`} first />
+        {outline.questions.map((q) => (
+          <QuestionCard key={q.number} q={q} icon={icons.get(q.type)} />
+        ))}
+
+        <SectionHead title="Endings" count={`${outline.endings.length}`} />
+        {outline.endings.map((e, i) => (
+          <EndingCard key={i} ending={e} />
+        ))}
+      </Page>
     </Document>
   );
 }
@@ -268,9 +284,9 @@ function Footer({ title, site, siteOrigin }: { title: string; site: string; site
   );
 }
 
-function SectionHead({ title, count }: { title: string; count?: string }) {
+function SectionHead({ title, count, first, tight }: { title: string; count?: string; first?: boolean; tight?: boolean }) {
   return (
-    <View style={s.sectionHead} minPresenceAhead={80}>
+    <View style={[s.sectionHead, first ? { marginTop: 0 } : {}, tight ? { marginTop: 16, marginBottom: 8 } : {}]} minPresenceAhead={80}>
       <View style={{ width: 4, height: 14, borderRadius: 2, backgroundColor: ORANGE, marginRight: 8, alignSelf: "center" }} />
       <Text style={s.sectionTitle}>{title}</Text>
       {count && <Text style={s.sectionCount}>{count}</Text>}
@@ -541,11 +557,12 @@ function FlagIcon({ screenOut }: { screenOut: boolean }) {
   );
 }
 
-function Mark({ size }: { size: number }) {
+/** `light` draws it in ink on a coloured ground, where the orange plate would vanish. */
+function Mark({ size, light }: { size: number; light?: boolean }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32">
-      <Path d="M19.7 25 L18.8 25 L10.4 28.1 L11.6 25 L11 25 A6 6 0 0 1 5 19 L5 13 A6 6 0 0 1 11 7 L11.3 7 Z" fill={ORANGE} />
-      <Path d="M12.3 7 L13.2 7 L21.6 3.9 L20.4 7 L21 7 A6 6 0 0 1 27 13 L27 19 A6 6 0 0 1 21 25 L20.7 25 Z" fill={VIOLET} />
+      <Path d="M19.7 25 L18.8 25 L10.4 28.1 L11.6 25 L11 25 A6 6 0 0 1 5 19 L5 13 A6 6 0 0 1 11 7 L11.3 7 Z" fill={light ? INK : ORANGE} />
+      <Path d="M12.3 7 L13.2 7 L21.6 3.9 L20.4 7 L21 7 A6 6 0 0 1 27 13 L27 19 A6 6 0 0 1 21 25 L20.7 25 Z" fill={light ? "#ffffff" : VIOLET} />
     </Svg>
   );
 }

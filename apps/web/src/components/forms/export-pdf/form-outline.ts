@@ -71,13 +71,12 @@ export interface FormOutline {
   stats: Fact[];
   questions: OutlineQuestion[];
   endings: OutlineEnding[];
-  settings: Fact[];
-  hiddenFields: Fact[];
+  overview: OverviewGroup[];
 }
 
 const CHOICE_TYPES = new Set<BlockType>(["single_select", "multi_select", "poll", "dropdown", "picture_choice"]);
 
-export function outlineForm(doc: FormDoc): FormOutline {
+export function outlineForm(doc: FormDoc, extras: OutlineExtras = {}): FormOutline {
   const numberOf = new Map(doc.blocks.map((b, i) => [b.ref, i + 1]));
   const endingByRef = new Map(doc.endings.map((e) => [e.ref, e]));
   const gotos = doc.logic.filter(isGoto);
@@ -153,8 +152,7 @@ export function outlineForm(doc: FormDoc): FormOutline {
     stats,
     questions,
     endings,
-    settings: settingsOf(doc),
-    hiddenFields: doc.hiddenFields.map((h) => ({ label: h.name, value: h.defaultValue ? `Default: ${h.defaultValue}` : "No default" })),
+    overview: overviewOf(doc, extras),
   };
 }
 
@@ -306,25 +304,139 @@ function factsOf(block: Block): Fact[] {
   return facts;
 }
 
-function settingsOf(doc: FormDoc): Fact[] {
-  const s = doc.settings;
-  const facts: Fact[] = [];
-  const add = (label: string, value: string) => facts.push({ label, value });
+/**
+ * What lives around the questions and is not in the document: fetched when
+ * the export runs. Each is optional, because a viewer may not be allowed to
+ * read one, and a missing section beats a failed export.
+ */
+export interface OutlineExtras {
+  integrations?: { provider: string; status: string }[];
+  webhooks?: { formId: string | null; active: boolean }[];
+  knowledge?: { enabled: boolean; sources: { status: string }[] };
+  paymentAccounts?: { id: string; provider: string; label: string; environment: string }[];
+}
 
-  add("Language", s.language.toUpperCase());
-  add("Progress", s.progressBar === "none" ? "Hidden" : s.progressBar === "steps" ? "Steps" : "Percentage");
-  add("Going back", s.navigation.allowBack ? "Allowed" : "Not allowed");
-  add("Sign-in", s.requireAuth.enabled ? `Required (${s.requireAuth.method.replaceAll("_", " ")})` : "Not required");
+export interface OverviewGroup {
+  title: string;
+  facts: Fact[];
+}
+
+const STYLE_LABELS: Record<string, string> = {
+  template: "Scripted: your questions, word for word",
+  hybrid: "Hybrid: your questions, with AI when needed",
+  ai: "Agentic: AI runs the whole conversation",
+};
+
+const INTEGRATION_LABELS: Record<string, string> = {
+  spreadsheet_feed: "Spreadsheet feed",
+  google_sheets: "Google Sheets",
+};
+
+/**
+ * The first page: how the form behaves, in the few settings that decide it.
+ *
+ * Not every setting. The ones somebody reading a printout would ask about:
+ * who it talks like, who can get in, what happens at the end and who hears
+ * about it, and what it is wired to. A row that would only say "default" is
+ * left out, except where "off" is itself the answer people look for.
+ */
+export function overviewOf(doc: FormDoc, extras: OutlineExtras = {}): OverviewGroup[] {
+  const s = doc.settings;
+  const groups: OverviewGroup[] = [];
+
+  const talk: Fact[] = [{ label: "Interview style", value: STYLE_LABELS[s.agent.mode] ?? s.agent.mode }];
+  if (s.agent.mode !== "template") talk.push({ label: "Tone", value: capitalise(s.agent.tone) });
+  if (s.agent.displayName) talk.push({ label: "Speaks as", value: s.agent.displayName });
+  talk.push({ label: "Language", value: s.language.toUpperCase() });
+  if (s.agent.goal) talk.push({ label: "Goal", value: clip(s.agent.goal, 220) });
+  groups.push({ title: "Conversation", facts: talk });
+
+  const access: Fact[] = [
+    { label: "Sign-in", value: s.requireAuth.enabled ? `Required, ${authLabel(s.requireAuth.method)}` : "Not required" },
+  ];
   // Only whether there is one. The password itself never goes on paper.
-  add("Password", s.password.enabled ? "Protected" : "None");
-  add("Resubmissions", s.allowResubmissions ? "Allowed" : "One per person");
-  if (s.closeRules.closeAt) add("Closes", new Date(s.closeRules.closeAt).toLocaleString());
-  if (s.closeRules.maxSubmissions) add("Response limit", String(s.closeRules.maxSubmissions));
-  add("Confirmation email", s.onComplete.autoReplyEmail.enabled ? "Sent" : "Off");
-  if (s.onComplete.notificationEmails.length > 0) add("Notify", s.onComplete.notificationEmails.join(", "));
-  if (s.onComplete.redirectUrl) add("After submitting", `Redirect to ${s.onComplete.redirectUrl}`);
-  add("Bot protection", s.captcha.enabled ? "On" : "Off");
-  return facts;
+  if (s.password.enabled) access.push({ label: "Password", value: "Protected" });
+  access.push({ label: "Responses", value: s.allowResubmissions ? "More than one per person" : "One per person" });
+  if (s.closeRules.closeAt) access.push({ label: "Closes", value: new Date(s.closeRules.closeAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) });
+  if (s.closeRules.maxSubmissions) access.push({ label: "Response limit", value: String(s.closeRules.maxSubmissions) });
+  groups.push({ title: "Who can answer", facts: access });
+
+  const done: Fact[] = [];
+  done.push({
+    label: "After the last question",
+    value: s.onComplete.redirectUrl ? `Redirects to ${s.onComplete.redirectUrl}` : "Shows the ending screen",
+  });
+  done.push({
+    label: "Confirmation to respondent",
+    value: s.onComplete.autoReplyEmail.enabled ? (s.onComplete.autoReplyEmail.includeAnswers ? "Emailed, with their answers" : "Emailed") : "Off",
+  });
+  done.push({
+    label: "New responses emailed to",
+    value: s.onComplete.notificationEmails.length > 0 ? s.onComplete.notificationEmails.join(", ") : "Nobody",
+  });
+  groups.push({ title: "On completion", facts: done });
+
+  const follow = s.followUp;
+  groups.push({
+    title: "Automated follow-ups",
+    facts: follow.enabled
+      ? [
+          { label: "Status", value: "On, for people who leave partway" },
+          { label: "Emails", value: follow.steps.map((st) => afterHours(st.delayHours)).join(", ") },
+        ]
+      : [{ label: "Status", value: "Off" }],
+  });
+
+  const payments = doc.blocks.filter((b) => b.type === "payment");
+  if (payments.length > 0) {
+    groups.push({
+      title: "Payments",
+      facts: payments.map((b) => {
+        const account = b.paymentAccountId ? extras.paymentAccounts?.find((a) => a.id === b.paymentAccountId) : undefined;
+        const how =
+          b.method === "gateway"
+            ? account
+              ? `${capitalise(account.provider)} checkout${account.environment === "test" ? " (test mode)" : ""}`
+              : "Card checkout"
+            : b.method === "upi"
+              ? "UPI"
+              : "Payment link";
+        const amount = b.amountMode === "fixed" && b.amount !== undefined ? `, ${money(b.amount, b.currency)}` : "";
+        return { label: clip(b.title, 60), value: `${how}${amount}` };
+      }),
+    });
+  }
+
+  const wired: Fact[] = [];
+  for (const i of extras.integrations ?? []) {
+    wired.push({ label: INTEGRATION_LABELS[i.provider] ?? capitalise(i.provider.replaceAll("_", " ")), value: i.status === "active" ? "Connected" : capitalise(i.status) });
+  }
+  const hooks = (extras.webhooks ?? []).filter((w) => w.active);
+  if (hooks.length > 0) wired.push({ label: "Webhooks", value: `${hooks.length} sending responses` });
+  const ready = extras.knowledge?.sources.filter((k) => k.status === "ready").length ?? 0;
+  if (extras.knowledge && (extras.knowledge.enabled || ready > 0)) {
+    wired.push({ label: "Knowledge base", value: extras.knowledge.enabled ? `${ready} resource${ready === 1 ? "" : "s"}, answers questions` : "Off" });
+  }
+  if (doc.hiddenFields.length > 0) wired.push({ label: "Hidden fields", value: doc.hiddenFields.map((h) => h.name).join(", ") });
+  if (wired.length > 0) groups.push({ title: "Connected", facts: wired });
+
+  return groups;
+}
+
+function authLabel(method: string): string {
+  return method === "google" ? "Google" : method === "email" ? "email code" : method === "phone" ? "phone code" : method;
+}
+
+function afterHours(hours: number): string {
+  return hours % 24 === 0 ? `after ${hours / 24} day${hours === 24 ? "" : "s"}` : `after ${hours}h`;
+}
+
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function clip(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
 /** A route's test, said from the question it leaves: "“Yes”", "greater than 5". */

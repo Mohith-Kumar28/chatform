@@ -2,7 +2,14 @@
 
 import { safeReadFormDoc, type FormDoc } from "@repo/form-schema";
 import { toast } from "sonner";
-import { getApiFormsById } from "@/lib/api/dashboard/dashboard";
+import {
+  getApiFormsById,
+  getApiFormsByIdIntegrations,
+  getApiFormsByIdKnowledge,
+  getApiPaymentAccounts,
+  getApiWebhooks,
+} from "@/lib/api/dashboard/dashboard";
+import type { OutlineExtras } from "./form-outline";
 import { apiData } from "@/lib/api/payload";
 import { SITE_ORIGIN } from "@/lib/seo";
 
@@ -29,7 +36,7 @@ async function build({ formId, doc: given }: { formId: string; doc?: FormDoc }) 
   const doc = given ?? safeReadFormDoc(row.workingSchema);
   if (!doc) throw new Error("This form's document could not be read.");
   const live = row.status === "published" && row.slug ? row.slug : null;
-  const blob = await renderFormPdf(doc, { liveSlug: live });
+  const blob = await renderFormPdf(doc, { formId, liveSlug: live, extras: await extrasFor(formId) });
 
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -43,7 +50,10 @@ async function build({ formId, doc: given }: { formId: string; doc?: FormDoc }) 
 }
 
 /** The PDF itself. `liveSlug` is set only for a published form, whose link is printed. */
-export async function renderFormPdf(doc: FormDoc, { liveSlug }: { liveSlug: string | null }): Promise<Blob> {
+export async function renderFormPdf(
+  doc: FormDoc,
+  { formId, liveSlug, extras = {} }: { formId: string; liveSlug: string | null; extras?: OutlineExtras },
+): Promise<Blob> {
   const [{ pdf }, { FormPdf, registerPdfFonts }, { snapshotFlow }, { outlineForm }] = await Promise.all([
     import("@react-pdf/renderer"),
     import("./form-pdf"),
@@ -56,15 +66,39 @@ export async function renderFormPdf(doc: FormDoc, { liveSlug }: { liveSlug: stri
   registerPdfFonts(window.location.origin);
   return pdf(
     <FormPdf
-      outline={outlineForm(doc)}
+      outline={outlineForm(doc, extras)}
       icons={icons}
       flowPages={pages}
       liveUrl={liveSlug ? `${SITE_ORIGIN}/f/${liveSlug}` : null}
+      builderUrl={`${SITE_ORIGIN}/forms/${formId}/build`}
       status={liveSlug ? "live" : "draft"}
       exportedAt={new Date()}
       siteOrigin={SITE_ORIGIN}
     />,
   ).toBlob();
+}
+
+/**
+ * The overview's wiring: integrations, webhooks, knowledge, payment accounts.
+ *
+ * In parallel, and each one allowed to fail on its own: a viewer who cannot
+ * list webhooks still gets a PDF, just without that line.
+ */
+async function extrasFor(formId: string): Promise<OutlineExtras> {
+  const quietly = <T,>(p: Promise<unknown>) => p.then((r) => apiData<T>(r)).catch(() => undefined);
+  const [integrations, webhooks, knowledge, payments] = await Promise.all([
+    quietly<OutlineExtras["integrations"]>(getApiFormsByIdIntegrations(formId)),
+    quietly<OutlineExtras["webhooks"]>(getApiWebhooks()),
+    quietly<OutlineExtras["knowledge"]>(getApiFormsByIdKnowledge(formId)),
+    quietly<{ accounts?: OutlineExtras["paymentAccounts"] }>(getApiPaymentAccounts()),
+  ]);
+  return {
+    integrations: Array.isArray(integrations) ? integrations : undefined,
+    // Account-wide hooks (no form) fire for this form too.
+    webhooks: Array.isArray(webhooks) ? webhooks.filter((w) => w.formId === formId || w.formId === null) : undefined,
+    knowledge: knowledge && Array.isArray(knowledge.sources) ? knowledge : undefined,
+    paymentAccounts: payments?.accounts,
+  };
 }
 
 function fileName(title: string): string {

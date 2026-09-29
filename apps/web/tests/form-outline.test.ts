@@ -82,8 +82,33 @@ describe("outlineForm", () => {
   });
 
   it("says a password exists without printing it", () => {
-    expect(outline.settings).toContainEqual({ label: "Password", value: "Protected" });
+    const access = outline.overview.find((g) => g.title === "Who can answer")!;
+    expect(access.facts).toContainEqual({ label: "Password", value: "Protected" });
     expect(JSON.stringify(outline)).not.toContain("hunter2");
+  });
+
+  it("opens with the settings that decide how the form behaves", () => {
+    expect(outline.overview.map((g) => g.title)).toEqual([
+      "Conversation",
+      "Who can answer",
+      "On completion",
+      "Automated follow-ups",
+    ]);
+    const done = outline.overview.find((g) => g.title === "On completion")!;
+    expect(done.facts).toContainEqual({ label: "New responses emailed to", value: "Nobody" });
+  });
+
+  it("adds what the form is wired to, when there is any", () => {
+    const wired = outlineForm(doc, {
+      integrations: [{ provider: "spreadsheet_feed", status: "active" }],
+      webhooks: [{ formId: null, active: true }, { formId: "frm_x", active: false }],
+      knowledge: { enabled: true, sources: [{ status: "ready" }, { status: "failed" }] },
+    }).overview.find((g) => g.title === "Connected")!;
+    expect(wired.facts).toEqual([
+      { label: "Spreadsheet feed", value: "Connected" },
+      { label: "Webhooks", value: "1 sending responses" },
+      { label: "Knowledge base", value: "1 resource, answers questions" },
+    ]);
   });
 
   it("marks a screen-out ending and its requirements", () => {
