@@ -391,10 +391,7 @@ function followUpLabel(row: SubmissionRecord): FollowUpLabel | null {
     const which = f.recoveredStep ? `Reminder ${f.recoveredStep}` : "A reminder";
     return {
       text: "Recovered",
-      detail:
-        f.recoveredSentAt && f.recoveredAt
-          ? `${which} brought them back. They finished ${gapLabel(f.recoveredSentAt, f.recoveredAt)} after it was sent`
-          : `${which} brought them back`,
+      detail: `${which} brought them back`,
       tone: "success",
       icon: CheckCircle2,
     };
@@ -415,8 +412,8 @@ function followUpLabel(row: SubmissionRecord): FollowUpLabel | null {
     return {
       text: "Finished later",
       detail: gap
-        ? `They finished ${gap} after the last reminder, too long after to credit it. Reminders keep the credit for 24 hours.`
-        : "They finished, but too long after the last reminder to credit it. Reminders keep the credit for 24 hours.",
+        ? `Finished ${gap} after the last reminder`
+        : "Finished after the last reminder",
       tone: "muted",
       icon: MailCheck,
     };
@@ -898,17 +895,7 @@ function FollowUpDetail({ row, className }: { row: SubmissionRecord; className?:
 
   const steps = followUpSteps(f);
   const total = steps.length;
-  /**
-   * Finished, and no reminder could claim it. See the matching branch in
-   * `followUpLabel`: the pill says "Finished later" and this is where the
-   * arithmetic behind that word goes, because "too long after" is a claim an
-   * author is entitled to check.
-   */
-  const lateFinish =
-    !f.recovered && row.status === "completed" && f.sent > 0 && f.lastSentAt && row.completedAt
-      ? gapLabel(f.lastSentAt, row.completedAt)
-      : null;
-  const hasNote = Boolean(f.stoppedReason) || f.recovered || Boolean(lateFinish) || f.clicked > 0;
+  const hasNote = Boolean(f.stoppedReason) || (f.clicked > 0 && !f.recovered);
   if (steps.length === 0 && !hasNote) return null;
 
   return (
@@ -929,41 +916,6 @@ function FollowUpDetail({ row, className }: { row: SubmissionRecord; className?:
                 : f.stoppedReason === "resumed"
                   ? "They came back to the form, so the remaining reminders were cancelled."
                   : `The rest were not sent: ${skipCopy(f.stoppedReason)}.`}
-            </p>
-          )}
-          {/*
-            The whole account of the recovery, in the order the author asks it:
-            which message, how long they took, and whether we know they read it.
-
-            It used to be one sentence — "They came back and finished after a
-            reminder" — which is the claim without any of its evidence, on a
-            figure the author is deciding whether to trust.
-          */}
-          {f.recovered && (
-            <div className="space-y-1 text-[var(--success-soft-foreground)]">
-              <p className="flex items-center gap-1.5 font-medium">
-                <Check className="size-3 shrink-0" />
-                {f.recoveredStep ? `Reminder ${f.recoveredStep} brought them back` : "A reminder brought them back"}
-              </p>
-              {f.recoveredSentAt && f.recoveredAt && (
-                <p className="text-muted-foreground">
-                  Sent {formatDateTime(f.recoveredSentAt)}, finished {formatDateTime(f.recoveredAt)}
-                  {", "}
-                  {gapLabel(f.recoveredSentAt, f.recoveredAt)} later, inside the 24-hour window a
-                  reminder keeps the credit for.
-                </p>
-              )}
-              <p className="text-muted-foreground">
-                {f.recoveredClickedAt
-                  ? `They opened the link in it ${formatRelative(f.recoveredClickedAt)}.`
-                  : "The link was never opened, so this is credited on timing alone: they came back within the window."}
-              </p>
-            </div>
-          )}
-          {lateFinish && (
-            <p className="text-muted-foreground">
-              They finished {lateFinish} after the last reminder. A reminder keeps the credit for 24
-              hours, so this completion is not counted as recovered.
             </p>
           )}
           {/*
