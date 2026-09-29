@@ -135,6 +135,11 @@ function AcceptInvitation() {
     try {
       const res = await authClient.organization.acceptInvitation({ invitationId: id });
       if (res.error) throw new Error(res.error.message ?? "Could not accept this invitation.");
+      // Accepting writes the new active organization to the session row but
+      // leaves the 5-minute session cookie cache alone, so the header kept
+      // naming the old organization. `setActive` re-issues that cookie.
+      const organizationId = res.data?.member?.organizationId;
+      if (organizationId) await authClient.organization.setActive({ organizationId });
       // A full navigation: accepting changes the active organization on the
       // session, and a client transition would render the dashboard against the
       // organization they were in a moment ago.

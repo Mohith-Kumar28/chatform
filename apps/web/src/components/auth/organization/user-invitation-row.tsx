@@ -64,7 +64,23 @@ export function UserInvitationRow({ invitation }: UserInvitationRowProps) {
           variant="outline"
           size="sm"
           disabled={isAccepting || isRejecting}
-          onClick={() => acceptInvitation({ invitationId: invitation.id })}
+          onClick={() =>
+            acceptInvitation(
+              { invitationId: invitation.id },
+              {
+                // Accepting leaves the cached session cookie on the old
+                // organization; `setActive` re-issues it, and the reload lands
+                // the dashboard in the organization just joined.
+                onSuccess: async () => {
+                  await authClient.organization.setActive({
+                    organizationId: invitation.organizationId
+                  })
+                  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+                  window.location.assign("/dashboard")
+                }
+              }
+            )
+          }
         >
           {isAccepting ? <Spinner /> : <Check />}
 
