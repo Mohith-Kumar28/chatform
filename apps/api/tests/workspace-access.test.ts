@@ -99,11 +99,12 @@ describe("a member added to one workspace", () => {
 
   it("sees its own organization's workspaces and only its grant in the other, across organizations", async () => {
     const res = await fetchApi("/api/workspaces/everywhere", { headers: auth(editor) });
-    const list = await res.json<{ id: string; organizationId: string; myRole: string }[]>();
+    const list = await res.json<{ id: string; organizationId: string; organizationRole: string; myRole: string }[]>();
     const inOwner = list.filter((w) => w.organizationId === owner.orgId);
     expect(inOwner.map((w) => [w.id, w.myRole])).toEqual([[owner.workspaceId, "editor"]]);
     expect(list.some((w) => w.id === wsB)).toBe(false);
     expect(list.some((w) => w.id === editor.workspaceId && w.organizationId === editor.orgId)).toBe(true);
+    expect(inOwner[0]).toMatchObject({ organizationRole: "member" });
   });
 
   it("cannot reach the other workspace, by slug or by any of its forms", async () => {

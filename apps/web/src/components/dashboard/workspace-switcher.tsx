@@ -65,8 +65,8 @@ import { cn } from "@/lib/utils";
 /** `?ws=all`: every workspace at once. The API never issues it as a slug. */
 export const ALL_WORKSPACES = "all";
 
-/** Past this many workspaces in the menu, it gets a search box. */
-const SEARCH_THRESHOLD = 4;
+/** Past this many workspaces in the menu (so eight or more), it gets a search box. */
+const SEARCH_THRESHOLD = 7;
 
 /**
  * Matches on the words a row carries in `keywords` (its name and its
@@ -85,7 +85,47 @@ interface EverywhereWorkspace {
   formCount: number;
   organizationId: string;
   organizationName: string;
+  organizationRole: string;
   myRole: string;
+}
+
+const hasRole = (roles: string, name: string) => roles.split(",").some((r) => r.trim() === name);
+
+/** How the caller belongs to an organization, as a heading pill. */
+function orgPill(role: string): string {
+  if (hasRole(role, "owner")) return "Yours";
+  if (hasRole(role, "admin")) return "Admin";
+  return "Member";
+}
+
+/** Owned organizations first, then admin, then member. */
+function orgRank(role: string): number {
+  return hasRole(role, "owner") ? 0 : hasRole(role, "admin") ? 1 : 2;
+}
+
+/** A workspace grant, as a row pill. Owners and admins open everything and get none. */
+function grantPill(myRole?: string): string | null {
+  if (myRole === "editor") return "Editor";
+  if (myRole === "viewer") return "Viewer";
+  return null;
+}
+
+function Pill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-1.5 py-px text-[0.6875rem] font-medium">
+      {children}
+    </span>
+  );
+}
+
+/** An organization heading: its name, and how you belong to it. */
+function OrgHeading({ name, role }: { name: string; role?: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className="min-w-0 truncate">{name}</span>
+      {role && <Pill>{orgPill(role)}</Pill>}
+    </span>
+  );
 }
 
 interface Workspace {
@@ -137,18 +177,28 @@ export function WorkspaceSwitcher({
    * organization's own rows come from `GET /workspaces`, which carries the
    * permissions this menu's actions need; this list only adds places to go.
    */
+  const everywhereRows = apiData<EverywhereWorkspace[]>(everywhere) ?? [];
+  const activeOrgRole = everywhereRows.find((w) => list.some((l) => l.id === w.id))?.organizationRole;
   const otherOrgs = (() => {
-    const rows = apiData<EverywhereWorkspace[]>(everywhere) ?? [];
-    const groups = new Map<string, { name: string; workspaces: EverywhereWorkspace[] }>();
-    for (const ws of rows) {
+    const groups = new Map<string, { name: string; role: string; workspaces: EverywhereWorkspace[] }>();
+    for (const ws of everywhereRows) {
       if (activeOrg && ws.organizationId === activeOrg.id) continue;
       if (!activeOrg && list.some((w) => w.id === ws.id)) continue;
-      const group = groups.get(ws.organizationId) ?? { name: ws.organizationName, workspaces: [] };
+      const group = groups.get(ws.organizationId) ?? {
+        name: ws.organizationName,
+        role: ws.organizationRole,
+        workspaces: [],
+      };
       group.workspaces.push(ws);
       groups.set(ws.organizationId, group);
     }
-    return [...groups.entries()].map(([id, g]) => ({ id, ...g }));
+    // The organization you are in stays on top; the rest follow, yours first.
+    return [...groups.entries()]
+      .map(([id, g]) => ({ id, ...g }))
+      .sort((a, b) => orgRank(a.role) - orgRank(b.role) || a.name.localeCompare(b.name));
   })();
+  // Headings and membership pills only earn their place with more than one organization.
+  const multiOrg = otherOrgs.length > 0;
 
   /**
    * Shown even with one workspace and no permission to make another. It used to
@@ -258,7 +308,9 @@ export function WorkspaceSwitcher({
               {/* Every workspace, grouped by the organization it belongs to, with
                   a tick on the current one. The organization you are in comes
                   first; picking a row in another one switches both. */}
-              <CommandGroup heading={activeOrg?.name ?? "Workspaces"}>
+              <CommandGroup
+                heading={multiOrg ? <OrgHeading name={activeOrg?.name ?? "Workspaces"} role={activeOrgRole} /> : undefined}
+              >
                 {list.length > 1 && (
                   <CommandItem
                     value="__all"
@@ -283,14 +335,14 @@ export function WorkspaceSwitcher({
                     <span className={cn("min-w-0 flex-1 truncate", ws.id === current?.id && "font-medium")}>
                       {ws.name}
                     </span>
-                    {ws.myRole === "viewer" && <span className="text-muted-foreground text-xs">View only</span>}
+                    {grantPill(ws.myRole) && <Pill>{grantPill(ws.myRole)}</Pill>}
                     <span className="text-muted-foreground w-5 text-right text-xs tabular-nums">{ws.formCount}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>
 
               {otherOrgs.map((org) => (
-                <CommandGroup key={org.id} heading={org.name}>
+                <CommandGroup key={org.id} heading={<OrgHeading name={org.name} role={org.role} />}>
                   {org.workspaces.map((ws) => (
                     <CommandItem
                       key={ws.id}
@@ -302,7 +354,7 @@ export function WorkspaceSwitcher({
                       <Check className="size-3.5 opacity-0" />
                       <span className="min-w-0 flex-1 truncate">{ws.name}</span>
                       {switchingTo === ws.id && <Loader2 className="size-3.5 animate-spin" />}
-                      {ws.myRole === "viewer" && <span className="text-muted-foreground text-xs">View only</span>}
+                      {grantPill(ws.myRole) && <Pill>{grantPill(ws.myRole)}</Pill>}
                       <span className="text-muted-foreground w-5 text-right text-xs tabular-nums">{ws.formCount}</span>
                     </CommandItem>
                   ))}

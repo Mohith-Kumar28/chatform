@@ -114,6 +114,8 @@ const WorkspaceEverywhereItem = z.object({
   formCount: z.number(),
   organizationId: z.string(),
   organizationName: z.string(),
+  /** The caller's role in the organization: `owner`, `admin` or `member`. */
+  organizationRole: z.string(),
   /** The caller's role here, as in `GET /workspaces`. */
   myRole: z.string(),
 });
@@ -169,6 +171,7 @@ workspacesRouter.get(
         formCount: r.form_count,
         organizationId: r.org_id,
         organizationName: r.org_name,
+        organizationRole: r.org_role,
         myRole: admin ? r.org_role : r.ws_role!,
       });
     }

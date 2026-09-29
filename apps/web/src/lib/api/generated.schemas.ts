@@ -3166,6 +3166,7 @@ export type GetApiWorkspacesEverywhere200Item = {
   formCount: number;
   organizationId: string;
   organizationName: string;
+  organizationRole: string;
   myRole: string;
 };
 
