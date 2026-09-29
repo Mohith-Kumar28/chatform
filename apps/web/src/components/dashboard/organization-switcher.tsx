@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { authClient, useListOrganizations } from "@/lib/auth/auth-client";
 import { useActiveOrg } from "@/hooks/use-active-org";
+import { switchOrganization } from "@/lib/api/persist";
 import { useMyRole } from "@/hooks/use-my-role";
 import { roleTitle } from "@/lib/roles";
 import {
@@ -89,16 +90,9 @@ export function OrganizationSwitcher() {
     if (id === current?.id) return;
     setSwitching(id);
     try {
-      await authClient.organization.setActive({ organizationId: id });
-      // The active org lives in the session cookie and the server reads it on
-      // every request, so this has to be a real navigation — a client
-      // transition would show the previous organization's cached data.
-      //
-      // Note the asymmetry with `WorkspaceSwitcher`, which switches with a
-      // client-side push: the active workspace is a URL parameter precisely so
-      // it does not need this.
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.assign("/dashboard");
+      // A real navigation, inside: the active org lives in the session cookie
+      // and the server reads it on every request.
+      await switchOrganization(authClient.organization.setActive, id);
     } catch (err) {
       setSwitching(null);
       toast.error("Couldn't switch", {

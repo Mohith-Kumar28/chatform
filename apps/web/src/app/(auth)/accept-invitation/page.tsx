@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { roleWithArticle } from "@/lib/roles";
+import { switchOrganization } from "@/lib/api/persist";
 
 /**
  * Where an invitation email lands.
@@ -52,7 +53,7 @@ interface InvitationPreview {
   expiresAt: number | null;
   recipientHasAccount: boolean;
   /** The workspaces accepting opens, for a member invitation. Empty for an admin. */
-  workspaces?: { name: string; role: string }[];
+  workspaces?: { name: string; slug: string; role: string }[];
 }
 
 /** The dead ends, each with its own reason. "Ask for another" is only useful advice on some of them. */
@@ -135,16 +136,17 @@ function AcceptInvitation() {
     try {
       const res = await authClient.organization.acceptInvitation({ invitationId: id });
       if (res.error) throw new Error(res.error.message ?? "Could not accept this invitation.");
+      // Straight into the first workspace the invitation opens, rather than
+      // whichever one this browser last viewed in another organization.
+      const ws = preview?.workspaces?.[0]?.slug;
+      const href = ws ? `/dashboard?ws=${encodeURIComponent(ws)}` : "/dashboard";
       // Accepting writes the new active organization to the session row but
       // leaves the 5-minute session cookie cache alone, so the header kept
-      // naming the old organization. `setActive` re-issues that cookie.
+      // naming the old organization. `setActive` re-issues that cookie, and the
+      // switch is a full navigation for the same reason.
       const organizationId = res.data?.member?.organizationId;
-      if (organizationId) await authClient.organization.setActive({ organizationId });
-      // A full navigation: accepting changes the active organization on the
-      // session, and a client transition would render the dashboard against the
-      // organization they were in a moment ago.
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.assign("/dashboard");
+      if (organizationId) await switchOrganization(authClient.organization.setActive, organizationId, href);
+      else window.location.assign(href);
     } catch (err) {
       setAcceptError(err instanceof Error ? err.message : "Could not accept this invitation.");
       setAccepting(false);

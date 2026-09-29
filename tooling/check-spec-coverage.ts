@@ -201,6 +201,7 @@ const DASHBOARD_ONLY: Record<string, string> = {
   "/api/forms/{id}/history": "the builder's activity feed; /v1/forms/{id}/versions is the API form",
   "/api/workspaces": "workspaces are an organization-management concern, not a form one",
   "/api/workspaces/{id}": "see /api/workspaces",
+  "/api/workspaces/everywhere": "the switcher's list across a person's organizations; a key belongs to one organization",
   "/api/feedback": "a signed-in person telling the chatform team something, not a thing an integration does",
 
   /**

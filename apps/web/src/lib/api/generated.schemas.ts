@@ -2588,6 +2588,7 @@ export const GetApiInvitationPreview200State = {
 
 export type GetApiInvitationPreview200WorkspacesItem = {
   name: string;
+  slug: string;
   role: string;
 };
 
@@ -3156,6 +3157,16 @@ export type PostApiWorkspaces200 = {
   slug: string;
   formCount: number;
   createdAt: number;
+};
+
+export type GetApiWorkspacesEverywhere200Item = {
+  id: string;
+  name: string;
+  slug: string;
+  formCount: number;
+  organizationId: string;
+  organizationName: string;
+  myRole: string;
 };
 
 export type PatchApiWorkspacesByIdBody = {

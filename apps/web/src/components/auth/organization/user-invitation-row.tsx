@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/item"
 import { Spinner } from "@/components/ui/spinner"
 import { organizationPlugin } from "@/lib/auth/organization-plugin"
+import { switchOrganization } from "@/lib/api/persist"
 
 export type UserInvitationRowProps = {
   invitation: Invitation & { organizationName?: string }
@@ -71,13 +72,11 @@ export function UserInvitationRow({ invitation }: UserInvitationRowProps) {
                 // Accepting leaves the cached session cookie on the old
                 // organization; `setActive` re-issues it, and the reload lands
                 // the dashboard in the organization just joined.
-                onSuccess: async () => {
-                  await authClient.organization.setActive({
-                    organizationId: invitation.organizationId
-                  })
-                  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-                  window.location.assign("/dashboard")
-                }
+                onSuccess: () =>
+                  switchOrganization(
+                    authClient.organization.setActive,
+                    invitation.organizationId
+                  )
               }
             )
           }

@@ -8,7 +8,7 @@ import { requirePermission, requireGauge, type AuthzVars } from "../lib/authoriz
 import { audit } from "../lib/gate-log.js";
 import { ALL_WORKSPACES, newWorkspaceId, workspaceSlug } from "../lib/workspace.js";
 import { accessFor, workspaceFilter } from "../lib/workspace-access.js";
-import { workspacePermissionsFor } from "../lib/permissions.js";
+import { isOrgAdmin, isWorkspaceRole, workspacePermissionsFor } from "../lib/permissions.js";
 
 /**
  * Workspaces — the folders forms live in, inside an organization.
@@ -104,6 +104,75 @@ workspacesRouter.get(
         };
       }),
     );
+  },
+);
+
+const WorkspaceEverywhereItem = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  formCount: z.number(),
+  organizationId: z.string(),
+  organizationName: z.string(),
+  /** The caller's role here, as in `GET /workspaces`. */
+  myRole: z.string(),
+});
+
+/**
+ * Every workspace the caller can open, in every organization they belong to.
+ *
+ * The switcher lists these grouped by organization, so picking a workspace in
+ * another organization is one step instead of two. The same access rule as
+ * `GET /workspaces`, applied per membership: owners and admins see every
+ * workspace in their organization, everyone else only their grants.
+ */
+workspacesRouter.get(
+  "/workspaces/everywhere",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "List workspaces across every organization the caller belongs to",
+    responses: {
+      200: { description: "Workspaces", content: { "application/json": { schema: resolver(z.array(WorkspaceEverywhereItem)) } } },
+    },
+  }),
+  async (c) => {
+    const userId = c.get("userId")!;
+    const rows = await c.env.DB.prepare(
+      `SELECT w.id, w.name, w.slug, o.id AS org_id, o.name AS org_name, m.role AS org_role, wm.role AS ws_role,
+              (SELECT COUNT(*) FROM forms f WHERE f.workspace_id = w.id AND f.deleted_at IS NULL) AS form_count
+         FROM members m
+         JOIN organizations o ON o.id = m.organization_id
+         JOIN workspaces w ON w.organization_id = m.organization_id
+         LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.member_id = m.id
+        WHERE m.user_id = ?
+        ORDER BY o.name COLLATE NOCASE ASC, w.created_at ASC`,
+    )
+      .bind(userId)
+      .all<{
+        id: string;
+        name: string;
+        slug: string;
+        org_id: string;
+        org_name: string;
+        org_role: string;
+        ws_role: string | null;
+        form_count: number;
+      }>();
+    const out = [];
+    for (const r of rows.results ?? []) {
+      const admin = isOrgAdmin(r.org_role);
+      if (!admin && !isWorkspaceRole(r.ws_role)) continue;
+      out.push({
+        id: r.id,
+        name: r.name,
+        slug: r.slug,
+        formCount: r.form_count,
+        organizationId: r.org_id,
+        organizationName: r.org_name,
+        myRole: admin ? r.org_role : r.ws_role!,
+      });
+    }
+    return c.json(out);
   },
 );
 

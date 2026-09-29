@@ -97,6 +97,15 @@ describe("a member added to one workspace", () => {
     expect(list[0]!.permissions.form).toContain("publish");
   });
 
+  it("sees its own organization's workspaces and only its grant in the other, across organizations", async () => {
+    const res = await fetchApi("/api/workspaces/everywhere", { headers: auth(editor) });
+    const list = await res.json<{ id: string; organizationId: string; myRole: string }[]>();
+    const inOwner = list.filter((w) => w.organizationId === owner.orgId);
+    expect(inOwner.map((w) => [w.id, w.myRole])).toEqual([[owner.workspaceId, "editor"]]);
+    expect(list.some((w) => w.id === wsB)).toBe(false);
+    expect(list.some((w) => w.id === editor.workspaceId && w.organizationId === editor.orgId)).toBe(true);
+  });
+
   it("cannot reach the other workspace, by slug or by any of its forms", async () => {
     expect((await fetchApi("/api/forms?ws=sales", { headers: auth(editor) })).status).toBe(404);
     expect((await fetchApi(`/api/forms/${formB}`, { headers: auth(editor) })).status).toBe(404);
@@ -256,7 +265,7 @@ describe("inviting into workspaces", () => {
     const { id } = await res.json<{ id: string }>();
 
     const preview = await (await fetchApi(`/api/invitation-preview?id=${id}`)).json<{ workspaces: { name: string; role: string }[] }>();
-    expect(preview.workspaces).toEqual([{ name: "Sales", role: "viewer" }]);
+    expect(preview.workspaces).toEqual([{ name: "Sales", slug: "sales", role: "viewer" }]);
 
     const accept = await post(invitee, "/api/auth/organization/accept-invitation", { invitationId: id });
     expect(accept.status).toBe(200);

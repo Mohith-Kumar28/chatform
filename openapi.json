@@ -10670,12 +10670,16 @@
                           "name": {
                             "type": "string"
                           },
+                          "slug": {
+                            "type": "string"
+                          },
                           "role": {
                             "type": "string"
                           }
                         },
                         "required": [
                           "name",
+                          "slug",
                           "role"
                         ]
                       }
@@ -12985,6 +12989,68 @@
           },
           "402": {
             "description": "Limit reached"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/workspaces/everywhere": {
+      "get": {
+        "operationId": "getApiWorkspacesEverywhere",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "List workspaces across every organization the caller belongs to",
+        "responses": {
+          "200": {
+            "description": "Workspaces",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "slug": {
+                        "type": "string"
+                      },
+                      "formCount": {
+                        "type": "number"
+                      },
+                      "organizationId": {
+                        "type": "string"
+                      },
+                      "organizationName": {
+                        "type": "string"
+                      },
+                      "myRole": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "slug",
+                      "formCount",
+                      "organizationId",
+                      "organizationName",
+                      "myRole"
+                    ]
+                  }
+                }
+              }
+            }
           }
         },
         "x-internal": true,

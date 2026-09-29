@@ -82,7 +82,7 @@ dashboardRouter.get(
                 inviterEmail: z.string().nullable(),
                 expiresAt: z.number().nullable(),
                 recipientHasAccount: z.boolean(),
-                workspaces: z.array(z.object({ name: z.string(), role: z.string() })),
+                workspaces: z.array(z.object({ name: z.string(), slug: z.string(), role: z.string() })),
               }),
             ),
           },
@@ -101,7 +101,7 @@ dashboardRouter.get(
       inviterEmail: null,
       expiresAt: null,
       recipientHasAccount: false,
-      workspaces: [] as { name: string; role: string }[],
+      workspaces: [] as { name: string; slug: string; role: string }[],
     };
     if (!id) return c.json(miss);
 
@@ -155,11 +155,11 @@ dashboardRouter.get(
       state === "pending"
         ? ((
             await c.env.DB.prepare(
-              `SELECT w.name, iw.role FROM invitation_workspaces iw JOIN workspaces w ON w.id = iw.workspace_id
+              `SELECT w.name, w.slug, iw.role FROM invitation_workspaces iw JOIN workspaces w ON w.id = iw.workspace_id
                 WHERE iw.invitation_id = ? ORDER BY w.created_at ASC`,
             )
               .bind(id)
-              .all<{ name: string; role: string }>()
+              .all<{ name: string; slug: string; role: string }>()
           ).results ?? [])
         : [];
 

@@ -139,3 +139,50 @@ export function purgePersistedCache(): void {
     /* nothing to clear if we cannot reach storage */
   }
 }
+
+/** Which organization the persisted bucket was filled under. */
+const ORG_KEY = `${CACHE_KEY}.org`;
+
+/**
+ * Drop the persisted bucket when it was filled under another organization.
+ *
+ * None of the persisted paths carry the organization in their key, and an
+ * organization switch is a full reload, so without this the reload restored the
+ * previous organization's workspace list and forms grid, fresh enough (under
+ * `staleTime`) that nothing refetched. Returns whether it purged.
+ */
+export function claimPersistedCacheFor(orgId: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const previous = window.localStorage.getItem(ORG_KEY);
+    window.localStorage.setItem(ORG_KEY, orgId);
+    if (previous === null || previous === orgId) return false;
+    window.localStorage.removeItem(CACHE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Switch the active organization and reload into it.
+ *
+ * The persisted bucket is dropped first so the reload cannot restore the
+ * previous organization's lists, and the reload is a real navigation because
+ * the active organization lives in the session cookie the server reads.
+ */
+export async function switchOrganization(
+  setActive: (args: { organizationId: string }) => Promise<{ error?: { message?: string } | null }>,
+  organizationId: string,
+  href = "/dashboard",
+): Promise<void> {
+  const res = await setActive({ organizationId });
+  if (res.error) throw new Error(res.error.message ?? "Couldn't switch organization");
+  purgePersistedCache();
+  try {
+    window.localStorage.setItem(ORG_KEY, organizationId);
+  } catch {
+    /* the watcher in AuthGuard catches it on the next load */
+  }
+  window.location.assign(href);
+}

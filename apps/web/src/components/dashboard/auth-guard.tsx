@@ -3,8 +3,8 @@
 import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSession } from "@/lib/auth/auth-client";
-import { purgePersistedCache } from "@/lib/api/persist";
+import { useActiveOrganization, useSession } from "@/lib/auth/auth-client";
+import { claimPersistedCacheFor, purgePersistedCache } from "@/lib/api/persist";
 import { setTrackedUser } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/button";
 import { currentPath, UNAUTHORIZED_EVENT } from "@/lib/safe-next";
@@ -79,6 +79,18 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
     lastUserId.current = userId;
   }, [isPending, transportFailure, session, queryClient]);
+
+  /**
+   * The same, one level down: the bucket also belongs to the organization it
+   * was filled under. Most switches purge on their way out, but accepting an
+   * invitation, leaving an organization and the settings pages move it too, so
+   * this catches whatever arrives with a different one and refetches.
+   */
+  const { data: activeOrg } = useActiveOrganization();
+  const activeOrgId = activeOrg?.id;
+  useEffect(() => {
+    if (activeOrgId && claimPersistedCacheFor(activeOrgId)) void queryClient.invalidateQueries();
+  }, [activeOrgId, queryClient]);
 
   if (isPending) {
     return (

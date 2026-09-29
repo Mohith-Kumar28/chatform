@@ -65,6 +65,7 @@ import type {
   GetApiWorkspaces200Item,
   GetApiWorkspacesByIdMembers200Item,
   GetApiWorkspacesByIdMembers404,
+  GetApiWorkspacesEverywhere200Item,
   PatchApiFormsByIdWorkspace200,
   PatchApiFormsByIdWorkspace404,
   PatchApiFormsByIdWorkspaceBody,
@@ -2123,7 +2124,95 @@ export const usePostApiWorkspaces = <TError = void,
       > => {
       return useMutation(getPostApiWorkspacesMutationOptions(options));
     }
-    export type patchApiWorkspacesByIdResponse200 = {
+    export type getApiWorkspacesEverywhereResponse200 = {
+  data: GetApiWorkspacesEverywhere200Item[]
+  status: 200
+}
+
+export type getApiWorkspacesEverywhereResponseSuccess = (getApiWorkspacesEverywhereResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiWorkspacesEverywhereResponse = (getApiWorkspacesEverywhereResponseSuccess)
+
+export const getGetApiWorkspacesEverywhereUrl = () => {
+
+
+
+
+  return `/api/workspaces/everywhere`
+}
+
+/**
+ * @summary List workspaces across every organization the caller belongs to
+ */
+export const getApiWorkspacesEverywhere = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiWorkspacesEverywhereResponse> => {
+
+  return customFetch<getApiWorkspacesEverywhereResponse>(getGetApiWorkspacesEverywhereUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiWorkspacesEverywhereQueryKey = () => {
+    return [
+    `/api/workspaces/everywhere`
+    ] as const;
+    }
+
+
+export const getGetApiWorkspacesEverywhereQueryOptions = <TData = Awaited<ReturnType<typeof getApiWorkspacesEverywhere>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiWorkspacesEverywhere>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiWorkspacesEverywhereQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiWorkspacesEverywhere>>> = ({ signal }) => getApiWorkspacesEverywhere({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiWorkspacesEverywhere>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiWorkspacesEverywhereQueryResult = NonNullable<Awaited<ReturnType<typeof getApiWorkspacesEverywhere>>>
+export type GetApiWorkspacesEverywhereQueryError = unknown
+
+
+/**
+ * @summary List workspaces across every organization the caller belongs to
+ */
+
+export function useGetApiWorkspacesEverywhere<TData = Awaited<ReturnType<typeof getApiWorkspacesEverywhere>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiWorkspacesEverywhere>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiWorkspacesEverywhereQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type patchApiWorkspacesByIdResponse200 = {
   data: PatchApiWorkspacesById200
   status: 200
 }
