@@ -1,112 +1,185 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
-import { TemplateCard } from "@/components/templates/template-card";
-import type { TemplateSummary } from "@/lib/templates";
-import { cn } from "@/lib/utils";
+import Link from "next/link";
+import { ArrowRight, ChevronRight, Search } from "lucide-react";
+import { TemplateTile, type TileData } from "./template-tile";
 
 export interface BrowsableTemplate {
-  summary: TemplateSummary;
-  path: string;
+  tile: TileData;
   type: "form" | "survey" | "quiz";
-  /** Lower-cased words to match a search against. */
+  /** Lower-cased words a search is matched against. */
   haystack: string;
 }
 
-const FILTERS = [
+export interface BrowseSection {
+  title: string;
+  href: string;
+  count: number;
+  slugs: string[];
+}
+
+const TYPES = [
   { value: "all", label: "All types" },
   { value: "form", label: "Forms" },
   { value: "survey", label: "Surveys" },
   { value: "quiz", label: "Quizzes" },
 ] as const;
 
-/**
- * Search and a type filter over every template.
- *
- * The first page of cards is server-rendered; the rest appear on "Show all" or
- * as soon as the visitor searches or filters. Rendering all of them made the
- * gallery a megabyte and a half of HTML, and every template is already linked
- * in plain HTML from its hub pages and the sitemap.
- */
-const FIRST_PAGE = 30;
+/** Shown before "Show all", so the page is not three hundred cards of HTML. */
+const FIRST_PAGE = 24;
 
-export function TemplateBrowser({ templates }: { templates: BrowsableTemplate[] }) {
+/**
+ * Search, a type filter and the grid, with the bar pinned while you scroll.
+ *
+ * The bar carries the breadcrumb, so where you are stays visible however far
+ * down the grid you go. With nothing typed the page shows its sections (the
+ * gallery's goals) and then everything; the moment you search or pick a type
+ * it becomes one list of matches.
+ */
+export function TemplateBrowser({
+  templates,
+  sections,
+  crumbs,
+  allTitle = "All templates",
+  typeFilter = true,
+}: {
+  templates: BrowsableTemplate[];
+  sections?: BrowseSection[];
+  crumbs: { name: string; path: string }[];
+  allTitle?: string;
+  typeFilter?: boolean;
+}) {
   const [query, setQuery] = useState("");
-  const [type, setType] = useState<(typeof FILTERS)[number]["value"]>("all");
+  const [type, setType] = useState<(typeof TYPES)[number]["value"]>("all");
   const [expanded, setExpanded] = useState(false);
 
+  const bySlug = useMemo(() => new Map(templates.map((t) => [t.tile.slug, t])), [templates]);
   const shown = useMemo(() => {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-    return templates.filter(
-      (t) => (type === "all" || t.type === type) && words.every((w) => t.haystack.includes(w)),
-    );
+    return templates.filter((t) => (type === "all" || t.type === type) && words.every((w) => t.haystack.includes(w)));
   }, [templates, query, type]);
   const narrowed = query.trim() !== "" || type !== "all";
   const visible = expanded || narrowed ? shown : shown.slice(0, FIRST_PAGE);
 
   return (
     <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <label className="border-border bg-card focus-within:ring-ring/40 flex h-11 flex-1 items-center gap-2 rounded-full border px-4 focus-within:ring-2">
-          <Search className="text-muted-foreground size-4 shrink-0" />
-          <span className="sr-only">Search templates</span>
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search templates, e.g. feedback, quote, quiz"
-            className="placeholder:text-muted-foreground w-full bg-transparent text-sm outline-none"
-          />
-        </label>
-        <div role="radiogroup" aria-label="Template type" className="bg-muted flex rounded-full p-1">
-          {FILTERS.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              role="radio"
-              aria-checked={type === f.value}
-              onClick={() => setType(f.value)}
-              className={cn(
-                "rounded-full px-3.5 py-1.5 text-sm transition-colors duration-[var(--duration-micro)]",
-                type === f.value ? "bg-card text-foreground font-medium shadow-xs" : "text-muted-foreground hover:text-foreground",
+      <div className="bg-background/92 sticky top-0 z-20 -mx-4 border-b border-transparent px-4 py-3 backdrop-blur-md supports-[backdrop-filter]:bg-background/80 sm:-mx-6 sm:px-6">
+        <nav aria-label="Breadcrumb" className="text-foreground/65 mb-3 flex flex-wrap items-center gap-1 text-sm">
+          {crumbs.map((c, i) => (
+            <span key={c.path} className="inline-flex items-center gap-1">
+              {i < crumbs.length - 1 ? (
+                <Link href={c.path} className="hover:text-foreground transition-colors duration-[var(--duration-micro)]">
+                  {c.name}
+                </Link>
+              ) : (
+                <span aria-current="page" className="text-foreground font-medium">
+                  {c.name}
+                </span>
               )}
-            >
-              {f.label}
-            </button>
+              {i < crumbs.length - 1 && <ChevronRight className="size-3.5" />}
+            </span>
           ))}
+        </nav>
+        <div className="flex gap-2">
+          <label className="border-border bg-card focus-within:border-foreground/40 flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-xl border px-3.5 shadow-xs transition-colors">
+            <Search className="text-foreground/50 size-4 shrink-0" />
+            <span className="sr-only">Search templates</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={'Try "event" or "feedback"'}
+              className="placeholder:text-foreground/45 text-foreground w-full bg-transparent text-[0.9375rem] outline-none"
+            />
+          </label>
+          {typeFilter && (
+            <>
+          <label className="sr-only" htmlFor="template-type">
+            Template type
+          </label>
+          <select
+            id="template-type"
+            value={type}
+            onChange={(e) => setType(e.target.value as typeof type)}
+            className="border-border bg-card text-foreground h-11 shrink-0 rounded-xl border px-3 text-[0.9375rem] shadow-xs outline-none focus:border-foreground/40"
+          >
+            {TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+            </>
+          )}
         </div>
       </div>
 
-      <p className="text-muted-foreground tabular mt-4 text-sm" aria-live="polite">
-        {shown.length} {shown.length === 1 ? "template" : "templates"}
-      </p>
-
-      {shown.length > 0 ? (
-        <ul className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {visible.map((t) => (
-            <li key={t.summary.slug} className="flex">
-              <TemplateCard template={t.summary} href={t.path} />
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {visible.length < shown.length && (
-        <div className="mt-8 flex justify-center">
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            className="border-border bg-card hover:bg-accent/60 rounded-full border px-5 py-2.5 text-sm font-medium transition-colors duration-[var(--duration-micro)]"
-          >
-            Show all {shown.length} templates
-          </button>
-        </div>
-      )}
-      {shown.length === 0 && (
-        <p className="text-muted-foreground text-body mt-8">
-          Nothing matches that. Try a broader word, or describe the form you want on the AI form builder.
-        </p>
+      {narrowed ? (
+        <section className="mt-8">
+          <p className="text-foreground/70 text-sm" aria-live="polite">
+            {shown.length} {shown.length === 1 ? "template" : "templates"}
+          </p>
+          {shown.length > 0 ? (
+            <Grid tiles={shown.map((t) => t.tile)} />
+          ) : (
+            <p className="text-foreground/75 mt-6">
+              Nothing matches that. Try a broader word, or{" "}
+              <Link href="/ai-form-builder" className="text-primary font-medium underline-offset-4 hover:underline">
+                describe your form to the AI builder
+              </Link>
+              .
+            </p>
+          )}
+        </section>
+      ) : (
+        <>
+          {sections?.map((s) => {
+            const tiles = s.slugs.map((slug) => bySlug.get(slug)?.tile).filter((t): t is TileData => Boolean(t));
+            return (
+              <section key={s.href} className="border-border/70 mt-10 border-b pb-12">
+                <div className="flex items-end justify-between gap-4">
+                  <h2 className="font-display text-foreground text-2xl font-semibold tracking-tight sm:text-[1.75rem]">{s.title}</h2>
+                  <Link href={s.href} className="text-foreground hover:text-primary inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold">
+                    View all {s.count}
+                    <ArrowRight className="size-4" />
+                  </Link>
+                </div>
+                <Grid tiles={tiles} />
+              </section>
+            );
+          })}
+          <section className="mt-10">
+            {sections && (
+              <h2 className="font-display text-foreground text-2xl font-semibold tracking-tight sm:text-[1.75rem]">{allTitle}</h2>
+            )}
+            <Grid tiles={visible.map((t) => t.tile)} />
+            {visible.length < shown.length && (
+              <div className="mt-10 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => setExpanded(true)}
+                  className="bg-foreground text-background hover:bg-foreground/90 rounded-xl px-5 py-3 text-sm font-semibold transition-colors duration-[var(--duration-micro)]"
+                >
+                  Show all {shown.length} templates
+                </button>
+              </div>
+            )}
+          </section>
+        </>
       )}
     </div>
+  );
+}
+
+function Grid({ tiles }: { tiles: TileData[] }) {
+  return (
+    <ul className="mt-6 grid gap-x-6 gap-y-10 sm:grid-cols-2 xl:grid-cols-3">
+      {tiles.map((t) => (
+        <li key={t.slug} className="flex">
+          <TemplateTile tile={t} />
+        </li>
+      ))}
+    </ul>
   );
 }

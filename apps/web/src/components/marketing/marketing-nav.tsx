@@ -16,8 +16,6 @@ import {
 } from "@/components/ui/sheet";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 import { Logo } from "@/components/brand/logo";
-import { UseCasesMenu } from "./use-cases-menu";
-import { USE_CASE_GROUPS } from "@/content/use-cases";
 import { cn } from "@/lib/utils";
 import dynamic from "next/dynamic";
 
@@ -36,20 +34,23 @@ const MarketingAccountButton = dynamic(
  */
 
 /**
- * Four flat links, plus the one that opens.
- *
- * `Use cases` is a menu rather than a link because the answer to "can it do
- * the thing I need?" is a list, and a list of twelve specific jobs is more
- * persuasive at a glance than any single page about them. It sits first: most
- * people arriving here are not shopping for a form builder in the abstract,
- * they have one thing they need to ask people, and the nav should show them
- * their thing before it shows them ours.
+ * Flat links, Templates first. The use-case menu is out of the nav for now;
+ * the pages themselves are still live and linked from the footer.
  */
 // Shared with the docs shell so both navigate the same way.
 const LINKS = MARKETING_LINKS;
 
 export function MarketingNav() {
   const [scrolled, setScrolled] = useState(false);
+  /**
+   * Out of the way while reading, back the moment you scroll up.
+   *
+   * Hidden only once the page is past the first screen's top and the last
+   * movement was downward; any upward scroll brings it straight back, and so
+   * does returning to the top. The bottom CTA (`StickyCta`) carries the one
+   * action that matters while the bar is away.
+   */
+  const [hidden, setHidden] = useState(false);
   /**
    * The landing hero is a full-strength brand wash that now runs up behind
    * this bar, and the nav's own colours assume a page-coloured ground: muted
@@ -70,7 +71,15 @@ export function MarketingNav() {
   const signedIn = useSignedIn();
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
+    let last = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      setScrolled(y > 8);
+      if (Math.abs(y - last) > 6) {
+        setHidden(y > 120 && y > last);
+        last = y;
+      }
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -81,8 +90,9 @@ export function MarketingNav() {
       className={cn(
         // The border is always there and only changes colour, so turning the
         // backdrop on never adds a pixel to the bar's height.
-        "sticky top-0 z-[var(--z-sticky)] border-b border-transparent transition-colors duration-[var(--duration-standard)] ease-[var(--ease-out)]",
-        scrolled && "bg-background/80 border-border/60 backdrop-blur-md",
+        "sticky top-0 z-[var(--z-sticky)] border-b border-transparent transition-[transform,background-color,border-color] duration-[var(--duration-standard)] ease-[var(--ease-out)] motion-reduce:transition-none",
+        scrolled && "bg-background/90 border-border/60 backdrop-blur-md",
+        hidden && "-translate-y-full",
       )}
       style={overWash && !scrolled ? { color: "var(--on-band-vivid)" } : undefined}
     >
@@ -110,7 +120,6 @@ export function MarketingNav() {
         </Link>
 
         <ul className="hidden flex-1 items-center gap-1 lg:flex">
-          <UseCasesMenu onWash={overWash && !scrolled} />
           {LINKS.map((link) => (
             <li key={link.href}>
               <Link
@@ -121,8 +130,8 @@ export function MarketingNav() {
                 className={`text-body ${cn(
                   "rounded-full px-3 py-1.5 transition-colors duration-[var(--duration-micro)]",
                   overWash && !scrolled
-                    ? "opacity-75 hover:bg-black/5 hover:opacity-100"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60",
+                    ? "font-medium hover:bg-black/5"
+                    : "text-foreground/80 hover:text-foreground hover:bg-accent/60",
                 )}`}
               >
                 {link.label}
@@ -193,34 +202,6 @@ export function MarketingNav() {
                       </SheetClose>
                     </li>
                   ))}
-                </ul>
-
-                <p className="text-micro text-muted-foreground mt-5 px-3 font-semibold tracking-[0.12em] uppercase">
-                  Use cases
-                </p>
-                <ul className="mt-1.5 flex flex-col gap-0.5">
-                  {USE_CASE_GROUPS.flatMap((group) => group.items).map((item) => (
-                    <li key={item.slug}>
-                      <SheetClose asChild>
-                        <Link
-                          href={item.path}
-                          className="text-body hover:bg-accent/60 block rounded-lg px-3 py-2"
-                        >
-                          {item.name}
-                        </Link>
-                      </SheetClose>
-                    </li>
-                  ))}
-                  <li>
-                    <SheetClose asChild>
-                      <Link
-                        href="/form-templates"
-                        className="text-body text-primary hover:bg-accent/60 block rounded-lg px-3 py-2 font-medium"
-                      >
-                        Form templates
-                      </Link>
-                    </SheetClose>
-                  </li>
                 </ul>
               </div>
               <div className="mt-auto flex flex-col gap-2 p-4">

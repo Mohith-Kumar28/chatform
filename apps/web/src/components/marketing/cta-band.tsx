@@ -93,7 +93,9 @@ export function CtaBand() {
           <Button asChild size="lg" shape="pill" variant="on-brand" className="h-12 px-8">
             <Link href="/signin">Start free</Link>
           </Button>
-          <Button asChild size="lg" shape="pill" variant="on-brand-outline" className="h-12 px-8">
+          {/* Solid near-black rather than the translucent outline: on this
+              sweep a see-through button read as disabled. */}
+          <Button asChild size="lg" shape="pill" className="bg-foreground text-background hover:bg-foreground/90 h-12 px-8">
             <Link href="/pricing">See pricing</Link>
           </Button>
         </div>

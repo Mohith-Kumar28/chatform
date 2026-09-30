@@ -2,8 +2,11 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "chatform-web",
   // Built by `opennextjs-cloudflare build`, not by wrangler — deploying without that
-  // build step first ships whatever the last build left behind.
-  "main": ".open-next/worker.js",
+  // build step first ships whatever the last build left behind. `worker.ts` wraps
+  // the generated `.open-next/worker.js` with an edge cache for marketing pages.
+  "main": "worker.ts",
+  // The deployed version id keys that cache, so each deploy starts clean.
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
   "compatibility_date": "2026-08-01",
   // Both are required by OpenNext: Next's server code reaches for node builtins, and
   // `nodejs_compat_populate_process_env` is what makes `process.env` readable at runtime.

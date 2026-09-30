@@ -2,16 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, MessageCircle, RefreshCw, TriangleAlert } from "lucide-react";
+import { ArrowUpRight, RefreshCw, SendHorizonal } from "lucide-react";
 import { toPublicConfig, type FormDoc } from "@repo/form-schema";
+import { ChatBubble } from "@/components/chat/chat-bubble";
 import { ChatClient } from "@/components/chat/chat-client";
 import { getTurnstileToken } from "@/components/chat/turnstile";
 import { Button } from "@/components/ui/button";
 import { API_ORIGIN } from "@/lib/api/mutator";
+import { chatThemeVars } from "@/lib/chat-theme";
 import { getRespondentSignal } from "@/lib/respondent-signal";
+import { patternImage, patternSize, patternWeight, resolvePattern } from "@/lib/background-patterns";
 import { cn } from "@/lib/utils";
+import { themeFor } from "./gallery/template-tile";
 
-/** How long Start waits on Cloudflare's bot check before going ahead without it. */
+/** How long starting waits on Cloudflare's bot check before going ahead without it. */
 const TURNSTILE_WAIT_MS = 10_000;
 
 type State =
@@ -22,45 +26,44 @@ type State =
   | { kind: "error"; message: string };
 
 /**
- * The template, running: the real chat against the real runtime.
+ * The template, running: the real chat against the real runtime, in the same
+ * colours as its card in the gallery.
  *
- * Nothing starts until the visitor asks, because every conversation is paid
- * for and most people scroll past. The API caps tries per person per day
- * (`apps/api/src/lib/template-demo-quota.ts`), keyed on the same FingerprintJS
- * device id the chat uses, or the user when signed in. Past the cap the page
+ * It opens already showing the greeting and the first question, so there is no
+ * "start" to press: the conversation begins the moment the visitor touches it,
+ * types, or picks an answer. Until then nothing is spent, because every
+ * conversation is a paid model call and most people only look.
+ *
+ * The API caps tries per person per day (`template-demo-quota.ts`) on the
+ * FingerprintJS device id, or the user when signed in. Past the cap the page
  * still has everything else: the questions, the flow and the button to use it.
- *
- * `credentials: "include"` so a signed-in visitor is counted as themselves and
- * gets the higher allowance.
  */
-export function TemplateTryLive({
-  slug,
-  doc,
-  useHref,
-}: {
-  slug: string;
-  doc: FormDoc;
-  useHref: string;
-}) {
+export function TemplateTryLive({ slug, doc, useHref }: { slug: string; doc: FormDoc; useHref: string }) {
   const [state, setState] = useState<State>({ kind: "idle" });
   const busy = useRef(false);
 
-  // Warm the device id while the visitor reads, so Start does not wait on it.
-  // Memoised and cached by the helper, and it never throws.
+  const theme = useMemo(() => themeFor(slug), [slug]);
+  const themed = useMemo(() => ({ ...doc, theme: { ...doc.theme, ...theme } }), [doc, theme]);
+  const config = useMemo(() => toPublicConfig(themed, { slug, brandingHidden: true }), [themed, slug]);
+
+  const greeting = doc.blocks.find((b) => b.type === "welcome")?.title;
+  const first = doc.blocks.find((b) => b.type !== "welcome" && b.type !== "statement") as
+    | { title: string; options?: { id: string; label: string }[] }
+    | undefined;
+
+  // Warm the device id while the visitor reads, so starting does not wait on it.
   useEffect(() => {
     void getRespondentSignal();
   }, []);
-
-  const config = useMemo(() => toPublicConfig(doc, { slug, brandingHidden: true }), [doc, slug]);
 
   const start = useCallback(async () => {
     if (busy.current) return;
     busy.current = true;
     setState({ kind: "starting" });
     try {
-      // The bot check never holds the try hostage: after a few seconds it
-      // starts without a token, and the server runs it with scripted
-      // questions instead of the model (see `routes/template-demo.ts`).
+      // The bot check never holds the try hostage: after a few seconds it goes
+      // ahead without a token, and the server answers with scripted questions
+      // instead of the model (see `routes/template-demo.ts`).
       const [deviceSignal, turnstileToken] = await Promise.all([
         getRespondentSignal(),
         Promise.race([
@@ -89,7 +92,7 @@ export function TemplateTryLive({
       if (res.status === 429 || err?.code === "device_required") {
         setState({
           kind: "limit",
-          message: err?.message ?? "You've used today's live tries. Come back tomorrow, or sign in and use this template.",
+          message: err?.message ?? "You've used today's live tries. Come back tomorrow, or sign in and use this template to make your own.",
           signedIn: err?.signedIn === true,
         });
         return;
@@ -102,59 +105,125 @@ export function TemplateTryLive({
     }
   }, [slug]);
 
+  const pattern = resolvePattern("auto", slug);
+  const ground = pattern
+    ? {
+        backgroundColor: theme.background,
+        backgroundImage: patternImage(pattern, `rgba(0,0,0,${0.05 * patternWeight(pattern)})`),
+        backgroundSize: patternSize(pattern),
+      }
+    : { backgroundColor: theme.background };
+
   return (
-    <div
-      className={cn(
-        "bg-card border-border/70 isolate flex w-full flex-col overflow-hidden rounded-2xl border shadow-md [&_.chat-surface]:rounded-2xl",
-        // Full height only once there is a conversation to hold.
-        state.kind === "live" ? "h-[34rem]" : "min-h-56",
-      )}
-    >
-      {state.kind === "live" ? (
-        <div className="min-h-0 flex-1">
+    <div className="border-border/80 bg-card overflow-hidden rounded-3xl border shadow-xl">
+      <div className="border-border/70 flex items-center justify-between gap-3 border-b px-5 py-3">
+        <p className="text-foreground/80 flex items-center gap-2 text-xs font-bold tracking-[0.14em] uppercase">
+          <span className="relative flex size-2">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60 motion-reduce:animate-none" />
+            <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+          </span>
+          The real thing. Go ahead, try it.
+        </p>
+        <Link href={useHref} className="text-foreground hover:text-primary inline-flex items-center gap-1 text-sm font-semibold">
+          Use this template
+          <ArrowUpRight className="size-4" />
+        </Link>
+      </div>
+
+      <div className="relative h-[36rem] [&_.chat-surface]:rounded-none" style={ground}>
+        {state.kind === "live" ? (
           <ChatClient config={config} existingSession={state.session} previewMode onRestart={() => void start()} />
-        </div>
-      ) : (
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-          {state.kind === "limit" ? (
-            <>
-              <p className="text-body max-w-sm">{state.message}</p>
-              <div className="flex flex-wrap justify-center gap-2">
-                <Button asChild shape="pill">
-                  <Link href={useHref}>
-                    Use this template
-                    <ArrowRight className="size-4" />
-                  </Link>
-                </Button>
-                {!state.signedIn && (
-                  <Button asChild shape="pill" variant="outline">
-                    <Link href={`/signin?next=${encodeURIComponent(useHref)}`}>Sign in</Link>
+        ) : (
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="Start the conversation"
+            onPointerDown={() => state.kind === "idle" && void start()}
+            onKeyDown={(e) => state.kind === "idle" && (e.key === "Enter" || e.key.length === 1) && void start()}
+            className="flex h-full cursor-text flex-col focus-visible:outline-none"
+            style={chatThemeVars(theme, slug)}
+          >
+            <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-start gap-3 px-5 pt-[4.5rem] pb-4">
+              {greeting && (
+                <div className="flex justify-start">
+                  <ChatBubble from="bot">{greeting}</ChatBubble>
+                </div>
+              )}
+              {first && (
+                <div className="flex justify-start">
+                  <ChatBubble from="bot">{first.title}</ChatBubble>
+                </div>
+              )}
+              {first?.options && first.options.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {first.options.slice(0, 5).map((o) => (
+                    <span
+                      key={o.id}
+                      className="rounded-full border px-3.5 py-1.5 text-sm font-medium"
+                      style={{ borderColor: theme.accent, color: theme.text, background: theme.botBubble }}
+                    >
+                      {o.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {state.kind === "starting" && (
+                <div className="flex justify-start">
+                  <ChatBubble from="bot" aria-label="Typing">
+                    <span className="flex gap-1 py-1">
+                      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.2s]" />
+                      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.1s]" />
+                      <span className="size-1.5 animate-bounce rounded-full bg-current" />
+                    </span>
+                  </ChatBubble>
+                </div>
+              )}
+            </div>
+            <div className="mx-auto w-full max-w-2xl px-5 pb-5">
+              <div
+                className="flex items-center gap-3 rounded-2xl border bg-white/90 px-4 py-3 shadow-sm"
+                style={{ borderColor: theme.accent }}
+              >
+                <span className="flex-1 text-[0.9375rem] text-stone-500">
+                  {state.kind === "starting" ? "Starting the conversation…" : "Type your answer, or tap one above…"}
+                </span>
+                <span className="grid size-8 place-items-center rounded-full text-white" style={{ background: theme.accent }}>
+                  <SendHorizonal className="size-4" />
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {(state.kind === "limit" || state.kind === "error") && (
+          <div className="bg-background/70 absolute inset-0 grid place-items-center p-6 backdrop-blur-sm">
+            <div className="bg-card border-border max-w-md rounded-2xl border p-6 text-center shadow-lg">
+              <p className="text-foreground text-[0.9375rem] leading-relaxed">{state.message}</p>
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                {state.kind === "limit" ? (
+                  <>
+                    <Button asChild shape="pill">
+                      <Link href={useHref}>Use this template</Link>
+                    </Button>
+                    {!state.signedIn && (
+                      <Button asChild shape="pill" variant="outline">
+                        <Link href={`/signin?next=${encodeURIComponent(useHref)}`}>Sign in</Link>
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <Button variant="outline" shape="pill" onClick={() => void start()}>
+                    <RefreshCw className="size-4" />
+                    Try again
                   </Button>
                 )}
               </div>
-            </>
-          ) : state.kind === "error" ? (
-            <>
-              <TriangleAlert className="text-destructive size-5" />
-              <p className="text-body text-muted-foreground max-w-sm">{state.message}</p>
-              <Button variant="outline" shape="pill" onClick={() => void start()}>
-                <RefreshCw className="size-4" />
-                Try again
-              </Button>
-            </>
-          ) : (
-            <>
-              <span className="bg-primary/10 text-primary grid size-12 place-items-center rounded-2xl">
-                <MessageCircle className="size-6" strokeWidth={1.75} />
-              </span>
-              <p className="font-display text-h3 font-semibold">Try it as a respondent</p>
-              <Button shape="pill" size="lg" onClick={() => void start()} disabled={state.kind === "starting"}>
-                {state.kind === "starting" ? "Starting…" : "Start the conversation"}
-              </Button>
-            </>
-          )}
-        </div>
-      )}
+            </div>
+          </div>
+        )}
+      </div>
+      {/* Screen readers get a plain statement of what the panel is. */}
+      <span className={cn("sr-only")}>A live preview of this template. Answer the first question to begin.</span>
     </div>
   );
 }

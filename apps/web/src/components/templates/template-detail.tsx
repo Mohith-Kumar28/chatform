@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { FormDoc } from "@repo/form-schema";
+import { toneOf } from "@/lib/block-tone";
 import { computeQuestionFlow } from "@/components/builder/branch-layout";
 import { isGoto } from "@/components/builder/flow-graph";
 import { blockMeta } from "@/components/builder/block-library";
@@ -321,9 +322,10 @@ function Conversation({ doc }: { doc: FormDoc }) {
         {questions.map((q, i) => {
           const meta = blockMeta(q.type);
           const step = flow.get(q.ref);
+          const tone = toneOf(q.type);
           return (
             <div key={q.ref} className="flex items-start gap-2.5">
-              <span className="text-muted-foreground tabular mt-2 w-5 shrink-0 text-right text-[0.6875rem]">
+              <span className={cn("tabular mt-1.5 grid size-6 shrink-0 place-items-center rounded-full text-[0.6875rem] font-semibold", tone.chip)}>
                 {i + 1}
               </span>
               <div className="min-w-0 flex-1">
@@ -331,24 +333,24 @@ function Conversation({ doc }: { doc: FormDoc }) {
                   {q.title}
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 pl-1">
-                  <span className="text-muted-foreground inline-flex items-center gap-1 text-[0.6875rem]">
+                  <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] font-medium", tone.chip)}>
                     <meta.icon className="size-3" strokeWidth={2} />
                     {meta.label}
-                    {q.required ? " · required" : " · optional"}
                   </span>
+                  <span className="text-foreground/60 text-[0.6875rem]">{q.required ? "required" : "optional"}</span>
 
                   {/* The same chip the builder's question list uses: an
                       expression in another typeface, so it cannot be misread as
                       more question. */}
                   {step?.conditional && (
-                    <span className="text-muted-foreground inline-flex max-w-full items-center gap-1 rounded bg-[color-mix(in_oklch,currentColor_14%,transparent)] px-1 py-0.5 font-mono text-[0.625rem] leading-none">
+                    <span className="text-foreground/70 inline-flex max-w-full items-center gap-1 rounded bg-[color-mix(in_oklch,currentColor_14%,transparent)] px-1 py-0.5 font-mono text-[0.625rem] leading-none">
                       <CornerDownRight className="size-2.5 shrink-0 opacity-60" strokeWidth={2.5} />
                       <span className="truncate opacity-85">{step.condition ?? "sometimes asked"}</span>
                     </span>
                   )}
 
                   {step?.branches && (
-                    <span className="text-muted-foreground inline-flex items-center gap-1 text-[0.6875rem]">
+                    <span className="text-primary inline-flex items-center gap-1 text-[0.6875rem] font-medium">
                       <GitBranch className="size-3" strokeWidth={2} />
                       splits the flow
                     </span>
@@ -439,7 +441,7 @@ function Panel({
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="font-display text-base font-semibold">{title}</h2>
-          <p className="text-muted-foreground mt-0.5 text-xs">{description}</p>
+          <p className="text-foreground/65 mt-0.5 text-xs">{description}</p>
         </div>
         {action}
       </div>

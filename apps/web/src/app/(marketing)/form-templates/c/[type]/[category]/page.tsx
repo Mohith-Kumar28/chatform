@@ -47,6 +47,8 @@ export default async function TemplateCategoryPage({ params }: { params: Promise
       ]}
       copy={hubCopy(`category:${info.type}/${cat.slug}`)}
       templates={byCategory(info.type, cat.slug)}
+      typeFilter={false}
+      eyebrow={`${byCategory(info.type, cat.slug).length} free ${cat.label.toLowerCase()} ${info.plural.toLowerCase()}`}
     />
   );
 }

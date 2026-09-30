@@ -1,5 +1,6 @@
 import type { FormDoc } from "@repo/form-schema";
 import type { TemplateSummary } from "@/lib/templates";
+import type { TileData } from "@/components/templates/gallery/template-tile";
 import { USE_CASES, type UseCase } from "@/content/use-cases";
 import index from "./index.generated.json";
 import { DOC_LOADERS } from "./docs/loaders.generated";
@@ -44,6 +45,8 @@ export interface TemplateCardData {
   blockCount: number;
   estMinutes: number;
   facts: TemplateFacts;
+  /** The opening the card's thumbnail draws. See `previewOf` in the generator. */
+  preview: { greeting: string; question: string; answer?: string; next?: string };
   /** `/form-templates/<slug>`. */
   path: string;
 }
@@ -172,6 +175,11 @@ export function summaryOf(template: TemplateCardData): TemplateSummary {
     blockCount: template.blockCount,
     estMinutes: template.estMinutes,
   };
+}
+
+/** A card's data, in the shape `TemplateTile` draws. */
+export function tileOf(t: TemplateCardData): TileData {
+  return { slug: t.slug, path: t.path, name: t.searchName, kind: kindLine(t), description: t.description, preview: t.preview };
 }
 
 /** The use-case guides that start from this template: the long-form version of the page. */

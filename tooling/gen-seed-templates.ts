@@ -116,6 +116,26 @@ function sqlFor(): string {
 }
 
 /**
+ * What a card's thumbnail shows: the template's own opening, as the chat would
+ * draw it. The greeting, the first question, and a reply only when that
+ * question offers choices (its first option), so nothing a respondent never
+ * said is put in their mouth. Without choices the thumbnail shows the next
+ * question instead, the same shape the dashboard card uses.
+ */
+function previewOf(t: TemplateSeed): { greeting: string; question: string; answer?: string; next?: string } {
+  const asked = t.doc.blocks.filter((b) => b.type !== "welcome" && b.type !== "statement");
+  const first = asked[0] as { title: string; options?: { label: string }[] } | undefined;
+  const second = asked[1] as { title: string } | undefined;
+  const greeting = t.doc.blocks.find((b) => b.type === "welcome")?.title ?? t.title;
+  const answer = first?.options?.[0]?.label;
+  return {
+    greeting,
+    question: first?.title ?? "",
+    ...(answer ? { answer } : second ? { next: second.title } : {}),
+  };
+}
+
+/**
  * The same catalogue, as JSON, for the public pages at `/form-templates`.
  *
  * The API serves templates only to a signed-in workspace, which is right for
@@ -159,6 +179,7 @@ function writeWebCatalogue(root: string): void {
       blockCount: t.blockCount,
       estMinutes: t.estMinutes,
       facts: t.facts,
+      preview: previewOf(t),
     })),
   };
   writeFileSync(join(root, "index.generated.json"), `${JSON.stringify(index, null, 1)}\n`);

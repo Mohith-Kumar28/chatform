@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { HubPage } from "@/components/templates/gallery/hub-page";
 import { TYPES, byCategory, byType, categoryPath, typeByPath, typePath } from "@/content/templates";
 import { hubCopy } from "@/content/templates/hubs";
@@ -30,26 +29,18 @@ export default async function TemplateTypePage({ params }: { params: Promise<{ t
   return (
     <HubPage
       path={path}
-      crumbs={[{ name: `${info.plural}`, path }]}
+      crumbs={[{ name: info.plural, path }]}
       copy={hubCopy(`type:${info.type}`)}
       templates={byType(info.type)}
-    >
-      <section className="mt-16">
-        <h2 className="font-display text-h2 font-semibold">{info.label} categories</h2>
-        <ul className="mt-4 flex flex-wrap gap-2">
-          {categories.map((c) => (
-            <li key={c.slug}>
-              <Link
-                href={categoryPath(info.type, c.slug)}
-                className="border-border/70 bg-card hover:bg-accent/60 text-caption inline-flex rounded-full border px-3.5 py-1.5 font-medium transition-colors duration-[var(--duration-micro)]"
-              >
-                {c.label}
-                <span className="text-muted-foreground tabular ml-1.5">{c.count}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </HubPage>
+      typeFilter={false}
+      eyebrow={`${byType(info.type).length} free ${info.label.toLowerCase()} templates`}
+      sections={categories.map((c) => ({
+        title: `${c.label} ${info.plural.toLowerCase()}`,
+        href: categoryPath(info.type, c.slug),
+        count: c.count,
+        slugs: byCategory(info.type, c.slug).slice(0, 3).map((t) => t.slug),
+      }))}
+      allTitle={`All ${info.plural.toLowerCase()}`}
+    />
   );
 }

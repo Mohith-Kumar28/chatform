@@ -1,5 +1,6 @@
 import { MarketingNav } from "@/components/marketing/marketing-nav";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
+import { StickyCta } from "@/components/marketing/sticky-cta";
 
 /**
  * The marketing shell DESIGN.md 1.3 specified and the app never got: one nav,
@@ -12,6 +13,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <MarketingNav />
       <main className="flex-1">{children}</main>
       <MarketingFooter />
+      <StickyCta />
     </div>
   );
 }

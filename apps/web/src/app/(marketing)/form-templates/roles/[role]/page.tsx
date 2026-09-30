@@ -24,5 +24,5 @@ export default async function TemplateRolePage({ params }: { params: Promise<{ r
   const role = ROLES.find((r) => r.slug === slug);
   if (!role) notFound();
   const path = rolePath(role.slug);
-  return <HubPage path={path} crumbs={[{ name: `For ${role.label.toLowerCase()}`, path }]} copy={hubCopy(`role:${role.slug}`)} templates={byRole(role.slug)} />;
+  return <HubPage path={path} crumbs={[{ name: `For ${role.label.toLowerCase()}`, path }]} copy={hubCopy(`role:${role.slug}`)} templates={byRole(role.slug)} eyebrow={`${byRole(role.slug).length} free templates`} />;
 }

@@ -24,5 +24,5 @@ export default async function TemplateGoalPage({ params }: { params: Promise<{ g
   const goal = GOALS.find((g) => g.slug === slug);
   if (!goal) notFound();
   const path = goalPath(goal.slug);
-  return <HubPage path={path} crumbs={[{ name: goal.label, path }]} copy={hubCopy(`goal:${goal.slug}`)} templates={byGoal(goal.slug)} />;
+  return <HubPage path={path} crumbs={[{ name: goal.label, path }]} copy={hubCopy(`goal:${goal.slug}`)} templates={byGoal(goal.slug)} eyebrow={`${byGoal(goal.slug).length} free templates`} />;
 }
