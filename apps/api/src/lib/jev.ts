@@ -65,6 +65,8 @@ export async function askJev(
     timeoutMs?: number;
     /** Told why, when the call itself failed; a well-formed "no" is not a failure. */
     onFailure?: (failure: AiFailure, latencyMs: number) => void;
+    /** What the call is for, in telemetry. The answer gate is the original caller. */
+    kind?: string;
   } = {},
 ): Promise<JevResult | null> {
   if (!jevAvailable(env)) return null;
@@ -75,7 +77,7 @@ export async function askJev(
   };
   // The same `user`, `session_id` and `trace` every chat call sends, so Langfuse
   // shows the gate inside the conversation it ran in.
-  const attribution = telemetry(env, {}, { ...ctx, kind: "answer_gate" }).openrouter ?? {};
+  const attribution = telemetry(env, {}, { ...ctx, kind: opts.kind ?? "answer_gate" }).openrouter ?? {};
   try {
     const res = await (opts.fetch ?? fetch)(SYSTEM_ONE_URL, {
       method: "POST",

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { ThemeDoc } from "@repo/form-schema";
-import { GOOGLE_FONTS, type GoogleFontCategory, type GoogleFontRow } from "@/lib/google-fonts.generated";
+import { GOOGLE_FONTS, type GoogleFontCategory, type GoogleFontRow } from "@repo/form-schema";
 
 /**
  * Turning a theme's font names into fonts that actually load.

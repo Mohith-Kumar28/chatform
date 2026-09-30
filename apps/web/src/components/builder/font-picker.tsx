@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { GOOGLE_FONTS } from "@/lib/google-fonts.generated";
+import { GOOGLE_FONTS } from "@repo/form-schema";
 import { ensureStylesheet, findFont, fontPreviewHref, fontStack, themeFontsHref } from "@/lib/theme-fonts";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";

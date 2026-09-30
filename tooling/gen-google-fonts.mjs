@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Writes `apps/web/src/lib/google-fonts.generated.ts`: the families the theme
+ * Writes `packages/form-schema/src/google-fonts.generated.ts`: the families the theme
  * panel's font picker offers.
  *
  * Read from Google's own catalogue rather than typed out, so the list carries
@@ -56,6 +56,6 @@ ${rows.map((r) => `  ${JSON.stringify(r)},`).join("\n")}
 ];
 `;
 
-const target = fileURLToPath(new URL("../apps/web/src/lib/google-fonts.generated.ts", import.meta.url));
+const target = fileURLToPath(new URL("../packages/form-schema/src/google-fonts.generated.ts", import.meta.url));
 writeFileSync(target, out);
 console.log(`${rows.length} families → ${target}`);

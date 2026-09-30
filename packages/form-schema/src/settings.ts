@@ -565,7 +565,8 @@ const BRAND_INK = THEME_DEFAULT_INK;
  * (`readableInk` in `apps/web/src/lib/chat-theme.ts`), which is why a form
  * holding one renders today.
  */
-const CSS_COLOR = /^(#[0-9a-fA-F]{3,8}|(rgb|hsl|oklch|lab|lch|color-mix)a?\([^;{}]*\)|[a-zA-Z]{3,20})$/;
+export const THEME_COLOR_PATTERN = /^(#[0-9a-fA-F]{3,8}|(rgb|hsl|oklch|lab|lch|color-mix)a?\([^;{}]*\)|[a-zA-Z]{3,20})$/;
+const CSS_COLOR = THEME_COLOR_PATTERN;
 const themeColor = (fallback: string) => boundedString(40).regex(CSS_COLOR).catch(fallback);
 
 export const ThemeDoc = z.object({
