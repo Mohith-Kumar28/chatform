@@ -1,0 +1,16 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  // A few-KB worker in front of chatform-web. See `edge.ts` for why.
+  // Deploy with `node edge/deploy.mjs` (run by `pnpm deploy:web`), which passes
+  // the web worker's current version as WEB_VERSION.
+  "name": "chatform-edge",
+  "main": "edge.ts",
+  "compatibility_date": "2026-08-01",
+  // Apex domain. `www` is deliberately not a second custom domain: one canonical
+  // host keeps the session cookie, the OAuth origins and the CORS allow-list to
+  // a single value.
+  "routes": [{ "pattern": "chatform.in", "custom_domain": true }],
+  "workers_dev": false,
+  "services": [{ "binding": "WEB", "service": "chatform-web" }],
+  "observability": { "enabled": true }
+}

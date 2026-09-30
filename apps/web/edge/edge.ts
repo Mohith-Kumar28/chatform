@@ -1,31 +1,29 @@
-// The OpenNext worker, wrapped with an edge cache for the public marketing pages.
+// chatform-edge: a small Worker in front of chatform-web, on chatform.in.
 //
-// Every page request used to start the Worker and read the prerender from the
-// assets-backed incremental cache: about 2.4s to first byte from India on
-// 2026-10-01, for pages that only change on deploy. Cloudflare's own edge cache
-// never kept them, because Next answers with `Vary` on four router headers
-// (see the `html-is-never-edge-cached` note), so this keeps them in the Cache
-// API instead, one entry per exact combination of those headers.
+// The Next worker is about 64MB of script. Starting an isolate for it costs
+// 1.5–2s, and a marketing site is quiet enough that most visits found it cold:
+// every page, even `/robots.txt`, took about 2.4s to first byte from India on
+// 2026-10-01, while a static asset took 0.5s. This worker is a few KB, so it
+// starts in milliseconds, answers public marketing pages from the edge cache,
+// and only wakes the Next worker (through a service binding) on a miss or for
+// anything that is not a cached public page.
 //
-// Safe by construction:
-// - only GETs to an allow-listed public path, with no query other than `_rsc`;
+// What it caches, and why it is safe:
+// - GETs to an allow-listed public path, with no query other than `_rsc`;
 // - never with a session cookie, and never a response that sets one;
-// - only a 200 that Next itself marked cacheable;
-// - keyed by the deployed version, so a deploy is a clean cache.
+// - only a 200 the Next worker itself marked cacheable;
+// - keyed by the web worker's deployed version (`WEB_VERSION`, set by
+//   `edge/deploy.mjs` right after each web deploy), so a deploy is a clean
+//   cache, and by the four router headers Next varies a page on, so an RSC
+//   payload and its HTML page can never be swapped.
 //
 // `/f/*`, the dashboard, the builder and auth are never on the list: they read
 // search params or the session, and caching them would serve one person's page
 // to another.
 
-// @ts-expect-error: produced by `opennextjs-cloudflare build`
-import openNext from "./.open-next/worker.js";
-
-// @ts-expect-error: produced by `opennextjs-cloudflare build`
-export { DOQueueHandler, DOShardedTagCache, BucketCachePurge } from "./.open-next/worker.js";
-
 interface Env {
-  CF_VERSION_METADATA?: { id: string };
-  [key: string]: unknown;
+  WEB: { fetch(request: Request): Promise<Response> };
+  WEB_VERSION?: string;
 }
 
 const EXACT = new Set([
@@ -40,12 +38,12 @@ const EXACT = new Set([
   "/import",
   "/ai-info",
   "/contact",
+  "/robots.txt",
+  "/sitemap.xml",
+  "/llms.txt",
 ]);
 const PREFIXES = ["/form-templates", "/compare/", "/use-cases/", "/blog", "/docs", "/import/"];
-
-/** The request headers Next varies a page's response on. */
 const VARY = ["rsc", "next-router-state-tree", "next-router-prefetch", "next-router-segment-prefetch"];
-
 const EDGE_TTL_SECONDS = 86_400;
 
 function cacheable(request: Request, url: URL): boolean {
@@ -69,10 +67,10 @@ async function keyFor(request: Request, url: URL, version: string): Promise<Requ
 export default {
   async fetch(request: Request, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
     const url = new URL(request.url);
-    if (!cacheable(request, url)) return openNext.fetch(request, env, ctx);
+    if (!env.WEB_VERSION || !cacheable(request, url)) return env.WEB.fetch(request);
 
     const cache = (caches as unknown as { default: Cache }).default;
-    const key = await keyFor(request, url, env.CF_VERSION_METADATA?.id ?? "dev");
+    const key = await keyFor(request, url, env.WEB_VERSION);
     const hit = await cache.match(key);
     if (hit) {
       const res = new Response(hit.body, hit);
@@ -80,7 +78,7 @@ export default {
       return res;
     }
 
-    const res: Response = await openNext.fetch(request, env, ctx);
+    const res = await env.WEB.fetch(request);
     if (res.status === 200 && !res.headers.has("set-cookie") && /s-maxage=\d+/.test(res.headers.get("cache-control") ?? "")) {
       const stored = new Response(res.clone().body, res);
       stored.headers.set("cache-control", `public, s-maxage=${EDGE_TTL_SECONDS}`);

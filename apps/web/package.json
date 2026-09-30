@@ -11,7 +11,7 @@
     "test": "vitest run",
     "cf:build": "opennextjs-cloudflare build",
     "cf:preview": "opennextjs-cloudflare preview",
-    "cf:deploy": "opennextjs-cloudflare deploy",
+    "cf:deploy": "opennextjs-cloudflare deploy && node edge/deploy.mjs",
     "og:image": "tsx scripts/og-image.mts",
     "postinstall": "fumadocs-mdx"
   },
