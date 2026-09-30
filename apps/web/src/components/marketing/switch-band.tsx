@@ -46,11 +46,11 @@ export function SwitchBand() {
               aria-controls="switch-panel"
               onClick={() => setActive(p.source)}
               className={cn(
-                "bg-card flex items-center gap-3 rounded-2xl border p-3.5 text-left sm:p-4",
-                "transition-[border-color,box-shadow,transform] duration-[var(--duration-standard)] ease-[var(--ease-out)]",
-                selected
-                  ? "border-foreground shadow-[0_3px_0_0_var(--foreground)]"
-                  : "border-border hover:border-foreground/30 hover:-translate-y-0.5",
+                // Every state is a ring (box-shadow), never a border or a lift,
+                // so picking a tab changes its colour and nothing moves.
+                "bg-card flex items-center gap-3 rounded-2xl p-3.5 text-left ring-inset sm:p-4",
+                "transition-shadow duration-[var(--duration-standard)] ease-[var(--ease-out)]",
+                selected ? "ring-foreground ring-2" : "ring-border hover:ring-foreground/30 ring-1",
               )}
             >
               <SourceLogo source={p.source} className="text-foreground size-7 sm:size-8" />
