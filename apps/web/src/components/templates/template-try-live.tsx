@@ -11,6 +11,9 @@ import { API_ORIGIN } from "@/lib/api/mutator";
 import { getRespondentSignal } from "@/lib/respondent-signal";
 import { cn } from "@/lib/utils";
 
+/** How long Start waits on Cloudflare's bot check before going ahead without it. */
+const TURNSTILE_WAIT_MS = 10_000;
+
 type State =
   | { kind: "idle" }
   | { kind: "starting" }
@@ -55,7 +58,16 @@ export function TemplateTryLive({
     busy.current = true;
     setState({ kind: "starting" });
     try {
-      const [deviceSignal, turnstileToken] = await Promise.all([getRespondentSignal(), getTurnstileToken()]);
+      // The bot check never holds the try hostage: after a few seconds it
+      // starts without a token, and the server runs it with scripted
+      // questions instead of the model (see `routes/template-demo.ts`).
+      const [deviceSignal, turnstileToken] = await Promise.all([
+        getRespondentSignal(),
+        Promise.race([
+          getTurnstileToken(),
+          new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), TURNSTILE_WAIT_MS)),
+        ]),
+      ]);
       const res = await fetch(`${API_ORIGIN}/api/templates/${slug}/demo-sessions`, {
         method: "POST",
         credentials: "include",
