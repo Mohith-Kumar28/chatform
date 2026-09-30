@@ -43,7 +43,20 @@ const EXACT = new Set([
   "/llms.txt",
 ]);
 const PREFIXES = ["/form-templates", "/compare/", "/use-cases/", "/blog", "/docs", "/import/"];
-const VARY = ["rsc", "next-router-state-tree", "next-router-prefetch", "next-router-segment-prefetch"];
+/**
+ * The request headers that change what Next sends for a static page: whether it
+ * is the HTML or the RSC payload, and whether it is a prefetch or one segment.
+ * `next-router-state-tree` is deliberately not one of them. It describes the
+ * page the visitor is navigating *from*, so keying on it gave every source
+ * page its own copy and a click from the gallery to a hub never hit; for a
+ * prerendered route Next answers with the same payload whatever it says. The
+ * `_rsc` query value is a cache-buster derived from the same thing, so it is
+ * dropped from the key for the same reason.
+ */
+const VARY = ["rsc", "next-router-prefetch", "next-router-segment-prefetch"];
+
+/** How long a browser may reuse a page before asking the edge again. */
+const BROWSER_TTL_SECONDS = 300;
 const EDGE_TTL_SECONDS = 86_400;
 
 function cacheable(request: Request, url: URL): boolean {
@@ -59,6 +72,7 @@ async function keyFor(request: Request, url: URL, version: string): Promise<Requ
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(variant));
   const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
   const key = new URL(url.toString());
+  key.searchParams.delete("_rsc");
   key.searchParams.set("__v", version);
   key.searchParams.set("__h", hex);
   return new Request(key.toString(), { method: "GET" });
@@ -74,6 +88,7 @@ export default {
     const hit = await cache.match(key);
     if (hit) {
       const res = new Response(hit.body, hit);
+      res.headers.set("cache-control", `public, max-age=${BROWSER_TTL_SECONDS}`);
       res.headers.set("x-edge-cache", "HIT");
       return res;
     }
@@ -84,6 +99,10 @@ export default {
       stored.headers.set("cache-control", `public, s-maxage=${EDGE_TTL_SECONDS}`);
       stored.headers.delete("vary");
       ctx.waitUntil(cache.put(key, stored));
+      const out = new Response(res.body, res);
+      out.headers.set("cache-control", `public, max-age=${BROWSER_TTL_SECONDS}`);
+      out.headers.set("x-edge-cache", "MISS");
+      return out;
     }
     const out = new Response(res.body, res);
     out.headers.set("x-edge-cache", "MISS");

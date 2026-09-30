@@ -1,3 +1,4 @@
+import { CACHE_MAX_AGE } from "@/lib/api/persist";
 import { useMemo } from "react";
 import {
   getGetApiTemplatesQueryKey,
@@ -77,7 +78,7 @@ export function useTemplates(enabled = true) {
   const query = useGetApiTemplates({
     // `enabled` so the command palette, which is mounted on every page in both
     // shells, does not fetch the catalogue until someone opens it.
-    query: { queryKey: getGetApiTemplatesQueryKey(), staleTime: 5 * 60_000, enabled },
+    query: { queryKey: getGetApiTemplatesQueryKey(), staleTime: CACHE_MAX_AGE, gcTime: CACHE_MAX_AGE, enabled },
   });
   const templates = useMemo(() => {
     const raw = query.data as unknown;

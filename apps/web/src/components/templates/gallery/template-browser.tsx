@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, ChevronRight, Search } from "lucide-react";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TemplateTile, type TileData } from "./template-tile";
 
 export interface BrowsableTemplate {
@@ -50,7 +52,13 @@ export function TemplateBrowser({
   allTitle?: string;
   typeFilter?: boolean;
 }) {
+  const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
+  // Filter once typing pauses, not on every keystroke over three hundred cards.
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(draft), 200);
+    return () => clearTimeout(t);
+  }, [draft]);
   const [type, setType] = useState<(typeof TYPES)[number]["value"]>("all");
   const [expanded, setExpanded] = useState(false);
 
@@ -65,52 +73,51 @@ export function TemplateBrowser({
   return (
     <div>
       <div className="bg-background/92 sticky top-0 z-20 -mx-4 border-b border-transparent px-4 py-3 backdrop-blur-md supports-[backdrop-filter]:bg-background/80 sm:-mx-6 sm:px-6">
-        <nav aria-label="Breadcrumb" className="text-foreground/65 mb-3 flex flex-wrap items-center gap-1 text-sm">
-          {crumbs.map((c, i) => (
-            <span key={c.path} className="inline-flex items-center gap-1">
-              {i < crumbs.length - 1 ? (
-                <Link prefetch={false} href={c.path} className="hover:text-foreground transition-colors duration-[var(--duration-micro)]">
-                  {c.name}
-                </Link>
-              ) : (
-                <span aria-current="page" className="text-foreground font-medium">
-                  {c.name}
-                </span>
-              )}
-              {i < crumbs.length - 1 && <ChevronRight className="size-3.5" />}
-            </span>
-          ))}
-        </nav>
-        <div className="flex gap-2">
-          <label className="border-border bg-card focus-within:border-foreground/40 flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-xl border px-3.5 shadow-xs transition-colors">
-            <Search className="text-foreground/50 size-4 shrink-0" />
-            <span className="sr-only">Search templates</span>
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={'Try "event" or "feedback"'}
-              className="placeholder:text-foreground/45 text-foreground w-full bg-transparent text-[0.9375rem] outline-none"
-            />
-          </label>
-          {typeFilter && (
-            <>
-          <label className="sr-only" htmlFor="template-type">
-            Template type
-          </label>
-          <select
-            id="template-type"
-            value={type}
-            onChange={(e) => setType(e.target.value as typeof type)}
-            className="border-border bg-card text-foreground h-11 shrink-0 rounded-xl border px-3 text-[0.9375rem] shadow-xs outline-none focus:border-foreground/40"
-          >
-            {TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
+        {crumbs.length > 1 && (
+          <nav aria-label="Breadcrumb" className="text-foreground/65 mb-3 flex flex-wrap items-center gap-1 text-sm">
+            {crumbs.map((c, i) => (
+              <span key={c.path} className="inline-flex items-center gap-1">
+                {i < crumbs.length - 1 ? (
+                  <Link prefetch={false} href={c.path} className="hover:text-foreground transition-colors duration-[var(--duration-micro)]">
+                    {c.name}
+                  </Link>
+                ) : (
+                  <span aria-current="page" className="text-foreground font-medium">
+                    {c.name}
+                  </span>
+                )}
+                {i < crumbs.length - 1 && <ChevronRight className="size-3.5" />}
+              </span>
             ))}
-          </select>
-            </>
+          </nav>
+        )}
+        <div className="flex gap-2">
+          <InputGroup className="bg-card h-11 flex-1">
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={'Try "event" or "feedback"'}
+              aria-label="Search templates"
+              className="text-[0.9375rem]"
+            />
+          </InputGroup>
+          {typeFilter && (
+            <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
+              <SelectTrigger aria-label="Template type" className="bg-card !h-11 w-36 shrink-0 text-[0.9375rem]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
         </div>
       </div>

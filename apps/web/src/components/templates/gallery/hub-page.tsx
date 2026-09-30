@@ -1,3 +1,4 @@
+import { ArrowRight } from "lucide-react";
 import { CtaBand } from "@/components/marketing/cta-band";
 import { JsonLd } from "@/components/seo/json-ld";
 import { categoryLabel, tileOf, type TemplateCardData } from "@/content/templates";
@@ -36,6 +37,7 @@ export function HubPage({
   sections,
   allTitle,
   typeFilter = true,
+  guideHref,
   children,
 }: {
   path: string;
@@ -50,6 +52,8 @@ export function HubPage({
   allTitle?: string;
   /** Off on a type or category hub, where every template is already one type. */
   typeFilter?: boolean;
+  /** An anchor to a guide further down the page. */
+  guideHref?: string;
   children?: React.ReactNode;
 }) {
   const trail = [{ name: "Templates", path: "/form-templates" }, ...crumbs];
@@ -78,6 +82,12 @@ export function HubPage({
               {heading ?? copy.h1}
             </h1>
             <p className="text-foreground/75 mt-4 max-w-2xl text-lg leading-relaxed">{lede ?? copy.metaDescription}</p>
+            {guideHref && (
+              <a href={guideHref} className="text-foreground hover:text-primary mt-4 inline-flex items-center gap-1.5 text-sm font-semibold underline-offset-4 hover:underline">
+                How to choose and use a template
+                <ArrowRight className="size-4" />
+              </a>
+            )}
 
             <div className="mt-8">
               <TemplateBrowser templates={browsable(templates)} sections={sections} crumbs={trail} allTitle={allTitle} typeFilter={typeFilter} />

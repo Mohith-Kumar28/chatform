@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner";
 import type { FormDoc } from "@repo/form-schema";
 import { toneOf } from "@/lib/block-tone";
+import { CACHE_MAX_AGE } from "@/lib/api/persist";
 import { computeQuestionFlow } from "@/components/builder/branch-layout";
 import { isGoto } from "@/components/builder/flow-graph";
 import { blockMeta } from "@/components/builder/block-library";
@@ -58,7 +59,9 @@ export function TemplateDetail({ slug }: { slug: string }) {
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useGetApiTemplatesBySlug(slug, {
-    query: { queryKey: getGetApiTemplatesBySlugQueryKey(slug), staleTime: 5 * 60_000 },
+    // Templates change on deploy, not by the minute: fresh for a day, and
+    // restored from disk on reload, so reopening one costs no request.
+    query: { queryKey: getGetApiTemplatesBySlugQueryKey(slug), staleTime: CACHE_MAX_AGE, gcTime: CACHE_MAX_AGE },
   });
   const detail = apiData<TemplateDetailPayload | undefined>(data);
 
