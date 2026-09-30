@@ -368,6 +368,7 @@ const FORM_SOURCE_LABEL: Record<Extract<MailJob, { kind: "admin_new_form" }>["so
   template: "template",
   ai: "AI generator",
   api: "API",
+  import: "import",
 };
 
 async function runNewFormJob(

@@ -6,6 +6,7 @@ import { TheMoment } from "@/components/marketing/the-moment";
 import { HowItConverts } from "@/components/marketing/how-it-converts";
 import { WhatItDoes } from "@/components/marketing/what-it-does";
 import { Developers } from "@/components/marketing/developers";
+import { SwitchBand } from "@/components/marketing/switch-band";
 import { PricingSection } from "@/components/marketing/pricing-section";
 import { CtaBand } from "@/components/marketing/cta-band";
 import { ChatformEmbed } from "@/components/marketing/chatform-embed";
@@ -139,6 +140,7 @@ export default function LandingPage() {
       <Hero />
       <LaunchVideo />
       <HowItConverts />
+      <SwitchBand />
       <SpectrumStrip />
       <TheMoment />
       <WhatItDoes />

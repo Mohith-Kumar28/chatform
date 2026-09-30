@@ -466,3 +466,19 @@ export const PublicFormConfigView = z
  * the second is what tells them apart.
  */
 export const FormReadView = z.union([FormDocumentView, PublicFormConfigView]);
+
+/** `POST /v1/import`: a converted document and what did and didn't come over. */
+export const ImportedDocumentView = z
+  .object({
+    doc: z.unknown(),
+    report: z.object({
+      provider: z.enum(["typeform", "google_forms", "tally"]),
+      sourceUrl: z.string(),
+      questions: z.number(),
+      branches: z.number(),
+      endings: z.number(),
+      notCopied: z.array(z.string()),
+      closed: z.boolean(),
+    }),
+  })
+  .loose();

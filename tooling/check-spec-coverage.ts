@@ -204,6 +204,8 @@ const DASHBOARD_ONLY: Record<string, string> = {
   "/api/workspaces/{id}": "see /api/workspaces",
   "/api/workspaces/everywhere": "the switcher's list across a person's organizations; a key belongs to one organization",
   "/api/feedback": "a signed-in person telling the chatform team something, not a thing an integration does",
+  "/api/import/preview": "the marketing page's public converter: a trial form for someone without an account; /v1/import is the API form",
+  "/api/import/claim": "moves a signed-out visitor's trial into the account they just made; a key never has a trial",
 
   /**
    * The platform console, and the one group here that must never gain a `/v1`

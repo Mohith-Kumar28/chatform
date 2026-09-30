@@ -115,6 +115,15 @@ import type {
   PostApiFormsByIdVersionsByVersionRestore200,
   PostApiFormsByIdVersionsByVersionRestore404,
   PostApiFormsByIdVersionsByVersionRestore422,
+  PostApiImportClaim200,
+  PostApiImportClaimBody,
+  PostApiImportForms200,
+  PostApiImportForms422,
+  PostApiImportFormsBody,
+  PostApiImportPreview200,
+  PostApiImportPreview422,
+  PostApiImportPreview429,
+  PostApiImportPreviewBody,
   PostApiInvitations200,
   PostApiInvitations402,
   PostApiInvitations409,
@@ -272,7 +281,306 @@ export function useGetApiPaymentAccountsOauthByProviderCallback<TData = Awaited<
 
 
 
-export type getApiAuthProvidersResponse200 = {
+export type postApiImportPreviewResponse200 = {
+  data: PostApiImportPreview200
+  status: 200
+}
+
+export type postApiImportPreviewResponse422 = {
+  data: PostApiImportPreview422
+  status: 422
+}
+
+export type postApiImportPreviewResponse429 = {
+  data: PostApiImportPreview429
+  status: 429
+}
+
+export type postApiImportPreviewResponseSuccess = (postApiImportPreviewResponse200) & {
+  headers: Headers;
+};
+export type postApiImportPreviewResponseError = (postApiImportPreviewResponse422 | postApiImportPreviewResponse429) & {
+  headers: Headers;
+};
+
+export type postApiImportPreviewResponse = (postApiImportPreviewResponseSuccess | postApiImportPreviewResponseError)
+
+export const getPostApiImportPreviewUrl = () => {
+
+
+
+
+  return `/api/import/preview`
+}
+
+/**
+ * Public. Reads the form behind the link, converts it, and publishes it in a trial account for 24 hours so the visitor can talk to it. Returns a token that `POST /api/import/claim` exchanges for a copy in the visitor's own workspace once they sign in. Signed-out visitors get three conversions a day.
+ * @summary Convert a public Typeform, Google Form or Tally form into a live trial form
+ */
+export const postApiImportPreview = async (postApiImportPreviewBody: PostApiImportPreviewBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiImportPreviewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiImportPreviewResponse>(getPostApiImportPreviewUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiImportPreviewBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiImportPreviewMutationOptions = <TError = PostApiImportPreview422 | PostApiImportPreview429,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiImportPreview>>, TError,PostApiImportPreviewMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiImportPreview>>, TError,PostApiImportPreviewMutationVariables, TContext> => {
+
+const mutationKey = ['postApiImportPreview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiImportPreview>>, PostApiImportPreviewMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiImportPreview(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiImportPreviewMutationResult = NonNullable<Awaited<ReturnType<typeof postApiImportPreview>>>
+    export type PostApiImportPreviewMutationBody = PostApiImportPreviewBody
+    export type PostApiImportPreviewMutationError = PostApiImportPreview422 | PostApiImportPreview429
+    export type PostApiImportPreviewMutationVariables = {data: PostApiImportPreviewBody}
+
+    /**
+ * @summary Convert a public Typeform, Google Form or Tally form into a live trial form
+ */
+export const usePostApiImportPreview = <TError = PostApiImportPreview422 | PostApiImportPreview429,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiImportPreview>>, TError,PostApiImportPreviewMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiImportPreview>>,
+        TError,
+        PostApiImportPreviewMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiImportPreviewMutationOptions(options));
+    }
+    export type postApiImportClaimResponse200 = {
+  data: PostApiImportClaim200
+  status: 200
+}
+
+export type postApiImportClaimResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiImportClaimResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postApiImportClaimResponseSuccess = (postApiImportClaimResponse200) & {
+  headers: Headers;
+};
+export type postApiImportClaimResponseError = (postApiImportClaimResponse404 | postApiImportClaimResponse409) & {
+  headers: Headers;
+};
+
+export type postApiImportClaimResponse = (postApiImportClaimResponseSuccess | postApiImportClaimResponseError)
+
+export const getPostApiImportClaimUrl = () => {
+
+
+
+
+  return `/api/import/claim`
+}
+
+/**
+ * @summary Copy an imported trial form into your workspace
+ */
+export const postApiImportClaim = async (postApiImportClaimBody: PostApiImportClaimBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiImportClaimResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiImportClaimResponse>(getPostApiImportClaimUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiImportClaimBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiImportClaimMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiImportClaim>>, TError,PostApiImportClaimMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiImportClaim>>, TError,PostApiImportClaimMutationVariables, TContext> => {
+
+const mutationKey = ['postApiImportClaim'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiImportClaim>>, PostApiImportClaimMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiImportClaim(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiImportClaimMutationResult = NonNullable<Awaited<ReturnType<typeof postApiImportClaim>>>
+    export type PostApiImportClaimMutationBody = PostApiImportClaimBody
+    export type PostApiImportClaimMutationError = void
+    export type PostApiImportClaimMutationVariables = {data: PostApiImportClaimBody}
+
+    /**
+ * @summary Copy an imported trial form into your workspace
+ */
+export const usePostApiImportClaim = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiImportClaim>>, TError,PostApiImportClaimMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiImportClaim>>,
+        TError,
+        PostApiImportClaimMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiImportClaimMutationOptions(options));
+    }
+    export type postApiImportFormsResponse200 = {
+  data: PostApiImportForms200
+  status: 200
+}
+
+export type postApiImportFormsResponse422 = {
+  data: PostApiImportForms422
+  status: 422
+}
+
+export type postApiImportFormsResponseSuccess = (postApiImportFormsResponse200) & {
+  headers: Headers;
+};
+export type postApiImportFormsResponseError = (postApiImportFormsResponse422) & {
+  headers: Headers;
+};
+
+export type postApiImportFormsResponse = (postApiImportFormsResponseSuccess | postApiImportFormsResponseError)
+
+export const getPostApiImportFormsUrl = () => {
+
+
+
+
+  return `/api/import/forms`
+}
+
+/**
+ * @summary Import a Typeform, Google Form or Tally form into a workspace
+ */
+export const postApiImportForms = async (postApiImportFormsBody: PostApiImportFormsBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiImportFormsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiImportFormsResponse>(getPostApiImportFormsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiImportFormsBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiImportFormsMutationOptions = <TError = PostApiImportForms422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiImportForms>>, TError,PostApiImportFormsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiImportForms>>, TError,PostApiImportFormsMutationVariables, TContext> => {
+
+const mutationKey = ['postApiImportForms'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiImportForms>>, PostApiImportFormsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiImportForms(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiImportFormsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiImportForms>>>
+    export type PostApiImportFormsMutationBody = PostApiImportFormsBody
+    export type PostApiImportFormsMutationError = PostApiImportForms422
+    export type PostApiImportFormsMutationVariables = {data: PostApiImportFormsBody}
+
+    /**
+ * @summary Import a Typeform, Google Form or Tally form into a workspace
+ */
+export const usePostApiImportForms = <TError = PostApiImportForms422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiImportForms>>, TError,PostApiImportFormsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiImportForms>>,
+        TError,
+        PostApiImportFormsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiImportFormsMutationOptions(options));
+    }
+    export type getApiAuthProvidersResponse200 = {
   data: GetApiAuthProviders200
   status: 200
 }

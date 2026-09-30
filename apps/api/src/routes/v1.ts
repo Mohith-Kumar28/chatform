@@ -22,6 +22,7 @@ import { exportsV1Router } from "./v1/exports.js";
 import { templatesV1Router } from "./v1/templates.js";
 import { versionsV1Router } from "./v1/versions.js";
 import { aiV1Router } from "./v1/ai.js";
+import { importV1Router } from "./v1/import.js";
 import { integrationsV1Router } from "./v1/integrations.js";
 import { paymentAccountsV1Router } from "./v1/payment-accounts.js";
 import { formPaymentsV1Router } from "./v1/form-payments.js";
@@ -152,6 +153,9 @@ v1Router.route("/", versionsV1Router);
  * this is the one capability on `/v1` that spends money per call.
  */
 v1Router.route("/", aiV1Router);
+
+/** Converting a form from another builder. No model, so no `ai:generate`; `form:write` like creating one. */
+v1Router.route("/", importV1Router);
 
 /**
  * The spreadsheet feed.

@@ -485,7 +485,7 @@ export type MailJob =
       /** A form was created, by any route. Mailed to `PLATFORM_ADMIN_EMAILS`. */
       kind: "admin_new_form";
       formId: string;
-      source: "builder" | "template" | "ai" | "api";
+      source: "builder" | "template" | "ai" | "api" | "import";
     };
 
 /**

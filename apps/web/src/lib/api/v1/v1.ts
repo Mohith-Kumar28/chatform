@@ -130,6 +130,10 @@ import type {
   PostV1FormsByIdVersionsByVersionRestore200,
   PostV1FormsByIdVersionsByVersionRestore404,
   PostV1FormsByIdVersionsByVersionRestore422,
+  PostV1Import200,
+  PostV1Import403,
+  PostV1Import422,
+  PostV1ImportBody,
   PostV1PaymentAccountsCashfreeOnboard200,
   PostV1PaymentAccountsCashfreeOnboard402,
   PostV1PaymentAccountsCashfreeOnboardBody,
@@ -3649,6 +3653,108 @@ export const usePostV1AiClarifyForm = <TError = PostV1AiClarifyForm403,
         TContext
       > => {
       return useMutation(getPostV1AiClarifyFormMutationOptions(options));
+    }
+    export type postV1ImportResponse200 = {
+  data: PostV1Import200
+  status: 200
+}
+
+export type postV1ImportResponse403 = {
+  data: PostV1Import403
+  status: 403
+}
+
+export type postV1ImportResponse422 = {
+  data: PostV1Import422
+  status: 422
+}
+
+export type postV1ImportResponseSuccess = (postV1ImportResponse200) & {
+  headers: Headers;
+};
+export type postV1ImportResponseError = (postV1ImportResponse403 | postV1ImportResponse422) & {
+  headers: Headers;
+};
+
+export type postV1ImportResponse = (postV1ImportResponseSuccess | postV1ImportResponseError)
+
+export const getPostV1ImportUrl = () => {
+
+
+
+
+  return `/v1/import`
+}
+
+/**
+ * Reads the form behind a public link and converts its questions, options, required fields, endings and jumps. Returns the document **without saving it**, plus a report of anything that could not be copied (payments, scores, rules that test a different question). Post the document to `POST /v1/forms` to keep it. The source form must open without signing in.
+ * @summary Convert a public Typeform, Google Form or Tally form into a form document
+ */
+export const postV1Import = async (postV1ImportBody: PostV1ImportBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1ImportResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postV1ImportResponse>(getPostV1ImportUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postV1ImportBody)
+  }
+);}
+
+
+
+
+
+export const getPostV1ImportMutationOptions = <TError = PostV1Import403 | PostV1Import422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1Import>>, TError,PostV1ImportMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postV1Import>>, TError,PostV1ImportMutationVariables, TContext> => {
+
+const mutationKey = ['postV1Import'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1Import>>, PostV1ImportMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postV1Import(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostV1ImportMutationResult = NonNullable<Awaited<ReturnType<typeof postV1Import>>>
+    export type PostV1ImportMutationBody = PostV1ImportBody
+    export type PostV1ImportMutationError = PostV1Import403 | PostV1Import422
+    export type PostV1ImportMutationVariables = {data: PostV1ImportBody}
+
+    /**
+ * @summary Convert a public Typeform, Google Form or Tally form into a form document
+ */
+export const usePostV1Import = <TError = PostV1Import403 | PostV1Import422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1Import>>, TError,PostV1ImportMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postV1Import>>,
+        TError,
+        PostV1ImportMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostV1ImportMutationOptions(options));
     }
     export type getV1FormsByIdIntegrationsResponse200 = {
   data: GetV1FormsByIdIntegrations200

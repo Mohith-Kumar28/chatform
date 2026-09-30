@@ -758,7 +758,7 @@ export function applySourceFormToDoc(doc: FormDoc, form: SourceForm): FormDoc {
   };
 }
 
-function uniqueRef(title: string, taken: Set<string>): string {
+export function uniqueRef(title: string, taken: Set<string>): string {
   const base =
     title
       .toLowerCase()

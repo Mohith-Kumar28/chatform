@@ -9226,6 +9226,434 @@
         ]
       }
     },
+    "/api/import/preview": {
+      "post": {
+        "operationId": "postApiImportPreview",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "minLength": 4,
+                    "maxLength": 2000
+                  },
+                  "deviceSignal": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "url"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Convert a public Typeform, Google Form or Tally form into a live trial form",
+        "description": "Public. Reads the form behind the link, converts it, and publishes it in a trial account for 24 hours so the visitor can talk to it. Returns a token that `POST /api/import/claim` exchanges for a copy in the visitor's own workspace once they sign in. Signed-out visitors get three conversions a day.",
+        "responses": {
+          "200": {
+            "description": "The trial form and what was copied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "report": {
+                      "type": "object",
+                      "properties": {
+                        "provider": {
+                          "type": "string",
+                          "enum": [
+                            "typeform",
+                            "google_forms",
+                            "tally"
+                          ]
+                        },
+                        "sourceUrl": {
+                          "type": "string"
+                        },
+                        "questions": {
+                          "type": "number"
+                        },
+                        "branches": {
+                          "type": "number"
+                        },
+                        "endings": {
+                          "type": "number"
+                        },
+                        "notCopied": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "closed": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "sourceUrl",
+                        "questions",
+                        "branches",
+                        "endings",
+                        "notCopied",
+                        "closed"
+                      ]
+                    },
+                    "remaining": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "token",
+                    "slug",
+                    "report",
+                    "remaining"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The link cannot be imported, with the reason",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "remaining": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Today's free conversions are used up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "remaining": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/import/claim": {
+      "post": {
+        "operationId": "postApiImportClaim",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 100
+                  },
+                  "workspaceId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "token"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Copy an imported trial form into your workspace",
+        "responses": {
+          "200": {
+            "description": "The new form in your workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "formId": {
+                      "type": "string"
+                    },
+                    "report": {
+                      "type": "object",
+                      "properties": {
+                        "provider": {
+                          "type": "string",
+                          "enum": [
+                            "typeform",
+                            "google_forms",
+                            "tally"
+                          ]
+                        },
+                        "sourceUrl": {
+                          "type": "string"
+                        },
+                        "questions": {
+                          "type": "number"
+                        },
+                        "branches": {
+                          "type": "number"
+                        },
+                        "endings": {
+                          "type": "number"
+                        },
+                        "notCopied": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "closed": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "sourceUrl",
+                        "questions",
+                        "branches",
+                        "endings",
+                        "notCopied",
+                        "closed"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "formId",
+                    "report"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such trial, or it expired"
+          },
+          "409": {
+            "description": "Someone else already claimed it"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/import/forms": {
+      "post": {
+        "operationId": "postApiImportForms",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "minLength": 4,
+                    "maxLength": 2000
+                  },
+                  "workspaceId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "url"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Import a Typeform, Google Form or Tally form into a workspace",
+        "responses": {
+          "200": {
+            "description": "The new form and what was copied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "formId": {
+                      "type": "string"
+                    },
+                    "report": {
+                      "type": "object",
+                      "properties": {
+                        "provider": {
+                          "type": "string",
+                          "enum": [
+                            "typeform",
+                            "google_forms",
+                            "tally"
+                          ]
+                        },
+                        "sourceUrl": {
+                          "type": "string"
+                        },
+                        "questions": {
+                          "type": "number"
+                        },
+                        "branches": {
+                          "type": "number"
+                        },
+                        "endings": {
+                          "type": "number"
+                        },
+                        "notCopied": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "closed": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "sourceUrl",
+                        "questions",
+                        "branches",
+                        "endings",
+                        "notCopied",
+                        "closed"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "formId",
+                    "report"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The link cannot be imported, with the reason",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "remaining": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "getHealth",
@@ -24778,6 +25206,230 @@
           }
         },
         "x-required-scope": "ai:generate",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/import": {
+      "post": {
+        "operationId": "postV1Import",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "minLength": 4,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "url"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Convert a public Typeform, Google Form or Tally form into a form document",
+        "description": "Reads the form behind a public link and converts its questions, options, required fields, endings and jumps. Returns the document **without saving it**, plus a report of anything that could not be copied (payments, scores, rules that test a different question). Post the document to `POST /v1/forms` to keep it. The source form must open without signing in.",
+        "responses": {
+          "200": {
+            "description": "The converted document and its report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "doc": {},
+                    "report": {
+                      "type": "object",
+                      "properties": {
+                        "provider": {
+                          "type": "string",
+                          "enum": [
+                            "typeform",
+                            "google_forms",
+                            "tally"
+                          ]
+                        },
+                        "sourceUrl": {
+                          "type": "string"
+                        },
+                        "questions": {
+                          "type": "number"
+                        },
+                        "branches": {
+                          "type": "number"
+                        },
+                        "endings": {
+                          "type": "number"
+                        },
+                        "notCopied": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "closed": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "sourceUrl",
+                        "questions",
+                        "branches",
+                        "endings",
+                        "notCopied",
+                        "closed"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "doc",
+                    "report"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key lacks the form:write scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The link cannot be imported; `error.code` says why",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "form:write",
         "security": [
           {
             "secretKey": []

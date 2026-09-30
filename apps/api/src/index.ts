@@ -9,6 +9,7 @@ import {
   sweepWebhookDeliveries,
   type WebhookMessage,
 } from "./lib/webhooks.js";
+import { expireImportTrials } from "./routes/import.js";
 import { pruneOtpChallenges } from "./lib/respondent-auth.js";
 import { pruneGateLog } from "./lib/gate-log.js";
 import { pruneFormActivity } from "./lib/form-activity.js";
@@ -212,6 +213,8 @@ export default {
       // Unconverted gate denials are only interesting while they are recent; a converted
       // row is kept forever because it is the attribution for a sale.
       await pruneGateLog(env).catch((err) => console.error("gate_log_prune_failed", err));
+      // Imported trial forms nobody claimed within a day, and spent daily import counters.
+      await expireImportTrials(env).catch((err) => console.error("import_trial_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
       /**
        * The knowledge base's housekeeping.
        *

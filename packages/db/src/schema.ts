@@ -1993,3 +1993,40 @@ export const pollTallies = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.formId, t.blockRef, t.optionId] })],
 );
+
+/**
+ * A form imported by someone who has not signed in yet, waiting to be claimed.
+ *
+ * The form itself lives, published, in the system `org_import_trials`
+ * organization so the chat runtime can serve it unchanged; this row is the
+ * ticket the visitor carries into sign-up. See `routes/import.ts` and
+ * migration 0052. Hashes only: never a raw fingerprint or address.
+ */
+export const importTrials = sqliteTable(
+  "import_trials",
+  {
+    token: text("token").primaryKey(),
+    formId: text("form_id").notNull(),
+    provider: text("provider").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    reportJson: text("report_json").notNull(),
+    deviceHash: text("device_hash"),
+    ipHash: text("ip_hash"),
+    claimedBy: text("claimed_by"),
+    claimedFormId: text("claimed_form_id"),
+    createdAt: ts("created_at").notNull(),
+    expiresAt: ts("expires_at").notNull(),
+  },
+  (t) => [index("idx_import_trials_expires").on(t.expiresAt)],
+);
+
+/** Free imports per signed-out visitor per UTC day; one row per hashed device or IP. */
+export const importQuota = sqliteTable(
+  "import_quota",
+  {
+    keyHash: text("key_hash").notNull(),
+    day: text("day").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.keyHash, t.day] })],
+);

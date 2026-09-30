@@ -32,6 +32,7 @@ import { paymentWebhooksRouter } from "./routes/payment-webhooks.js";
 import { formPaymentsRouter } from "./routes/form-payments.js";
 import { previewRouter } from "./routes/preview.js";
 import { templatesRouter } from "./routes/templates.js";
+import { importRouter } from "./routes/import.js";
 import { auditRouter } from "./routes/audit.js";
 import { formHistoryRouter } from "./routes/form-history.js";
 import { adminRouter } from "./routes/admin/index.js";
@@ -343,6 +344,14 @@ export function createApp() {
    * costs the other routers nothing.
    */
   app.route("/api", adminRouter);
+
+  /**
+   * Importing a form, mounted ahead of the session-guarded routers for the
+   * reason the console is: their `use("*", requireSession)` would answer the
+   * public converter (`/api/import/preview`) with a 401 before it ran. Its own
+   * session guards are scoped to its own paths.
+   */
+  app.route("/api", importRouter);
 
   app.route("/health", healthRouter);
   publicRouter.route("/", uploadsRouter);

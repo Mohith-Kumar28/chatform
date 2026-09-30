@@ -2242,6 +2242,138 @@ export type DeleteApiAdminCampaignsById200 = {
   ok: boolean;
 };
 
+export type PostApiImportPreviewBody = {
+  /**
+     * @minLength 4
+     * @maxLength 2000
+     */
+  url: string;
+  /** @maxLength 200 */
+  deviceSignal?: string;
+};
+
+export type PostApiImportPreview200ReportProvider = typeof PostApiImportPreview200ReportProvider[keyof typeof PostApiImportPreview200ReportProvider];
+
+
+export const PostApiImportPreview200ReportProvider = {
+  typeform: 'typeform',
+  google_forms: 'google_forms',
+  tally: 'tally',
+} as const;
+
+export type PostApiImportPreview200Report = {
+  provider: PostApiImportPreview200ReportProvider;
+  sourceUrl: string;
+  questions: number;
+  branches: number;
+  endings: number;
+  notCopied: string[];
+  closed: boolean;
+};
+
+export type PostApiImportPreview200 = {
+  token: string;
+  slug: string;
+  report: PostApiImportPreview200Report;
+  remaining: number | null;
+};
+
+export type PostApiImportPreview422Error = {
+  code: string;
+  message: string;
+  remaining?: number;
+};
+
+export type PostApiImportPreview422 = {
+  error: PostApiImportPreview422Error;
+};
+
+export type PostApiImportPreview429Error = {
+  code: string;
+  message: string;
+  remaining?: number;
+};
+
+export type PostApiImportPreview429 = {
+  error: PostApiImportPreview429Error;
+};
+
+export type PostApiImportClaimBody = {
+  /**
+     * @minLength 8
+     * @maxLength 100
+     */
+  token: string;
+  workspaceId?: string;
+};
+
+export type PostApiImportClaim200ReportProvider = typeof PostApiImportClaim200ReportProvider[keyof typeof PostApiImportClaim200ReportProvider];
+
+
+export const PostApiImportClaim200ReportProvider = {
+  typeform: 'typeform',
+  google_forms: 'google_forms',
+  tally: 'tally',
+} as const;
+
+export type PostApiImportClaim200Report = {
+  provider: PostApiImportClaim200ReportProvider;
+  sourceUrl: string;
+  questions: number;
+  branches: number;
+  endings: number;
+  notCopied: string[];
+  closed: boolean;
+};
+
+export type PostApiImportClaim200 = {
+  formId: string;
+  report: PostApiImportClaim200Report;
+};
+
+export type PostApiImportFormsBody = {
+  /**
+     * @minLength 4
+     * @maxLength 2000
+     */
+  url: string;
+  workspaceId?: string;
+};
+
+export type PostApiImportForms200ReportProvider = typeof PostApiImportForms200ReportProvider[keyof typeof PostApiImportForms200ReportProvider];
+
+
+export const PostApiImportForms200ReportProvider = {
+  typeform: 'typeform',
+  google_forms: 'google_forms',
+  tally: 'tally',
+} as const;
+
+export type PostApiImportForms200Report = {
+  provider: PostApiImportForms200ReportProvider;
+  sourceUrl: string;
+  questions: number;
+  branches: number;
+  endings: number;
+  notCopied: string[];
+  closed: boolean;
+};
+
+export type PostApiImportForms200 = {
+  formId: string;
+  report: PostApiImportForms200Report;
+};
+
+export type PostApiImportForms422Error = {
+  code: string;
+  message: string;
+  remaining?: number;
+};
+
+export type PostApiImportForms422 = {
+  error: PostApiImportForms422Error;
+};
+
 export type GetHealth200 = {
   ok: boolean;
   env: string;
@@ -6131,6 +6263,79 @@ export type PostV1AiClarifyForm403Error = {
 
 export type PostV1AiClarifyForm403 = {
   error: PostV1AiClarifyForm403Error;
+};
+
+export type PostV1ImportBody = {
+  /**
+     * @minLength 4
+     * @maxLength 2000
+     */
+  url: string;
+};
+
+export type PostV1Import200ReportProvider = typeof PostV1Import200ReportProvider[keyof typeof PostV1Import200ReportProvider];
+
+
+export const PostV1Import200ReportProvider = {
+  typeform: 'typeform',
+  google_forms: 'google_forms',
+  tally: 'tally',
+} as const;
+
+export type PostV1Import200Report = {
+  provider: PostV1Import200ReportProvider;
+  sourceUrl: string;
+  questions: number;
+  branches: number;
+  endings: number;
+  notCopied: string[];
+  closed: boolean;
+};
+
+export type PostV1Import200 = {
+  doc: unknown;
+  report: PostV1Import200Report;
+  [key: string]: unknown;
+};
+
+export type PostV1Import403ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1Import403Error = {
+  code: string;
+  message: string;
+  issues?: PostV1Import403ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1Import403 = {
+  error: PostV1Import403Error;
+};
+
+export type PostV1Import422ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostV1Import422Error = {
+  code: string;
+  message: string;
+  issues?: PostV1Import422ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostV1Import422 = {
+  error: PostV1Import422Error;
 };
 
 export type GetV1FormsByIdIntegrations200DataItem = {

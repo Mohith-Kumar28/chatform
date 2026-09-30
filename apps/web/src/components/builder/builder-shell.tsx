@@ -31,6 +31,7 @@ import { firstBlockingIssue } from "./attention";
 import { ShortcutsDialog } from "@/components/ui/shortcuts-dialog";
 import { FeedbackLauncher } from "@/components/feedback/feedback-launcher";
 import { useBuilderShortcuts } from "./use-builder-shortcuts";
+import { ImportNotice } from "@/components/import/import-notice";
 
 /**
  * Owns everything shared by the builder tabs: document loading, store
@@ -342,6 +343,7 @@ export function BuilderShell({
         {/* The builder is the product too: acting as a customer here must say
             so as loudly as it does on the dashboard. */}
         <ImpersonationBanner />
+        <ImportNotice formId={formId} />
         {/* No chrome over a form that could not be opened: a skeleton header
             above "we couldn't open this form" reads as a page still arriving,
             which is the thing the message exists to stop saying. */}

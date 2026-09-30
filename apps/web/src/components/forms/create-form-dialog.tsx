@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Mic, Plus, Search, Sparkles, Square } from "lucide-react";
+import { ArrowRight, FileInput, Mic, Plus, Search, Sparkles, Square } from "lucide-react";
 import { toast } from "sonner";
 import { useDictation } from "@/hooks/use-dictation";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,8 @@ import {
   type StagedItem,
 } from "@/components/knowledge/staged-knowledge";
 import { useEntitlements } from "@/hooks/use-entitlements";
+import { ImportPanel } from "@/components/import/import-panel";
+import { detectImportSource, handOffReport, SOURCE_NAME } from "@/components/import/import-client";
 
 /**
  * Every way into a new form, on one screen — but not three equal ways.
@@ -137,6 +139,13 @@ export function CreateFormDialog({
    * screen is the exception rather than a step everybody walks through.
    */
   const [clarify, setClarify] = useState<{ prompt: string; questions: ClarifyQuestion[] } | null>(null);
+  /**
+   * Importing from another builder: its own screen, like the clarify step,
+   * because once chosen it is the whole decision. `autoStart` when it was
+   * opened from a link pasted into the describe box, which has already said
+   * which form.
+   */
+  const [importing, setImporting] = useState<{ url: string; autoStart: boolean } | null>(null);
   const [asking, setAsking] = useState(false);
   /** Kept so a retry after a failed draft does not ask the same questions twice. */
   const lastAnswers = useRef<ClarifyAnswer[]>([]);
@@ -229,6 +238,7 @@ export function CreateFormDialog({
       generation.cancel();
       generation.reset();
       setClarify(null);
+      setImporting(null);
       setAsking(false);
       setSearch("");
       setCategory("all");
@@ -242,7 +252,7 @@ export function CreateFormDialog({
       <DialogContent size="3xl" layout="panel" className="gap-0">
         <DialogHeader className="border-border shrink-0 border-b px-6 py-4 text-left">
           <DialogTitle className="font-display text-xl">
-            {drafting ? "Building your form" : clarify ? "Just checking" : "Create a form"}
+            {drafting ? "Building your form" : clarify ? "Just checking" : importing ? "Import a form" : "Create a form"}
           </DialogTitle>
           {/* Idle, the screen explains itself — a box, a blank row, a
               gallery. The description stays for screen readers only. */}
@@ -256,7 +266,22 @@ export function CreateFormDialog({
         </DialogHeader>
 
         <DialogBody className="px-6 py-5">
-          {clarify ? (
+          {importing ? (
+            <ImportPanel
+              initialUrl={importing.url}
+              autoStart={importing.autoStart}
+              workspaceId={ws}
+              onBack={() => setImporting(null)}
+              onImported={(formId, report) => {
+                handOffReport(formId, report);
+                void invalidateForms(queryClient);
+                setPrompt("");
+                setImporting(null);
+                onOpenChange(false);
+                router.push(`/forms/${formId}/build`);
+              }}
+            />
+          ) : clarify ? (
             /**
              * The alternatives are gone rather than greyed out.
              *
@@ -297,6 +322,7 @@ export function CreateFormDialog({
                 setPrompt={setPrompt}
                 canGenerate={canGenerate}
                 onGenerate={generate}
+                onImportLink={(url) => setImporting({ url, autoStart: true })}
               />
 
               <PromptTips onOpenKnowledge={() => setKnowledgeOpen(true)} />
@@ -307,7 +333,7 @@ export function CreateFormDialog({
                   the builder is better at collecting, on the screen you are
                   trying to leave. It lands as "Untitled form" and gets its
                   real name in the builder's title field. */}
-              <div className="mt-5">
+              <div className="mt-5 flex flex-wrap gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -319,6 +345,18 @@ export function CreateFormDialog({
                 >
                   <Plus className="size-4" strokeWidth={1.75} />
                   {createBlank.isPending ? "Creating…" : "Start blank"}
+                </Button>
+                {/* The third way in, at the weight of the second: a form that
+                    already exists elsewhere is a starting point, like blank. */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  shape="pill"
+                  disabled={busy}
+                  onClick={() => setImporting({ url: "", autoStart: false })}
+                >
+                  <FileInput className="size-4" strokeWidth={1.75} />
+                  Import from Typeform, Google Forms or Tally
                 </Button>
               </div>
 
@@ -394,7 +432,7 @@ export function CreateFormDialog({
             gallery is: "what do you want to make" has been answered, and an
             offer to go and browse instead belongs to the screen where it was
             still an open question. */}
-        {!drafting && !clarify && (
+        {!drafting && !clarify && !importing && (
           <div className="border-border text-muted-foreground flex shrink-0 items-center justify-end gap-3 border-t px-6 py-3 text-xs">
             <Link
               href="/templates"
@@ -427,6 +465,7 @@ function AiPanel({
   onGenerate,
   knowledgeCount,
   onOpenKnowledge,
+  onImportLink,
 }: {
   prompt: string;
   setPrompt: (v: string) => void;
@@ -434,8 +473,11 @@ function AiPanel({
   onGenerate: () => void;
   knowledgeCount: number;
   onOpenKnowledge: () => void;
+  /** A form link on its own in the box: offer the exact import instead of an AI redraft. */
+  onImportLink: (url: string) => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const linked = detectImportSource(prompt);
 
   // Describing a form is a few sentences, which is easier said than typed.
   // Words land in the box to be read back, not straight off to the generator.
@@ -546,6 +588,17 @@ function AiPanel({
           </Button>
         </div>
       </div>
+
+      {/* Generating from a link rewrites the form in the AI's words; importing
+          copies it. Someone who pasted only a link almost always wants the copy. */}
+      {linked && (
+        <div className="border-border flex flex-wrap items-center gap-2 border-t px-4 py-2.5 text-sm">
+          <span className="text-muted-foreground">That&rsquo;s a {SOURCE_NAME[linked]} link.</span>
+          <Button variant="link" size="sm" className="h-auto p-0" onClick={() => onImportLink(prompt.trim())}>
+            Import it exactly
+          </Button>
+        </div>
+      )}
     </section>
   );
 }
