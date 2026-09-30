@@ -33,6 +33,15 @@ const HEAD = 132;
 const FOOT = 110;
 /** Pixels per CSS pixel. 2.5 keeps 10px node labels sharp when zoomed. */
 const SCALE = 2.5;
+/**
+ * The widest a page picture may be: A4 at 300 DPI, 2480 by 3508.
+ *
+ * A wide flow at the full scale made pages of 37 megapixels (150 MB once
+ * decoded), which phone viewers and Preview drew blank or half-drawn, and
+ * Safari refuses to capture a canvas past 16.7 megapixels at all. Narrow
+ * flows are under this already and keep the full scale.
+ */
+const MAX_PAGE_PX = 2480;
 
 export const CANVAS_BG = "#fbfaf5";
 const DOT = "#c9c4bb";
@@ -62,6 +71,7 @@ export async function snapshotFlow(
   const pageHeight = canvasWidth * PAGE_ASPECT;
   const pageCount = Math.max(1, Math.ceil((HEAD + height + FOOT) / pageHeight));
   const canvasHeight = pageCount * pageHeight;
+  const scale = Math.min(SCALE, MAX_PAGE_PX / canvasWidth);
   const types = [...new Set(doc.blocks.map((b) => b.type))];
 
   const host = document.createElement("div");
@@ -140,12 +150,12 @@ export async function snapshotFlow(
       const drawing = await domToCanvas(sheet!, {
         width: canvasWidth,
         height: pageHeight,
-        scale: SCALE,
+        scale,
         // The same sheet each time, shifted up a page: consecutive slices meet exactly.
         style: { transform: `translateY(${-i * pageHeight}px)` },
         timeout: 8000,
       });
-      pages.push(onDots(drawing, i * pageHeight).toDataURL("image/png"));
+      pages.push(onDots(drawing, i * pageHeight, scale).toDataURL("image/png"));
     }
     return { pages, icons };
   } finally {
@@ -163,7 +173,7 @@ export async function snapshotFlow(
  * The grid is anchored to the sheet, not the slice, so it runs on unbroken
  * across a page cut.
  */
-function onDots(drawing: HTMLCanvasElement, sheetTop: number): HTMLCanvasElement {
+function onDots(drawing: HTMLCanvasElement, sheetTop: number, scale: number): HTMLCanvasElement {
   const out = document.createElement("canvas");
   out.width = drawing.width;
   out.height = drawing.height;
@@ -173,10 +183,10 @@ function onDots(drawing: HTMLCanvasElement, sheetTop: number): HTMLCanvasElement
   ctx.fillStyle = DOT;
   // Dots sit at 9, 27, 45… down the sheet; find the first one inside this slice.
   const first = (((GRID / 2 - sheetTop) % GRID) + GRID) % GRID;
-  for (let y = first; y * SCALE < out.height; y += GRID) {
-    for (let x = GRID / 2; x * SCALE < out.width; x += GRID) {
+  for (let y = first; y * scale < out.height; y += GRID) {
+    for (let x = GRID / 2; x * scale < out.width; x += GRID) {
       ctx.beginPath();
-      ctx.arc(x * SCALE, y * SCALE, DOT_RADIUS * SCALE, 0, Math.PI * 2);
+      ctx.arc(x * scale, y * scale, DOT_RADIUS * scale, 0, Math.PI * 2);
       ctx.fill();
     }
   }
