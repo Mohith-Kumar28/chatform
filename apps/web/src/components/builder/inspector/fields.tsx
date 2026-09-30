@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Check, Plus, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -526,14 +526,15 @@ export function CheckboxGroup<T extends string>({
                 onChange(checked ? value.filter((v) => v !== o.value) : [...value, o.value])
               }
               className={cn(
-                "rounded-lg border px-2.5 py-2 text-left text-xs transition-colors",
+                "flex items-center justify-between gap-1.5 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors",
                 "duration-[var(--duration-micro)] ease-[var(--ease-out)]",
                 checked
                   ? "border-primary bg-primary-soft text-primary font-medium"
                   : "bg-muted/70 text-muted-foreground border-transparent hover:border-border",
               )}
             >
-              {o.label}
+              <span className="min-w-0 truncate">{o.label}</span>
+              {checked && <Check className="size-3.5 shrink-0" strokeWidth={2.25} />}
             </button>
           );
         })}

@@ -63,7 +63,7 @@ export function UserMenu() {
   const name = session.user.name || email;
   const image = session.user.image;
   const initials = (name.match(/\b\w/g) ?? ["?"]).slice(0, 2).join("").toUpperCase();
-  const current = THEMES.find((t) => t.value === theme) ?? THEMES[2];
+  const current = THEMES.find((t) => t.value === theme) ?? THEMES[0];
 
   return (
     <DropdownMenu>

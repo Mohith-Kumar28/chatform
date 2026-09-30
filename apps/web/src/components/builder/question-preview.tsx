@@ -80,7 +80,7 @@ export function QuestionPreview({
 
   return (
     <div
-      className="chat-surface shadow-md flex max-h-full flex-col overflow-hidden rounded-2xl [&_[data-inspect]]:cursor-pointer"
+      className="chat-surface border border-border shadow-md flex max-h-full flex-col overflow-hidden rounded-2xl [&_[data-inspect]]:cursor-pointer"
       style={themeVars}
       // Nothing here is editable in place, and people click it expecting it to
       // be — so a click points them at the field that is. See `inspector-reveal`.

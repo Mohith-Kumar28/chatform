@@ -28,12 +28,12 @@ const OPTIONS = [
  */
 export function ThemeToggle({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme();
-  // The server cannot know the resolved theme, so show a stable icon until
-  // hydration rather than flashing the wrong one.
+  // The server cannot know a stored choice, so show the default's icon until
+  // hydration.
   const mounted = useHydrated();
 
-  const current = OPTIONS.find((o) => o.value === theme) ?? OPTIONS[2];
-  const Icon = mounted ? current.icon : Monitor;
+  const current = OPTIONS.find((o) => o.value === theme) ?? OPTIONS[0];
+  const Icon = mounted ? current.icon : Sun;
 
   return (
     <DropdownMenu>
@@ -41,7 +41,7 @@ export function ThemeToggle({ className }: { className?: string }) {
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={`Theme: ${mounted ? current.label : "system"}`}
+          aria-label={`Theme: ${mounted ? current.label : "light"}`}
           className={cn("rounded-full", className)}
         >
           <Icon className="size-4" strokeWidth={1.75} />

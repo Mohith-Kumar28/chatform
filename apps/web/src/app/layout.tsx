@@ -105,10 +105,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#faf7f2" },
-    { media: "(prefers-color-scheme: dark)", color: "#211f1d" },
-  ],
+  // The site opens in light regardless of the device, so the browser chrome
+  // does too.
+  themeColor: "#faf7f2",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
