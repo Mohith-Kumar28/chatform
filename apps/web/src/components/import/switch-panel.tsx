@@ -44,7 +44,13 @@ export function SwitchPanel({
             {page.band.accent}
           </span>
         </Heading>
-        <p className="text-muted-foreground mt-4 max-w-xl text-[0.95rem] leading-relaxed text-pretty">{page.band.body}</p>
+        {/* Every builder's body is written to two lines at this width, and the
+            floor holds them there, so switching tabs moves nothing below it.
+            Foreground at a step down, not the muted grey, which went ashen on
+            the tinted ground. */}
+        <p className="text-foreground/75 mt-4 max-w-xl text-[0.95rem] leading-relaxed text-pretty sm:min-h-[3.25em]">
+          {page.band.body}
+        </p>
         <ConvertField source={page.source} onDetect={onDetect} className="mt-7 max-w-xl" />
         <Link
           href={page.band.compare}

@@ -65,7 +65,9 @@ export function SwitchBand() {
       </div>
 
       <div id="switch-panel" role="tabpanel" aria-label={`${page.name} to chatform`} className="mt-4">
-        <SwitchPanel key={page.source} page={page} onDetect={setActive} />
+        {/* No `key`: pasting a Google Forms link under the Typeform tab moves the
+            tab, and a remount there would wipe the link that moved it. */}
+        <SwitchPanel page={page} onDetect={setActive} />
       </div>
     </Band>
   );

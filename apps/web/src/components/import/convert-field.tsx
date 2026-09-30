@@ -85,7 +85,7 @@ export function ConvertField({
 
       <p
         role={error ? "alert" : undefined}
-        className={cn("mt-3 min-h-5 px-2 text-sm", error ? "text-destructive" : "text-muted-foreground")}
+        className={cn("mt-3 min-h-5 px-2 text-sm", error ? "text-destructive" : "text-foreground/60")}
       >
         {error ? (
           <>
