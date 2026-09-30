@@ -6,11 +6,14 @@ const SURFACE: Record<"bot" | "user", CSSProperties> = {
     background: "var(--cf-bot-bubble)",
     color: "var(--cf-bot-bubble-text)",
     borderColor: "var(--cf-bot-bubble-border)",
+    // A theme's own shadow (tweakcn's hard offsets, say); none unless it sets one.
+    boxShadow: "var(--cf-bubble-shadow, none)",
   },
   user: {
     background: "var(--cf-user-bubble)",
     color: "var(--cf-user-bubble-text)",
     borderColor: "transparent",
+    boxShadow: "var(--cf-bubble-shadow, none)",
   },
 };
 

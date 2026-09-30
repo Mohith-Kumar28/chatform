@@ -1,17 +1,4 @@
-import {
-  buildFlowRules,
-  FormDoc,
-  hasErrors,
-  lintFormDoc,
-  SettingsDoc,
-  ThemeDoc,
-  BACKGROUND_PRESETS,
-  applyBackgroundPreset,
-  type BlockInput,
-  type ConditionOp,
-  type DraftBranch,
-  type LogicRuleInput,
-} from "@repo/form-schema";
+import { buildFlowRules, FormDoc, hasErrors, lintFormDoc, SettingsDoc, ThemeDoc, type BlockInput, type ConditionOp, type DraftBranch, type LogicRuleInput, applyFormTheme, FORM_THEMES } from "@repo/form-schema";
 
 /** The variable a scored template totals into. */
 const SCORE_VARIABLE = "score";
@@ -663,33 +650,43 @@ function factsOf(input: TemplateInput, doc: FormDoc): TemplateFacts {
 }
 
 /**
- * The background a template ships with: one of the builder's colourful presets
- * (the quiet greys and the near-black ones are left for authors to choose), picked
- * from the slug so it never changes between runs. Real, selectable looks, so
- * the card in the gallery, the live try on its page and the form somebody
- * copies all show the same colours and pattern, and the author can switch it
- * in the builder like any other.
+ * The theme a template ships with: one of the colourful tweakcn themes (the
+ * greyscale and near-black ones are left for authors to choose), picked from
+ * the slug so it never changes between runs, with the background shapes on.
+ * Real, selectable themes, so the card in the gallery, the live try on its
+ * page and the form somebody copies all look the same, and the author can
+ * switch it in the builder like any other.
  */
-const TEMPLATE_PRESETS = [
-  "peach-linen",
-  "lilac-haze",
-  "mint-fresh",
-  "sky-breeze",
-  "butter-cream",
-  "rose-petal",
-  "sand-dune",
-  "sage-garden",
-  "party-confetti",
-  "teal-lagoon",
+const TEMPLATE_THEMES = [
+  "violet-bloom",
+  "mocha-mousse",
+  "bubblegum",
+  "amethyst-haze",
+  "catppuccin",
+  "kodama-grove",
+  "cosmic-night",
   "tangerine",
-  "violet-pop",
-  "deep-navy",
-].filter((id) => BACKGROUND_PRESETS.some((p) => p.id === id));
+  "quantum-rose",
+  "nature",
+  "elegant-luxury",
+  "solar-dusk",
+  "claymorphism",
+  "pastel-dreams",
+  "ocean-breeze",
+  "retro-arcade",
+  "candyland",
+  "northern-lights",
+  "vintage-paper",
+  "sunset-horizon",
+  "starry-night",
+  "soft-pop",
+  "sage-garden",
+].filter((id) => FORM_THEMES.some((t) => t.id === id));
 
 export function templatePreset(slug: string): string {
   let h = 2166136261;
   for (let i = 0; i < slug.length; i++) h = Math.imul(h ^ slug.charCodeAt(i), 16777619);
-  return TEMPLATE_PRESETS[(h >>> 0) % TEMPLATE_PRESETS.length]!;
+  return TEMPLATE_THEMES[(h >>> 0) % TEMPLATE_THEMES.length]!;
 }
 
 export function defineTemplate(input: TemplateInput): TemplateSeed {
@@ -697,7 +694,7 @@ export function defineTemplate(input: TemplateInput): TemplateSeed {
   const preset = templatePreset(input.slug);
   const { doc, blockCount, estMinutes } = buildAuthoredDoc({
     ...input,
-    theme: input.theme ?? applyBackgroundPreset(ThemeDoc.parse({}), preset),
+    theme: input.theme ?? templateTheme(preset),
   });
   return {
     slug: input.slug,
@@ -719,4 +716,9 @@ export function defineTemplate(input: TemplateInput): TemplateSeed {
     facts: factsOf(input, doc),
     doc,
   };
+}
+
+/** A template's theme: the tweakcn theme with the background shapes on. */
+export function templateTheme(id: string) {
+  return applyFormTheme(ThemeDoc.parse({ backgroundPattern: "auto", backgroundShape: "auto" }), id);
 }

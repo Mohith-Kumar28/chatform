@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { RATING_RAMP } from "./rating-ramp";
-import { contrast, isDarkColor, readableInk, shiftColor, THEME_DEFAULT_INK, type ThemeDoc } from "@repo/form-schema";
+import { contrast, cssColorToHex, isDarkColor, readableInk, shiftColor, THEME_DEFAULT_INK, themeTokenVars, type ThemeDoc, type ThemeStyles } from "@repo/form-schema";
 
 // Moved to the shared package (the API derives palettes too); re-exported for existing imports.
 export { contrast, isDarkColor, readableInk };
@@ -11,6 +11,7 @@ import {
   patternWeight,
   resolvePattern,
   rgbaFromHex,
+  resolveShape,
   shapeLayer,
 } from "@/lib/background-patterns";
 import { fontStack } from "@/lib/theme-fonts";
@@ -261,7 +262,9 @@ export function chatThemeVars(themeIn: ThemeDoc, seed?: string | null): CSSPrope
       (darkSurface ? RATING_RAMP.dark : RATING_RAMP.light).map((c, i) => [`--cf-rating-${i + 1}`, c]),
     ),
     "--cf-chip-bg": theme.surface,
-    "--cf-chip-border": shiftColor(theme.text, 0.82, darkSurface ? "dark" : "light"),
+    // Nearer the text on a dark page: 82% of the way to black left a 44/255
+    // outline on a 26/255 answer box, which is no outline at all.
+    "--cf-chip-border": shiftColor(theme.text, darkSurface ? 0.68 : 0.82, darkSurface ? "dark" : "light"),
     /*
      * A fill for a panel that holds other controls — one entry of a repeating
      * group, say. It cannot be the surface, because the inputs inside it are
@@ -287,7 +290,7 @@ export function chatThemeVars(themeIn: ThemeDoc, seed?: string | null): CSSPrope
      * sees. `none` is a valid `background-image`, which is what lets the
      * seedless case fall through to a flat fill with no branch in the CSS.
      */
-    ...backgroundLayers(theme, tile),
+    ...backgroundLayers(theme, tile, seed),
     /*
      * Stacks rather than bare names: quoted, pointed at the bundled `next/font`
      * faces where the theme names one of those, and falling back by the
@@ -296,17 +299,94 @@ export function chatThemeVars(themeIn: ThemeDoc, seed?: string | null): CSSPrope
      */
     fontFamily: fontStack(theme.fontBody),
     "--cf-font-heading": fontStack(theme.fontHeading, theme.fontBody),
+    ...tweakcnVars(themeIn),
   } as CSSProperties;
+}
+
+/**
+ * A tweakcn theme, applied the way tweakcn applies it (`applyThemeToElement`):
+ * every token as a CSS variable on the form, so the chat and any shadcn
+ * component inside it restyle together, light or dark. The chat's own
+ * variables are then pointed at those tokens: the page is `--background`,
+ * a bubble is `--card` with `--border`, the answer and buttons are `--primary`,
+ * a placeholder is `--muted-foreground`.
+ *
+ * The side is whichever the form's colours are on (`resolveScheme` has already
+ * set them). Fonts are the form's own (a theme sets them when picked), and
+ * corners follow the theme until the author changes Corners.
+ */
+function tweakcnVars(theme: ThemeDoc): Record<string, string> {
+  const styles = theme.styles as ThemeStyles | undefined;
+  if (!styles) return {};
+  const dark = cssColorToHex(styles.dark.background) === theme.background.toLowerCase() && isDarkColor(theme.background);
+  const vars = themeTokenVars(styles, dark ? "dark" : "light");
+  /*
+   * tweakcn's colours, exactly, except where text on its fill would not read:
+   * a few themes put white on a pale or neon primary (Pastel Dreams, Cyberpunk).
+   * Those pairs get the readable ink for their fill, and nothing else moves.
+   */
+  for (const [fill, ink] of [
+    ["--primary", "--primary-foreground"],
+    ["--card", "--card-foreground"],
+    ["--background", "--foreground"],
+    ["--secondary", "--secondary-foreground"],
+    ["--muted", "--muted-foreground"],
+  ] as const) {
+    const f = cssColorToHex(vars[fill] ?? "");
+    const i = cssColorToHex(vars[ink] ?? "");
+    const need = ink === "--muted-foreground" ? 3 : AA_BODY;
+    if (f && i && contrast(f, i) < need) vars[ink] = readableInk(f);
+  }
+  const ownRadius = RADIUS_STEP(styles.light.radius) === theme.radius;
+  return {
+    ...vars,
+    // The theme's family through `fontStack`, which points Inter and Bricolage
+    // at the bundled faces; tweakcn's bare "Inter" names a font never loaded.
+    "--font-sans": fontStack(theme.fontBody),
+    ...(ownRadius ? {} : { "--radius": CARD_RADIUS[theme.radius] }),
+    "--cf-bg": "var(--background)",
+    "--cf-surface": "var(--card)",
+    "--cf-text": "var(--foreground)",
+    "--cf-muted": "var(--muted-foreground)",
+    "--cf-accent": "var(--primary)",
+    "--cf-accent-text": "var(--primary-foreground)",
+    "--cf-bot-bubble": "var(--card)",
+    "--cf-bot-bubble-text": "var(--card-foreground)",
+    "--cf-bot-bubble-border": "var(--border)",
+    "--cf-user-bubble": "var(--primary)",
+    "--cf-user-bubble-text": "var(--primary-foreground)",
+    "--cf-composer-bg": "var(--card)",
+    "--cf-chip-bg": "var(--card)",
+    "--cf-chip-border": "var(--border)",
+    "--cf-sunken": "var(--muted)",
+    "--cf-bubble-shadow": "var(--shadow-sm)",
+    // tweakcn's scale: controls at the radius, cards a step rounder, bubbles two.
+    "--cf-radius-control": "var(--radius)",
+    "--cf-radius-card": "calc(var(--radius) + 4px)",
+    "--cf-radius": "calc(var(--radius) * 1.6)",
+    letterSpacing: "var(--letter-spacing)",
+  };
+}
+
+/** tweakcn's radius as the nearest Corners step, the same rule `applyFormTheme` uses. */
+function RADIUS_STEP(radius: string): ThemeDoc["radius"] {
+  const n = parseFloat(radius);
+  const rem = Number.isNaN(n) ? 0.5 : radius.trim().endsWith("px") ? n / 16 : n;
+  if (rem <= 0.05) return "none";
+  if (rem < 0.4) return "sm";
+  if (rem < 0.7) return "md";
+  if (rem < 1.2) return "lg";
+  return "full";
 }
 
 /**
  * The background as layers `.chat-surface` paints: the shape on top, then the
  * tile. With no shape it is the tile alone, exactly as before the shape existed.
  */
-function backgroundLayers(theme: ThemeDoc, tile: PatternDef | undefined | null): Record<string, string> {
+function backgroundLayers(theme: ThemeDoc, tile: PatternDef | undefined | null, seed?: string | null): Record<string, string> {
   const tileImage = tile ? patternImage(tile, patternInk(theme, tile)) : "none";
   const tileSize = tile ? patternSize(tile) : "auto";
-  const shape = shapeLayer(theme.backgroundShape, shapeInk(theme));
+  const shape = shapeLayer(resolveShape(theme.backgroundShape, seed), shapeInk(theme));
   if (!shape) return { "--cf-pattern": tileImage, "--cf-pattern-size": tileSize };
   return {
     "--cf-pattern": `${shape.image}, ${tileImage}`,

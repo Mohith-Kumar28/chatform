@@ -97,7 +97,7 @@ export function UrlInput({
         enterKeyHint="send"
         autoFocus={autoFocus}
         placeholder={placeholder}
-        className="min-w-0 flex-1 bg-transparent px-3 outline-none placeholder:opacity-50"
+        className="min-w-0 flex-1 bg-transparent px-3 outline-none placeholder:text-[var(--cf-placeholder)] placeholder:opacity-100"
       />
     </div>
   );

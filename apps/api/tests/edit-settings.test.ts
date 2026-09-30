@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolve } from "@repo/entitlements";
-import { BACKGROUND_PRESETS, FormDoc, applyBackgroundPreset, leadFormFixture } from "@repo/form-schema";
+import { FORM_THEMES, FormDoc, applyFormTheme, leadFormFixture } from "@repo/form-schema";
 import { z } from "zod";
 import { checkSettingsDraft, createSettingsPrompt, lockPaidBlockOptions, settingsDraftFields, settingsPrompt } from "../src/lib/edit-settings.js";
 import type { RequestRoute } from "../src/lib/settings-route.js";
@@ -41,14 +41,14 @@ describe("settingsPrompt", () => {
     expect(text).not.toContain("Form settings you can change");
   });
 
-  it("offers the background presets by id, with what each one is for", () => {
+  it("offers the themes by id, with what each one is for", () => {
     for (const { text, keys } of [settingsPrompt(base(), route(["design"]), free), createSettingsPrompt(free)]) {
       expect(keys).toContain("theme.backgroundPreset");
-      for (const p of BACKGROUND_PRESETS) expect(text).toContain(`${p.id} (${p.description})`);
+      for (const t of FORM_THEMES) expect(text).toContain(`${t.id} (${t.description})`);
     }
-    const checked = checkSettingsDraft(base(), { settings: [{ key: "theme.backgroundPreset", value: "deep-navy" }] }, free);
+    const checked = checkSettingsDraft(base(), { settings: [{ key: "theme.backgroundPreset", value: "cosmic-night" }] }, free);
     expect(checked.rejected).toEqual([]);
-    expect(checked.doc.theme).toEqual(applyBackgroundPreset(base().theme, "deep-navy"));
+    expect(checked.doc.theme).toEqual(applyFormTheme(base().theme, "cosmic-night"));
   });
 
   it("tells a free plan which question options are paid", () => {

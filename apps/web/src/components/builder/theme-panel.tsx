@@ -1,13 +1,13 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import { FormDoc, ThemeDoc, THEME_DEFAULT_INK } from "@repo/form-schema";
+import { FormDoc, ThemeDoc, THEME_DEFAULT_INK, withoutFormTheme } from "@repo/form-schema";
 import { Label } from "@/components/ui/label";
 import { InfoHint } from "@/components/ui/info-hint";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { BrandField } from "./brand-field";
-import { StyleField } from "./style-field";
+import { ThemeField } from "./theme-field";
 import { LockedControl } from "@/components/billing/gate";
 import { BufferedInput } from "@/components/ui/buffered-input";
 import { Switch } from "@/components/ui/switch";
@@ -103,7 +103,11 @@ export function ThemePanel({
   const setColor = (key: keyof Theme, value: string) => {
     const derived = key === "accent" && linked ? themeFromAccent(value, { dark: isDarkTheme(theme) }) : null;
     // The accent stays exactly what was picked; only the colours around it move.
-    patch(derived ? { ...derived, accent: value } : ({ [key]: value } as Partial<Theme>), `theme:${key}`);
+    // A colour picked by hand takes the form off its theme, whose tokens would paint over it.
+    onChange(
+      { ...withoutFormTheme(latest.current), ...(derived ? { ...derived, accent: value } : ({ [key]: value } as Partial<Theme>)) },
+      `theme:${key}`,
+    );
   };
 
   // Light, dark, or the respondent's own device: one rule, shared with the builder AI.
@@ -135,8 +139,8 @@ export function ThemePanel({
         </div>
       </Section>
 
-      <Section title="Style">
-        <StyleField theme={theme} seed={seed} onChange={(next) => onChange(next)} />
+      <Section title="Theme">
+        <ThemeField theme={theme} seed={seed} onChange={(next) => onChange(next)} />
       </Section>
 
       <Section title="Appearance">

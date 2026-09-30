@@ -2,12 +2,12 @@ import type { FormDoc } from "./form-doc";
 import { CLOSED_MESSAGE_DEFAULT, DEFAULT_CONFIRMATION_BODY, DEFAULT_CONFIRMATION_SUBJECT, THEME_COLOR_PATTERN } from "./settings";
 import { GOOGLE_FONTS } from "./google-fonts.generated";
 import { isDarkTheme, themeFromAccent, withAppearance } from "./palette";
-import { applyBackgroundPreset, BACKGROUND_PRESETS, matchBackgroundPreset } from "./background-presets";
+import { applyFormTheme, backgroundDecorOn, FORM_THEMES, matchFormTheme, themeFont, withoutFormTheme } from "./form-themes";
 import type { ThemeDoc } from "./settings";
 
 const GOOGLE_FONT_FAMILIES = GOOGLE_FONTS.map(([family]) => family);
 
-/** A setting with no field of its own: it writes a whole look (`applyBackgroundPreset`). */
+/** A setting with no field of its own: it writes a whole theme (`applyFormTheme`). */
 export const BACKGROUND_PRESET_KEY = "theme.backgroundPreset";
 
 /**
@@ -32,7 +32,7 @@ export const BACKGROUND_PRESET_KEY = "theme.backgroundPreset";
  */
 
 export const SETTING_SECTIONS = {
-  design: "How the form looks: its colours, fonts, corner roundness, and its style: a ready-made look (page, pattern and shape) for a mood",
+  design: "How the form looks: its theme (a ready-made look for a mood, with its own light and dark sides), colours, fonts, corner roundness and background shapes",
   display: "The progress indicator, whether optional questions can be skipped, and the Powered by chatform badge",
   agent_persona: "Who the AI interviewer is: its interview style, tone of voice, persona, name, and whether it rewords questions",
   agent_goal: "The interviewer's written goal and its description of what a good response contains, which steer how deep it probes",
@@ -166,6 +166,10 @@ function def(spec: Spec): SettingDef {
 const unlessDefault = (name: string, fallback: SettingValue) => (value: SettingValue) =>
   value === undefined || value === fallback ? null : name;
 
+/** Custom fonts, unless the font is the default or the one the form's theme sets (`themeFont`). */
+const unlessThemeFont = (fallback: string) => (value: SettingValue, doc: FormDoc) =>
+  value === undefined || value === fallback || value === themeFont(doc.theme) ? null : "custom_fonts";
+
 const authFeature = (method: SettingValue) =>
   method === "phone" ? "respondent_auth_phone" : method === "email" ? "respondent_auth_email" : "respondent_auth_google";
 
@@ -188,19 +192,33 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   def({
     key: BACKGROUND_PRESET_KEY,
     section: "design",
-    label: "Style",
-    where: `${DESIGN} → Style`,
+    label: "Theme",
+    where: `${DESIGN} → Theme`,
     format: "enum",
-    options: BACKGROUND_PRESETS.map((p) => ({ value: p.id, label: p.name })),
+    options: FORM_THEMES.map((t) => ({ value: t.id, label: t.name })),
     hint:
-      "a ready-made look that sets the page, text, bubbles, primary colour, pattern and background shape together. " +
-      "When the author asks for a look or feel rather than exact colours, pick the preset whose description fits the request and the form best; " +
-      "a colour set in the same edit is kept on top of it. " +
-      `The presets: ${BACKGROUND_PRESETS.map((p) => `${p.id} (${p.description})`).join("; ")}`,
-    // No field of its own: read off the colours it sets, and written as all of them.
-    get: (doc) => matchBackgroundPreset(doc.theme)?.id,
+      "a ready-made theme that sets the page, text, bubbles, buttons, borders, fonts, corners and shadows together, with its own light and dark sides. " +
+      "When the author asks for a look or feel rather than exact colours, pick the theme whose description fits the request and the form best; " +
+      "a colour set in the same edit replaces the theme with hand-picked colours. " +
+      `The themes: ${FORM_THEMES.map((t) => `${t.id} (${t.description})`).join("; ")}`,
+    // No field of its own: read off the theme the form is on, and written as all of it.
+    get: (doc) => matchFormTheme(doc.theme),
     set: (doc, value) => {
-      if (typeof value === "string") doc.theme = applyBackgroundPreset(doc.theme, value);
+      if (typeof value === "string") doc.theme = applyFormTheme(doc.theme, value);
+    },
+  }),
+  def({
+    key: "theme.backgroundDecor",
+    section: "design",
+    label: "Background shapes",
+    where: `${DESIGN} → Theme`,
+    format: "bool",
+    hint: "a soft pattern and one large shape behind the conversation, in the primary colour",
+    // Two fields as one switch: the tile and the shape, both picked from the form's link.
+    get: (doc) => backgroundDecorOn(doc.theme),
+    set: (doc, value) => {
+      doc.theme.backgroundPattern = value ? "auto" : "none";
+      doc.theme.backgroundShape = value ? "auto" : undefined;
     },
   }),
   def({
@@ -260,7 +278,7 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
     format: "font",
     hint: "a Google Fonts family name",
     feature: "custom_fonts",
-    gate: unlessDefault("custom_fonts", "Bricolage Grotesque"),
+    gate: unlessThemeFont("Bricolage Grotesque"),
   }),
   def({
     key: "theme.fontBody",
@@ -270,7 +288,7 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
     format: "font",
     hint: "a Google Fonts family name",
     feature: "custom_fonts",
-    gate: unlessDefault("custom_fonts", "Inter"),
+    gate: unlessThemeFont("Inter"),
   }),
 
   // display
@@ -942,6 +960,8 @@ export const PALETTE_KEYS = [
 export function deriveTheme(doc: FormDoc, changed: ReadonlySet<string>): void {
   // A preset is a finished palette: nothing around it is recomputed.
   if (changed.has(BACKGROUND_PRESET_KEY)) return;
+  // A colour named by hand replaces the theme: its tokens would paint over it.
+  if (PALETTE_KEYS.some((k) => changed.has(`theme.${k}`))) doc.theme = withoutFormTheme(doc.theme);
   if (changed.has("theme.colorScheme")) doc.theme = withAppearance(doc.theme, doc.theme.colorScheme);
   if (![...changed].some((k) => settingDef(k)?.derives === "palette")) return;
   const palette = themeFromAccent(doc.theme.accent, { dark: isDarkTheme(doc.theme) });

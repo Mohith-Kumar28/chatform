@@ -365,7 +365,7 @@ export function TextInput({
 }) {
   const growRef = useAutoGrow(multiline ? value : null);
   const shared = cn(
-    "w-full rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 py-3 text-[0.9375rem] outline-none transition-colors placeholder:opacity-50 focus:border-[var(--cf-accent)]",
+    "w-full rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 py-3 text-[0.9375rem] outline-none transition-colors placeholder:text-[var(--cf-placeholder)] placeholder:opacity-100 focus:border-[var(--cf-accent)]",
     // Room for the trailing control, so text never runs underneath it. Wider
     // exactly where `kbd-hint` draws the key beside the mic.
     trailing && "pr-12",

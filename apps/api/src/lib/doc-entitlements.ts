@@ -22,6 +22,7 @@ import {
   DEFAULT_CONFIRMATION_BODY,
   DEFAULT_CONFIRMATION_SUBJECT,
   PAYMENT_PROVIDER_LABELS,
+  themeFont,
   toMinorUnits,
   type FormDoc,
 } from "@repo/form-schema";
@@ -90,7 +91,10 @@ export function stripForPublish(input: FormDoc, ent: Entitlements): StripResult 
   }
   if (!can(ent, "custom_fonts")) {
     const defaults = { fontHeading: "Bricolage Grotesque", fontBody: "Inter" };
-    if (t.fontHeading !== defaults.fontHeading || t.fontBody !== defaults.fontBody) {
+    // A theme's own font comes with the theme on every plan (`themeFont`).
+    const own = themeFont(t);
+    const allowed = (v: string, fallback: string) => v === fallback || v === own;
+    if (!allowed(t.fontHeading, defaults.fontHeading) || !allowed(t.fontBody, defaults.fontBody)) {
       t.fontHeading = defaults.fontHeading;
       t.fontBody = defaults.fontBody;
       note(stripped, "theme.fontHeading", "custom_fonts");

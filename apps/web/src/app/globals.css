@@ -1511,6 +1511,9 @@
   --cf-radius-control: 9999px;
   --cf-pattern: none;
   --cf-pattern-size: auto;
+  /* A hint, never mistaken for an answer: the muted ink eased into the box it
+     sits in. Some themes set their muted ink almost as dark as the text. */
+  --cf-placeholder: color-mix(in oklab, var(--cf-muted) 65%, var(--cf-composer-bg));
 
   /* `background-color`, not `background`: the shorthand resets
      `background-image`, so a flat fill declared here would wipe out the tile

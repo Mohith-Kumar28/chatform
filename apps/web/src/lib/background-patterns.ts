@@ -1,4 +1,4 @@
-import type { BackgroundShape } from "@repo/form-schema";
+import { BACKGROUND_SHAPES, type BackgroundShape } from "@repo/form-schema";
 
 /**
  * The faint SVG tile behind a form's conversation.
@@ -438,6 +438,14 @@ const SHAPES: Record<BackgroundShape, ShapeDef> = {
       `<g fill="none" stroke="${ink}" stroke-width="5"><circle cx="130" cy="72" r="62"/><circle cx="130" cy="72" r="38"/><circle cx="36" cy="172" r="18"/></g>`,
   },
 };
+
+/** A stored shape with `auto` picked from the form's link, the way `auto` picks a tile. */
+export function resolveShape(shape: string | undefined, seed?: string | null): BackgroundShape | undefined {
+  if (shape !== "auto") return shape as BackgroundShape | undefined;
+  let h = 2166136261;
+  for (const ch of seed ?? "") h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return BACKGROUND_SHAPES[(h >>> 0) % BACKGROUND_SHAPES.length];
+}
 
 /** The shape as a background layer, or null for none (and for a value this build does not know). */
 export function shapeLayer(shape: string | undefined, ink: string): { image: string; size: string; position: string } | null {

@@ -68,7 +68,7 @@ export function OtherOption({
           }
         }}
         // 16px on phones: iOS zooms into any field smaller than that.
-        className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:opacity-50 sm:text-sm"
+        className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-[var(--cf-placeholder)] placeholder:opacity-100 sm:text-sm"
       />
       {onSubmit ? (
         <button

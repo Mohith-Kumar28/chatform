@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
-import { ThemeDoc, applyBackgroundPreset } from "@repo/form-schema";
+import { ThemeDoc, applyFormTheme } from "@repo/form-schema";
 import { ChatBubble } from "@/components/chat/chat-bubble";
 import { chatThemeVars } from "@/lib/chat-theme";
 
@@ -24,7 +24,8 @@ export interface TileData {
  * way in, the same gesture the dashboard card uses.
  */
 export function TemplateThumb({ tile, className }: { tile: TileData; className?: string }) {
-  const theme = applyBackgroundPreset(ThemeDoc.parse({}), tile.preview.preset);
+  // The template's own theme with its background shapes, as `templateTheme` in the generator builds it.
+  const theme = applyFormTheme(ThemeDoc.parse({ backgroundPattern: "auto", backgroundShape: "auto" }), tile.preview.preset);
   const vars = chatThemeVars(theme, tile.slug);
   const ground: CSSProperties = {
     ...vars,

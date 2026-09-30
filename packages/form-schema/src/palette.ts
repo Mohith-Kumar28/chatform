@@ -1,4 +1,5 @@
 import { THEME_DEFAULT_INK, type ThemeDoc } from "./settings";
+import { withThemeSide } from "./form-themes";
 
 /**
  * Colour maths for a form's theme, shared by the web app and the API.
@@ -151,6 +152,39 @@ export function oklchToHex({ l, c, h }: Oklch): string {
   return rgbToHex(lin.map((v) => toGamma(v) * 255) as Rgb);
 }
 
+/**
+ * Any colour a tweakcn theme writes (hex, `rgb()`, `hsl()`, `oklch()`), as hex,
+ * for the code here that measures contrast and mixes in sRGB. Alpha is dropped.
+ * Null for anything else, so a caller keeps its own fallback.
+ */
+export function cssColorToHex(value: string): string | null {
+  const v = value.trim().toLowerCase();
+  if (/^#[0-9a-f]{3,8}$/.test(v)) {
+    const h = v.slice(1);
+    if (h.length === 3 || h.length === 4) return `#${h.slice(0, 3).split("").map((c) => c + c).join("")}`;
+    return `#${h.slice(0, 6)}`;
+  }
+  const m = v.match(/^(rgb|hsl|oklch)a?\(([^)]*)\)$/);
+  if (!m) return null;
+  const parts = m[2]!.split("/")[0]!.trim().split(/[\s,]+/).filter(Boolean);
+  const num = (p: string | undefined, scale = 1) => (p === undefined ? NaN : p.endsWith("%") ? (parseFloat(p) / 100) * scale : parseFloat(p));
+  if (m[1] === "rgb") {
+    const rgb = parts.slice(0, 3).map((p) => num(p, 255));
+    return rgb.some(Number.isNaN) ? null : rgbToHex(rgb as Rgb);
+  }
+  if (m[1] === "hsl") {
+    const [h, s, l] = [parseFloat(parts[0]!), num(parts[1]), num(parts[2])];
+    if ([h, s, l].some(Number.isNaN)) return null;
+    const k = (n: number) => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return rgbToHex([f(0) * 255, f(8) * 255, f(4) * 255]);
+  }
+  const [l, c, h] = [num(parts[0]), parseFloat(parts[1]!), parseFloat(parts[2] ?? "0")];
+  if ([l, c].some(Number.isNaN)) return null;
+  return oklchToHex({ l, c, h: Number.isNaN(h) ? 0 : h });
+}
+
 /** Shortest distance between two hues, 0–180. */
 export function hueDistance(a: number, b: number): number {
   const d = Math.abs(a - b) % 360;
@@ -295,6 +329,8 @@ export const isDarkTheme = (theme: Pick<ThemeDoc, "background">) => isDarkColor(
  */
 export function resolveScheme(theme: ThemeDoc, prefersDark: boolean): ThemeDoc {
   const wantDark = theme.colorScheme === "dark" || (theme.colorScheme === "auto" && prefersDark);
+  // A tweakcn theme carries its own designed dark side; use it rather than a mirror.
+  if (theme.styles) return withThemeSide(theme, wantDark);
   if (!wantDark || isDarkTheme(theme)) return theme;
   const dark = themeFromAccent(theme.accent, { dark: true, secondary: bubbleHue(theme.userBubble) });
   return dark ? { ...theme, ...dark } : theme;
@@ -322,6 +358,7 @@ export function appearanceOf(theme: ThemeDoc): ThemeDoc["colorScheme"] {
  */
 export function withAppearance(theme: ThemeDoc, next: ThemeDoc["colorScheme"]): ThemeDoc {
   const dark = next === "dark";
+  if (theme.styles) return { ...withThemeSide(theme, dark), colorScheme: next };
   const palette = dark !== isDarkTheme(theme) ? themeFromAccent(theme.accent, { dark, secondary: bubbleHue(theme.userBubble) }) : null;
   return { ...theme, ...(palette ?? {}), colorScheme: next };
 }

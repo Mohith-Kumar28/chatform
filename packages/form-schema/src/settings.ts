@@ -569,8 +569,15 @@ export const THEME_COLOR_PATTERN = /^(#[0-9a-fA-F]{3,8}|(rgb|hsl|oklch|lab|lch|c
 const CSS_COLOR = THEME_COLOR_PATTERN;
 const themeColor = (fallback: string) => boundedString(40).regex(CSS_COLOR).catch(fallback);
 
+/** One mode of a tweakcn theme: token name to CSS value, bounded in size and count. */
+const ThemeTokens = z
+  .record(z.string().max(40), z.string().max(400))
+  .refine((r) => Object.keys(r).length <= 80);
+
 /** The background shapes, in the order the Design sheet lists them. */
 export const BACKGROUND_SHAPES = ["wave", "blob", "rings"] as const;
+/** What a form stores: a named shape, or `auto`, which the form's link picks among them. */
+export const BACKGROUND_SHAPE_VALUES = ["auto", ...BACKGROUND_SHAPES] as const;
 export type BackgroundShape = (typeof BACKGROUND_SHAPES)[number];
 
 export const ThemeDoc = z.object({
@@ -620,12 +627,27 @@ export const ThemeDoc = z.object({
   /** The tile's ink. Absent means the primary colour (or the text colour when that is too pale to show). */
   backgroundPatternColor: boundedString(40).regex(CSS_COLOR).optional().catch(undefined),
   /**
+   * A tweakcn theme (`./tweakcn`): its id and its full token set, light and
+   * dark, copied onto the form when picked. The runtime writes every token as
+   * a CSS variable on the form, as tweakcn does, and the colour fields above
+   * are kept in step with the side on show so everything that reads them
+   * (dashboard cards, the API, contrast checks) still sees the real colours.
+   * Absent on a form with hand-picked colours, which renders from those.
+   * Optional with a `catch`, so a malformed copy drops back to the colours
+   * above instead of taking the form down.
+   */
+  themeId: boundedString(60).optional().catch(undefined),
+  styles: z
+    .object({ light: ThemeTokens, dark: ThemeTokens })
+    .optional()
+    .catch(undefined),
+  /**
    * A large soft shape behind the conversation, in the primary colour: a wave
    * along the bottom, a blob in a corner, or a few rings. Absent means none.
    * Optional with a `catch`, like the opacity above, so saved docs and seeded
    * templates keep their shape and a stray value is dropped, not refused.
    */
-  backgroundShape: z.enum(BACKGROUND_SHAPES).optional().catch(undefined),
+  backgroundShape: z.enum(BACKGROUND_SHAPE_VALUES).optional().catch(undefined),
 
   /**
    * Optional branding. Both are opt-in: a form with neither still looks
