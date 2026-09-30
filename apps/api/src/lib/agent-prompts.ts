@@ -675,11 +675,27 @@ export interface BuilderTurn {
  * length, and colour never do: those are the author's to change afterwards in
  * a builder they can see.
  */
-export const CLARIFY_SYSTEM = `You are about to design a conversational form from someone's description. Before you do, decide whether anything they left out would actually change the form you build.
+/**
+ * "Is there anything I need to ask before I build this?", for a new form and
+ * for an edit. The rules for what is worth asking are the same; only the
+ * opening differs, because an edit has a form (and a conversation) that
+ * already answer most things.
+ */
+export function clarifySystem(purpose: "create" | "edit"): string {
+  return `${purpose === "create" ? CLARIFY_CREATE : CLARIFY_EDIT}
 
-YOU ARE TALKING TO THE FORM'S AUTHOR, NOT TO THE PEOPLE WHO WILL FILL IT IN. Every question you return is one the author answers right now, about their own form, before it is built. It is never a question the form itself should ask. "What is the primary reason for your message?" is a question for a bakery's customer and belongs IN the form; "which of your events can people enter?" is a question for the bakery, and only that second kind belongs here. If what you are about to ask would read naturally as a question inside the finished form, do not ask it. Draft it instead.
+${CLARIFY_RULES}`;
+}
 
-Return NOTHING, an empty list, unless the answer would change what gets asked. That is the common case, and it is the right one. You are good at sizing a form from a sentence, and the author is waiting.
+const CLARIFY_CREATE = `You are about to design a conversational form from someone's description. Before you do, decide whether anything they left out would actually change the form you build.
+
+Return NOTHING, an empty list, unless the answer would change what gets asked. That is the common case, and it is the right one. You are good at sizing a form from a sentence, and the author is waiting.`;
+
+const CLARIFY_EDIT = `You are about to change a conversational form that already exists, at its author's request. The form as it is now, and what has been said so far, come with the request. Before you change anything, decide whether something the request leaves open would actually change what you do.
+
+Most requests about a working form are clear: change a question, a route, a setting, a wording. Return NOTHING for those. Never ask what the form or the conversation already answers.`;
+
+const CLARIFY_RULES = `YOU ARE TALKING TO THE FORM'S AUTHOR, NOT TO THE PEOPLE WHO WILL FILL IT IN. Every question you return is one the author answers right now, about their own form, before you build or change it. It is never a question the form itself should ask. "What is the primary reason for your message?" is a question for a bakery's customer and belongs IN the form; "which of your events can people enter?" is a question for the bakery, and only that second kind belongs here. If what you are about to ask would read naturally as a question inside the finished form, do not ask it. Build it instead.
 
 Ask ONLY when one of these is genuinely unresolved:
 - WHO fills it in, when the request implies two different audiences who would be asked different things ("customers and prospects", "students and staff") and does not say which.
@@ -704,6 +720,9 @@ For each question:
 - "options": 2 to 5 answers for a choice, as the author would say them. Include the escape hatch the set needs ("Both", "Not sure yet") when one honestly exists. Empty for a text question.
 - "multiple": true when the author could reasonably pick more than one option ("which plans get their own branch?"), false when the options exclude each other ("who fills it in?"). Always false for a text question.`;
 
+/** The create version, as every caller before edits could ask. */
+export const CLARIFY_SYSTEM = clarifySystem("create");
+
 /**
  * The author's answers, folded back into their request.
  *
@@ -711,6 +730,16 @@ For each question:
  * are what they clarified. A model reading them together writes a better form
  * than one reading a request somebody has rewritten on the author's behalf.
  */
+/**
+ * The author's request with what they answered, as the thread keeps it: one
+ * plain line per answer under their words, so a later turn ("also add the
+ * third track") can see what was settled.
+ */
+export function answeredRequest(prompt: string, answers: { question: string; answer: string }[] = []): string {
+  const given = answers.filter((a) => a.answer.trim());
+  return given.length === 0 ? prompt : `${prompt}\n\n${given.map((a) => `${a.question} → ${a.answer.trim()}`).join("\n")}`;
+}
+
 export function withClarifications(
   prompt: string,
   answers: { question: string; answer: string }[],
@@ -721,6 +750,56 @@ export function withClarifications(
 
 THEY ALSO TOLD YOU:
 ${given.map((a) => `- ${a.question} → ${a.answer.trim()}`).join("\n")}`;
+}
+
+/**
+ * The form's questions as the model reads them: ref, type, required, options,
+ * and how each is reached. What an edit is written against, and what the
+ * clarifying step checks a request against before asking anything.
+ */
+export function questionManifest(doc: FormDoc): string {
+  const gotos = doc.logic.filter((r) => r.action_kind === "goto");
+
+  /** How each question is reached, in the same words the builder sees. */
+  const reachedBy = new Map<string, string[]>();
+  for (const r of gotos) {
+    if (!r.from) continue;
+    const c = r.when?.conditions?.[0];
+    const source = doc.blocks.find((b) => b.ref === r.from);
+    let how: string;
+    if (!c) {
+      how = `everyone who reaches ${r.from} continues to`;
+    } else {
+      const value = "value" in c ? c.value : undefined;
+      const option =
+        source && "options" in source && source.options
+          ? (source.options as { id: string; label: string }[]).find((o) => o.id === value)
+          : undefined;
+      const shown = option ? `"${option.label}"` : value === OTHER_ANSWER ? '"Other"' : JSON.stringify(value);
+      how = `${r.from} ${c.op} ${shown} →`;
+    }
+    const list = reachedBy.get(r.target);
+    if (list) list.push(how);
+    else reachedBy.set(r.target, [how]);
+  }
+
+  return doc.blocks
+    .map((b, i) => {
+      const options = "options" in b && b.options?.length
+        ? ` options: [${[
+            ...(b.options as { id: string; label: string }[]).map((o) => `"${o.label}"`),
+            // A typed answer, routable by the name "Other".
+            ...("allowOther" in b && b.allowOther ? ['"Other"'] : []),
+          ].join(", ")}]`
+        : "";
+      const routed = reachedBy.get(b.ref);
+      const reach = routed?.length ? `  ← reached by: ${routed.join("; ")}` : "";
+      // Shown so a request to make a question unique that already is comes back
+      // as "it already is" rather than as a second copy of the question.
+      const unique = enforcesUnique(b) ? ", unique" : "";
+      return `  ${i + 1}. ${b.ref} (${b.type}${b.required ? ", required" : ""}${unique}): "${b.title}"${options}${reach}`;
+    })
+    .join("\n");
 }
 
 /** How a consent question is made refusable, in whichever vocabulary the edit writes in (tool calls or JSON). */
@@ -764,48 +843,8 @@ export function buildEditPrompt(
   /** From `requestContext`, as a new form gets it. Empty when the request has no links or media. */
   context = "",
 ): string {
+  const blocks = questionManifest(doc);
   const gotos = doc.logic.filter((r) => r.action_kind === "goto");
-
-  /** How each question is reached, in the same words the builder sees. */
-  const reachedBy = new Map<string, string[]>();
-  for (const r of gotos) {
-    if (!r.from) continue;
-    const c = r.when?.conditions?.[0];
-    const source = doc.blocks.find((b) => b.ref === r.from);
-    let how: string;
-    if (!c) {
-      how = `everyone who reaches ${r.from} continues to`;
-    } else {
-      const value = "value" in c ? c.value : undefined;
-      const option =
-        source && "options" in source && source.options
-          ? (source.options as { id: string; label: string }[]).find((o) => o.id === value)
-          : undefined;
-      const shown = option ? `"${option.label}"` : value === OTHER_ANSWER ? '"Other"' : JSON.stringify(value);
-      how = `${r.from} ${c.op} ${shown} →`;
-    }
-    const list = reachedBy.get(r.target);
-    if (list) list.push(how);
-    else reachedBy.set(r.target, [how]);
-  }
-
-  const blocks = doc.blocks
-    .map((b, i) => {
-      const options = "options" in b && b.options?.length
-        ? ` options: [${[
-            ...(b.options as { id: string; label: string }[]).map((o) => `"${o.label}"`),
-            // A typed answer, routable by the name "Other".
-            ...("allowOther" in b && b.allowOther ? ['"Other"'] : []),
-          ].join(", ")}]`
-        : "";
-      const routed = reachedBy.get(b.ref);
-      const reach = routed?.length ? `  ← reached by: ${routed.join("; ")}` : "";
-      // Shown so a request to make a question unique that already is comes back
-      // as "it already is" rather than as a second copy of the question.
-      const unique = enforcesUnique(b) ? ", unique" : "";
-      return `  ${i + 1}. ${b.ref} (${b.type}${b.required ? ", required" : ""}${unique}): "${b.title}"${options}${reach}`;
-    })
-    .join("\n");
 
   /**
    * The outcomes, with what kind each one is.

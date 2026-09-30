@@ -1,6 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { beforeAll, describe, it, expect } from "vitest";
 import { z } from "zod";
-import { CLARIFY_SYSTEM, withClarifications } from "../src/lib/agent-prompts.js";
+import { answeredRequest, buildEditPrompt, CLARIFY_SYSTEM, clarifySystem, questionManifest, withClarifications } from "../src/lib/agent-prompts.js";
+import { FormDoc } from "@repo/form-schema";
+import { applySchema, fetchApi, minimalDoc, seedTenant } from "./helpers.js";
 import { ClarifyQuestions } from "../src/lib/ai.js";
 
 /**
@@ -81,5 +83,51 @@ describe("withClarifications", () => {
     expect(out).toContain("acme@okhdfcbank");
     expect(out).toContain("What's your UPI id?");
     expect(out).not.toContain("Skipped one");
+  });
+});
+
+describe("asking before an edit", () => {
+  it("shares the rules with a new form and opens on the form that exists", () => {
+    const edit = clarifySystem("edit");
+    expect(clarifySystem("create")).toBe(CLARIFY_SYSTEM);
+    expect(edit).toContain("already exists");
+    expect(edit).toContain("Never ask what the form or the conversation already answers");
+    // The same rules body: who fills it in, what not to ask, the three-question cap.
+    for (const rule of ["NOT TO THE PEOPLE WHO WILL FILL IT IN", "Tone, wording, length, colours", "At most three questions"]) {
+      expect(edit).toContain(rule);
+      expect(CLARIFY_SYSTEM).toContain(rule);
+    }
+  });
+
+  it("checks the request against the same manifest the edit is written against", () => {
+    const doc = FormDoc.parse(minimalDoc("clar"));
+    expect(buildEditPrompt(doc, "anything")).toContain(questionManifest(doc));
+  });
+
+  it("keeps what the author answered in the thread, one line each, and nothing they skipped", () => {
+    expect(answeredRequest("route by plan", [{ question: "Which plans?", answer: " Free and Pro " }, { question: "Skipped?", answer: "" }])).toBe(
+      "route by plan\n\nWhich plans? → Free and Pro",
+    );
+    expect(answeredRequest("route by plan", [])).toBe("route by plan");
+  });
+});
+
+describe("POST /api/ai/clarify-form with a form", () => {
+  beforeAll(applySchema);
+
+  it("asks only about a form the caller can open", async () => {
+    const me = await seedTenant(`clarme${Date.now()}`);
+    const other = await seedTenant(`clarot${Date.now()}`);
+    const ask = (formId: string) =>
+      fetchApi("/api/ai/clarify-form", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: me.cookie },
+        body: JSON.stringify({ prompt: "route by plan", formId }),
+      });
+    expect((await ask(other.formId)).status).toBe(404);
+    const mine = await ask(me.formId);
+    expect(mine.status).toBe(200);
+    // No model in tests: nothing to ask, and the edit goes ahead.
+    expect(await mine.json()).toEqual({ questions: [] });
   });
 });

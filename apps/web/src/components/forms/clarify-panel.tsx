@@ -1,31 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { motion } from "motion/react";
-import { Check, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 /**
- * The two or three things the generator needs before it can draft.
+ * What the AI needs to know before it builds, one question at a time.
  *
- * A form generator that guesses is better than one that interrogates — which
- * is why `CLARIFY_SYSTEM` returns nothing far more often than it returns
- * something, and why this screen is not on the path of a clear request. But
- * there are answers it cannot invent and must not fake: the author's own UPI
- * id, their booking link, which plans get their own branch. Those used to be
- * guessed, and the author found out by opening a form with a dead end in it.
+ * Shared by the New form dialog (before a first draft) and the builder's chat
+ * (before an edit), so asking back looks and works the same in both. The
+ * model returns nothing far more often than something (see `CLARIFY_SYSTEM`),
+ * so this is only on the path of a request with a real hole in it: the plans
+ * that get their own branch, what makes a team eligible, a booking link.
  *
- * So this exists for the minority of requests that genuinely have a hole in
- * them, and it is built to be left: every question is skippable, and "Just
- * build it" is on screen the whole time. Nothing here is a gate.
- *
- * The controls are typed rather than a free-text box per question. Asking
- * "which platforms?" and getting a paragraph back is the same parsing problem
- * the form runtime already solved with composers — a choice is chips, anything
- * else is a box, and both come back as a string the prompt can carry.
+ * One question per step, because the builder's chat is a small box and three
+ * questions stacked in it is a wall. Every step can be skipped, answered from
+ * the offered choices, or answered in the author's own words, and "Just build
+ * it" is on screen the whole time: nothing here is a gate.
  */
 
 export interface ClarifyQuestion {
@@ -33,7 +28,7 @@ export interface ClarifyQuestion {
   why: string;
   kind: "choice" | "text";
   options: string[];
-  /** Still sent by the generator; ignored here, since every choice is multi-select. */
+  /** Still sent by the model; ignored here, since every choice is multi-select. */
   multiple?: boolean;
 }
 
@@ -48,214 +43,200 @@ export function ClarifyPanel({
   onSubmit,
   onSkip,
   busy,
+  intent = "draft",
 }: {
-  /** What the author wrote, shown back so the thread reads as a conversation. */
-  prompt: string;
+  /** What the author wrote, echoed as the thread's first bubble. Omit where the thread already shows it. */
+  prompt?: string;
   questions: ClarifyQuestion[];
   onSubmit: (answers: ClarifyAnswer[]) => void;
   onSkip: () => void;
   busy: boolean;
+  /** `draft` for a new form, `edit` for a change to one: only the words differ. */
+  intent?: "draft" | "edit";
 }) {
-  const [answers, setAnswers] = useState<Record<number, string>>({});
-  // Picks for a choice, kept as a list and joined on submit. Every choice is
-  // multi-select: the generator's `multiple` flag guessed wrong too often
-  // ("which paths should branch?" came back pick-one), and an author who means
-  // one simply picks one.
+  const [step, setStep] = useState(0);
+  // Every choice is multi-select: the model's `multiple` flag guessed wrong
+  // too often, and an author who means one simply picks one.
   const [picks, setPicks] = useState<Record<number, string[]>>({});
-  // What the author typed beside the offered options. The options are a guess
-  // at the answer space; the author's own words are always allowed.
-  const [custom, setCustom] = useState<Record<number, string>>({});
-  const firstBox = useRef<HTMLTextAreaElement>(null);
+  // The author's own words, beside the offered options or instead of them.
+  const [typed, setTyped] = useState<Record<number, string>>({});
 
-  // The first text answer takes focus, so a keyboard-first author can answer
-  // without reaching for the mouse. A choice question needs no focus — its
-  // options are one tab away and reading them is the point.
-  useEffect(() => {
-    if (questions[0]?.kind === "text") firstBox.current?.focus();
-  }, [questions]);
+  const total = questions.length;
+  const q = questions[step]!;
+  const last = step === total - 1;
+  const verb = intent === "draft" ? "build" : "change";
 
-  const set = (i: number, v: string) => setAnswers((prev) => ({ ...prev, [i]: v }));
-  const toggle = (i: number, option: string) =>
+  const answerFor = (i: number) =>
+    [...(picks[i] ?? []), (typed[i] ?? "").trim()].filter(Boolean).join(", ");
+  const answers = () => questions.map((question, i) => ({ question: question.question, answer: answerFor(i) }));
+  const answered = questions.filter((_, i) => answerFor(i)).length;
+
+  const next = () => {
+    if (busy) return;
+    if (last) onSubmit(answers());
+    else setStep((s) => s + 1);
+  };
+  const skipOne = () => {
+    if (busy) return;
+    setPicks((p) => ({ ...p, [step]: [] }));
+    setTyped((t) => ({ ...t, [step]: "" }));
+    if (last) onSubmit(questions.map((question, i) => ({ question: question.question, answer: i === step ? "" : answerFor(i) })));
+    else setStep((s) => s + 1);
+  };
+  const toggle = (option: string) =>
     setPicks((prev) => {
-      const had = prev[i] ?? [];
-      return { ...prev, [i]: had.includes(option) ? had.filter((o) => o !== option) : [...had, option] };
+      const had = prev[step] ?? [];
+      return { ...prev, [step]: had.includes(option) ? had.filter((o) => o !== option) : [...had, option] };
     });
-  const answerFor = (q: ClarifyQuestion, i: number) =>
-    q.kind === "choice"
-      ? [...(picks[i] ?? []), (custom[i] ?? "").trim()].filter(Boolean).join(", ")
-      : (answers[i] ?? "");
-  const answered = questions.filter((q, i) => answerFor(q, i).trim()).length;
 
-  const submit = () => onSubmit(questions.map((q, i) => ({ question: q.question, answer: answerFor(q, i) })));
-
-  // Enter builds, Shift+Enter skips — the two things this screen is for, on the
-  // keys an author already has a finger on. Anywhere a key means something else
-  // it is left alone: Enter in a box is a newline and Enter on a chip picks it,
-  // so a control that takes typing or activation keeps its own behaviour and
-  // only the panel's empty space answers for the buttons.
+  // Enter moves on from the panel's empty space; a control that takes typing
+  // or activation keeps its own Enter.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Enter" || busy || e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target as HTMLElement | null;
-      const tag = el?.tagName;
-      if (tag === "TEXTAREA" || tag === "INPUT" || tag === "BUTTON" || el?.isContentEditable)
-        return;
+      if (el && (["TEXTAREA", "INPUT", "BUTTON"].includes(el.tagName) || el.isContentEditable)) return;
       e.preventDefault();
-      if (e.shiftKey) onSkip();
-      else submit();
+      next();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  return (
-    <div className="space-y-5">
-      {/* Their own words, first. The thread starts where they started. */}
-      <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-        className="flex justify-end"
-      >
-        <p className="bg-muted text-foreground max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm">
-          {prompt}
-        </p>
-      </motion.div>
+  const hasAnswer = Boolean(answerFor(step));
 
-      <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
-        className="flex items-start gap-2.5"
-      >
-        <span className="bg-primary/10 text-primary mt-0.5 grid size-7 shrink-0 place-items-center rounded-full">
+  return (
+    <div className="space-y-4">
+      {prompt ? (
+        <div className="flex justify-end">
+          <p className="bg-muted text-foreground max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm">{prompt}</p>
+        </div>
+      ) : null}
+
+      <div className="flex items-center gap-2.5">
+        <span className="bg-primary/10 text-primary grid size-7 shrink-0 place-items-center rounded-full">
           <Sparkles className="size-3.5" strokeWidth={1.75} />
         </span>
-        <p className="text-muted-foreground pt-1 text-sm">
-          {questions.length === 1
-            ? "One thing before I draft this —"
-            : `A couple of things before I draft this —`}
+        <p className="text-muted-foreground flex-1 text-sm">
+          {total === 1 ? `One thing before I ${verb} this` : `${total} quick things before I ${verb} this`}
         </p>
-      </motion.div>
-
-      <div className="space-y-5 pl-9">
-        {questions.map((q, i) => (
-          <motion.div
-            key={q.question}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.14 + i * 0.07, ease: [0.22, 1, 0.36, 1] }}
-            className="space-y-2.5"
-          >
-            <div>
-              <p className="text-foreground text-sm font-medium">{q.question}</p>
-              {q.kind === "choice" ? (
-                <p className="text-muted-foreground mt-0.5 text-xs">Pick any that apply.</p>
-              ) : null}
-              {q.why.trim() ? (
-                <p className="text-muted-foreground mt-0.5 text-xs">{q.why}</p>
-              ) : null}
-            </div>
-
-            {q.kind === "choice" ? (
-              <div className="flex flex-wrap gap-2">
-                {q.options.map((option) => {
-                  const picked = (picks[i] ?? []).includes(option);
-                  return (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => toggle(i, option)}
-                      aria-pressed={picked}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
-                        "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
-                        // Picked is an outline and a tint, not a fill: a filled
-                        // chip read as a button that had been pressed to act,
-                        // right beside "Build it", which is one.
-                        picked
-                          ? "border-primary bg-primary/10 text-foreground"
-                          : "border-border hover:border-foreground/30 hover:bg-muted text-foreground",
-                      )}
-                    >
-                      {picked && <Check className="text-primary size-3.5" strokeWidth={2.5} />}
-                      {option}
-                    </button>
-                  );
-                })}
-                {/* Always the last pill: a dashed outline reads as "yours to
-                    fill", and it is a real input, so one click is typing. */}
-                <input
-                  value={custom[i] ?? ""}
-                  onChange={(e) => setCustom((prev) => ({ ...prev, [i]: e.target.value }))}
-                  placeholder="Type your own…"
-                  aria-label={`Your own answer to: ${q.question}`}
-                  // A one-line box has no newline to protect, so Enter builds.
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && !busy) {
-                      e.preventDefault();
-                      submit();
-                    }
-                  }}
-                  className={cn(
-                    "field-sizing-content min-w-36 max-w-full rounded-full border border-dashed bg-transparent px-3 py-1.5 text-sm transition-colors",
-                    "placeholder:text-muted-foreground text-foreground focus-visible:outline-none",
-                    (custom[i] ?? "").trim()
-                      ? "border-primary bg-primary/10"
-                      : "border-border hover:border-foreground/30 focus:border-foreground/40",
-                  )}
-                />
-              </div>
-            ) : (
-              <Textarea
-                ref={i === 0 ? firstBox : undefined}
-                value={answers[i] ?? ""}
-                onChange={(e) => set(i, e.target.value)}
-                placeholder="Type your answer, or leave it blank"
-                rows={2}
-                className="resize-none text-sm"
-                // In a box Enter is still a newline — submitting a
-                // half-written answer on a stray keypress is worse than
-                // needing one more keystroke — so the panel's Enter gives way
-                // here and ⌘↵ carries it instead.
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                    e.preventDefault();
-                    submit();
-                  }
-                }}
+        {total > 1 ? (
+          <span className="flex items-center gap-1" aria-label={`Question ${step + 1} of ${total}`}>
+            {questions.map((_, i) => (
+              <span
+                key={i}
+                className={cn(
+                  "h-1.5 rounded-full transition-all duration-200",
+                  i === step ? "bg-primary w-4" : answerFor(i) ? "bg-primary/50 w-1.5" : "bg-border w-1.5",
+                )}
               />
-            )}
-          </motion.div>
-        ))}
+            ))}
+          </span>
+        ) : null}
       </div>
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.3, delay: 0.14 + questions.length * 0.07 }}
-        className="flex items-center gap-2 pl-9"
-      >
-        <Button onClick={submit} disabled={busy} shape="pill">
-          {busy ? "Starting…" : answered > 0 ? "Build it" : "Build it anyway"}
-          {/* The key that fires it, on the control it fires — an arrow only
-              ever said "forward", which the label already said. */}
-          <Kbd tone="inverse" className="w-auto px-1.5">
-            ↵
-          </Kbd>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={step}
+          initial={{ opacity: 0, x: 12 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -12 }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+          className="space-y-3 pl-9"
+        >
+          <div>
+            <p className="text-foreground text-sm font-medium">{q.question}</p>
+            {q.why.trim() ? <p className="text-muted-foreground mt-0.5 text-xs">{q.why}</p> : null}
+          </div>
+
+          {q.kind === "choice" ? (
+            <div className="flex flex-wrap gap-2">
+              {q.options.map((option) => {
+                const picked = (picks[step] ?? []).includes(option);
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => toggle(option)}
+                    aria-pressed={picked}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
+                      "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
+                      picked
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border hover:border-foreground/30 hover:bg-muted text-foreground",
+                    )}
+                  >
+                    {picked && <Check className="text-primary size-3.5" strokeWidth={2.5} />}
+                    {option}
+                  </button>
+                );
+              })}
+              {/* Always last, dashed: the author's own answer, one click from typing. */}
+              <input
+                value={typed[step] ?? ""}
+                onChange={(e) => setTyped((prev) => ({ ...prev, [step]: e.target.value }))}
+                placeholder="Type your own…"
+                aria-label={`Your own answer to: ${q.question}`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    next();
+                  }
+                }}
+                className={cn(
+                  "field-sizing-content min-w-36 max-w-full rounded-full border border-dashed bg-transparent px-3 py-1.5 text-sm transition-colors",
+                  "placeholder:text-muted-foreground text-foreground focus-visible:outline-none",
+                  (typed[step] ?? "").trim()
+                    ? "border-primary bg-primary/10"
+                    : "border-border hover:border-foreground/30 focus:border-foreground/40",
+                )}
+              />
+            </div>
+          ) : (
+            <Textarea
+              // A text question is answered by typing, so its box takes focus
+              // as it arrives (after the previous step has animated out).
+              autoFocus
+              value={typed[step] ?? ""}
+              onChange={(e) => setTyped((prev) => ({ ...prev, [step]: e.target.value }))}
+              placeholder="Type your answer"
+              rows={2}
+              className="resize-none text-sm"
+              // Enter moves on; Shift+Enter is a new line.
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  next();
+                }
+              }}
+            />
+          )}
+        </motion.div>
+      </AnimatePresence>
+
+      <div className="flex items-center gap-1.5 pl-9">
+        {step > 0 ? (
+          <Button variant="ghost" size="sm" shape="pill" onClick={() => setStep((s) => s - 1)} disabled={busy} aria-label="Previous question">
+            <ArrowLeft className="size-3.5" />
+          </Button>
+        ) : null}
+        <Button onClick={next} disabled={busy} size="sm" shape="pill">
+          {busy ? "Starting…" : last ? (answered > 0 ? `${verb === "build" ? "Build" : "Make"} it` : `${verb === "build" ? "Build" : "Make"} it anyway`) : "Next"}
+          {last ? <Kbd tone="inverse" className="w-auto px-1.5">↵</Kbd> : <ArrowRight className="size-3.5" />}
         </Button>
-        {/* Always available, never a gate. An author who wants a draft more
-            than they want to answer questions should get one. */}
-        <Button variant="ghost" size="sm" shape="pill" onClick={onSkip} disabled={busy}>
-          Skip these
-          <Kbd className="w-auto px-1.5">⇧↵</Kbd>
-        </Button>
-        <span className="text-muted-foreground ml-auto text-xs">
-          {answered === 0
-            ? "All optional"
-            : `${answered} of ${questions.length} answered`}
-        </span>
-      </motion.div>
+        {!hasAnswer ? (
+          <Button variant="ghost" size="sm" shape="pill" onClick={skipOne} disabled={busy}>
+            Skip
+          </Button>
+        ) : null}
+        {/* Always there: an author who wants the result more than the questions gets it. */}
+        {!last ? (
+          <Button variant="ghost" size="sm" shape="pill" onClick={onSkip} disabled={busy} className="text-muted-foreground ml-auto">
+            Just {verb} it
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }

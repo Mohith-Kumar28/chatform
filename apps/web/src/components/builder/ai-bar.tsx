@@ -17,6 +17,8 @@ import { streamEvents, type SseEvent } from "@/lib/api/stream";
 import { postApiFormsByIdKnowledgeLink, postApiFormsByIdKnowledgeText } from "@/lib/api/dashboard/dashboard";
 import { applySettingChanges } from "./ai-settings";
 import { SettingRows } from "./ai-setting-rows";
+import { ClarifyPanel, type ClarifyAnswer, type ClarifyQuestion } from "@/components/forms/clarify-panel";
+import { customFetch } from "@/lib/api/mutator";
 
 /** Refs of questions no path through the form reaches. */
 function unreachableRefs(doc: FormDoc): string[] {
@@ -94,6 +96,19 @@ export function AiBar() {
    */
   const [stage, setStage] = useState<EditStage | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
+  /**
+   * What the AI asked before making a change, while the author answers.
+   *
+   * The same step, questions and panel as a new form (`/ai/clarify-form`,
+   * `ClarifyPanel`), asked about this form and this conversation. Null for
+   * most requests: a clear one goes straight to the edit.
+   */
+  const [asking, setAsking] = useState<{
+    text: string;
+    pendingId: string;
+    history: { role: Turn["role"]; text: string }[];
+    questions: ClarifyQuestion[];
+  } | null>(null);
   const markAiTurnApplied = useBuilderStore((s) => s.markAiTurnApplied);
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -173,7 +188,7 @@ export function AiBar() {
 
   async function run() {
     const text = prompt.trim();
-    if (!text || !doc || busy) return;
+    if (!text || !doc || busy || asking) return;
 
     // The field is about to be cleared; a recogniser still writing into it
     // would put the next half-sentence on top of an empty prompt.
@@ -184,8 +199,6 @@ export function AiBar() {
     // reply lands, so the ids on screen are the stored ones.
     const pendingId = crypto.randomUUID();
     setTurns((t) => [...t, { id: pendingId, role: "user", text }]);
-    const settle = (stored: Turn[] | undefined, reply: Turn) =>
-      setTurns((t) => [...t.filter((x) => x.id !== pendingId), stored?.[0] ?? { id: pendingId, role: "user", text }, reply]);
 
     /**
      * The thread goes with the request.
@@ -198,6 +211,41 @@ export function AiBar() {
      * unapplied one is not part of the form at all.
      */
     const history = turns.slice(-8).map((t) => ({ role: t.role, text: t.text }));
+
+    // Anything worth asking first? Usually not. A failure here is silence:
+    // the question is an improvement on a guess, never a gate on the edit.
+    setStage("reading");
+    try {
+      const res = await customFetch<{ questions: ClarifyQuestion[] }>("/api/ai/clarify-form", {
+        method: "POST",
+        body: JSON.stringify({ prompt: text, formId, history }),
+      });
+      if (res.questions?.length) {
+        setAsking({ text, pendingId, history, questions: res.questions });
+        setBusy(false);
+        setStage(null);
+        return;
+      }
+    } catch {
+      // Straight to the edit.
+    }
+    await makeEdit(text, pendingId, history, []);
+  }
+
+  async function makeEdit(
+    text: string,
+    pendingId: string,
+    history: { role: Turn["role"]; text: string }[],
+    clarifications: ClarifyAnswer[],
+  ) {
+    if (!doc) return;
+    setAsking(null);
+    setBusy(true);
+    const answered = clarifications.filter((a) => a.answer.trim());
+    const shown: Turn = { id: pendingId, role: "user", text: answered.length ? `${text}\n\n${answered.map((a) => `${a.question} → ${a.answer.trim()}`).join("\n")}` : text };
+    setTurns((t) => t.map((x) => (x.id === pendingId ? shown : x)));
+    const settle = (stored: Turn[] | undefined, reply: Turn) =>
+      setTurns((t) => [...t.filter((x) => x.id !== pendingId), stored?.[0] ?? shown, reply]);
 
     type EditResult = {
       doc?: unknown;
@@ -234,7 +282,7 @@ export function AiBar() {
       await streamEvents("/api/ai/edit-form/stream", {
         // The offset turns "close it at 6pm on the 30th" into the author's 6pm,
         // not the server's.
-        body: { formId, prompt: text, history, utcOffsetMinutes: new Date().getTimezoneOffset() },
+        body: { formId, prompt: text, history, utcOffsetMinutes: new Date().getTimezoneOffset(), clarifications: answered },
         onEvent: ({ event, data }: SseEvent) => {
           if (event === "stage") setStage((data as { id: EditStage }).id);
           else if (event === "done") res = data as EditResult;
@@ -411,6 +459,18 @@ export function AiBar() {
                 {turns.map((turn) => (
                   <Message key={turn.id} turn={turn} current={doc} onApply={apply} />
                 ))}
+                {asking && (
+                  <div className="px-1 pt-1">
+                    <ClarifyPanel
+                      key={asking.pendingId}
+                      intent="edit"
+                      questions={asking.questions}
+                      busy={busy}
+                      onSubmit={(answers) => void makeEdit(asking.text, asking.pendingId, asking.history, answers)}
+                      onSkip={() => void makeEdit(asking.text, asking.pendingId, asking.history, [])}
+                    />
+                  </div>
+                )}
                 {busy && (
                   <div className="text-muted-foreground flex items-center gap-2 px-1 text-sm">
                     <Loader2 className="size-3.5 animate-spin" />
@@ -480,7 +540,7 @@ export function AiBar() {
                 void run();
               }
             }}
-            placeholder="Ask AI to make changes…"
+            placeholder={asking ? "Answer above, or skip them" : "Ask AI to make changes…"}
             className="min-h-8 flex-1 resize-none overflow-y-auto bg-transparent py-1.5 text-sm leading-5 outline-none placeholder:text-[color-mix(in_oklch,currentColor_45%,transparent)]"
           />
           {/* Nothing at all where the browser has no recogniser — a mic that
@@ -519,7 +579,7 @@ export function AiBar() {
             type="submit"
             size="icon-sm"
             shape="pill"
-            disabled={busy || !prompt.trim()}
+            disabled={busy || Boolean(asking) || !prompt.trim()}
             aria-label="Ask"
             className="shrink-0"
           >
@@ -563,7 +623,7 @@ function Message({
   if (turn.role === "user") {
     return (
       <div className="flex justify-end">
-        <p className="bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-md px-3 py-1.5 text-sm">
+        <p className="bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-md px-3 py-1.5 text-sm whitespace-pre-line">
           {turn.text}
         </p>
       </div>

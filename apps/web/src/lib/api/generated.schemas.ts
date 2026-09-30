@@ -3705,12 +3705,29 @@ export type PostApiAiGenerateForm200 = {
   tokens: number;
 };
 
+export type PostApiAiClarifyFormBodyHistoryItemRole = typeof PostApiAiClarifyFormBodyHistoryItemRole[keyof typeof PostApiAiClarifyFormBodyHistoryItemRole];
+
+
+export const PostApiAiClarifyFormBodyHistoryItemRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export type PostApiAiClarifyFormBodyHistoryItem = {
+  role: PostApiAiClarifyFormBodyHistoryItemRole;
+  /** @maxLength 2000 */
+  text: string;
+};
+
 export type PostApiAiClarifyFormBody = {
   /**
-     * @minLength 5
+     * @minLength 3
      * @maxLength 2000
      */
   prompt: string;
+  formId?: string;
+  /** @maxItems 20 */
+  history?: PostApiAiClarifyFormBodyHistoryItem[];
 };
 
 export type PostApiAiClarifyForm200QuestionsItemKind = typeof PostApiAiClarifyForm200QuestionsItemKind[keyof typeof PostApiAiClarifyForm200QuestionsItemKind];
@@ -3775,6 +3792,13 @@ export type PostApiAiEditFormStreamBodyHistoryItem = {
   text: string;
 };
 
+export type PostApiAiEditFormStreamBodyClarificationsItem = {
+  /** @maxLength 300 */
+  question: string;
+  /** @maxLength 500 */
+  answer: string;
+};
+
 export type PostApiAiEditFormStreamBody = {
   formId: string;
   /**
@@ -3789,6 +3813,13 @@ export type PostApiAiEditFormStreamBody = {
      * @maximum 10
      */
   count?: number;
+  /**
+     * @minimum -900
+     * @maximum 900
+     */
+  utcOffsetMinutes?: number;
+  /** @maxItems 3 */
+  clarifications?: PostApiAiEditFormStreamBodyClarificationsItem[];
 };
 
 export type PostApiAiEditFormBodyHistoryItemRole = typeof PostApiAiEditFormBodyHistoryItemRole[keyof typeof PostApiAiEditFormBodyHistoryItemRole];
@@ -3805,6 +3836,13 @@ export type PostApiAiEditFormBodyHistoryItem = {
   text: string;
 };
 
+export type PostApiAiEditFormBodyClarificationsItem = {
+  /** @maxLength 300 */
+  question: string;
+  /** @maxLength 500 */
+  answer: string;
+};
+
 export type PostApiAiEditFormBody = {
   formId: string;
   /**
@@ -3819,6 +3857,13 @@ export type PostApiAiEditFormBody = {
      * @maximum 10
      */
   count?: number;
+  /**
+     * @minimum -900
+     * @maximum 900
+     */
+  utcOffsetMinutes?: number;
+  /** @maxItems 3 */
+  clarifications?: PostApiAiEditFormBodyClarificationsItem[];
 };
 
 export type PostApiAiEditForm200 = {
@@ -3846,6 +3891,13 @@ export type PostApiAiAddBlocksBodyHistoryItem = {
   text: string;
 };
 
+export type PostApiAiAddBlocksBodyClarificationsItem = {
+  /** @maxLength 300 */
+  question: string;
+  /** @maxLength 500 */
+  answer: string;
+};
+
 export type PostApiAiAddBlocksBody = {
   formId: string;
   /**
@@ -3860,6 +3912,13 @@ export type PostApiAiAddBlocksBody = {
      * @maximum 10
      */
   count?: number;
+  /**
+     * @minimum -900
+     * @maximum 900
+     */
+  utcOffsetMinutes?: number;
+  /** @maxItems 3 */
+  clarifications?: PostApiAiAddBlocksBodyClarificationsItem[];
 };
 
 export type PostApiAiAddBlocks200 = {
@@ -6173,6 +6232,13 @@ export type PostV1AiEditFormBodyHistoryItem = {
   text: string;
 };
 
+export type PostV1AiEditFormBodyClarificationsItem = {
+  /** @maxLength 300 */
+  question: string;
+  /** @maxLength 500 */
+  answer: string;
+};
+
 export type PostV1AiEditFormBody = {
   formId: string;
   /**
@@ -6187,6 +6253,13 @@ export type PostV1AiEditFormBody = {
      * @maximum 10
      */
   count?: number;
+  /**
+     * @minimum -900
+     * @maximum 900
+     */
+  utcOffsetMinutes?: number;
+  /** @maxItems 3 */
+  clarifications?: PostV1AiEditFormBodyClarificationsItem[];
 };
 
 export type PostV1AiEditForm200IssuesItem = {
@@ -6263,12 +6336,29 @@ export type PostV1AiEditForm404 = {
   error: PostV1AiEditForm404Error;
 };
 
+export type PostV1AiClarifyFormBodyHistoryItemRole = typeof PostV1AiClarifyFormBodyHistoryItemRole[keyof typeof PostV1AiClarifyFormBodyHistoryItemRole];
+
+
+export const PostV1AiClarifyFormBodyHistoryItemRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export type PostV1AiClarifyFormBodyHistoryItem = {
+  role: PostV1AiClarifyFormBodyHistoryItemRole;
+  /** @maxLength 2000 */
+  text: string;
+};
+
 export type PostV1AiClarifyFormBody = {
   /**
-     * @minLength 5
+     * @minLength 3
      * @maxLength 2000
      */
   prompt: string;
+  formId?: string;
+  /** @maxItems 20 */
+  history?: PostV1AiClarifyFormBodyHistoryItem[];
 };
 
 export type PostV1AiClarifyForm200QuestionsItemKind = typeof PostV1AiClarifyForm200QuestionsItemKind[keyof typeof PostV1AiClarifyForm200QuestionsItemKind];

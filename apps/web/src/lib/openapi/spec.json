@@ -7787,6 +7787,32 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 10
+                  },
+                  "utcOffsetMinutes": {
+                    "type": "integer",
+                    "minimum": -900,
+                    "maximum": 900
+                  },
+                  "clarifications": {
+                    "maxItems": 3,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "question": {
+                          "type": "string",
+                          "maxLength": 300
+                        },
+                        "answer": {
+                          "type": "string",
+                          "maxLength": 500
+                        }
+                      },
+                      "required": [
+                        "question",
+                        "answer"
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -7801,7 +7827,7 @@
           "v1"
         ],
         "summary": "Ask a model to change an existing form: add, edit or remove questions and rewire the flow",
-        "description": "Returns the proposed document **without saving it**. Send it to `PUT /v1/forms/{id}/doc` to keep it. An edit may add no questions at all: most requests about a working form change the routing rather than the wording. Pass `history` (oldest first) when this is a follow-up, or the model cannot resolve 'also', 'it' or 'instead'.",
+        "description": "Returns the proposed document **without saving it**. Send it to `PUT /v1/forms/{id}/doc` to keep it. An edit may add no questions at all: most requests about a working form change the routing rather than the wording. Pass `history` (oldest first) when this is a follow-up, or the model cannot resolve 'also', 'it' or 'instead'. A request about the form's settings (its colours, the interviewer's tone, a closing date) comes back in `settings`, one entry per setting with its value before and after, already applied to `doc` unless it is marked `locked` because the plan does not include it. A question about how to do something comes back as `answer`, with no `doc`.",
         "responses": {
           "200": {
             "description": "The proposed document and what changed",
@@ -8064,8 +8090,36 @@
                 "properties": {
                   "prompt": {
                     "type": "string",
-                    "minLength": 5,
+                    "minLength": 3,
                     "maxLength": 2000
+                  },
+                  "formId": {
+                    "type": "string"
+                  },
+                  "history": {
+                    "default": [],
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "assistant"
+                          ]
+                        },
+                        "text": {
+                          "type": "string",
+                          "maxLength": 2000
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "text"
+                      ]
+                    }
                   }
                 },
                 "required": [

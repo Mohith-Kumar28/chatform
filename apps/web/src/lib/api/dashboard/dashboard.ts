@@ -3578,6 +3578,11 @@ export const usePostApiAiGenerateForm = <TError = void,
   status: 200
 }
 
+export type postApiAiClarifyFormResponse404 = {
+  data: void
+  status: 404
+}
+
 export type postApiAiClarifyFormResponse503 = {
   data: void
   status: 503
@@ -3586,7 +3591,7 @@ export type postApiAiClarifyFormResponse503 = {
 export type postApiAiClarifyFormResponseSuccess = (postApiAiClarifyFormResponse200) & {
   headers: Headers;
 };
-export type postApiAiClarifyFormResponseError = (postApiAiClarifyFormResponse503) & {
+export type postApiAiClarifyFormResponseError = (postApiAiClarifyFormResponse404 | postApiAiClarifyFormResponse503) & {
   headers: Headers;
 };
 

@@ -57,20 +57,20 @@ const STAGE_COPY: Record<StageId, { icon: typeof Globe; active: string; done: st
     icon: Globe,
     active: "Reading the page",
     done: "Read the page",
-    skipped: "Couldn't read the page — drafting from your description alone",
+    skipped: "Couldn't read the page, so this is drafted from your description alone",
   },
   researching: {
     icon: Search,
     active: "Looking up what this product does",
     done: "Learned what this product does",
-    skipped: "Skipped the lookup — drafting from your description alone",
+    skipped: "Skipped the lookup, so this is drafted from your description alone",
   },
   drafting: { icon: Sparkles, active: "Writing the questions", done: "Questions written", skipped: "Skipped" },
   logic: {
     icon: GitBranch,
     active: "Working out who gets asked what",
     done: "Branching set up",
-    skipped: "No branching needed — everyone answers the same questions",
+    skipped: "No branching needed: everyone answers the same questions",
   },
   saving: { icon: Save, active: "Saving your form", done: "Saved", skipped: "Skipped" },
 };

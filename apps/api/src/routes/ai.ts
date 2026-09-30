@@ -27,7 +27,7 @@ import {
   NO_USAGE,
 } from "../lib/ai.js";
 import { logAiGeneration } from "../lib/ai-usage.js";
-import { buildFlowGeneratorPrompt, buildEditPrompt, requestContext, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL, CLARIFY_SYSTEM, withClarifications, type BuilderTurn } from "../lib/agent-prompts.js";
+import { buildFlowGeneratorPrompt, buildEditPrompt, requestContext, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL, clarifySystem, answeredRequest, questionManifest, withClarifications, type BuilderTurn } from "../lib/agent-prompts.js";
 import { draftToDoc, pruneOrphanEndings } from "../lib/draft-normalize.js";
 import { applySourceFields, applySourceForm, applySourceFormToDoc, finishSourceForm, type SourceForm } from "../lib/form-import.js";
 import { withDefaultPaymentAccount } from "../lib/payments/default-account.js";
@@ -94,6 +94,12 @@ aiRouter.post("/ai/generate-form/stream", requireGauge("forms_count", "forms.cre
  * obeyed exactly. The ceiling is 50 because `DRAFT_LIMITS.blocks` is 51 and the
  * welcome block is one of them.
  */
+/** What the author answered when asked first (`/ai/clarify-form`), for a new form or an edit. */
+const Clarifications = z
+  .array(z.object({ question: z.string().max(300), answer: z.string().max(500) }))
+  .max(3)
+  .optional();
+
 export const GenerateBody = z.object({
   prompt: z.string().min(5).max(2000),
   questionCount: z.number().int().min(2).max(50).optional(),
@@ -106,10 +112,7 @@ export const GenerateBody = z.object({
    * Absent or empty on every generation that needed no questions, which is
    * most of them.
    */
-  clarifications: z
-    .array(z.object({ question: z.string().max(300), answer: z.string().max(500) }))
-    .max(3)
-    .optional(),
+  clarifications: Clarifications,
   /**
    * The workspace to create into — a slug or an id, resolved inside the
    * caller's organization. Omitted means the organization's first workspace.
@@ -381,7 +384,16 @@ aiRouter.post(
  * spent an allowance on it. The tokens are still logged, because they are still
  * tokens.
  */
-export const ClarifyBody = z.object({ prompt: z.string().min(5).max(2000) });
+export const ClarifyBody = z.object({
+  prompt: z.string().min(3).max(2000),
+  /** Set when the builder chat asks before an edit: the questions are checked against this form. */
+  formId: z.string().optional(),
+  /** The builder chat's thread, oldest first, so a settled point is not asked again. */
+  history: z
+    .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().max(2000) }))
+    .max(20)
+    .default([]),
+});
 
 aiRouter.post(
   "/ai/clarify-form",
@@ -410,6 +422,7 @@ aiRouter.post(
           },
         },
       },
+      404: { description: "The form to ask about does not exist, or the caller cannot open it" },
       503: { description: "AI not configured" },
     },
   }),
@@ -417,22 +430,34 @@ aiRouter.post(
 );
 
 export async function clarifyFormHandler(c: AiCtx) {
-    // No key is not an error here. The author can still describe their form and
-    // have it drafted; they simply are not asked anything first.
-    if (!c.env.OPENROUTER_API_KEY) return c.json({ questions: [] });
-    const { prompt } = validBody<z.infer<typeof ClarifyBody>>(c);
+    const { prompt, formId, history } = validBody<z.infer<typeof ClarifyBody>>(c);
     const started = Date.now();
+    // Before an edit, the question is asked about THIS form and THIS
+    // conversation, with the same access check the edit itself makes.
+    let current = "";
+    if (formId) {
+      const form = keyOwnsForm(c, formId) ? await assertFormAccess(c, formId) : null;
+      if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+      const row = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ? AND deleted_at IS NULL`).bind(formId).first<{ working_schema: string }>();
+      if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+      const doc = FormDoc.parse(migrateFormDoc(JSON.parse(row.working_schema)));
+      const said = history.map((t) => `${t.role === "user" ? "Author" : "You"}: ${t.text}`).join("\n");
+      current = `THE FORM AS IT IS NOW:\n${questionManifest(doc)}\n\n${said ? `WHAT HAS BEEN SAID SO FAR:\n${said}\n\n` : ""}THE REQUEST:\n`;
+    }
+    // No key is not an error here. The author can still describe their form and
+    // have it built; they simply are not asked anything first.
+    if (!c.env.OPENROUTER_API_KEY) return c.json({ questions: [] });
     // The pages are read after this step, not before, so without this the
     // model asked the author to list the fields of the form they had just
     // linked. Saying so costs nothing; fetching the pages here would cost the
     // author several seconds before the first question.
     const linked = extractUrls(prompt).length > 0
-      ? `${prompt}\n\n(Every link above is read automatically before drafting, including any form on it: its questions, options, order and required fields. Never ask what a linked page or form contains.)`
+      ? `${prompt}\n\n(Every link above is read automatically first, including any form on it: its questions, options, order and required fields. Never ask what a linked page or form contains.)`
       : prompt;
     const { questions, usage } = await clarifyRequest({
       env: c.env,
-      prompt: linked,
-      system: CLARIFY_SYSTEM,
+      prompt: current + linked,
+      system: clarifySystem(formId ? "edit" : "create"),
       organizationId: c.get("orgId"),
       trace: { userId: c.get("userId"), source: callSource(c) },
     });
@@ -441,13 +466,13 @@ export async function clarifyFormHandler(c: AiCtx) {
       await logAiGeneration(c.env, {
         organizationId: orgId,
         userId: c.get("userId"),
-        kind: "clarify",
+        kind: formId ? "clarify_edit" : "clarify",
         model: MODELS.extraction,
         usage,
         latencyMs: Date.now() - started,
       });
     }
-    console.log("clarify_form", { asked: questions.length, ms: Date.now() - started });
+    console.log("clarify_form", { asked: questions.length, edit: Boolean(formId), ms: Date.now() - started });
     return c.json({ questions });
 }
 
@@ -629,6 +654,8 @@ export const EditFormBody = z.object({
    * lands at their 6pm. Absent reads a date as UTC.
    */
   utcOffsetMinutes: z.number().int().min(-900).max(900).optional(),
+  /** Answers to the questions the builder chat asked first, as a new form takes them. */
+  clarifications: Clarifications,
 });
 
 /**
@@ -683,7 +710,9 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
     if (!c.env.OPENROUTER_API_KEY) {
       return { status: 503, body: { error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } } };
     }
-  const { formId, prompt, history, utcOffsetMinutes } = validBody<z.infer<typeof EditFormBody>>(c);
+  const { formId, prompt: asked, history, utcOffsetMinutes, clarifications } = validBody<z.infer<typeof EditFormBody>>(c);
+  // Appended, not merged, exactly as a new form takes them.
+  const prompt = withClarifications(asked, clarifications ?? []);
   // One Langfuse trace for the whole edit: tool loop, review, any retry.
   const trace = newTrace("edit_form", c.get("userId"), callSource(c));
     /**
@@ -1208,8 +1237,8 @@ aiRouter.post(
         // The server writes the conversation itself, in this request: the
         // prompt and the reply both pass through here. The ids go back on the
         // event so the builder's copy and the stored one agree.
-        const { formId, prompt } = validBody<z.infer<typeof EditFormBody>>(c);
-        const asked: StoredTurn = { id: turnId(), role: "user", text: prompt };
+        const { formId, prompt, clarifications } = validBody<z.infer<typeof EditFormBody>>(c);
+        const asked: StoredTurn = { id: turnId(), role: "user", text: answeredRequest(prompt, clarifications) };
         if (status === 200) {
           const b = body as Parameters<typeof proposalTurn>[2] & { question?: string; answer?: string | null; doc?: unknown };
           const proposed = base && !b.question ? FormDoc.safeParse(b.doc) : null;

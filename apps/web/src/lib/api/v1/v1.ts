@@ -3484,7 +3484,7 @@ export const getPostV1AiEditFormUrl = () => {
 }
 
 /**
- * Returns the proposed document **without saving it**. Send it to `PUT /v1/forms/{id}/doc` to keep it. An edit may add no questions at all: most requests about a working form change the routing rather than the wording. Pass `history` (oldest first) when this is a follow-up, or the model cannot resolve 'also', 'it' or 'instead'.
+ * Returns the proposed document **without saving it**. Send it to `PUT /v1/forms/{id}/doc` to keep it. An edit may add no questions at all: most requests about a working form change the routing rather than the wording. Pass `history` (oldest first) when this is a follow-up, or the model cannot resolve 'also', 'it' or 'instead'. A request about the form's settings (its colours, the interviewer's tone, a closing date) comes back in `settings`, one entry per setting with its value before and after, already applied to `doc` unless it is marked `locked` because the plan does not include it. A question about how to do something comes back as `answer`, with no `doc`.
  * @summary Ask a model to change an existing form: add, edit or remove questions and rewire the flow
  */
 export const postV1AiEditForm = async (postV1AiEditFormBody: PostV1AiEditFormBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1AiEditFormResponse> => {
