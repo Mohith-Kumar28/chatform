@@ -114,6 +114,8 @@ const FormCardTheme = z.object({
   backgroundPatternOpacity: z.number().optional(),
   /** The tile's ink; absent means the accent. */
   backgroundPatternColor: z.string().optional(),
+  /** The large soft shape behind the conversation; absent means none. */
+  backgroundShape: z.string().optional(),
   /**
    * The rest of what shapes a bubble, so the card's miniature is drawn by the
    * same `chatThemeVars` the chat is. Optional so an older payload still parses.
@@ -243,6 +245,7 @@ function summariseDoc(raw: string | null): {
       backgroundPattern: pick(t.backgroundPattern, DEFAULT_CARD_THEME.backgroundPattern),
       ...(typeof t.backgroundPatternOpacity === "number" ? { backgroundPatternOpacity: t.backgroundPatternOpacity } : {}),
       ...(typeof t.backgroundPatternColor === "string" && t.backgroundPatternColor ? { backgroundPatternColor: t.backgroundPatternColor } : {}),
+      ...(typeof t.backgroundShape === "string" && t.backgroundShape ? { backgroundShape: t.backgroundShape } : {}),
       // Parsed rather than picked: these have enums and bounds, and the schema's
       // own defaults are what the chat falls back to as well.
       ...shapeOf(parsedTheme(t)),

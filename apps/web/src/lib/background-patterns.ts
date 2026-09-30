@@ -1,3 +1,5 @@
+import type { BackgroundShape } from "@repo/form-schema";
+
 /**
  * The faint SVG tile behind a form's conversation.
  *
@@ -388,4 +390,61 @@ export function rgbaFromHex(hex: string, alpha: number): string {
   if (full.length !== 6) return `rgba(0,0,0,${alpha})`;
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/**
+ * The large soft shapes: one decoration behind the conversation, painted as a
+ * second layer over the tile by the same `.chat-surface` rule, so the hosted
+ * form, the builder preview, the embed and the template cards all draw it.
+ *
+ * Each is anchored to an edge rather than stretched over the whole surface, so
+ * it reads the same on a phone and on a wide desktop page.
+ */
+interface ShapeDef {
+  w: number;
+  h: number;
+  /** `preserveAspectRatio`: the wave stretches along its edge, the others keep their form. */
+  aspect: string;
+  size: string;
+  position: string;
+  draw: (ink: string) => string;
+}
+
+const SHAPES: Record<BackgroundShape, ShapeDef> = {
+  wave: {
+    w: 400,
+    h: 100,
+    aspect: "none",
+    size: "100% 34%",
+    position: "left bottom",
+    draw: (ink) => `<path d="M0 45 C 80 0, 150 90, 230 45 S 360 0, 400 30 L400 100 L0 100 Z" fill="${ink}"/>`,
+  },
+  blob: {
+    w: 200,
+    h: 200,
+    aspect: "xMidYMid meet",
+    size: "auto 72%",
+    position: "right -20% top -30%",
+    draw: (ink) =>
+      `<path d="M120 8 C 165 18, 196 60, 190 108 C 184 160, 140 196, 94 190 C 44 184, 8 146, 12 98 C 16 52, 62 -4, 120 8 Z" fill="${ink}"/>`,
+  },
+  rings: {
+    w: 200,
+    h: 200,
+    aspect: "xMidYMid meet",
+    size: "auto 62%",
+    position: "right -12% top -20%",
+    draw: (ink) =>
+      `<g fill="none" stroke="${ink}" stroke-width="5"><circle cx="130" cy="72" r="62"/><circle cx="130" cy="72" r="38"/><circle cx="36" cy="172" r="18"/></g>`,
+  },
+};
+
+/** The shape as a background layer, or null for none (and for a value this build does not know). */
+export function shapeLayer(shape: string | undefined, ink: string): { image: string; size: string; position: string } | null {
+  const def = shape ? SHAPES[shape as BackgroundShape] : undefined;
+  if (!def) return null;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${def.w}" height="${def.h}" viewBox="0 0 ${def.w} ${def.h}" ` +
+    `preserveAspectRatio="${def.aspect}">${def.draw(ink)}</svg>`;
+  return { image: dataUri(svg), size: def.size, position: def.position };
 }

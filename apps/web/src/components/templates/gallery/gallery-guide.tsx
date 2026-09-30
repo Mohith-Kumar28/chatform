@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GradientField } from "@/components/brand/gradient-field";
 import { ArrowRight, GitBranch, MessageCircle, Share2, Sparkles } from "lucide-react";
 import { GOALS, ROLES, byGoal, byRole, getTemplate, goalPath, rolePath, typePath, type TemplateType } from "@/content/templates";
 
@@ -82,7 +83,7 @@ export function GalleryGuide() {
 
           <div>
             <h2 className="font-display text-foreground text-3xl font-semibold tracking-tight">Choose the right starting point</h2>
-            <div className="mt-6 grid gap-5 md:grid-cols-3">
+            <div className="mt-6 grid max-w-2xl gap-5">
               {KINDS.map((k) => {
                 const examples = k.examples.map((s) => getTemplate(s)).filter((t) => t !== undefined);
                 return (
@@ -193,8 +194,9 @@ export function GalleryGuide() {
             <Link
               prefetch={false}
               href="/signin"
-              className="bg-brand-drift text-on-primary inline-flex h-12 shrink-0 items-center gap-2 rounded-md px-6 font-semibold"
+              className="relative isolate inline-flex h-12 shrink-0 items-center gap-2 overflow-hidden rounded-md px-6 font-semibold text-[var(--on-band-vivid)]"
             >
+              <GradientField tier="vivid" size="160%" interactive={false} className="-z-10" />
               Create your free form
               <ArrowRight className="size-4" />
             </Link>

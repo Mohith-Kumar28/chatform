@@ -17,31 +17,9 @@ export interface TileData {
   preview: { preset: string; greeting: string; question: string; answer?: string; next?: string };
 }
 
-/** A soft shape in the corner, varied by slug, in the theme's accent. Decoration on the card only. */
-function Shape({ slug }: { slug: string }) {
-  let h = 2166136261;
-  for (let i = 0; i < slug.length; i++) h = Math.imul(h ^ slug.charCodeAt(i), 16777619);
-  const seed = h >>> 0;
-  const kind = seed % 3;
-  const style: CSSProperties = { color: "var(--cf-accent)", transform: (seed >> 3) % 2 === 1 ? "scaleX(-1)" : undefined };
-  return (
-    <svg aria-hidden viewBox="0 0 400 240" preserveAspectRatio="none" className="absolute inset-0 h-full w-full opacity-[0.16]" style={style}>
-      {kind === 0 && <path d="M0 170 C 80 120, 150 210, 230 170 S 360 120, 400 150 L400 240 L0 240 Z" fill="currentColor" />}
-      {kind === 1 && <path d="M260 0 C 340 30, 420 90, 400 170 C 380 240, 300 250, 250 240 C 190 225, 200 150, 230 100 C 250 60, 220 20, 260 0 Z" fill="currentColor" />}
-      {kind === 2 && (
-        <g fill="none" stroke="currentColor" strokeWidth="6">
-          <circle cx="330" cy="50" r="70" />
-          <circle cx="60" cy="210" r="46" />
-          <circle cx="360" cy="200" r="24" />
-        </g>
-      )}
-    </svg>
-  );
-}
-
 /**
  * The thumbnail: this template's own opening, drawn by the chat's bubbles in
- * the template's own theme (its builder background: colour, pattern and
+ * the template's own theme (its builder style: colour, pattern, shape and
  * bubbles), so the card looks like the form it opens as. Hovering shows the
  * way in, the same gesture the dashboard card uses.
  */
@@ -53,11 +31,12 @@ export function TemplateThumb({ tile, className }: { tile: TileData; className?:
     backgroundColor: "var(--cf-bg)",
     backgroundImage: "var(--cf-pattern)",
     backgroundSize: "var(--cf-pattern-size)",
+    backgroundRepeat: "var(--cf-pattern-repeat, repeat)",
+    backgroundPosition: "var(--cf-pattern-position, 0 0)",
   };
 
   return (
     <div className={`relative aspect-[16/10] overflow-hidden rounded-2xl ${className ?? ""}`} style={ground}>
-      <Shape slug={tile.slug} />
       <div className="relative flex h-full flex-col justify-center gap-2 px-5 py-4 [zoom:0.72]">
         <div className="flex justify-start">
           <ChatBubble from="bot" className="shadow-xs">

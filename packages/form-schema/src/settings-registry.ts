@@ -32,7 +32,7 @@ export const BACKGROUND_PRESET_KEY = "theme.backgroundPreset";
  */
 
 export const SETTING_SECTIONS = {
-  design: "How the form looks: its colours, fonts, corner roundness, background pattern, and ready-made looks for a style or mood",
+  design: "How the form looks: its colours, fonts, corner roundness, and its style: a ready-made look (page, pattern and shape) for a mood",
   display: "The progress indicator, whether optional questions can be skipped, and the Powered by chatform badge",
   agent_persona: "Who the AI interviewer is: its interview style, tone of voice, persona, name, and whether it rewords questions",
   agent_goal: "The interviewer's written goal and its description of what a good response contains, which steer how deep it probes",
@@ -188,12 +188,12 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   def({
     key: BACKGROUND_PRESET_KEY,
     section: "design",
-    label: "Background preset",
-    where: `${DESIGN} → Background`,
+    label: "Style",
+    where: `${DESIGN} → Style`,
     format: "enum",
     options: BACKGROUND_PRESETS.map((p) => ({ value: p.id, label: p.name })),
     hint:
-      "a ready-made look that sets the page, text, bubbles, primary colour and pattern together. " +
+      "a ready-made look that sets the page, text, bubbles, primary colour, pattern and background shape together. " +
       "When the author asks for a look or feel rather than exact colours, pick the preset whose description fits the request and the form best; " +
       "a colour set in the same edit is kept on top of it. " +
       `The presets: ${BACKGROUND_PRESETS.map((p) => `${p.id} (${p.description})`).join("; ")}`,
@@ -271,27 +271,6 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
     hint: "a Google Fonts family name",
     feature: "custom_fonts",
     gate: unlessDefault("custom_fonts", "Inter"),
-  }),
-  def({
-    key: "theme.backgroundPattern",
-    section: "design",
-    label: "Background pattern",
-    where: `${DESIGN} → Background`,
-    format: "enum",
-    options: [
-      { value: "auto", label: "Auto" },
-      { value: "none", label: "None" },
-    ],
-    hint: "specific tiles are picked by hand in the Design sheet",
-  }),
-  def({
-    key: "theme.backgroundPatternOpacity",
-    section: "design",
-    label: "Pattern strength",
-    where: `${DESIGN} → Background`,
-    format: "int",
-    min: 0,
-    max: 100,
   }),
 
   // display

@@ -1,4 +1,4 @@
-import type { ThemeDoc } from "./settings";
+import type { BackgroundShape, ThemeDoc } from "./settings";
 
 /**
  * Named backgrounds: a page colour, a tile and the colours that sit on them,
@@ -29,6 +29,8 @@ export interface BackgroundPreset {
   pattern: string;
   /** The tile's ink, when the primary colour is not the right one for it. */
   patternColor?: string;
+  /** The large soft shape behind the conversation, if any. */
+  shape?: BackgroundShape;
   colors: Pick<
     ThemeDoc,
     "background" | "surface" | "text" | "accent" | "accentText" | "botBubble" | "userBubble" | "userBubbleText"
@@ -42,6 +44,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "warm and friendly, for hospitality, events, community sign-ups",
     dark: false,
     pattern: "dots",
+    shape: "blob",
     colors: {
       background: "#ffe4d3",
       surface: "#ffffff",
@@ -59,6 +62,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "soft and creative, for design studios, workshops, wellbeing check-ins",
     dark: false,
     pattern: "rings",
+    shape: "rings",
     colors: {
       background: "#ece3ff",
       surface: "#ffffff",
@@ -76,6 +80,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "clean and upbeat, for health, fitness, food and sustainability",
     dark: false,
     pattern: "plus",
+    shape: "wave",
     colors: {
       background: "#d9f2e6",
       surface: "#ffffff",
@@ -93,6 +98,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "calm and trustworthy, for support, education, product feedback",
     dark: false,
     pattern: "wave",
+    shape: "wave",
     colors: {
       background: "#dbeafe",
       surface: "#ffffff",
@@ -110,6 +116,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "sunny and cheerful, for bakeries, kids' activities, casual surveys",
     dark: false,
     pattern: "dots-offset",
+    shape: "blob",
     colors: {
       background: "#fff1bf",
       surface: "#ffffff",
@@ -127,6 +134,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "gentle and personal, for weddings, beauty, gifts and RSVPs",
     dark: false,
     pattern: "scallops",
+    shape: "rings",
     colors: {
       background: "#ffdce8",
       surface: "#ffffff",
@@ -144,6 +152,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "earthy and relaxed, for travel, real estate, interiors, craft",
     dark: false,
     pattern: "grid-fine",
+    shape: "wave",
     colors: {
       background: "#f1e8dc",
       surface: "#ffffff",
@@ -161,6 +170,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "natural and grounded, for outdoors, farming, nonprofits, mindfulness",
     dark: false,
     pattern: "diagonal",
+    shape: "blob",
     colors: {
       background: "#e8f0d8",
       surface: "#ffffff",
@@ -195,6 +205,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "cool and professional, for SaaS, recruiting, B2B research",
     dark: false,
     pattern: "pinstripe",
+    shape: "rings",
     colors: {
       background: "#f1f5f9",
       surface: "#ffffff",
@@ -212,6 +223,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "playful and festive, for parties, launches, giveaways, celebrations",
     dark: false,
     pattern: "confetti",
+    shape: "blob",
     colors: {
       background: "#f3e6ff",
       surface: "#ffffff",
@@ -229,6 +241,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "cool and calm, for health, travel and service feedback",
     dark: false,
     pattern: "dots-offset",
+    shape: "wave",
     colors: {
       background: "#dff5f7",
       surface: "#ffffff",
@@ -246,6 +259,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "loud and energetic, for launches, giveaways, quizzes and campaigns",
     dark: true,
     pattern: "wave",
+    shape: "blob",
     patternColor: "#1c1917",
     colors: {
       background: "#f26b1d",
@@ -264,6 +278,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "bold and playful, for quizzes, product finders and creative brands",
     dark: true,
     pattern: "rings",
+    shape: "rings",
     patternColor: "#ffffff",
     colors: {
       background: "#5b2ee6",
@@ -282,6 +297,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "dark, confident and polished, for tech, finance, premium services",
     dark: true,
     pattern: "grid",
+    shape: "rings",
     colors: {
       background: "#221d44",
       surface: "#2d2757",
@@ -316,6 +332,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "dark and calm, for outdoors, eco projects, late-night reflection",
     dark: true,
     pattern: "diamonds",
+    shape: "wave",
     colors: {
       background: "#0f1d17",
       surface: "#152720",
@@ -333,6 +350,7 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
     description: "dark and luxurious, for fashion, music, evening events",
     dark: true,
     pattern: "crosshatch",
+    shape: "blob",
     colors: {
       background: "#1c1224",
       surface: "#251830",
@@ -353,7 +371,9 @@ export function backgroundPreset(id: string | null | undefined): BackgroundPrese
 /**
  * The theme with a preset on it: its colours, its tile and its tile ink (or
  * none, so a hand-picked ink from before does not clash). A dark preset makes
- * the form dark; a light one keeps Auto if the form is on it. Fonts, corners,
+ * the form dark; a light one keeps Auto if the form is on it. Its shape comes
+ * too, but matching (below) ignores it, so swapping the shape afterwards is a
+ * tweak on the preset rather than leaving it. Fonts, corners,
  * the logo and the tile's opacity are left alone. An unknown id changes
  * nothing.
  */
@@ -365,6 +385,7 @@ export function applyBackgroundPreset(theme: ThemeDoc, id: string): ThemeDoc {
     ...p.colors,
     backgroundPattern: p.pattern,
     backgroundPatternColor: p.patternColor,
+    backgroundShape: p.shape,
     colorScheme: p.dark ? "dark" : theme.colorScheme === "auto" ? "auto" : "light",
   };
 }

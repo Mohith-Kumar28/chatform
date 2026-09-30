@@ -11607,6 +11607,9 @@
                               "backgroundPatternColor": {
                                 "type": "string"
                               },
+                              "backgroundShape": {
+                                "type": "string"
+                              },
                               "text": {
                                 "type": "string"
                               },

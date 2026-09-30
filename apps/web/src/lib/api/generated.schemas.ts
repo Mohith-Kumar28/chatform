@@ -2870,6 +2870,7 @@ export type GetApiForms200ItemTheme = {
   backgroundPattern: string;
   backgroundPatternOpacity?: number;
   backgroundPatternColor?: string;
+  backgroundShape?: string;
   text?: string;
   surface?: string;
   accentText?: string;

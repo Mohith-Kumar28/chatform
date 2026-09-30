@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowRight, Check, ChevronRight, Clock, Flag, GitBranch, ListChecks } from "lucide-react";
 import { BLOCK_PRESENTATION, type BlockType } from "@repo/form-schema";
 import { CtaBand } from "@/components/marketing/cta-band";
+import { GradientField } from "@/components/brand/gradient-field";
 import { JsonLd } from "@/components/seo/json-ld";
 import { FaqList } from "@/components/templates/gallery/faq-list";
 import { TemplateTile } from "@/components/templates/gallery/template-tile";
@@ -148,8 +149,11 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ s
           <div className="flex flex-col items-start gap-2.5 lg:items-end">
             <Link prefetch={false}
               href={useHref}
-              className="bg-brand-drift text-on-primary inline-flex h-12 items-center gap-2 rounded-md px-6 text-base font-semibold shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_8px_20px_-8px_color-mix(in_oklab,var(--brand-violet)_60%,transparent)] transition-[transform,box-shadow] duration-200 hover:-translate-y-px active:translate-y-0 motion-reduce:hover:translate-y-0"
+              // The hero's own wash, drifting: soft colour moving inside the
+              // button rather than a hard two-stop sweep sliding across it.
+              className="relative isolate inline-flex h-12 items-center gap-2 overflow-hidden rounded-md px-6 text-base font-semibold text-[var(--on-band-vivid)] shadow-xs ring-1 ring-black/5 transition-transform duration-200 hover:-translate-y-px active:translate-y-0 motion-reduce:hover:translate-y-0"
             >
+              <GradientField tier="vivid" size="160%" interactive={false} className="-z-10" />
               Use this template
               <ArrowRight className="size-4" />
             </Link>

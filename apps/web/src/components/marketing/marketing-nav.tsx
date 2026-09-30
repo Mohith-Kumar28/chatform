@@ -59,7 +59,14 @@ export function MarketingNav() {
    * borrows the band ink instead — the same near-black the hero sets on
    * itself. Once scrolled, the backdrop is back and so are the normal colours.
    */
-  const overWash = usePathname() === "/";
+  const pathname = usePathname();
+  const overWash = pathname === "/";
+  /**
+   * The template gallery pins its own search bar to the top of the viewport,
+   * so a nav sliding back in on scroll-up lands on top of it. There the bar
+   * stays away until you are back at the top of the page.
+   */
+  const staysHidden = pathname.startsWith("/form-templates");
   const ctaVariant = overWash && !scrolled ? ("on-brand" as const) : ("default" as const);
   /**
    * These pages are static, so the session is only knowable in the browser.
@@ -76,14 +83,14 @@ export function MarketingNav() {
       const y = window.scrollY;
       setScrolled(y > 8);
       if (Math.abs(y - last) > 6) {
-        setHidden(y > 120 && y > last);
+        setHidden(y > 120 && (staysHidden || y > last));
         last = y;
       }
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [staysHidden]);
 
   return (
     <header

@@ -1524,7 +1524,9 @@
   background-color: var(--cf-bg);
   background-image: var(--cf-pattern);
   background-size: var(--cf-pattern-size);
-  background-repeat: repeat;
+  /* Two layers when the form has a shape: it sits once on an edge, over the tile. */
+  background-repeat: var(--cf-pattern-repeat, repeat);
+  background-position: var(--cf-pattern-position, 0 0);
   color: var(--cf-text);
 }
 

@@ -11,6 +11,7 @@ import {
   patternWeight,
   resolvePattern,
   rgbaFromHex,
+  shapeLayer,
 } from "@/lib/background-patterns";
 import { fontStack } from "@/lib/theme-fonts";
 
@@ -184,6 +185,16 @@ export function readableTheme(theme: ThemeDoc): ThemeDoc {
  *   the marketing demo — and the surface then paints the flat background it
  *   always did unless the theme names a tile outright.
  */
+/**
+ * The shape's ink: the primary colour (the text colour when that is too pale
+ * to see), at a soft fixed strength. A shape is one large quiet form, not a
+ * texture, so it does not follow the tile's opacity setting.
+ */
+export function shapeInk(theme: ThemeDoc): string {
+  const usable = contrast(theme.background, theme.accent) >= 1.3;
+  return rgbaFromHex(usable ? theme.accent : theme.text, isDarkColor(theme.background) ? 0.2 : 0.14);
+}
+
 export function chatThemeVars(themeIn: ThemeDoc, seed?: string | null): CSSProperties {
   const theme = readableTheme(themeIn);
   const darkSurface = isDarkColor(theme.background);
@@ -276,8 +287,7 @@ export function chatThemeVars(themeIn: ThemeDoc, seed?: string | null): CSSPrope
      * sees. `none` is a valid `background-image`, which is what lets the
      * seedless case fall through to a flat fill with no branch in the CSS.
      */
-    "--cf-pattern": tile ? patternImage(tile, patternInk(theme, tile)) : "none",
-    "--cf-pattern-size": tile ? patternSize(tile) : "auto",
+    ...backgroundLayers(theme, tile),
     /*
      * Stacks rather than bare names: quoted, pointed at the bundled `next/font`
      * faces where the theme names one of those, and falling back by the
@@ -287,4 +297,21 @@ export function chatThemeVars(themeIn: ThemeDoc, seed?: string | null): CSSPrope
     fontFamily: fontStack(theme.fontBody),
     "--cf-font-heading": fontStack(theme.fontHeading, theme.fontBody),
   } as CSSProperties;
+}
+
+/**
+ * The background as layers `.chat-surface` paints: the shape on top, then the
+ * tile. With no shape it is the tile alone, exactly as before the shape existed.
+ */
+function backgroundLayers(theme: ThemeDoc, tile: PatternDef | undefined | null): Record<string, string> {
+  const tileImage = tile ? patternImage(tile, patternInk(theme, tile)) : "none";
+  const tileSize = tile ? patternSize(tile) : "auto";
+  const shape = shapeLayer(theme.backgroundShape, shapeInk(theme));
+  if (!shape) return { "--cf-pattern": tileImage, "--cf-pattern-size": tileSize };
+  return {
+    "--cf-pattern": `${shape.image}, ${tileImage}`,
+    "--cf-pattern-size": `${shape.size}, ${tileSize}`,
+    "--cf-pattern-repeat": "no-repeat, repeat",
+    "--cf-pattern-position": `${shape.position}, 0 0`,
+  };
 }

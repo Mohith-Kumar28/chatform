@@ -162,25 +162,21 @@ export function TemplatePanes({
       >
         <Conversation doc={doc} />
 
-        {/* Sticky, because the list beside it is the long column: scrolling to
-            question nine should not scroll the flow off the screen. */}
-        <div className="lg:sticky lg:top-6 lg:self-start">
-          <Panel
-            title="The flow"
-            description="Where each answer leads. Every route here is editable once the form is yours."
-            action={
-              <Button variant="ghost" size="sm" shape="pill" onClick={() => setExpanded(true)}>
-                <Maximize2 className="size-3.5" />
-                Expand
-              </Button>
-            }
-          >
-            <div className="bg-muted/30 border-border rounded-xl border p-2">
-              <TemplateFlow doc={doc} height={520} />
-            </div>
-            <FlowLegend doc={doc} />
-          </Panel>
-        </div>
+        <Panel
+          title="The flow"
+          description="Where each answer leads. Every route here is editable once the form is yours."
+          action={
+            <Button variant="ghost" size="sm" shape="pill" onClick={() => setExpanded(true)}>
+              <Maximize2 className="size-3.5" />
+              Expand
+            </Button>
+          }
+        >
+          <div className="bg-muted/30 border-border min-h-0 flex-1 rounded-xl border p-2">
+            <TemplateFlow doc={doc} height="100%" className="h-full" />
+          </div>
+          <FlowLegend doc={doc} />
+        </Panel>
       </div>
 
       <Dialog open={expanded} onOpenChange={setExpanded}>
@@ -314,6 +310,7 @@ function Conversation({ doc }: { doc: FormDoc }) {
     <Panel
       title="The conversation"
       description="What a respondent is asked, in order."
+      scroll
     >
       <div className="space-y-3">
         {greeting?.title && (
@@ -427,28 +424,36 @@ function FlowLegend({ doc }: { doc: FormDoc }) {
   );
 }
 
-/** The pane wrapper both columns share, so the two read as one screen. */
+/**
+ * The pane wrapper both columns share, so the two read as one screen.
+ *
+ * Both are 80% of the screen tall, whatever the template: the content scrolls
+ * inside, so a twelve-question list never outgrows the flow beside it.
+ */
 function Panel({
   title,
   description,
   action,
+  scroll,
   children,
 }: {
   title: string;
   description: string;
   action?: React.ReactNode;
+  /** Scroll the body as one column; the flow scrolls its own frame instead. */
+  scroll?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <section className="bg-card border-border rounded-2xl border p-5 shadow-xs">
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <section className="bg-card border-border flex h-[80svh] flex-col rounded-2xl border p-5 shadow-xs">
+      <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="font-display text-base font-semibold">{title}</h2>
           <p className="text-foreground/65 mt-0.5 text-xs">{description}</p>
         </div>
         {action}
       </div>
-      {children}
+      {scroll ? <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2">{children}</div> : children}
     </section>
   );
 }

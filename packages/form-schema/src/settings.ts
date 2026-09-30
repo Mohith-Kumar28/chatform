@@ -569,6 +569,10 @@ export const THEME_COLOR_PATTERN = /^(#[0-9a-fA-F]{3,8}|(rgb|hsl|oklch|lab|lch|c
 const CSS_COLOR = THEME_COLOR_PATTERN;
 const themeColor = (fallback: string) => boundedString(40).regex(CSS_COLOR).catch(fallback);
 
+/** The background shapes, in the order the Design sheet lists them. */
+export const BACKGROUND_SHAPES = ["wave", "blob", "rings"] as const;
+export type BackgroundShape = (typeof BACKGROUND_SHAPES)[number];
+
 export const ThemeDoc = z.object({
   colorScheme: z.enum(["light", "dark", "auto"]).default("light"),
   background: themeColor("#faf7f2").default("#faf7f2"),
@@ -615,6 +619,13 @@ export const ThemeDoc = z.object({
   backgroundPatternOpacity: z.number().int().min(0).max(100).optional().catch(undefined),
   /** The tile's ink. Absent means the primary colour (or the text colour when that is too pale to show). */
   backgroundPatternColor: boundedString(40).regex(CSS_COLOR).optional().catch(undefined),
+  /**
+   * A large soft shape behind the conversation, in the primary colour: a wave
+   * along the bottom, a blob in a corner, or a few rings. Absent means none.
+   * Optional with a `catch`, like the opacity above, so saved docs and seeded
+   * templates keep their shape and a stray value is dropped, not refused.
+   */
+  backgroundShape: z.enum(BACKGROUND_SHAPES).optional().catch(undefined),
 
   /**
    * Optional branding. Both are opt-in: a form with neither still looks

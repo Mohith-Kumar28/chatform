@@ -68,7 +68,7 @@ export function TemplateFlow({
 }: {
   doc: FormDoc;
   className?: string;
-  height?: number;
+  height?: number | string;
 }) {
   // Down a column, not across one: see `Rankdir` in `flow-layout`.
   const graph = useMemo(() => deriveGraph(doc, doc.logic.filter(isGoto), undefined, "TB"), [doc]);

@@ -47,7 +47,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { chatThemeVars, contrast, isDarkColor, patternAlpha, patternOpacity } from "@/lib/chat-theme";
 import { resolveScheme } from "@/lib/form-scheme";
-import { patternImage, patternSize, patternWeight, resolvePattern, rgbaFromHex } from "@/lib/background-patterns";
+import { patternImage, patternSize, patternWeight, resolvePattern, rgbaFromHex, shapeLayer } from "@/lib/background-patterns";
 
 /**
  * The pieces of a menu, so one list of items can be rendered by two of them.
@@ -134,6 +134,7 @@ export interface FormRow {
     backgroundPattern?: string;
     backgroundPatternOpacity?: number;
     backgroundPatternColor?: string;
+    backgroundShape?: string;
     text?: string;
     surface?: string;
     accentText?: string;
@@ -1103,16 +1104,19 @@ function thumbSurface(
      * logo, a status strip and a fade, and a texture at full runtime strength
      * turns a card you recognise into a card you have to decode.
      */
-    if (!tile) return { backgroundColor: theme.background };
     const usable = contrast(theme.background, theme.accent) >= 1.3;
+    // The shape sits once in the thumbnail; the bleed below the seam is tile only.
+    const shape = part === "thumb" ? shapeLayer(theme.backgroundShape, rgbaFromHex(usable ? theme.accent : theme.userBubbleText, 0.14)) : null;
+    if (!tile && !shape) return { backgroundColor: theme.background };
     const color = theme.backgroundPatternColor || (usable ? theme.accent : theme.userBubbleText);
-    const ink = rgbaFromHex(color, patternAlpha(theme.background, color, 0.9 * patternWeight(tile) * patternOpacity(theme)));
+    const tileImage = tile ? patternImage(tile, rgbaFromHex(color, patternAlpha(theme.background, color, 0.9 * patternWeight(tile) * patternOpacity(theme)))) : "none";
+    const tileSize = tile ? patternSize(tile) : "auto";
     return {
       backgroundColor: theme.background,
-      backgroundImage: patternImage(tile, ink),
-      backgroundSize: patternSize(tile),
-      backgroundRepeat: "repeat",
-      backgroundPosition: tilePos,
+      backgroundImage: shape ? `${shape.image}, ${tileImage}` : tileImage,
+      backgroundSize: shape ? `${shape.size}, ${tileSize}` : tileSize,
+      backgroundRepeat: shape ? "no-repeat, repeat" : "repeat",
+      backgroundPosition: shape ? `${shape.position}, ${tilePos}` : tilePos,
     };
   }
 

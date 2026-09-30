@@ -2,14 +2,12 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { FormDoc, ThemeDoc, THEME_DEFAULT_INK } from "@repo/form-schema";
-import { Check } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { InfoHint } from "@/components/ui/info-hint";
 import { cn } from "@/lib/utils";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { BrandField } from "./brand-field";
-import { PatternField } from "./pattern-field";
+import { StyleField } from "./style-field";
 import { LockedControl } from "@/components/billing/gate";
 import { BufferedInput } from "@/components/ui/buffered-input";
 import { Switch } from "@/components/ui/switch";
@@ -19,6 +17,15 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { appearanceOf, withAppearance } from "@/lib/form-scheme";
 
 type Theme = FormDoc["theme"];
+
+/** The Corners choices, each with the radius its tile draws (Pill as a deep curve). */
+const CORNERS: { value: Theme["radius"]; label: string; preview: string }[] = [
+  { value: "none", label: "Square", preview: "0" },
+  { value: "sm", label: "Small", preview: "5px" },
+  { value: "md", label: "Medium", preview: "10px" },
+  { value: "lg", label: "Large", preview: "16px" },
+  { value: "full", label: "Pill", preview: "999px" },
+];
 
 /**
  * Five fills, and no ink.
@@ -40,47 +47,6 @@ const COLOR_FIELDS: { key: keyof Theme; label: string }[] = [
   // The label on send, book, pay and submit. Stored as the schema's default
   // ink until someone picks one, which the runtime reads as "choose for me".
   { key: "accentText", label: "Button text" },
-];
-
-/**
- * A preset moves the accent and the respondent's bubble together, and it puts
- * them at different lightnesses on purpose.
- *
- * The accent is the thing you press, so it stays saturated — a pale button is
- * a button people miss. The respondent's bubble is a passage of their own
- * writing, so it is a tint: light enough that dark ink sits above 9:1 on it,
- * dark enough to stand clear of the page. The old presets had the bubble at
- * full strength, which is the one lightness that serves neither job — nothing
- * reads well on a mid-tone, and a form that picked violet still sent in orange
- * because the accent had not moved with it.
- *
- * `Chatform` is the only preset that keeps two hues: the mark's orange for the
- * action, the mark's violet for the respondent. That reads as a palette now
- * that the violet is a tint under the orange rather than a second fill
- * competing with it.
- */
-const PRESETS: { name: string; theme: Partial<Theme> }[] = [
-  {
-    // The schema's defaults, so a new form opens with this one selected.
-    name: "Chatform",
-    theme: { background: "#faf7f2", accent: "#FD6F29", botBubble: "#ffffff", userBubble: "#FFCBAA", text: "#1c1917" },
-  },
-  {
-    name: "Violet",
-    theme: { background: "#f8f5fd", accent: "#6D3FC7", botBubble: "#ffffff", userBubble: "#C9AEEE", text: "#1e1b26" },
-  },
-  {
-    name: "Ocean",
-    theme: { background: "#f4f9fd", accent: "#0369A1", botBubble: "#ffffff", userBubble: "#B9DCF6", text: "#0c2f47" },
-  },
-  {
-    name: "Forest",
-    theme: { background: "#f5faf6", accent: "#166534", botBubble: "#ffffff", userBubble: "#B9E4C8", text: "#14321f" },
-  },
-  {
-    name: "Midnight",
-    theme: { background: "#14111c", accent: "#B48DF4", botBubble: "#221d30", userBubble: "#453862", text: "#f5f3f8" },
-  },
 ];
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -169,6 +135,10 @@ export function ThemePanel({
         </div>
       </Section>
 
+      <Section title="Style">
+        <StyleField theme={theme} seed={seed} onChange={(next) => onChange(next)} />
+      </Section>
+
       <Section title="Appearance">
         <div data-setting="theme.colorScheme" className="flex items-center gap-2">
           <SegmentedControl
@@ -185,41 +155,6 @@ export function ThemePanel({
           <InfoHint label="About appearance">
             Auto shows each person the form in light or dark to match their device.
           </InfoHint>
-        </div>
-      </Section>
-
-      <Section title="Presets">
-        <div className="grid grid-cols-2 gap-2">
-          {PRESETS.map((p) => {
-            // Selected while every colour it sets still matches, so a preset
-            // tweaked by hand stops claiming to be the one in use.
-            const active = (Object.keys(p.theme) as (keyof Theme)[]).every(
-              (k) => String(theme[k]).toLowerCase() === String(p.theme[k]).toLowerCase(),
-            );
-            return (
-            <button
-              key={p.name}
-              type="button"
-              aria-pressed={active}
-              // A dark preset makes the form dark; a light one keeps Auto if it is on.
-              onClick={() =>
-                patch({ ...p.theme, colorScheme: isDarkTheme(p.theme as Theme) ? "dark" : theme.colorScheme === "auto" ? "auto" : "light" })
-              }
-              className={cn(
-                "flex items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-colors",
-                active ? "border-primary bg-primary/5" : "hover:bg-muted/60 border-transparent",
-              )}
-            >
-              <span className="flex gap-1">
-                <span className="size-4 rounded-full" style={{ background: p.theme.background, boxShadow: "inset 0 0 0 1px var(--border)" }} />
-                <span className="size-4 rounded-full" style={{ background: p.theme.accent }} />
-                <span className="size-4 rounded-full" style={{ background: p.theme.userBubble }} />
-              </span>
-              <span className="text-xs font-medium">{p.name}</span>
-              {active && <Check className="text-primary ml-auto size-3.5" />}
-            </button>
-            );
-          })}
         </div>
       </Section>
 
@@ -272,34 +207,6 @@ export function ThemePanel({
               </div>
             );
           })}
-          {/* Only while there is a pattern to colour. Empty follows the primary colour. */}
-          {theme.backgroundPattern !== "none" && (
-            <div className="space-y-1.5">
-              <Label htmlFor="theme-backgroundPatternColor">Pattern</Label>
-              <div className="flex items-center gap-2">
-                <input
-                  id="theme-backgroundPatternColor"
-                  type="color"
-                  value={
-                    /^#[0-9a-fA-F]{6}$/.test(theme.backgroundPatternColor ?? "")
-                      ? theme.backgroundPatternColor!
-                      : /^#[0-9a-fA-F]{6}$/.test(theme.accent)
-                        ? theme.accent
-                        : "#000000"
-                  }
-                  onChange={(e) => patch({ backgroundPatternColor: e.target.value }, "theme:backgroundPatternColor")}
-                  className="size-8 shrink-0 cursor-pointer rounded-md border"
-                  aria-label="Pattern colour"
-                />
-                <BufferedInput
-                  value={theme.backgroundPatternColor ?? ""}
-                  onCommit={(v) => patch({ backgroundPatternColor: v.trim() || undefined })}
-                  placeholder="Primary"
-                  className="font-mono text-xs"
-                />
-              </div>
-            </div>
-          )}
         </div>
         <p className="text-muted-foreground text-xs">
           Text on their bubble is chosen for you, and so is Button text until you set it, so
@@ -307,39 +214,35 @@ export function ThemePanel({
         </p>
       </Section>
 
-      <Section title="Background">
-        <div data-setting="theme.backgroundPattern theme.backgroundPatternOpacity">
-          <PatternField theme={theme} seed={seed} onChange={patch} />
-        </div>
-      </Section>
-
-      <Section title="Shape">
-        <div data-setting="theme.radius" className="space-y-1.5">
-          <div className="flex items-center gap-1">
-            <Label>Corners</Label>
-            <InfoHint label="About corners">
-              How round the chat bubbles, answer options, buttons, answer box and cards are. Square is sharp; Pill makes
-              every option and button fully round.
-            </InfoHint>
-          </div>
-          <Select value={theme.radius} onValueChange={(v) => patch({ radius: v as Theme["radius"] })}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Square</SelectItem>
-              <SelectItem value="sm">Small</SelectItem>
-              <SelectItem value="md">Medium</SelectItem>
-              <SelectItem value="lg">
-                Large
-                <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-                  <span className="size-1 rounded-full bg-current" aria-hidden />
-                  Default
+      <Section title="Corners">
+        <div data-setting="theme.radius" role="radiogroup" aria-label="Corners" className="grid grid-cols-5 gap-2">
+          {CORNERS.map((c) => {
+            const active = theme.radius === c.value;
+            return (
+              <button
+                key={c.value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => patch({ radius: c.value })}
+                className="group text-center"
+              >
+                {/* One corner of a box, drawn at the roundness it sets. */}
+                <span
+                  className={cn(
+                    "bg-muted/40 relative block aspect-square overflow-hidden rounded-md ring-1 transition-shadow",
+                    active ? "ring-primary ring-2" : "ring-border group-hover:ring-foreground/30",
+                  )}
+                >
+                  <span
+                    className="border-foreground/70 absolute top-1/3 left-1/3 size-full border-t-2 border-l-2"
+                    style={{ borderTopLeftRadius: c.preview }}
+                  />
                 </span>
-              </SelectItem>
-              <SelectItem value="full">Pill</SelectItem>
-            </SelectContent>
-          </Select>
+                <span className="mt-1 block text-xs">{c.label}</span>
+              </button>
+            );
+          })}
         </div>
       </Section>
 
