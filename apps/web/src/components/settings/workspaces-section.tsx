@@ -171,7 +171,7 @@ export function WorkspacesSection() {
           description="Every organization has at least one. Reload if this looks wrong."
         />
       ) : (
-        <Card className="divide-border divide-y p-0">
+        <Card className="divide-border gap-0 divide-y p-0">
           {workspaces.map((ws) => (
             <div key={ws.id} className="flex items-center gap-3 px-4 py-3">
               <FolderOpen className="text-muted-foreground size-4 shrink-0" strokeWidth={1.75} />
