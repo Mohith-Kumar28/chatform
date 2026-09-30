@@ -1293,8 +1293,16 @@ export function generateEdit<T extends EditDraft = EditDraft>(opts: {
 }
 
 /** AI flow generator: prompt → loose draft (normalized to FormDoc by the caller). */
-export function generateFormDraft(opts: { env: Bindings; prompt: string; system?: string; organizationId?: string | null; trace?: AiTrace }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage; model: string }> {
-  return draftObject({ ...opts, schema: GenerationDraft as z.ZodType<GenerationDraft>, kind: "generate" });
+export function generateFormDraft(opts: {
+  env: Bindings;
+  prompt: string;
+  system?: string;
+  organizationId?: string | null;
+  trace?: AiTrace;
+  /** `GenerationDraft` with fields of its own (a new form's settings); the extra fields ride along untyped. */
+  schema?: z.ZodType<GenerationDraft>;
+}): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage; model: string }> {
+  return draftObject({ ...opts, schema: opts.schema ?? (GenerationDraft as z.ZodType<GenerationDraft>), kind: "generate" });
 }
 
 /** A question as it appears mid-stream, before the draft is complete. */
@@ -1329,6 +1337,8 @@ export async function streamFormDraft(opts: {
   trace?: AiTrace;
   onBlock?: (block: DraftBlockPreview) => void;
   abortSignal?: AbortSignal;
+  /** As on `generateFormDraft`. */
+  schema?: z.ZodType<GenerationDraft>;
 }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage; model: string }> {
   // Whether this attempt has already put a question on the author's screen.
   // A schema refusal lands before the first token, so the fallback normally
@@ -1341,7 +1351,7 @@ export async function streamFormDraft(opts: {
   const draw = async (model: string) => {
     const result = streamObject({
       model: chatModel(opts.env, model),
-      schema: GenerationDraft,
+      schema: opts.schema ?? GenerationDraft,
       system: opts.system,
       prompt: opts.prompt,
       providerOptions: telemetry(opts.env, GENERATION_PROVIDER_OPTIONS, { kind: "generate_stream", organizationId: opts.organizationId, formId: opts.formId, ...opts.trace, model }),

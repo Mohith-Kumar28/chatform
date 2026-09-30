@@ -17,6 +17,7 @@ import { responsesRouter } from "./v1/responses.js";
 import { metaRouter } from "./v1/meta.js";
 import { chatRouter } from "./v1/chat.js";
 import { formsV1Router } from "./v1/forms.js";
+import { formSettingsV1Router } from "./v1/form-settings.js";
 import { webhooksV1Router } from "./v1/webhooks.js";
 import { exportsV1Router } from "./v1/exports.js";
 import { templatesV1Router } from "./v1/templates.js";
@@ -128,6 +129,12 @@ v1Router.route("/", metaRouter);
 
 /** Forms, programmatically: list, read, create, edit, publish, delete. */
 v1Router.route("/", formsV1Router);
+
+/**
+ * A form's settings by key: the ones the builder chat can change, with the
+ * same checks. The small tool for "make it navy" that the whole-document PUT is not.
+ */
+v1Router.route("/", formSettingsV1Router);
 
 /**
  * The template catalogue, and starting a form from one.

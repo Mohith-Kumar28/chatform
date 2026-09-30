@@ -61,6 +61,27 @@ export function registerReadTools(server: McpServer, ctx: () => McpCtx): void {
   );
 
   server.registerTool(
+    "list_form_settings",
+    {
+      title: "List a form's settings",
+      description:
+        "Every setting of one form that update_form_settings can change: its key, the label the builder shows, where it lives " +
+        "in the builder, the values it takes, and its current value. Covers design (colours, fonts, corners), the interviewer " +
+        "(style, tone, persona, goal, guardrails), who can respond, closing, emails, link previews, embedding, and the form's name " +
+        "and language. A setting marked locked needs the plan it names. Also the answer to 'where do I change X' questions.",
+      inputSchema: {
+        form_id: z.string().describe("The form id, e.g. frm_abc123."),
+      },
+      annotations: READ_ONLY,
+    },
+    async ({ form_id }) => {
+      const res = await callApi(ctx(), "GET", `/v1/forms/${encodeURIComponent(form_id)}/settings`);
+      if (res.status !== 200) return errorResult(describeFailure(res));
+      return jsonResult(res.body);
+    },
+  );
+
+  server.registerTool(
     "get_form",
     {
       title: "Get a form",

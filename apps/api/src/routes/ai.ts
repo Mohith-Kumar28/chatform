@@ -3,7 +3,8 @@ import { APICallError } from "ai";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../lib/validator.js";
 import { z } from "zod";
-import { FLOW_PROBLEM_CODES, FormDoc, buildFlowRules, lintFormDoc, hasErrors, migrateFormDoc, type Block } from "@repo/form-schema";
+import { FLOW_PROBLEM_CODES, FormDoc, buildFlowRules, lintFormDoc, hasErrors, migrateFormDoc, type Block, type ParseContext, type SettingChange } from "@repo/form-schema";
+import type { Entitlements } from "@repo/entitlements";
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, assertFormAccess, keyOwnsForm, type GuardVars } from "../lib/guards.js";
 import { requirePermission, requireQuota, requireGauge, assertPermission, type AuthzVars } from "../lib/authorize.js";
@@ -21,7 +22,7 @@ import {
   newTrace,
   MODELS,
   type AiTrace,
-  type GenerationDraft,
+  GenerationDraft,
   type TokenUsage,
   addUsage,
   NO_USAGE,
@@ -45,6 +46,8 @@ import { routeRequest } from "../lib/settings-route.js";
 import {
   allowedBy,
   checkSettingsDraft,
+  createSettingsField,
+  createSettingsPrompt,
   lockPaidBlockOptions,
   planNeeded,
   settingsDraftFields,
@@ -138,7 +141,35 @@ export const GenerateBody = z.object({
    * uploaded never pushes the author's own file past the plan's limit.
    */
   reserveKnowledge: z.number().int().min(0).max(100).optional(),
+  /** As on an edit: the author's `Date#getTimezoneOffset()`, for "closes on the 30th". */
+  utcOffsetMinutes: z.number().int().min(-900).max(900).optional(),
 });
+
+/**
+ * The settings side of a new form.
+ *
+ * Every section, not Jev's pick, unlike an edit. A new form's prompt describes
+ * the whole form in a sentence ("a playful signup form in forest green"), and
+ * Jev, asked section by section, placed neither "playful" nor most plain
+ * requests: it is built for requests that point at one part of a form that
+ * exists. Every section costs ~1,500 prompt tokens once per form, less than a
+ * hundredth of a cent, and saves a call.
+ */
+async function createSettings(
+  env: Bindings,
+  organizationId: string | null | undefined,
+  utcOffsetMinutes: number | undefined,
+): Promise<NonNullable<Parameters<typeof generateWithRetry>[0]["settings"]> | undefined> {
+  if (!organizationId) return undefined;
+  // Settings are a nicety on a new form; a plan lookup that fails must not
+  // take the form down with it.
+  const ent = await getEntitlements(env, organizationId).catch((err: unknown) => {
+    console.error("generate_settings_entitlements_failed", { message: err instanceof Error ? err.message : String(err) });
+    return null;
+  });
+  if (!ent) return undefined;
+  return { part: createSettingsPrompt(ent), ent, parse: { utcOffsetMinutes, now: Date.now() } };
+}
 
 /** A generation that produced a valid document, plus what it cost. */
 interface Generated {
@@ -153,6 +184,8 @@ interface Generated {
    * to be logged (and priced) as Gemini regardless of which vendor ran.
    */
   model: string;
+  /** Settings the request asked for, locked ones included (and not applied). */
+  settings: SettingChange[];
 }
 
 /**
@@ -185,6 +218,12 @@ async function generateWithRetry(opts: {
   /** Called for each question as it is drafted; enables the streaming path. */
   onBlock?: (b: { index: number; title: string; type: string }) => void;
   onRetry?: (reason: string) => void;
+  /**
+   * The settings this request may set, from `createSettingsPrompt`, and what
+   * the plan and the author's clock say about them. Absent, a new form is
+   * drafted with its questions only, as it always was.
+   */
+  settings?: { part: { text: string; keys: string[] }; ent: Entitlements; parse: ParseContext };
 }): Promise<Generated> {
   let lastError = "";
   let tokens = 0;
@@ -200,7 +239,11 @@ async function generateWithRetry(opts: {
   for (let attempt = 0; attempt < 2; attempt++) {
     const fixNote =
       attempt === 0 ? "" : `\n\nYour previous attempt had these problems — fix them:\n${lastError}`;
-    const prompt = buildFlowGeneratorPrompt(opts.prompt, opts.questionCount, opts.context) + fixNote;
+    const prompt = buildFlowGeneratorPrompt(opts.prompt, opts.questionCount, opts.context + (opts.settings?.part.text ?? "")) + fixNote;
+    // The key enum is built per request, so the static type stays GenerationDraft.
+    const schema = opts.settings?.part.keys.length
+      ? (GenerationDraft.extend(createSettingsField(opts.settings.part.keys)) as unknown as z.ZodType<GenerationDraft>)
+      : undefined;
 
     let draft: GenerationDraft;
     try {
@@ -213,6 +256,7 @@ async function generateWithRetry(opts: {
             organizationId: opts.organizationId,
             formId: opts.formId,
             trace: opts.trace,
+            schema,
           })
         : await generateFormDraft({
             env: opts.env,
@@ -220,6 +264,7 @@ async function generateWithRetry(opts: {
             prompt,
             organizationId: opts.organizationId,
             trace: opts.trace,
+            schema,
           });
       draft = result.draft;
       tokens += result.tokens;
@@ -274,8 +319,13 @@ async function generateWithRetry(opts: {
       // builder than by nothing at all. An ending still unconnected is dropped
       // first; nobody could have reached it, so nobody loses anything.
       const pruned = pruneOrphanEndings(normalized.doc);
-      const doc = await withDefaultPaymentAccount(opts.env, opts.organizationId, pruned);
-      return { doc, issues: pruned === normalized.doc ? normalized.issues : lintFormDoc(pruned), tokens, usage, model };
+      const paid = await withDefaultPaymentAccount(opts.env, opts.organizationId, pruned);
+      // Settings last, onto the finished document, checked exactly as an edit's are.
+      const asked = (draft as GenerationDraft & SettingsDraft).settings ?? [];
+      const checked = opts.settings && asked.length > 0 ? checkSettingsDraft(paid, { settings: asked }, opts.settings.ent, { parse: opts.settings.parse }) : null;
+      if (checked?.rejected.length) console.log("generate_settings_rejected", { rejected: checked.rejected });
+      const doc = checked?.doc ?? paid;
+      return { doc, issues: pruned === normalized.doc ? normalized.issues : lintFormDoc(pruned), tokens, usage, model, settings: checked?.settings ?? [] };
     }
 
     lastError = repairable.map((i) => `${i.path ?? ""}: ${i.message}`).join("\n");
@@ -323,7 +373,7 @@ export const generateFormHandler = async (c: AiCtx) => {
     if (!c.env.OPENROUTER_API_KEY) {
       return c.json({ error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } }, 503);
     }
-    const { prompt: rawPrompt, questionCount, clarifications } = validBody<z.infer<typeof GenerateBody>>(c);
+    const { prompt: rawPrompt, questionCount, clarifications, utcOffsetMinutes } = validBody<z.infer<typeof GenerateBody>>(c);
     const prompt = withClarifications(rawPrompt, clarifications ?? []);
 
     // One Langfuse trace for the whole generation: research, draft, any retry.
@@ -331,9 +381,10 @@ export const generateFormHandler = async (c: AiCtx) => {
     const orgId = c.get("orgId");
     const started = Date.now();
     const ledger = new Ledger();
+    const settingsFor = createSettings(c.env, orgId, utcOffsetMinutes);
     const reading = await readLinks({ env: c.env, prompt, organizationId: orgId, trace, ledger });
     try {
-      const { doc, issues, usage, model } = await generateWithRetry({
+      const { doc, issues, usage, model, settings } = await generateWithRetry({
         env: c.env,
         organizationId: orgId,
         trace,
@@ -341,13 +392,14 @@ export const generateFormHandler = async (c: AiCtx) => {
         questionCount,
         context: requestContext(prompt, reading, "create"),
         sourceForm: reading.sourceForm,
+        settings: await settingsFor,
       });
       ledger.add("generate", model, usage);
       // Charged only now that a valid document exists: a generation that
       // failed upstream, or produced something unusable, spends no allowance.
       await ledger.meter(c.env, orgId, { generation: true });
       await ledger.log(c.env, { organizationId: orgId, userId: c.get("userId"), latencyMs: Date.now() - started });
-      return c.json({ doc, issues, tokens: ledger.tokens });
+      return c.json({ doc, issues, tokens: ledger.tokens, settings });
     } catch (err) {
       await ledger.log(c.env, { organizationId: orgId, userId: c.get("userId"), latencyMs: Date.now() - started });
       return c.json(
@@ -526,7 +578,7 @@ aiRouter.post(
     if (!c.env.OPENROUTER_API_KEY) {
       return c.json({ error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } }, 503);
     }
-    const { prompt: rawPrompt, questionCount, workspaceId, clarifications, reserveKnowledge } = c.req.valid("json");
+    const { prompt: rawPrompt, questionCount, workspaceId, clarifications, reserveKnowledge, utcOffsetMinutes } = c.req.valid("json");
     const prompt = withClarifications(rawPrompt, clarifications ?? []);
     const ws = await requireWorkspace(c, workspaceId);
     if (ws === undefined) {
@@ -549,6 +601,7 @@ aiRouter.post(
       const startedAt = Date.now();
       const ledger = new Ledger();
       try {
+        const settingsFor = createSettings(c.env, orgId, utcOffsetMinutes);
         const reading = await readLinks({
           env: c.env,
           prompt,
@@ -564,7 +617,7 @@ aiRouter.post(
         });
 
         await stage("drafting", "start");
-        const { doc, issues, usage: genUsage, model: genModel } = await generateWithRetry({
+        const { doc, issues, usage: genUsage, model: genModel, settings } = await generateWithRetry({
           env: c.env,
           organizationId: orgId,
           trace,
@@ -578,6 +631,7 @@ aiRouter.post(
             void send("question", { index: b.index, title: b.title, type: b.type });
           },
           onRetry: (reason) => void send("retry", { reason }),
+          settings: await settingsFor,
         });
         ledger.add("generate_stream", genModel, genUsage);
         await stage("drafting", "done");
@@ -617,6 +671,9 @@ aiRouter.post(
           questions,
           rules,
           issues: issues.filter((i) => i.level === "error").length,
+          // Every setting the request set, and the ones its plan does not
+          // include, which the dashboard names so they do not just vanish.
+          settings,
         });
       } catch (err) {
         console.error("generate_form_stream_failed", { message: err instanceof Error ? err.message : String(err) });

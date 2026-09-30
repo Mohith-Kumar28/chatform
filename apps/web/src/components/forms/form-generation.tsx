@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, GitBranch, Globe, Loader2, Save, Search, Sparkles, X } from "lucide-react";
-import type { Block } from "@repo/form-schema";
+import { toast } from "sonner";
+import type { Block, SettingChange } from "@repo/form-schema";
+import { minPlanFor, PLANS, type FeatureKey } from "@repo/entitlements";
 import { Button } from "@/components/ui/button";
 import { streamEvents } from "@/lib/api/stream";
 import { blockMeta, TONE_CLASSES } from "@/components/builder/block-library";
@@ -48,6 +50,8 @@ export interface GenerationResult {
   title: string;
   questions: number;
   rules: number;
+  /** The settings the request set; locked ones were not applied. */
+  settings?: SettingChange[];
 }
 
 const STAGE_ORDER: StageId[] = ["reading", "researching", "drafting", "logic", "saving"];
@@ -121,7 +125,8 @@ export function useFormGeneration() {
 
       try {
         await streamEvents("/api/ai/generate-form/stream", {
-          body,
+          // The offset turns "closes at 6pm on the 30th" into the author's 6pm.
+          body: { ...body, utcOffsetMinutes: new Date().getTimezoneOffset() },
           signal: controller.signal,
           onEvent: ({ event, data }) => {
             if (event === "stage") {
@@ -163,7 +168,15 @@ export function useFormGeneration() {
               return;
             }
             if (event === "done") {
-              onDone(data as GenerationResult);
+              const result = data as GenerationResult;
+              // A setting the plan does not include was asked for and left
+              // out. Said once, by name, rather than silently missing.
+              const locked = (result.settings ?? []).filter((c) => c.locked);
+              if (locked.length > 0) {
+                const plan = PLANS[minPlanFor(locked[0]!.locked!.feature as FeatureKey)].name;
+                toast(`Needs ${plan}: ${locked.map((c) => c.label).join(", ")}`, { description: "Left at the default for now." });
+              }
+              onDone(result);
             }
           },
         });

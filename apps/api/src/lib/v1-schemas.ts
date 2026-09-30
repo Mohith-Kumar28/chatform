@@ -247,6 +247,45 @@ export const LintIssueView = z.object({
 /** Lint issues are returned, not enforced: a warning saves, an error does not. */
 export const DocSavedView = z.object({ ok: z.boolean(), issues: z.array(LintIssueView) });
 
+/** One setting of a form, as `GET /v1/forms/{id}/settings` lists it. See `form-settings-service.ts`. */
+const SettingView = z
+  .object({
+    key: z.string(),
+    section: z.string(),
+    sectionLabel: z.string(),
+    label: z.string(),
+    where: z.string(),
+    format: z.string(),
+    options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
+    min: z.number().optional(),
+    max: z.number().optional(),
+    maxLength: z.number().optional(),
+    maxItems: z.number().optional(),
+    clearable: z.boolean().optional(),
+    hint: z.string().optional(),
+    value: z.unknown(),
+    locked: z.object({ feature: z.string(), plan: z.string() }).optional(),
+  })
+  .loose();
+
+export const FormSettingsView = z.object({ settings: z.array(SettingView) });
+
+/** One setting a call changed, with its value on each side. `locked` ones were not applied. */
+const SettingChangeView = z
+  .object({
+    key: z.string(),
+    section: z.string(),
+    label: z.string(),
+    where: z.string(),
+    format: z.string(),
+    before: z.unknown(),
+    after: z.unknown(),
+    locked: z.object({ feature: z.string() }).optional(),
+  })
+  .loose();
+
+export const SettingsPatchedView = z.object({ changes: z.array(SettingChangeView), rejected: z.array(z.string()) });
+
 export const PublishedView = z.object({
   ok: z.boolean(),
   version: z.number(),

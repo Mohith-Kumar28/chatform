@@ -88,6 +88,42 @@ export function registerWriteTools(server: McpServer, ctx: () => McpCtx): void {
     },
   );
 
+  /**
+   * The small edit. `update_form` replaces the whole document, which is the
+   * wrong size of tool for one colour: an agent has to send every question
+   * back untouched. This changes settings by key and nothing else.
+   */
+  server.registerTool(
+    "update_form_settings",
+    {
+      title: "Change a form's settings",
+      description:
+        "Change settings on a form's draft by key, without touching its questions. Read the keys, formats and current values " +
+        "with list_form_settings first. Values are text (a colour like #1E40AF, true/false, an option's value, a date as " +
+        "YYYY-MM-DDTHH:mm). A value that does not fit comes back in 'rejected' with the reason; a setting the plan does not " +
+        "include comes back marked locked and is not applied. Changes are not live until publish_form.",
+      inputSchema: {
+        form_id: z.string().describe("The form id."),
+        changes: z
+          .array(z.object({ key: z.string(), value: z.string() }))
+          .describe("Each setting by its key from list_form_settings, with the new value as text. Empty text clears a clearable setting."),
+        utc_offset_minutes: z
+          .number()
+          .int()
+          .optional()
+          .describe("For a date without a zone: minutes behind UTC, as JavaScript's Date#getTimezoneOffset() gives it (India is -330)."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ form_id, changes, utc_offset_minutes }) => {
+      const res = await callApi(ctx(), "PATCH", `/v1/forms/${encodeURIComponent(form_id)}/settings`, {
+        body: { changes, ...(utc_offset_minutes !== undefined ? { utcOffsetMinutes: utc_offset_minutes } : {}) },
+      });
+      if (res.status >= 400) return errorResult(describeFailure(res));
+      return jsonResult(res.body);
+    },
+  );
+
   server.registerTool(
     "publish_form",
     {

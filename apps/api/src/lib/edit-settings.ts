@@ -1,10 +1,12 @@
 import { z } from "zod";
 import {
+  FormDoc as FormDocSchema,
   applySettingOps,
   renderSettingsForPrompt,
   settingDef,
   settingKeysFor,
   SETTING_SECTIONS,
+  SETTING_SECTION_IDS,
   type FormDoc,
   type KnowledgeAdd,
   type ParseContext,
@@ -271,4 +273,37 @@ export function lockPaidBlockOptions(base: FormDoc, proposed: FormDoc, ent: Enti
     }
   }
   return { doc, locked };
+}
+
+
+/** A new form's settings, all at their defaults: what "now" means before a form exists. */
+const BLANK = FormDocSchema.parse({
+  title: "New form",
+  blocks: [{ id: "blk_00000000", ref: "welcome", type: "welcome", title: "Hi", required: false }],
+  endings: [{ id: "end_00000000", ref: "end", title: "Thanks" }],
+});
+
+/**
+ * The settings half of a NEW form's prompt: "a dark, playful signup form"
+ * is a form and three settings, and the generator should set all of it.
+ *
+ * No builder map and no knowledge or answer fields: there is nobody to answer
+ * yet, and the dashboard stages knowledge itself. Locked settings are offered
+ * for the same reason as in an edit, so the author can be told what they asked
+ * for needs another plan rather than having it vanish.
+ */
+export function createSettingsPrompt(ent: Entitlements): { text: string; keys: string[] } {
+  const allowed = allowedBy(ent);
+  const keys = settingKeysFor(SETTING_SECTION_IDS, () => true);
+  const text = `
+
+FORM SETTINGS. Besides its questions, the request may say how the form should look or behave: its colours or fonts, the interviewer's tone, when it closes, who can respond. Set exactly those in "settings", each { "key", "value" } with the value as text, and leave everything the request does not mention at its default. A setting or value marked LOCKED or [needs <plan>] is not on this plan: still include it when asked for, and the author will be told. Today is ${new Date().toISOString().slice(0, 10)}.
+${renderSettingsForPrompt(BLANK, SETTING_SECTION_IDS, allowed, planNeeded)}`;
+  return { text, keys };
+}
+
+/** The one extra field a new form's draft carries. */
+export function createSettingsField(keys: readonly string[]) {
+  const fields = settingsDraftFields(keys);
+  return "settings" in fields && fields.settings ? { settings: fields.settings } : {};
 }

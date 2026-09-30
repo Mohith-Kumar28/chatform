@@ -229,6 +229,7 @@ describe("tools/list", () => {
         "list_blocks",
         "list_events",
         "list_form_versions",
+        "list_form_settings",
         "list_forms",
         "list_responses",
         "list_templates",
@@ -240,6 +241,7 @@ describe("tools/list", () => {
         "search_responses",
         "submit_response",
         "update_form",
+        "update_form_settings",
         "use_template",
         "whoami",
       ].sort(),
@@ -649,5 +651,28 @@ describe("passthrough tools", () => {
     const out = await callTool("chatform_api_read", { path: "/api/billing/usage" });
     expect(out.isError).toBe(true);
     expect(out.text).toContain("not a documented Chatform endpoint");
+  });
+});
+
+describe("form settings", () => {
+  it("lists settings by key and changes one without touching the questions", async () => {
+    const listed = await callTool("list_form_settings", { form_id: t.formId });
+    expect(listed.isError).toBe(false);
+    const settings = JSON.parse(listed.text).settings as { key: string; value: unknown }[];
+    expect(settings.find((s) => s.key === "settings.agent.tone")?.value).toBe("friendly");
+
+    const before = JSON.parse((await callTool("get_form", { form_id: t.formId })).text);
+    const changed = await callTool("update_form_settings", {
+      form_id: t.formId,
+      changes: [{ key: "settings.agent.tone", value: "playful" }, { key: "theme.accent", value: "not a colour" }],
+    });
+    expect(changed.isError).toBe(false);
+    const out = JSON.parse(changed.text) as { changes: { key: string; after: unknown }[]; rejected: string[] };
+    expect(out.changes).toMatchObject([{ key: "settings.agent.tone", after: "playful" }]);
+    expect(out.rejected[0]).toMatch(/theme.accent/);
+
+    const after = JSON.parse((await callTool("get_form", { form_id: t.formId })).text);
+    expect(after.doc.settings.agent.tone).toBe("playful");
+    expect(after.doc.blocks).toEqual(before.doc.blocks);
   });
 });

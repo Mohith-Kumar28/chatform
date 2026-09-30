@@ -152,6 +152,8 @@ server you have connected.
 | `list_blocks` | — | Every question type, its config schema and answer contract |
 | `create_form` | `form:write` | Create a form, empty or fully authored |
 | `update_form` | `form:write` | Replace the working document |
+| `list_form_settings` | `form:read` | Every setting by key: colours, fonts, tone, goal, closing, emails, embedding, with current values and plan locks |
+| `update_form_settings` | `form:write` | Change settings by key without touching the questions |
 | `publish_form` | `form:publish` | Make the working document live |
 | `list_templates` | `form:read` | The official template catalogue, or one template's document |
 | `use_template` | `form:write` | Start a draft from a template |
@@ -226,7 +228,10 @@ That runs `list_blocks` → `create_form` → `publish_form` → `get_form_analy
 
 When editing an existing form, the assistant must read the document first:
 `update_form` **replaces** the whole draft, so a partial document silently removes
-every question missing from it.
+every question missing from it. For a setting ("make it navy", "close it after
+200 responses", "sound more professional") use `update_form_settings` instead:
+it changes those keys and nothing else, refuses a value that does not fit with
+the reason, and reports a setting your plan does not include without applying it.
 
 ## What is not here
 

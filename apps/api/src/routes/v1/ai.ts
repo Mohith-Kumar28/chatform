@@ -54,13 +54,15 @@ aiV1Router.post(
     description:
       "Returns a document and its lint issues **without saving anything**. Pass the result to `POST /v1/forms` to keep it. " +
       "Consumes one `ai_generations` unit and the tokens it costs, charged only when a usable document comes back. " +
-      "If you are already driving this from a model of your own, writing the document yourself and posting it to `/v1/forms` costs you nothing here.",
+      "If you are already driving this from a model of your own, writing the document yourself and posting it to `/v1/forms` costs you nothing here. " +
+      "Settings the prompt asks for (\"a dark, playful form that closes on the 30th\") are set on `doc` and listed in `settings`, one entry per setting " +
+      "with its value before and after; one marked `locked` is not on your plan and was left at its default.",
     responses: {
       200: {
-        description: "The generated document, its lint issues, and the tokens spent",
+        description: "The generated document, its lint issues, the tokens spent, and the settings it set",
         content: {
           "application/json": {
-            schema: resolver(z.object({ doc: z.unknown(), issues: z.array(z.any()), tokens: z.number() })),
+            schema: resolver(z.object({ doc: z.unknown(), issues: z.array(z.any()), tokens: z.number(), settings: z.array(z.unknown()).optional() })),
           },
         },
       },

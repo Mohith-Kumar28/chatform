@@ -14873,6 +14873,11 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 100
+                  },
+                  "utcOffsetMinutes": {
+                    "type": "integer",
+                    "minimum": -900,
+                    "maximum": 900
                   }
                 },
                 "required": [
@@ -15098,6 +15103,11 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 100
+                  },
+                  "utcOffsetMinutes": {
+                    "type": "integer",
+                    "minimum": -900,
+                    "maximum": 900
                   }
                 },
                 "required": [
@@ -23834,6 +23844,466 @@
         ]
       }
     },
+    "/v1/forms/{id}/settings": {
+      "get": {
+        "operationId": "getV1FormsByIdSettings",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Every setting a form has, by key, with its current value",
+        "description": "The settings you can change with `PATCH /v1/forms/{id}/settings`: colours and fonts, the interviewer's tone and goal, who can respond, when the form closes, emails, sharing and embedding. Each carries the builder's label, where it lives in the builder, the values it takes, and `locked` when your plan does not include it.",
+        "responses": {
+          "200": {
+            "description": "The settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "settings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "section": {
+                            "type": "string"
+                          },
+                          "sectionLabel": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "where": {
+                            "type": "string"
+                          },
+                          "format": {
+                            "type": "string"
+                          },
+                          "options": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "label"
+                              ]
+                            }
+                          },
+                          "min": {
+                            "type": "number"
+                          },
+                          "max": {
+                            "type": "number"
+                          },
+                          "maxLength": {
+                            "type": "number"
+                          },
+                          "maxItems": {
+                            "type": "number"
+                          },
+                          "clearable": {
+                            "type": "boolean"
+                          },
+                          "hint": {
+                            "type": "string"
+                          },
+                          "value": {},
+                          "locked": {
+                            "type": "object",
+                            "properties": {
+                              "feature": {
+                                "type": "string"
+                              },
+                              "plan": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "feature",
+                              "plan"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "section",
+                          "sectionLabel",
+                          "label",
+                          "where",
+                          "format",
+                          "value"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "settings"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Form not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-required-scope": "form:read",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patchV1FormsByIdSettings",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "changes": {
+                    "minItems": 1,
+                    "maxItems": 40,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string",
+                          "maxLength": 10000
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ]
+                    },
+                    "description": "Each setting by its key from GET /v1/forms/{id}/settings, with the new value as text. Empty text clears a clearable setting."
+                  },
+                  "utcOffsetMinutes": {
+                    "description": "For a date written without a zone: minutes behind UTC, as JavaScript's Date#getTimezoneOffset() reports it.",
+                    "type": "integer",
+                    "minimum": -900,
+                    "maximum": 900
+                  }
+                },
+                "required": [
+                  "changes"
+                ]
+              }
+            }
+          }
+        },
+        "tags": [
+          "v1"
+        ],
+        "summary": "Change a form's settings by key",
+        "description": "Changes the working document; nothing is live until `POST /v1/forms/{id}/publish`. Every value is checked: one that does not parse is listed in `rejected` with the reason and nothing else in the call is held back. A setting your plan does not include comes back in `changes` with `locked` and is not applied. 422 when nothing in the call could be applied.",
+        "responses": {
+          "200": {
+            "description": "What changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "section": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "where": {
+                            "type": "string"
+                          },
+                          "format": {
+                            "type": "string"
+                          },
+                          "before": {},
+                          "after": {},
+                          "locked": {
+                            "type": "object",
+                            "properties": {
+                              "feature": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "feature"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "section",
+                          "label",
+                          "where",
+                          "format",
+                          "before",
+                          "after"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "rejected": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "changes",
+                    "rejected"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Form not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Nothing could be applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-required-scope": "form:write",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
     "/v1/templates": {
       "get": {
         "operationId": "getV1Templates",
@@ -24776,6 +25246,11 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 100
+                  },
+                  "utcOffsetMinutes": {
+                    "type": "integer",
+                    "minimum": -900,
+                    "maximum": 900
                   }
                 },
                 "required": [
@@ -24789,10 +25264,10 @@
           "v1"
         ],
         "summary": "Generate a form document from a natural-language prompt",
-        "description": "Returns a document and its lint issues **without saving anything**. Pass the result to `POST /v1/forms` to keep it. Consumes one `ai_generations` unit and the tokens it costs, charged only when a usable document comes back. If you are already driving this from a model of your own, writing the document yourself and posting it to `/v1/forms` costs you nothing here.",
+        "description": "Returns a document and its lint issues **without saving anything**. Pass the result to `POST /v1/forms` to keep it. Consumes one `ai_generations` unit and the tokens it costs, charged only when a usable document comes back. If you are already driving this from a model of your own, writing the document yourself and posting it to `/v1/forms` costs you nothing here. Settings the prompt asks for (\"a dark, playful form that closes on the 30th\") are set on `doc` and listed in `settings`, one entry per setting with its value before and after; one marked `locked` is not on your plan and was left at its default.",
         "responses": {
           "200": {
-            "description": "The generated document, its lint issues, and the tokens spent",
+            "description": "The generated document, its lint issues, the tokens spent, and the settings it set",
             "content": {
               "application/json": {
                 "schema": {
@@ -24805,6 +25280,10 @@
                     },
                     "tokens": {
                       "type": "number"
+                    },
+                    "settings": {
+                      "type": "array",
+                      "items": {}
                     }
                   },
                   "required": [
