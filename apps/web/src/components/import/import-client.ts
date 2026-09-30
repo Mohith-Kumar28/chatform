@@ -13,7 +13,7 @@ import { getRespondentSignal } from "@/lib/respondent-signal";
  * no model call, so these are plain requests, not a stream.
  */
 
-export type ImportSource = "typeform" | "google_forms" | "tally";
+export type ImportSource = "typeform" | "google_forms" | "tally" | "jotform" | "youform";
 
 export const IMPORT_SOURCES: {
   id: ImportSource;
@@ -45,12 +45,28 @@ export const IMPORT_SOURCES: {
     placeholder: "https://tally.so/r/…",
     where: "In Tally, open the form, choose Share, and copy the link.",
   },
+  {
+    id: "jotform",
+    name: "Jotform",
+    slug: "jotform",
+    placeholder: "https://form.jotform.com/…",
+    where: "In Jotform, open the form, choose Publish, and copy the form link.",
+  },
+  {
+    id: "youform",
+    name: "Youform",
+    slug: "youform",
+    placeholder: "https://app.youform.com/forms/…",
+    where: "In Youform, open the form, choose Share, and copy the link.",
+  },
 ];
 
 export const SOURCE_NAME: Record<ImportSource, string> = {
   typeform: "Typeform",
   google_forms: "Google Forms",
   tally: "Tally",
+  jotform: "Jotform",
+  youform: "Youform",
 };
 
 export interface ImportReport {
@@ -61,6 +77,7 @@ export interface ImportReport {
   endings: number;
   notCopied: string[];
   closed: boolean;
+  outline: { title: string; type: string; required: boolean }[];
 }
 
 export interface ImportTrial {
@@ -78,6 +95,8 @@ export function detectImportSource(text: string): ImportSource | null {
   if (/(^|\/\/)([a-z0-9-]+\.)?typeform\.com\/(to|form)\//i.test(t)) return "typeform";
   if (/(^|\/\/)(forms\.gle\/|docs\.google\.com\/forms\/)/i.test(t)) return "google_forms";
   if (/(^|\/\/)tally\.so\/(r|embed)\//i.test(t)) return "tally";
+  if (/(^|\/\/)([a-z0-9-]+\.)?youform\.com\/forms\//i.test(t)) return "youform";
+  if (/(^|\/\/)([a-z0-9-]+\.)?(jotform\.com|jotformeu\.com|jotform\.me)\/(build\/|form\/|jsform\/)?\d{10,}/i.test(t)) return "jotform";
   return null;
 }
 

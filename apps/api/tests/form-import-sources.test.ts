@@ -14,6 +14,17 @@ import typeform2 from "./fixtures/import/typeform-2.json";
 import tally1 from "./fixtures/import/tally-1.json";
 import tally2 from "./fixtures/import/tally-2.json";
 import google1 from "./fixtures/import/google-1.json";
+import typeform3 from "./fixtures/import/typeform-3.json";
+import jotformCamp from "./fixtures/import/jotform-20840494923456.html?raw";
+import jotformEvent from "./fixtures/import/jotform-221091427437049.html?raw";
+import jotformEngagement from "./fixtures/import/jotform-221093382736962.html?raw";
+import jotformExit from "./fixtures/import/jotform-240353619407960.html?raw";
+import jotformYoga from "./fixtures/import/jotform-201112518659957.html?raw";
+import jotformService from "./fixtures/import/jotform-211401670560040.html?raw";
+import { readJotform } from "../src/lib/import/jotform.js";
+import { parseYouformData, readYouform } from "../src/lib/import/youform.js";
+import { rehostImages } from "../src/lib/import/rehost.js";
+import youform1 from "./fixtures/import/youform-1.html?raw";
 
 /**
  * Imports, against real public forms saved as fixtures (Typeform's API JSON,
@@ -28,6 +39,14 @@ const convert = {
   tally1: () => importedToDoc(readTallyForm(tally1 as never, "https://tally.so/r/mZNovm")),
   tally2: () => importedToDoc(readTallyForm(tally2 as never, "https://tally.so/r/3X5kdw")),
   google1: () => importedToDoc(readGoogleForm(google1 as unknown[], "https://docs.google.com/forms/d/e/x/viewform")),
+  typeform3: () => importedToDoc(readTypeform(typeform3, "https://form.typeform.com/to/yWBgS4vK")),
+  jotformCamp: () => importedToDoc(readJotform(jotformCamp, "https://form.jotform.com/20840494923456")),
+  jotformEvent: () => importedToDoc(readJotform(jotformEvent, "https://form.jotform.com/221091427437049")),
+  jotformEngagement: () => importedToDoc(readJotform(jotformEngagement, "https://form.jotform.com/221093382736962")),
+  jotformExit: () => importedToDoc(readJotform(jotformExit, "https://form.jotform.com/240353619407960")),
+  jotformYoga: () => importedToDoc(readJotform(jotformYoga, "https://form.jotform.com/201112518659957")),
+  youform1: () => importedToDoc(readYouform(parseYouformData(youform1)!, "https://app.youform.com/forms/xrjcjyti")),
+  jotformService: () => importedToDoc(readJotform(jotformService, "https://form.jotform.com/211401670560040")),
 };
 
 const block = (doc: FormDoc, title: string) => {
@@ -82,6 +101,15 @@ describe("Typeform", () => {
       text: "Thanks! What's your team called?",
       recalled: true,
     });
+  });
+
+  it("makes a contact card required when its lines are", () => {
+    // Typeform keeps "required" on each line (first name, last name, email), not the card.
+    const { doc } = convert.typeform3();
+    expect(block(doc, "Contact Details")).toMatchObject({ type: "contact_info", required: true, fields: ["first_name", "last_name", "email"] });
+    // The ones Typeform itself leaves optional stay optional.
+    expect(block(doc, "What is your current monthly revenue?").required).toBe(false);
+    expect(block(doc, "What is your current ads situation?").required).toBe(true);
   });
 
   it("routes a yes/no on its boolean answer", () => {
@@ -146,6 +174,124 @@ describe("Google Forms", () => {
   });
 });
 
+describe("Jotform", () => {
+  it("reads fields, required stars and headings from the page", () => {
+    const { doc, report } = convert.jotformCamp();
+    expect(doc.blocks[0]).toMatchObject({ type: "welcome", title: "Summer Camp Registration ☀️ 🏕️" });
+    expect(block(doc, "Child Name")).toMatchObject({ type: "contact_info", required: true, fields: ["first_name", "last_name"] });
+    expect(block(doc, "Birth Date")).toMatchObject({ type: "date", required: true });
+    expect(block(doc, "Grade")).toMatchObject({ type: "number", required: true });
+    expect(block(doc, "Address")).toMatchObject({ type: "address", required: true });
+    expect(block(doc, "Medical Concerns")).toMatchObject({ type: "long_text", required: false });
+    expect(block(doc, "Child Information").type).toBe("statement");
+    expect(report.provider).toBe("jotform");
+  });
+
+  it("turns 'show the guest fields for Yes' into a branch", () => {
+    const { doc } = convert.jotformEvent();
+    const q = block(doc, "Will you have a guest with you?");
+    const rules = rulesFrom(doc, q.ref);
+    expect(rules[0]).toMatchObject({ target: block(doc, "Guest Name").ref, when: { conditions: [{ op: "eq", value: optionId(doc, "Will you have a guest with you?", "Yes") }] } });
+    expect(rules.at(-1)).toMatchObject({ target: block(doc, "Would you like to be updated").ref, when: { conditions: [] } });
+  });
+
+  it("keeps grids and scales with their labels", () => {
+    const grid = block(convert.jotformEngagement().doc, "Please, rate your satisfaction") as unknown as { type: string; rows: { label: string }[]; columns: { label: string }[] };
+    expect(grid.type).toBe("matrix");
+    expect(grid.rows[0]!.label).toBe("Comfortable working environment");
+    expect(grid.columns.map((c) => c.label)).toContain("Extremely Satisfied");
+    const scale = block(convert.jotformExit().doc, "How would you rate your overall job satisfaction");
+    expect(scale).toMatchObject({ type: "opinion_scale", steps: 5, labelLow: "Very Dissatisfied", labelHigh: "Very Satisfied" });
+  });
+
+  it("reads a star rating drawn as a select, and grid headers that wrap", () => {
+    const { doc } = convert.jotformService();
+    expect(block(doc, "Overall, how satisfied are you")).toMatchObject({ type: "rating", scale: 5 });
+    const grid = block(doc, "Please rate how strongly you agree") as unknown as { columns: { label: string }[] };
+    expect(grid.columns[0]!.label).toBe("Totally Disagree");
+  });
+
+  it("says a payment field was not copied", () => {
+    expect(convert.jotformYoga().report.notCopied.some((n) => /Payment/.test(n))).toBe(true);
+  });
+});
+
+describe("Youform", () => {
+  it("reads blocks, required flags, the welcome and the thank-you screen", () => {
+    const { doc, report } = convert.youform1();
+    expect(doc.blocks[0]).toMatchObject({ type: "welcome", title: "👋 Welcome! This is a live Youform", buttonLabel: "Let's Start" });
+    expect(block(doc, "Where did you hear about Youform?")).toMatchObject({ type: "short_text", required: true, placeholder: 'e.g "Google", "ChatGPT" etc' });
+    expect(block(doc, "Please upload a file").type).toBe("file_upload");
+    expect(block(doc, "Based on what you've seen so far")).toMatchObject({ type: "rating", required: false });
+    expect(block(doc, "You can ask for signatures")).toMatchObject({ type: "signature", required: true });
+    expect(doc.endings[0]!.title).toBe("That's the end of this form! ✅");
+    expect(report.provider).toBe("youform");
+  });
+
+  it("keeps the pictures on a picture choice, and routes each answer to its own reply", () => {
+    const { doc } = convert.youform1();
+    const q = block(doc, "Which do you prefer?") as unknown as { ref: string; type: string; options: { label: string; image_key: string | null }[] };
+    expect(q.type).toBe("picture_choice");
+    expect(q.options.find((o) => o.label === "Youform")!.image_key).toMatch(/^https:\/\/files\.youform\.io\//);
+    const rules = rulesFrom(doc, q.ref);
+    expect(rules.map((r) => r.action_kind === "goto" && r.target)).toEqual([
+      block(doc, "You chose correctly").ref,
+      block(doc, "That is incorrect").ref,
+      block(doc, "How would you like to use Youform?").ref,
+    ]);
+    // The first reply jumps past the second one, as the source says.
+    expect(rulesFrom(doc, block(doc, "You chose correctly").ref)[0]).toMatchObject({ target: block(doc, "How would you like to use Youform?").ref });
+  });
+});
+
+describe("images", () => {
+  it("come over on questions, picture choices, the welcome and the thank-you screen", () => {
+    const { doc } = convert.typeform2();
+    expect(block(doc, "What's your first name?")).toMatchObject({ media: { kind: "image", url: "https://images.typeform.com/images/9T4uH8HuyaH7" } });
+    expect(doc.blocks[0]).toMatchObject({ media: { url: "https://images.typeform.com/images/UNT9r6QxDXAC" } });
+    expect(doc.endings[0]!.imageUrl).toBe("https://public-assets.typeform.com/public/admin/2dpnUBBkz2VN.gif");
+    const pictures = doc.blocks.find((b) => b.type === "picture_choice") as unknown as { options: { image_key: string | null }[] };
+    expect(pictures.options.every((o) => o.image_key?.startsWith("https://images.typeform.com/"))).toBe(true);
+  });
+
+  it("keep a YouTube video from a Google Form as an embed", () => {
+    const { doc } = convert.google1();
+    expect(block(doc, "Watch this video").description).toContain("https://www.youtube.com/watch?v=Hi8SztClWBk");
+  });
+});
+
+describe("rehostImages", () => {
+  beforeAll(applySchema);
+  afterEach(() => vi.restoreAllMocks());
+
+  it("copies each image into our storage and keeps the link when a copy fails", async () => {
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
+    stubSources({
+      "https://images.typeform.com/images/9T4uH8HuyaH7": () => new Response(png, { status: 200, headers: { "content-type": "image/png" } }),
+      "https://images.typeform.com/images/UNT9r6QxDXAC": () => new Response("nope", { status: 404 }),
+    });
+    const { doc } = convert.typeform2();
+    const t = await seedTenant(`imprehost${Date.now()}`);
+    const hosted = await rehostImages(env as never, doc, { orgId: t.orgId, apiOrigin: "https://api.test" });
+    const q = hosted.doc.blocks.find((b) => b.title.startsWith("What's your first name")) as unknown as { media: { key: string | null; url: string | null } };
+    expect(q.media.url).toBeNull();
+    expect(q.media.key).toMatch(new RegExp(`^assets/${t.orgId}/ast_`));
+    const id = q.media.key!.split("/").pop()!.split("-")[0]!;
+    const served = await fetchApi(`/p/assets/${id}`);
+    expect(served.status).toBe(200);
+    expect(served.headers.get("content-type")).toBe("image/png");
+    // The one that 404'd keeps its original link rather than vanishing.
+    expect(hosted.doc.blocks[0]).toMatchObject({ media: { url: "https://images.typeform.com/images/UNT9r6QxDXAC" } });
+  });
+
+  it("stops copying at the plan's storage", async () => {
+    stubSources({ "https://images.typeform.com/": () => new Response(new Uint8Array(2048), { status: 200, headers: { "content-type": "image/png" } }) });
+    const t = await seedTenant(`impbudget${Date.now()}`);
+    const hosted = await rehostImages(env as never, convert.typeform2().doc, { orgId: t.orgId, apiOrigin: "https://api.test", budgetBytes: 3000 });
+    expect(hosted.copied).toBe(1);
+  });
+});
+
 describe("links", () => {
   const code = (url: string) => {
     try {
@@ -161,6 +307,9 @@ describe("links", () => {
     expect(resolveImportUrl("acme.typeform.com/to/AbCd1234?utm=x")).toEqual({ provider: "typeform", target: "AbCd1234" });
     expect(resolveImportUrl("https://tally.so/embed/mZNovm?alignLeft=1")).toEqual({ provider: "tally", target: "https://tally.so/r/mZNovm" });
     expect(resolveImportUrl("https://forms.gle/SCaZgu449bHcdJHP6").provider).toBe("google_forms");
+    expect(resolveImportUrl("https://form.jotform.com/221091427437049")).toEqual({ provider: "jotform", target: "https://form.jotform.com/221091427437049" });
+    expect(resolveImportUrl("https://www.jotform.com/build/221091427437049")).toEqual({ provider: "jotform", target: "https://form.jotform.com/221091427437049" });
+    expect(resolveImportUrl("https://app.youform.com/forms/xrjcjyti")).toEqual({ provider: "youform", target: "https://app.youform.com/forms/xrjcjyti" });
     expect(resolveImportUrl("https://docs.google.com/forms/d/e/1FAIpQLSciCcNILfeSdgUavm_GYuCFE_G8InD1YVkIWAiTU_B3-l9AkA/viewform?usp=sf_link")).toEqual({
       provider: "google_forms",
       target: "https://docs.google.com/forms/d/e/1FAIpQLSciCcNILfeSdgUavm_GYuCFE_G8InD1YVkIWAiTU_B3-l9AkA/viewform",
@@ -251,6 +400,23 @@ describe("POST /api/import/preview", () => {
     const code = async (url: string) => ((await (await preview({ url, deviceSignal: `d-${crypto.randomUUID()}` })).json()) as { error: { code: string } }).error.code;
     expect(await code("https://docs.google.com/forms/d/e/1FAIpQLSdSignedInOnlyxxxxxxxxxxxxxxxxxxxxx/viewform")).toBe("sign_in_required");
     expect(await code("https://docs.google.com/forms/d/e/1FAIpQLSdClosedFormxxxxxxxxxxxxxxxxxxxxxxxx/viewform")).toBe("closed_hidden");
+  });
+});
+
+describe("talking to a trial form", () => {
+  beforeAll(applySchema);
+  afterEach(() => vi.restoreAllMocks());
+
+  it("caps a signed-out device's starts on one trial form", async () => {
+    stubSources({ "https://api.typeform.com/forms/yWBgS4vK": () => json(typeform3) });
+    const { slug } = (await (await preview({ url: "https://form.typeform.com/to/yWBgS4vK", deviceSignal: `d-${crypto.randomUUID()}` })).json()) as { slug: string };
+    const deviceSignal = `respondent-${crypto.randomUUID()}`;
+    const open = () =>
+      fetchApi(`/p/forms/${slug}/sessions`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ deviceSignal }) });
+    for (let i = 0; i < 6; i++) expect((await open()).status).toBe(200);
+    const refused = await open();
+    expect(refused.status).toBe(403);
+    expect(((await refused.json()) as { error: { message: string } }).error.message).toMatch(/free previews/);
   });
 });
 

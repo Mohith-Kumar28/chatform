@@ -1,3 +1,4 @@
+import { imageUrlOf } from "./text.js";
 import type { ImportedCondition, ImportedConditionGroup, ImportedForm, ImportedItem, ImportedJump } from "./types.js";
 
 /**
@@ -45,6 +46,14 @@ function description(raw: unknown): string {
   return text(raw).replace(/\s*\{\{[^}]+\}\}/g, "").trim();
 }
 
+/** A Typeform attachment's image, when it is one (videos are YouTube or Vimeo links, kept in the description instead). */
+function attachmentImage(raw: unknown): string | undefined {
+  const a = obj(raw);
+  return a.type === "image" ? imageUrlOf(a.href) : undefined;
+}
+
+const anyRequired = (lines: Json[]) => lines.some((l) => obj(l.validations).required === true);
+
 const CONTACT: Record<string, string> = { first_name: "first_name", last_name: "last_name", email: "email", phone_number: "phone" };
 const ADDRESS: Record<string, string> = { address_line_1: "street", city: "city", state_province: "state", zip_code: "postal", country: "country" };
 
@@ -86,6 +95,7 @@ export function readTypeform(def: unknown, url: string): ImportedForm {
       allowOther: false,
       scale: 0,
       config: "",
+      imageUrl: attachmentImage(f.attachment),
     };
     const choices = list(p.choices).map(obj);
     const withChoices = (t: string): ImportedItem => ({
@@ -134,9 +144,14 @@ export function readTypeform(def: unknown, url: string): ImportedForm {
       case "dropdown":
         return push(withChoices("dropdown"), ref);
       case "picture_choice":
-        // Ours has no pictures on its choices, so the choice is kept and the pictures are said.
-        notCopied.add("Pictures on picture-choice answers (the answers are kept as plain choices)");
-        return push(withChoices(p.allow_multiple_selection === true ? "multi_select" : "single_select"), ref);
+        return push(
+          {
+            ...withChoices("picture_choice"),
+            optionImages: choices.map((c) => attachmentImage(c.attachment) ?? null),
+            exact: { multiSelect: p.allow_multiple_selection === true },
+          },
+          ref,
+        );
       case "yes_no":
         return push({ ...base, type: "yes_no" }, ref);
       case "legal":
@@ -193,16 +208,24 @@ export function readTypeform(def: unknown, url: string): ImportedForm {
         return push({ ...base, type: "file_upload" }, ref);
       case "statement":
         return push({ ...base, type: "statement", required: false, exact: { buttonLabel: text(p.button_text) || undefined } }, ref);
+      /*
+       * A contact card or address keeps "required" on each of its lines, not on
+       * the card: `validations` on the card itself is absent. Reading only the
+       * card turned "first name, last name, email, all required" into an
+       * optional card the respondent could skip.
+       */
       case "contact_info": {
-        const sub = list(p.fields).map((s) => text(obj(s).subfield_key) || text(obj(s).type));
+        const lines = list(p.fields).map(obj);
+        const sub = lines.map((s) => text(s.subfield_key) || text(s.type));
         const mapped = sub.map((s) => CONTACT[s]).filter(Boolean);
         if (sub.includes("company")) notCopied.add("The company line of a contact card");
-        return push({ ...base, type: "contact_info", config: mapped.length ? `fields=${mapped.join("|")}` : "" }, ref);
+        return push({ ...base, type: "contact_info", required: required || anyRequired(lines), config: mapped.length ? `fields=${mapped.join("|")}` : "" }, ref);
       }
       case "address": {
-        const sub = list(p.fields).map((s) => text(obj(s).subfield_key) || text(obj(s).type));
+        const lines = list(p.fields).map(obj);
+        const sub = lines.map((s) => text(s.subfield_key) || text(s.type));
         const mapped = [...new Set(sub.map((s) => ADDRESS[s]).filter(Boolean))];
-        return push({ ...base, type: "address", config: mapped.length ? `fields=${mapped.join("|")}` : "" }, ref);
+        return push({ ...base, type: "address", required: required || anyRequired(lines), config: mapped.length ? `fields=${mapped.join("|")}` : "" }, ref);
       }
       case "payment":
         notCopied.add("Payment questions (add a payment question and connect Stripe or Razorpay)");
@@ -231,6 +254,7 @@ export function readTypeform(def: unknown, url: string): ImportedForm {
         key: text(s.ref) || text(s.id),
         title: plainTypeformText(text(s.title)).text || "Thank you!",
         body: description(p.description),
+        imageUrl: attachmentImage(s.attachment),
         ...(redirect && p.show_button === true && text(p.button_text)
           ? { ctaLabel: text(p.button_text).slice(0, 60), ctaUrl: redirect }
           : {}),
@@ -243,6 +267,7 @@ export function readTypeform(def: unknown, url: string): ImportedForm {
         title: plainTypeformText(text(welcomeScreen.title)).text,
         description: description(obj(welcomeScreen.properties).description),
         buttonLabel: text(obj(welcomeScreen.properties).button_text) || undefined,
+        imageUrl: attachmentImage(welcomeScreen.attachment),
       }
     : undefined;
 

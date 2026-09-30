@@ -12,14 +12,20 @@
  * no model call at all.
  */
 
-export type ImportProvider = "typeform" | "google_forms" | "tally";
+/** The system organization that holds forms imported by visitors who have not signed up. Migration 0052. */
+export const IMPORT_TRIAL_ORG = "org_import_trials";
+export const IMPORT_TRIAL_WORKSPACE = "ws_import_trials";
 
-export const IMPORT_PROVIDERS: readonly ImportProvider[] = ["typeform", "google_forms", "tally"];
+export type ImportProvider = "typeform" | "google_forms" | "tally" | "jotform" | "youform";
+
+export const IMPORT_PROVIDERS: readonly ImportProvider[] = ["typeform", "google_forms", "tally", "jotform", "youform"];
 
 export const PROVIDER_NAMES: Record<ImportProvider, string> = {
   typeform: "Typeform",
   google_forms: "Google Forms",
   tally: "Tally",
+  jotform: "Jotform",
+  youform: "Youform",
 };
 
 /** One question or statement, in the draft vocabulary `normalizeBlock` reads. */
@@ -41,6 +47,10 @@ export interface ImportedItem {
   /** Draft `config` (`rows=a|b; multiplePerRow=true`). */
   config: string;
   placeholder?: string;
+  /** An image shown with the question, as the source hosts it. Copied into our storage on import. */
+  imageUrl?: string;
+  /** Per option, same order as `options`: a picture-choice answer's image. */
+  optionImages?: (string | null)[];
   /** Applied after normalizing, where the draft has no field for them. */
   exact?: {
     startAt?: 0 | 1;
@@ -59,6 +69,7 @@ export interface ImportedEnding {
   redirectUrl?: string;
   ctaLabel?: string;
   ctaUrl?: string;
+  imageUrl?: string;
 }
 
 /** One side of a condition, as the source states it. */
@@ -97,7 +108,7 @@ export interface ImportedForm {
   url: string;
   title: string;
   description: string;
-  welcome?: { title: string; description: string; buttonLabel?: string };
+  welcome?: { title: string; description: string; buttonLabel?: string; imageUrl?: string };
   items: ImportedItem[];
   /** At least one; a source with none gets a plain thank-you. */
   endings: ImportedEnding[];
@@ -127,7 +138,7 @@ export type ImportErrorCode =
   | "unreachable";
 
 export const IMPORT_ERROR_MESSAGES: Record<ImportErrorCode, string> = {
-  unsupported_url: "Paste a link to a Typeform, Google Form or Tally form.",
+  unsupported_url: "Paste a link to a Typeform, Google Form, Tally, Jotform or Youform form.",
   edit_link:
     "That's the editor link, which only you can open. In Google Forms, press Send, copy the link, and paste that one.",
   not_found: "We couldn't find a form at that link. Check that it's published and opens in a private window.",
@@ -155,4 +166,6 @@ export interface ImportReport {
   endings: number;
   notCopied: string[];
   closed: boolean;
+  /** Every step in order, for the preview's "what came over" list. Titles clipped. */
+  outline: { title: string; type: string; required: boolean }[];
 }

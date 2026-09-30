@@ -7530,7 +7530,7 @@
                   "questionCount": {
                     "type": "integer",
                     "minimum": 2,
-                    "maximum": 19
+                    "maximum": 50
                   },
                   "clarifications": {
                     "maxItems": 3,
@@ -8242,7 +8242,9 @@
                           "enum": [
                             "typeform",
                             "google_forms",
-                            "tally"
+                            "tally",
+                            "jotform",
+                            "youform"
                           ]
                         },
                         "sourceUrl": {
@@ -8265,6 +8267,28 @@
                         },
                         "closed": {
                           "type": "boolean"
+                        },
+                        "outline": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "title": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "required": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "title",
+                              "type",
+                              "required"
+                            ]
+                          }
                         }
                       },
                       "required": [
@@ -8274,7 +8298,8 @@
                         "branches",
                         "endings",
                         "notCopied",
-                        "closed"
+                        "closed",
+                        "outline"
                       ]
                     }
                   },

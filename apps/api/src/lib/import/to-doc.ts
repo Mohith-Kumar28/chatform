@@ -91,7 +91,10 @@ export function importedToDoc(form: ImportedForm): { doc: FormDoc; report: Impor
   const itemByRef = new Map(form.items.map((it) => [refOf.get(it.key)!, it]));
   const docBlocks = normalized.blocks.map((block) => {
     if (block.type === "welcome") {
-      return form.welcome?.buttonLabel ? ({ ...block, buttonLabel: clip(form.welcome.buttonLabel, 40) } as Block) : block;
+      let welcome = block as Record<string, unknown>;
+      if (form.welcome?.buttonLabel) welcome = { ...welcome, buttonLabel: clip(form.welcome.buttonLabel, 40) };
+      if (form.welcome?.imageUrl) welcome = { ...welcome, media: { kind: "image", key: null, url: form.welcome.imageUrl } };
+      return welcome as Block;
     }
     const item = itemByRef.get(block.ref);
     return item ? exactly(block, item) : block;
@@ -99,8 +102,12 @@ export function importedToDoc(form: ImportedForm): { doc: FormDoc; report: Impor
 
   const endings = normalized.endings.map((ending, i) => {
     const src = sourceEndings[i];
-    if (!src || !src.ctaLabel || !src.ctaUrl) return ending;
-    return { ...ending, ctaLabel: clip(src.ctaLabel, 60), ctaUrl: src.ctaUrl };
+    if (!src) return ending;
+    return {
+      ...ending,
+      ...(src.ctaLabel && src.ctaUrl ? { ctaLabel: clip(src.ctaLabel, 60), ctaUrl: src.ctaUrl } : {}),
+      ...(src.imageUrl ? { imageUrl: src.imageUrl } : {}),
+    };
   });
 
   // The flow, one source jump to one rule.
@@ -188,6 +195,10 @@ export function importedToDoc(form: ImportedForm): { doc: FormDoc; report: Impor
     endings: final.endings.length,
     notCopied: [...notCopied],
     closed: form.closed,
+    outline: final.blocks
+      .filter((b) => b.type !== "welcome")
+      .slice(0, 200)
+      .map((b) => ({ title: b.title.slice(0, 140), type: b.type, required: b.type !== "statement" && b.required })),
   };
   return { doc: final, report };
 }
@@ -199,6 +210,16 @@ export function importIssues(doc: FormDoc) {
 
 function exactly(block: Block, item: ImportedItem): Block {
   let next = { ...block } as Record<string, unknown>;
+  // The question's own image, and a picture choice's pictures, as links for
+  // now; `rehostImages` copies them into our storage before the form is saved.
+  if (item.imageUrl) next.media = { kind: "image", key: null, url: item.imageUrl };
+  if (item.optionImages && "options" in block && Array.isArray(block.options)) {
+    const byLabel = new Map(item.options.map((label, i) => [label.trim().toLowerCase(), item.optionImages![i] ?? null]));
+    next.options = (block.options as { label: string; image_key?: string | null }[]).map((o) => {
+      const image = byLabel.get(o.label.trim().toLowerCase());
+      return image ? { ...o, image_key: image } : o;
+    });
+  }
   if (item.description) next.description = clip(item.description, 5000);
   if (item.placeholder && (block.type === "short_text" || block.type === "long_text")) next.placeholder = clip(item.placeholder, 200);
   if ("allowOther" in block && item.allowOther) next.allowOther = true;

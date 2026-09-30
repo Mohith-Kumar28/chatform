@@ -6,14 +6,15 @@ import type { Bindings } from "../env.js";
 import { validator } from "../lib/validator.js";
 import { getAuth, requireOrg, requireSession, type GuardVars } from "../lib/guards.js";
 import { assertPermission, requireGauge, requirePermission, type AuthzVars } from "../lib/authorize.js";
-import { getEntitlements } from "../lib/entitlements.js";
+import { getEntitlements, storageBytes } from "../lib/entitlements.js";
+import { rehostImages } from "../lib/import/rehost.js";
 import { publishForm } from "../lib/forms-service.js";
 import { enqueueMail } from "../lib/mail.js";
 import { withOwnerNotification } from "../lib/owner-notification.js";
 import { formSlug, requireWorkspace } from "../lib/workspace.js";
 import { readImport } from "../lib/import/read.js";
 import { importedToDoc } from "../lib/import/to-doc.js";
-import { ImportError, type ImportReport } from "../lib/import/types.js";
+import { IMPORT_TRIAL_ORG, IMPORT_TRIAL_WORKSPACE, ImportError, type ImportReport } from "../lib/import/types.js";
 import { quotaKeys, remainingImports, spendImport } from "../lib/import-quota.js";
 
 /**
@@ -33,8 +34,6 @@ import { quotaKeys, remainingImports, spendImport } from "../lib/import-quota.js
  *   the workspace, no trial.
  */
 
-export const IMPORT_TRIAL_ORG = "org_import_trials";
-export const IMPORT_TRIAL_WORKSPACE = "ws_import_trials";
 const TRIAL_TTL_MS = 24 * 60 * 60 * 1000;
 
 type Vars = Partial<AuthzVars & GuardVars>;
@@ -52,13 +51,14 @@ importRouter.post("/import/forms", requirePermission("form", "create"), requireG
 const Url = z.string().trim().min(4).max(2000);
 
 export const ImportReportSchema = z.object({
-  provider: z.enum(["typeform", "google_forms", "tally"]),
+  provider: z.enum(["typeform", "google_forms", "tally", "jotform", "youform"]),
   sourceUrl: z.string(),
   questions: z.number(),
   branches: z.number(),
   endings: z.number(),
   notCopied: z.array(z.string()),
   closed: z.boolean(),
+  outline: z.array(z.object({ title: z.string(), type: z.string(), required: z.boolean() })),
 });
 
 const ImportErrorEnvelope = z.object({
@@ -155,7 +155,9 @@ importRouter.post(
       return importFailed(c, err);
     }
 
-    const formId = await insertForm(c.env, { orgId: IMPORT_TRIAL_ORG, wsId: IMPORT_TRIAL_WORKSPACE, userId: null, doc: converted.doc });
+    // Images come with the form, copied into our storage so they outlive the source.
+    const hosted = await rehostImages(c.env, converted.doc, { orgId: IMPORT_TRIAL_ORG, apiOrigin: new URL(c.req.url).origin });
+    const formId = await insertForm(c.env, { orgId: IMPORT_TRIAL_ORG, wsId: IMPORT_TRIAL_WORKSPACE, userId: null, doc: hosted.doc });
     const published = await publishForm(c.env, {
       formId,
       userId: null,
@@ -296,7 +298,11 @@ importRouter.post(
     } catch (err) {
       return importFailed(c, err);
     }
-    const formId = await insertForm(c.env, { orgId: ws.orgId, wsId: ws.wsId, userId, doc: converted.doc });
+    // Within the plan's file storage: images past it keep their original links.
+    const quota = (await getEntitlements(c.env, ws.orgId)).limits.file_storage_mb;
+    const budgetBytes = quota == null ? null : Math.max(0, quota * 1024 * 1024 - (await storageBytes(c.env, ws.orgId)));
+    const hosted = await rehostImages(c.env, converted.doc, { orgId: ws.orgId, apiOrigin: new URL(c.req.url).origin, budgetBytes });
+    const formId = await insertForm(c.env, { orgId: ws.orgId, wsId: ws.wsId, userId, doc: hosted.doc });
     await enqueueMail(c.env, { kind: "admin_new_form", formId, source: "import" });
     console.log("import_form", { provider: converted.report.provider, questions: converted.report.questions });
     return c.json({ formId, report: converted.report });

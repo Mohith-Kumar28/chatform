@@ -76,7 +76,7 @@ export function ImportPanel({
             inputMode="url"
             autoComplete="off"
             spellCheck={false}
-            placeholder="Paste a Typeform, Google Forms or Tally link"
+            placeholder="Paste a Typeform, Google Forms, Tally, Jotform or Youform link"
             aria-label="Form link"
             aria-invalid={error ? true : undefined}
             className="h-11 rounded-full pr-10 pl-4 text-base md:text-sm"

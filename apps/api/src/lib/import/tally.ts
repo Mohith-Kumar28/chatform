@@ -1,3 +1,5 @@
+import { imageUrlOf } from "./text.js";
+import { skippedNote, visibilityToJumps, type VisibilityRule } from "./show-hide.js";
 import type { ImportedCondition, ImportedConditionGroup, ImportedEnding, ImportedForm, ImportedItem, ImportedJump } from "./types.js";
 
 /**
@@ -83,6 +85,8 @@ export function readTallyForm(page: Json, url: string): ImportedForm {
   let pendingTextUuids: string[] = [];
   let seenQuestion = false;
   let inThankYou: ImportedEnding | null = null;
+  /** An image block waiting for the question it sits above. */
+  let pendingImage: string | undefined;
 
   const flushText = (next?: string) => {
     const words = pendingText.filter(Boolean);
@@ -109,6 +113,10 @@ export function readTallyForm(page: Json, url: string): ImportedForm {
     const group = text(b.groupUuid) || uuid;
 
     if (inThankYou) {
+      if (type === "IMAGE") {
+        inThankYou.imageUrl ??= imageUrlOf(obj(list(p.images)[0]).url) ?? imageUrlOf(p.url);
+        continue;
+      }
       if (TEXT_BLOCKS.has(type) || type === "TITLE") {
         const words = tallyText(p.safeHTMLSchema);
         if (!words) continue;
@@ -153,8 +161,12 @@ export function readTallyForm(page: Json, url: string): ImportedForm {
       notCopied.add("Calculated fields");
       continue;
     }
-    if (type === "IMAGE" || type === "EMBED" || type === "EMBED_VIDEO" || type === "EMBED_AUDIO" || type === "DIVIDER") {
-      if (type === "IMAGE") notCopied.add("Images");
+    if (type === "IMAGE") {
+      const src = imageUrlOf(obj(list(p.images)[0]).url) ?? imageUrlOf(p.url);
+      if (src) pendingImage = src;
+      continue;
+    }
+    if (type === "EMBED" || type === "EMBED_VIDEO" || type === "EMBED_AUDIO" || type === "DIVIDER") {
       if (type.startsWith("EMBED")) notCopied.add("Embedded videos and media");
       continue;
     }
@@ -163,7 +175,10 @@ export function readTallyForm(page: Json, url: string): ImportedForm {
     flushText(question?.text);
     pendingTitle = null;
     const required = p.isRequired === true;
+    const image = pendingImage;
+    pendingImage = undefined;
     const base = (t: string): ImportedItem => ({
+      imageUrl: image,
       key: group,
       type: t,
       title: question?.text || text(p.placeholder) || "Untitled question",
@@ -277,101 +292,40 @@ const COMPARISON: Record<string, ImportedCondition["op"]> = {
   IS_NOT_EMPTY: "is_not_empty",
 };
 
-/**
- * Show/hide rules, as jumps where they mean one.
- *
- * - "Hide R when C", with R starting right after the question C reads: after
- *   that question, when C, go past R.
- * - "Show R when C" on the same shape: when C, go to R; otherwise go past it.
- *   Several shown runs off one question (Yes shows A, No shows B) each get
- *   their own jump in, and every run but the last jumps past the rest when it
- *   ends, so a respondent who took A never falls into B.
- *
- * Two rules showing the same run are one rule with their conditions OR'd,
- * which is what Tally does when both are true.
- */
+/** Tally's logic blocks as generic visibility rules; see `show-hide.ts`. */
 function showHideToJumps(logic: Json[], items: ImportedItem[], itemOfBlock: Map<string, string>, notCopied: Set<string>): ImportedJump[] {
-  const index = new Map(items.map((it, i) => [it.key, i]));
   const byKey = new Map(items.map((it) => [it.key, it]));
-  const jumps: ImportedJump[] = [];
-  let skipped = 0;
+  const rules: VisibilityRule[] = [];
+  let other = 0;
   let required = 0;
-
-  /** Question → shown runs off it, keyed by the run's first item. */
-  const shows = new Map<string, Map<string, { run: string[]; when: ImportedConditionGroup[] }>>();
-
   for (const rule of logic) {
     const conds = list(rule.conditionals).map(obj);
     const fields = new Set(conds.map((c) => text(obj(obj(c.payload).field).blockGroupUuid) || text(obj(obj(c.payload).field).uuid)));
-    const actions = list(rule.actions).map(obj);
-    for (const a of actions) {
+    const from = fields.size === 1 ? [...fields][0]! : null;
+    const fromItem = from ? byKey.get(from) : undefined;
+    for (const a of list(rule.actions).map(obj)) {
       const kind = text(a.type);
       if (kind === "REQUIRE_ANSWER") {
         required++;
         continue;
       }
       if (kind !== "SHOW_BLOCKS" && kind !== "HIDE_BLOCKS") {
-        skipped++;
+        other++;
         continue;
       }
-      const from = fields.size === 1 ? [...fields][0]! : "";
-      const fromItem = byKey.get(from);
       const uuids = list(obj(a.payload)[kind === "SHOW_BLOCKS" ? "showBlocks" : "hideBlocks"]).map(text);
-      const run = [...new Set(uuids.map((u) => itemOfBlock.get(u)).filter((k): k is string => !!k))].sort(
-        (x, y) => index.get(x)! - index.get(y)!,
-      );
-      const when = fromItem ? conditionOf(conds, rule, fromItem) : null;
-      const contiguous = run.every((k, n) => n === 0 || index.get(k)! === index.get(run[n - 1]!)! + 1);
-      if (!fromItem || !when || run.length === 0 || !contiguous || index.get(run[0]!)! <= index.get(from)!) {
-        skipped++;
-        continue;
-      }
-      if (kind === "HIDE_BLOCKS") {
-        if (index.get(run[0]!)! !== index.get(from)! + 1) {
-          skipped++;
-          continue;
-        }
-        jumps.push({ fromKey: from, when, to: past(run.at(-1)!) });
-        continue;
-      }
-      const runs = shows.get(from) ?? new Map();
-      const existing = runs.get(run[0]!);
-      if (existing) existing.when.push(when);
-      else runs.set(run[0]!, { run, when: [when] });
-      shows.set(from, runs);
+      rules.push({
+        fromKey: fromItem ? from : null,
+        when: fromItem ? conditionOf(conds, rule, fromItem) : null,
+        kind: kind === "SHOW_BLOCKS" ? "show" : "hide",
+        targets: uuids.map((u) => itemOfBlock.get(u)).filter((k): k is string => !!k),
+      });
     }
   }
-
-  for (const [from, runs] of shows) {
-    const ordered = [...runs.values()].sort((a, b) => index.get(a.run[0]!)! - index.get(b.run[0]!)!);
-    // The runs must fill the space right after the question, one after another.
-    let at = index.get(from)! + 1;
-    const fits = ordered.every((r) => {
-      const ok = index.get(r.run[0]!) === at;
-      at = index.get(r.run.at(-1)!)! + 1;
-      return ok;
-    });
-    if (!fits) {
-      skipped += ordered.length;
-      continue;
-    }
-    const end = past(ordered.at(-1)!.run.at(-1)!);
-    for (const r of ordered) {
-      const when = r.when.length === 1 ? r.when[0]! : { op: "or" as const, conditions: [], groups: r.when };
-      jumps.push({ fromKey: from, when, to: { kind: "item", key: r.run[0]! } });
-    }
-    jumps.push({ fromKey: from, when: null, to: end });
-    for (const r of ordered.slice(0, -1)) jumps.push({ fromKey: r.run.at(-1)!, when: null, to: end });
-  }
-
-  if (skipped > 0) notCopied.add(`${skipped} show/hide ${skipped === 1 ? "rule" : "rules"} (rebuild ${skipped === 1 ? "it" : "them"} in the Flow tab)`);
+  const { jumps, skipped } = visibilityToJumps(rules, items);
+  if (skipped + other > 0) notCopied.add(skippedNote(skipped + other));
   if (required > 0) notCopied.add("Answers that become required only after certain answers");
   return jumps;
-
-  function past(lastKey: string): ImportedJump["to"] {
-    const next = items[index.get(lastKey)! + 1];
-    return next ? { kind: "item", key: next.key } : { kind: "ending", key: "" };
-  }
 }
 
 function conditionOf(conds: Json[], rule: Json, item: ImportedItem): ImportedConditionGroup | null {

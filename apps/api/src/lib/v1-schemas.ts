@@ -472,13 +472,14 @@ export const ImportedDocumentView = z
   .object({
     doc: z.unknown(),
     report: z.object({
-      provider: z.enum(["typeform", "google_forms", "tally"]),
+      provider: z.enum(["typeform", "google_forms", "tally", "jotform", "youform"]),
       sourceUrl: z.string(),
       questions: z.number(),
       branches: z.number(),
       endings: z.number(),
       notCopied: z.array(z.string()),
       closed: z.boolean(),
+      outline: z.array(z.object({ title: z.string(), type: z.string(), required: z.boolean() })),
     }),
   })
   .loose();

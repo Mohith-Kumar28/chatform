@@ -62,3 +62,43 @@ export async function spendImport(env: Bindings, keys: QuotaKeys, day = quotaDay
   if (keys.ip) statements.push(env.DB.prepare(upsert).bind(keys.ip, day));
   await env.DB.batch(statements);
 }
+
+/**
+ * Conversations with imported trial forms, per signed-out visitor per day.
+ *
+ * Converting is free; talking to the result is what spends model calls, and
+ * the trial account has no plan limit of its own (migration 0052 lifts Free's
+ * caps so one busy day cannot switch the demo off for everyone). So the cap
+ * lives here: a handful of different forms a day, and a handful of starts on
+ * each. Counted per form rather than per open because reopening the page
+ * resumes the same response, and a refresh must not use up the allowance.
+ */
+export const TRIAL_FORMS_PER_DEVICE = 5;
+export const TRIAL_STARTS_PER_FORM = 6;
+export const TRIAL_FORMS_PER_IP = 15;
+
+export async function claimTrialChat(
+  env: Bindings,
+  formId: string,
+  deviceSignal: string | null | undefined,
+  ip: string | undefined,
+): Promise<boolean> {
+  const keys = await quotaKeys(env, deviceSignal ?? undefined, ip);
+  const forms = { device: `chat:${keys.device}`, ip: keys.ip ? `chat:${keys.ip}` : null };
+  const starts = `chat:${keys.device}:${formId}`;
+  const day = quotaDay();
+  const rows = await env.DB.prepare(`SELECT key_hash, count FROM import_quota WHERE day = ? AND key_hash IN (?, ?, ?)`)
+    .bind(day, forms.device, forms.ip ?? forms.device, starts)
+    .all<{ key_hash: string; count: number }>();
+  const used = new Map((rows.results ?? []).map((r) => [r.key_hash, r.count]));
+  const startsSoFar = used.get(starts) ?? 0;
+  if (startsSoFar >= TRIAL_STARTS_PER_FORM) return false;
+  if (startsSoFar === 0) {
+    // A form this visitor has not opened today: it counts against the daily forms.
+    if ((used.get(forms.device) ?? 0) >= TRIAL_FORMS_PER_DEVICE) return false;
+    if (forms.ip && (used.get(forms.ip) ?? 0) >= TRIAL_FORMS_PER_IP) return false;
+    await spendImport(env, forms, day);
+  }
+  await spendImport(env, { device: starts, ip: null }, day);
+  return true;
+}

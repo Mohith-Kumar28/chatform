@@ -87,7 +87,12 @@ export function readGoogleForm(data: Json[], url: string): ImportedForm {
       continue;
     }
     if (type === G.video) {
-      notCopied.add("Videos");
+      const youtube = str(arr(item[6])[3]);
+      if (/^[\w-]{11}$/.test(youtube)) {
+        pushItem({ key, type: "statement", title: title || "Watch this", description: `${description ? `${description}\n\n` : ""}https://www.youtube.com/watch?v=${youtube}`, required: false, options: [], allowOther: false, scale: 0, config: "" });
+      } else {
+        notCopied.add("Videos");
+      }
       continue;
     }
 

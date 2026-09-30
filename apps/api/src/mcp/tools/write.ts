@@ -325,7 +325,7 @@ export function registerWriteTools(server: McpServer, ctx: () => McpCtx): void {
           .number()
           .int()
           .min(2)
-          .max(19)
+          .max(50)
           .optional()
           .describe("Force a length. Omit to let the model size the form against the request."),
       },

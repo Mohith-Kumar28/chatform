@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Check, CircleAlert } from "lucide-react";
 import { Band, BandTitle, BandLede } from "@/components/marketing/band";
 import { CtaBand } from "@/components/marketing/cta-band";
-import { ImportWidget } from "@/components/import/import-widget";
+import { SwitchPanel } from "@/components/import/switch-panel";
 import { JsonLd } from "@/components/seo/json-ld";
 import { IMPORT_PAGES, importPage } from "@/content/import-sources";
 import { breadcrumbLd, canonical, faqPageLd, openGraphBase } from "@/lib/seo";
@@ -48,15 +48,15 @@ export default async function ImportSourcePage({ params }: { params: Promise<{ s
       />
 
       <Band size="tall">
-        <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:gap-16">
-          <div className="max-w-xl">
-            <p className="text-caption text-muted-foreground">{page.name} to chatform</p>
-            <BandTitle as="h1" className="mt-3">
-              {page.h1}
-            </BandTitle>
-            <BandLede>{page.lede}</BandLede>
-          </div>
-          <ImportWidget initial={page.source} />
+        <div className="max-w-2xl">
+          <p className="text-muted-foreground text-xs font-semibold tracking-[0.14em] uppercase">{page.name} to chatform</p>
+          <BandTitle as="h1" className="mt-3">
+            {page.h1}
+          </BandTitle>
+          <BandLede>{page.lede}</BandLede>
+        </div>
+        <div className="mt-10">
+          <SwitchPanel page={page} headingLevel="h2" />
         </div>
       </Band>
 

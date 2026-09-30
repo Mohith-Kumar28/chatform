@@ -1,6 +1,8 @@
 import { readFormDoc, sha256Hex, type FormDoc, type RespondentAuthMethod } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { getEntitlements, meter, checkQuota } from "./entitlements.js";
+import { claimTrialChat } from "./import-quota.js";
+import { IMPORT_TRIAL_ORG } from "./import/types.js";
 import { clampForRuntime, brandingHiddenFor, gatewayPaymentsLapsed } from "./doc-entitlements.js";
 import { respondentKey, type RespondentKey } from "./respondent-key.js";
 import { deviceKeyFor } from "./respondents.js";
@@ -304,6 +306,23 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
       status: 403,
       body: { error: { code: "form_closed", message: closedMessage } },
     };
+  }
+
+  // A form imported by a visitor who has not signed up yet: capped per visitor
+  // per day, since the trial account itself has no plan limit. See `claimTrialChat`.
+  if (form.organization_id === IMPORT_TRIAL_ORG && !input.resumeSubmissionId && !input.trustedCaller) {
+    if (!(await claimTrialChat(env, form.id, input.deviceSignal, input.ip))) {
+      return {
+        ok: false,
+        status: 403,
+        body: {
+          error: {
+            code: "form_closed",
+            message: "You've tried today's free previews. Sign up free to keep this form and talk to it as much as you like.",
+          },
+        },
+      };
+    }
   }
 
   const cap = settings.closeRules.maxSubmissions;

@@ -2,6 +2,8 @@ import { GuardError, guardedFetch, readTruncatedText } from "@repo/guard";
 import { parseGoogleData, readGoogleForm } from "./google.js";
 import { parseTallyData, readTallyForm } from "./tally.js";
 import { readTypeform } from "./typeform.js";
+import { readJotform } from "./jotform.js";
+import { parseYouformData, readYouform } from "./youform.js";
 import { ImportError, type ImportedForm, type ImportProvider } from "./types.js";
 
 /**
@@ -65,6 +67,20 @@ export function resolveImportUrl(raw: string): ResolvedLink {
     throw new ImportError("unsupported_url");
   }
 
+  if (host === "jotform.com" || host.endsWith(".jotform.com") || host === "jotform.me" || host.endsWith(".jotform.me") || host === "jotformeu.com" || host.endsWith(".jotformeu.com")) {
+    // form.jotform.com/<id>, jotform.com/<id>, jotform.com/build/<id> (the editor, same id), eu/hipaa subdomains.
+    const id = path.match(/\/(?:build\/|form\/|jsform\/)?(\d{10,})(?:\/|$)/)?.[1];
+    if (id) return { provider: "jotform", target: `https://${host.startsWith("eu") || host.includes("jotformeu") ? "form.jotformeu.com" : host.startsWith("hipaa") ? "hipaa.jotform.com" : "form.jotform.com"}/${id}` };
+    return { provider: null, target: url.toString() };
+  }
+
+  if (host === "youform.com" || host.endsWith(".youform.com") || host.endsWith(".youform.io")) {
+    // app.youform.com/forms/<slug>; the builder's own /forms/<slug>/build is the same slug.
+    const slug = path.match(/\/forms\/([A-Za-z0-9]{4,20})(?:\/|$)/)?.[1];
+    if (slug) return { provider: "youform", target: `https://app.youform.com/forms/${slug}` };
+    throw new ImportError("unsupported_url");
+  }
+
   // Anything else may be a form on a custom domain, or a page embedding one.
   return { provider: null, target: url.toString() };
 }
@@ -78,6 +94,10 @@ export async function readImport(raw: string): Promise<ImportedForm> {
       return fetchGoogle(link.target);
     case "tally":
       return fetchTally(link.target);
+    case "jotform":
+      return fetchJotform(link.target);
+    case "youform":
+      return fetchYouform(link.target);
     default:
       return sniff(link.target);
   }
@@ -175,6 +195,31 @@ async function fetchTally(url: string): Promise<ImportedForm> {
   return withQuestions(readTallyForm(data, url));
 }
 
+async function fetchYouform(url: string): Promise<ImportedForm> {
+  const page = await get(url);
+  if (page.status === 404) throw new ImportError("not_found");
+  if (page.status !== 200) throw new ImportError("unreachable");
+  const data = parseYouformData(page.body);
+  if (!data) {
+    if (/password/i.test(page.body) && /type="password"/i.test(page.body)) throw new ImportError("password_protected");
+    // "This form is not published yet", a deleted form, or a closed one.
+    throw new ImportError("not_found");
+  }
+  return withQuestions(readYouform(data, url));
+}
+
+async function fetchJotform(url: string): Promise<ImportedForm> {
+  const page = await get(url);
+  if (page.status === 404) throw new ImportError("not_found");
+  if (page.status !== 200) throw new ImportError("unreachable");
+  // A missing or deleted form still answers 200, with this title.
+  if (/<title>\s*Jotform - Form is (missing|disabled)/i.test(page.body) || /This form is (currently )?(disabled|unavailable)/i.test(page.body.slice(0, 20_000))) {
+    throw new ImportError("not_found");
+  }
+  if (/data-type="control_passwordbox"|Password Protected Form/i.test(page.body) && !/<li\b[^>]*data-type="control_(?!passwordbox)/.test(page.body)) throw new ImportError("password_protected");
+  return withQuestions(readJotform(page.body, url));
+}
+
 /**
  * A page that is not a builder's own domain: a custom domain, or a website
  * with a form embedded in it. Read once, and handed to whichever reader
@@ -197,6 +242,13 @@ async function sniff(url: string): Promise<ImportedForm> {
   if (typeformId) return fetchTypeform(typeformId);
   const tallyId = html.match(/tally\.so\/(?:r|embed)\/([A-Za-z0-9]{4,12})/)?.[1] ?? html.match(/data-tally-(?:src|open)="(?:https:\/\/tally\.so\/(?:r|embed)\/)?([A-Za-z0-9]{4,12})/)?.[1];
   if (tallyId) return fetchTally(`https://tally.so/r/${tallyId}`);
+  if (/<li\b[^>]*data-type="control_[a-z]/.test(html) && /JotForm/.test(html)) return withQuestions(readJotform(html, page.finalUrl));
+  const youform = parseYouformData(html);
+  if (youform) return withQuestions(readYouform(youform, page.finalUrl));
+  const youformSlug = html.match(/app\.youform\.com\/forms\/([A-Za-z0-9]{4,20})/)?.[1];
+  if (youformSlug) return fetchYouform(`https://app.youform.com/forms/${youformSlug}`);
+  const jotformId = html.match(/(?:form\.jotform\.com|jotform\.com\/jsform)\/(\d{10,})/)?.[1];
+  if (jotformId) return fetchJotform(`https://form.jotform.com/${jotformId}`);
   const googleId = html.match(/docs\.google\.com\/forms\/d\/e\/([A-Za-z0-9_-]{20,})/)?.[1];
   if (googleId) return fetchGoogle(`https://docs.google.com/forms/d/e/${googleId}/viewform`);
   throw new ImportError("unsupported_url");

@@ -356,7 +356,7 @@ export function CreateFormDialog({
                   onClick={() => setImporting({ url: "", autoStart: false })}
                 >
                   <FileInput className="size-4" strokeWidth={1.75} />
-                  Import from Typeform, Google Forms or Tally
+                  Import from Typeform, Google Forms, Tally, Jotform or Youform
                 </Button>
               </div>
 

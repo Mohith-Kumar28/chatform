@@ -295,9 +295,11 @@ export const REASONING_HEADROOM_TOKENS = 1200;
  * `branches` is 12 because the flow stops being readable past it.
  */
 export const DRAFT_LIMITS = {
-  blocks: 20,
+  // 50 answerable questions plus the welcome. A ceiling, not a target: the
+  // prompt sizes each form to its request, and most stay far below it.
+  blocks: 51,
   endings: 5,
-  branches: 12,
+  branches: 24,
   /** Edit-only lists. */
   addBlocks: 12,
   updateBlocks: 12,

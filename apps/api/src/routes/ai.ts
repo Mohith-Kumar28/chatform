@@ -84,12 +84,12 @@ aiRouter.post("/ai/generate-form/stream", requireGauge("forms_count", "forms.cre
  *
  * Absent, the model sizes the form against the request (see
  * `FORM_DESIGNER_SYSTEM`). Present, it is a number the author typed and is
- * obeyed exactly. The ceiling is 19 because `DRAFT_LIMITS.blocks` is 20 and the
+ * obeyed exactly. The ceiling is 50 because `DRAFT_LIMITS.blocks` is 51 and the
  * welcome block is one of them.
  */
 export const GenerateBody = z.object({
   prompt: z.string().min(5).max(2000),
-  questionCount: z.number().int().min(2).max(19).optional(),
+  questionCount: z.number().int().min(2).max(50).optional(),
   /**
    * What the author answered when asked (see `/ai/clarify-form`).
    *

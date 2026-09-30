@@ -405,9 +405,10 @@ Read the request for its ambition and size accordingly:
 - An ordinary signup, feedback survey or lead form with no stated depth: 6-10 questions.
 - Anything the request calls detailed, thorough, in-depth, comprehensive, multi-step, or that names several topics to cover: 12-18 questions.
 - Qualification, application, intake, onboarding, screening, diagnostic, medical or legal history, event registration with options: 12-18 questions.
+- A request that lists its fields, or describes a long form in full (a full application, a multi-section survey, an existing form to recreate): every field it names, however many that is.
 - Add questions for structure the request implies: every distinct segment ("for iOS users…", "for enterprise…") needs its own 2-4 questions, on top of the ones everyone answers. A request naming three platforms and asking for different flows per platform is asking for at least three arms, so it is a 12+ question form even if it sounds small.
 
-The absolute range is 3 to 19 answerable questions. Both ends are real: do not pad a newsletter signup to twelve, and do not compress a detailed multi-segment intake into six.
+The absolute range is 3 to 50 answerable questions. Both ends are real, and the top is a ceiling, not a goal: do not pad a newsletter signup to twelve, and do not compress a detailed multi-segment intake into six.
 
 If the author states a number ("8 questions", "keep it to five"), that number wins over everything above. Otherwise the number is yours to choose, and choosing it well is part of the job.
 
@@ -507,7 +508,7 @@ Use this. Ask about the platforms, plans and concepts this product actually has,
 
   const sizing =
     questionCount === undefined
-      ? `- Decide how many questions this form needs, using the sizing guidance. Between 3 and 19; err towards covering the request rather than towards brevity, and give every segment the request names its own arm.`
+      ? `- Decide how many questions this form needs, using the sizing guidance. Between 3 and 50; err towards covering the request rather than towards brevity, and give every segment the request names its own arm.`
       : `- Exactly ${questionCount} answerable questions. The author asked for this number, so hit it exactly.`;
 
   const media = mediaUrls(prompt);

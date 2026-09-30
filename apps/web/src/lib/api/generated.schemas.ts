@@ -2259,7 +2259,15 @@ export const PostApiImportPreview200ReportProvider = {
   typeform: 'typeform',
   google_forms: 'google_forms',
   tally: 'tally',
+  jotform: 'jotform',
+  youform: 'youform',
 } as const;
+
+export type PostApiImportPreview200ReportOutlineItem = {
+  title: string;
+  type: string;
+  required: boolean;
+};
 
 export type PostApiImportPreview200Report = {
   provider: PostApiImportPreview200ReportProvider;
@@ -2269,6 +2277,7 @@ export type PostApiImportPreview200Report = {
   endings: number;
   notCopied: string[];
   closed: boolean;
+  outline: PostApiImportPreview200ReportOutlineItem[];
 };
 
 export type PostApiImportPreview200 = {
@@ -2314,7 +2323,15 @@ export const PostApiImportClaim200ReportProvider = {
   typeform: 'typeform',
   google_forms: 'google_forms',
   tally: 'tally',
+  jotform: 'jotform',
+  youform: 'youform',
 } as const;
+
+export type PostApiImportClaim200ReportOutlineItem = {
+  title: string;
+  type: string;
+  required: boolean;
+};
 
 export type PostApiImportClaim200Report = {
   provider: PostApiImportClaim200ReportProvider;
@@ -2324,6 +2341,7 @@ export type PostApiImportClaim200Report = {
   endings: number;
   notCopied: string[];
   closed: boolean;
+  outline: PostApiImportClaim200ReportOutlineItem[];
 };
 
 export type PostApiImportClaim200 = {
@@ -2347,7 +2365,15 @@ export const PostApiImportForms200ReportProvider = {
   typeform: 'typeform',
   google_forms: 'google_forms',
   tally: 'tally',
+  jotform: 'jotform',
+  youform: 'youform',
 } as const;
+
+export type PostApiImportForms200ReportOutlineItem = {
+  title: string;
+  type: string;
+  required: boolean;
+};
 
 export type PostApiImportForms200Report = {
   provider: PostApiImportForms200ReportProvider;
@@ -2357,6 +2383,7 @@ export type PostApiImportForms200Report = {
   endings: number;
   notCopied: string[];
   closed: boolean;
+  outline: PostApiImportForms200ReportOutlineItem[];
 };
 
 export type PostApiImportForms200 = {
@@ -3656,7 +3683,7 @@ export type PostApiAiGenerateFormBody = {
   prompt: string;
   /**
      * @minimum 2
-     * @maximum 19
+     * @maximum 50
      */
   questionCount?: number;
   /** @maxItems 3 */
@@ -3713,7 +3740,7 @@ export type PostApiAiGenerateFormStreamBody = {
   prompt: string;
   /**
      * @minimum 2
-     * @maximum 19
+     * @maximum 50
      */
   questionCount?: number;
   /** @maxItems 3 */
@@ -6060,7 +6087,7 @@ export type PostV1AiGenerateFormBody = {
   prompt: string;
   /**
      * @minimum 2
-     * @maximum 19
+     * @maximum 50
      */
   questionCount?: number;
   /** @maxItems 3 */
@@ -6280,7 +6307,15 @@ export const PostV1Import200ReportProvider = {
   typeform: 'typeform',
   google_forms: 'google_forms',
   tally: 'tally',
+  jotform: 'jotform',
+  youform: 'youform',
 } as const;
+
+export type PostV1Import200ReportOutlineItem = {
+  title: string;
+  type: string;
+  required: boolean;
+};
 
 export type PostV1Import200Report = {
   provider: PostV1Import200ReportProvider;
@@ -6290,6 +6325,7 @@ export type PostV1Import200Report = {
   endings: number;
   notCopied: string[];
   closed: boolean;
+  outline: PostV1Import200ReportOutlineItem[];
 };
 
 export type PostV1Import200 = {
