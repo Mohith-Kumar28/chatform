@@ -40,6 +40,31 @@ export const SETTING_SECTIONS = {
 } as const;
 
 export type SettingSection = keyof typeof SETTING_SECTIONS;
+
+/** What the builder calls each section, for grouping a proposal's changes. */
+export const SETTING_SECTION_LABELS: Record<SettingSection, string> = {
+  design: "Design",
+  display: "Display",
+  agent_persona: "Interviewer",
+  agent_goal: "Goal",
+  guardrails: "Guardrails",
+  access: "Who can respond",
+  closing: "Closing",
+  completion: "On completion",
+  sharing: "Link & social",
+  embed: "On your site",
+  form: "Form",
+};
+
+/**
+ * Something to add to the knowledge base the interviewer answers from.
+ *
+ * Not a setting: sources are rows of their own, added through the knowledge
+ * routes, so a proposal carries them for the builder to add on Apply.
+ */
+export type KnowledgeAdd =
+  | { kind: "link"; url: string; locked?: { limit: "knowledge_sources_count" } }
+  | { kind: "text"; title: string; body: string; locked?: { limit: "knowledge_sources_count" } };
 export const SETTING_SECTION_IDS = Object.keys(SETTING_SECTIONS) as SettingSection[];
 
 export type SettingFormat =
@@ -76,8 +101,9 @@ export interface SettingDef {
   /** One line for the model when the format alone is not enough. */
   hint?: string;
   /**
-   * The builder recomputes neighbouring colours from this one, the way the
-   * Design sheet does with its "match" switch on. The web client owns that
+   * The builder recomputes the neighbouring colours when this one changes, the
+   * way the Design sheet does with its "match" switch on: from the primary
+   * colour, light or dark as the background now is. The web client owns that
    * maths (`themeFromAccent`), so the server only records the value.
    */
   derives?: "palette";
@@ -162,7 +188,15 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
     derives: "palette",
     hint: "the button colour; page, text and bubbles are recomputed to match unless set in the same edit",
   }),
-  def({ key: "theme.background", section: "design", label: "Background", where: `${DESIGN} → Colours`, format: "color" }),
+  def({
+    key: "theme.background",
+    section: "design",
+    label: "Background",
+    where: `${DESIGN} → Colours`,
+    format: "color",
+    derives: "palette",
+    hint: "a dark colour makes a dark theme; text and bubbles are recomputed to suit unless set in the same edit",
+  }),
   def({ key: "theme.text", section: "design", label: "Text", where: `${DESIGN} → Colours`, format: "color" }),
   def({ key: "theme.botBubble", section: "design", label: "Agent bubble", where: `${DESIGN} → Colours`, format: "color" }),
   def({ key: "theme.userBubble", section: "design", label: "Their bubble", where: `${DESIGN} → Colours`, format: "color" }),

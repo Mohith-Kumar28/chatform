@@ -1,4 +1,4 @@
-import type { Block, FormDoc } from "@repo/form-schema";
+import type { Block, FormDoc, KnowledgeAdd, SettingChange } from "@repo/form-schema";
 import { getApiFormsByIdAiThread } from "@/lib/api/dashboard/dashboard";
 import { apiData } from "@/lib/api/payload";
 
@@ -31,6 +31,10 @@ export interface Turn {
    * plain "Apply", and applied.
    */
   orphaned?: string[];
+  /** Form settings the proposal changes, each already checked against the plan. */
+  settings?: SettingChange[];
+  /** Pages and text the proposal adds to the knowledge base on Apply. */
+  knowledge?: KnowledgeAdd[];
   applied?: boolean;
 }
 

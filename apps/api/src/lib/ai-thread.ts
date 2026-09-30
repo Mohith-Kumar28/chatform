@@ -1,4 +1,4 @@
-import { lintFormDoc, type Block, type FormDoc } from "@repo/form-schema";
+import { lintFormDoc, type Block, type FormDoc, type KnowledgeAdd, type SettingChange } from "@repo/form-schema";
 
 /**
  * The builder AI bar's conversation, written by the server as it happens.
@@ -25,6 +25,8 @@ export interface StoredTurn {
   rules?: number;
   rewired?: number;
   orphaned?: string[];
+  settings?: SettingChange[];
+  knowledge?: KnowledgeAdd[];
   applied?: boolean;
 }
 
@@ -32,12 +34,13 @@ const MAX_TURNS = 40;
 
 export const turnId = () => crypto.randomUUID();
 
-export function describeEdit(added: number, updated: number, removed: number, rules: number): string {
+export function describeEdit(added: number, updated: number, removed: number, rules: number, settings = 0): string {
   const parts: string[] = [];
   if (added) parts.push(`${added} new question${added > 1 ? "s" : ""}`);
   if (updated) parts.push(`${updated} question${updated > 1 ? "s" : ""} changed`);
   if (removed) parts.push(`${removed} removed`);
   if (rules) parts.push(`${rules} branching rule${rules > 1 ? "s" : ""}`);
+  if (settings) parts.push(`${settings} setting${settings > 1 ? "s" : ""}`);
   return parts.length ? `Here is the change: ${parts.join(", ")}.` : "Here is the change.";
 }
 
@@ -47,7 +50,15 @@ const unreachable = (doc: FormDoc) => lintFormDoc(doc).find((i) => i.code === "u
 export function proposalTurn(
   base: FormDoc,
   proposed: FormDoc,
-  r: { summary?: string; updatedRefs?: string[]; removedRefs?: string[]; rules?: number; rewired?: number },
+  r: {
+    summary?: string;
+    updatedRefs?: string[];
+    removedRefs?: string[];
+    rules?: number;
+    rewired?: number;
+    settings?: SettingChange[];
+    knowledge?: KnowledgeAdd[];
+  },
 ): StoredTurn {
   const existing = new Set(base.blocks.map((b) => b.ref));
   const blocks = proposed.blocks.filter((b) => !existing.has(b.ref));
@@ -62,13 +73,15 @@ export function proposalTurn(
   return {
     id: turnId(),
     role: "assistant",
-    text: r.summary?.trim() || describeEdit(blocks.length, updated.length, removed.length, rules),
+    text: r.summary?.trim() || describeEdit(blocks.length, updated.length, removed.length, rules, r.settings?.length ?? 0),
     blocks,
     removed,
     updated,
     rules,
     rewired: r.rewired ?? 0,
     orphaned,
+    ...(r.settings?.length ? { settings: r.settings } : {}),
+    ...(r.knowledge?.length ? { knowledge: r.knowledge } : {}),
   };
 }
 

@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUp, Check, GitBranch, Loader2, Mic, Minus, Shuffle, SlidersHorizontal, Sparkles, Square, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
-import { FormDoc as FormDocSchema, lintFormDoc, type FormDoc } from "@repo/form-schema";
+import { FormDoc as FormDocSchema, lintFormDoc, type FormDoc, type KnowledgeAdd, type SettingChange } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { useBuilderStore } from "@/stores/builder-store";
@@ -14,6 +14,9 @@ import { KEY } from "./use-builder-shortcuts";
 import { useDictation } from "@/hooks/use-dictation";
 import { cn } from "@/lib/utils";
 import { streamEvents, type SseEvent } from "@/lib/api/stream";
+import { postApiFormsByIdKnowledgeLink, postApiFormsByIdKnowledgeText } from "@/lib/api/dashboard/dashboard";
+import { applySettingChanges } from "./ai-settings";
+import { SettingRows } from "./ai-setting-rows";
 
 /** Refs of questions no path through the form reaches. */
 function unreachableRefs(doc: FormDoc): string[] {
@@ -28,6 +31,28 @@ function describeEdit(added: number, updated: number, removed: number, rules: nu
   if (removed) parts.push(`${removed} removed`);
   if (rules) parts.push(`${rules} branching rule${rules > 1 ? "s" : ""}`);
   return parts.length ? `Here is the change: ${parts.join(", ")}.` : "Here is the change.";
+}
+
+/**
+ * Add what a proposal named to the knowledge base, once it is applied.
+ *
+ * Through the same routes the Knowledge tab uses, so the plan's source limit
+ * and the page reader apply exactly as they do there. A proposal carries these
+ * rather than adding them itself: nothing it names should exist before Apply.
+ */
+async function addKnowledge(formId: string, items: readonly KnowledgeAdd[]) {
+  let added = 0;
+  for (const item of items) {
+    try {
+      if (item.kind === "link") await postApiFormsByIdKnowledgeLink(formId, { url: item.url });
+      else await postApiFormsByIdKnowledgeText(formId, { title: item.title, body: item.body });
+      added++;
+    } catch (err) {
+      console.error("ai_knowledge_add_failed", item.kind, err);
+    }
+  }
+  if (added > 0) toast.success(`Added ${added === 1 ? "1 source" : `${added} sources`} to the knowledge base`, { description: "It is read in the background." });
+  if (added < items.length) toast.error("Some knowledge could not be added. Try it from Agent → Knowledge.");
 }
 
 /**
@@ -181,6 +206,9 @@ export function AiBar() {
       updatedRefs?: string[];
       removedRefs?: string[];
       summary?: string;
+      /** Form settings it changes, checked and plan-gated by the server. */
+      settings?: SettingChange[];
+      knowledge?: KnowledgeAdd[];
       /** Set when the model stopped to ask rather than to propose. */
       question?: string;
       /** Set when a review flagged the proposal and could not fix it. */
@@ -202,7 +230,9 @@ export function AiBar() {
       let res: EditResult | null = null;
       let failure: { message: string; turns?: Turn[] } | null = null;
       await streamEvents("/api/ai/edit-form/stream", {
-        body: { formId, prompt: text, history },
+        // The offset turns "close it at 6pm on the 30th" into the author's 6pm,
+        // not the server's.
+        body: { formId, prompt: text, history, utcOffsetMinutes: new Date().getTimezoneOffset() },
         onEvent: ({ event, data }: SseEvent) => {
           if (event === "stage") setStage((data as { id: EditStage }).id);
           else if (event === "done") res = data as EditResult;
@@ -278,6 +308,8 @@ export function AiBar() {
               rules,
               rewired: result.rewired ?? 0,
               orphaned,
+              settings: result.settings,
+              knowledge: result.knowledge,
               doc: proposed.data,
             },
       );
@@ -303,20 +335,37 @@ export function AiBar() {
     // routing has no new questions, and refusing to apply it was the last place
     // this flow still assumed every change adds something.
     if (!next) return;
+    const settings = (turn.settings ?? []).filter((c) => !c.locked);
+    const knowledge = (turn.knowledge ?? []).filter((k) => !k.locked);
+    // Only an edit that touched the questions replaces them. One that changed
+    // nothing but settings would otherwise put back the questions as they were
+    // when it was asked, over anything the author did in the meantime.
+    const touchesQuestions =
+      added.length > 0 ||
+      (turn.removed?.length ?? 0) > 0 ||
+      (turn.updated?.length ?? 0) > 0 ||
+      (turn.rules ?? 0) > 0 ||
+      (turn.rewired ?? 0) > 0 ||
+      (settings.length === 0 && knowledge.length === 0);
 
     // Take the whole proposal. Pushing the new blocks onto the end instead —
     // which is what this did — discarded both the positions chosen for them
     // and every branching rule, so a question meant only for iPhone users was
     // appended after everything and asked of everyone.
     edit((d) => {
-      d.blocks = next.blocks as never;
-      d.logic = next.logic as never;
-      d.endings = next.endings as never;
+      if (touchesQuestions) {
+        d.blocks = next.blocks as never;
+        d.logic = next.logic as never;
+        d.endings = next.endings as never;
+      }
+      // Settings go onto the live document one by one, for the same reason.
+      applySettingChanges(d as FormDoc, settings);
     });
     if (added[0]) select(added[0].ref);
     setTurns((t) => t.map((x) => (x.id === turn.id ? { ...x, applied: true } : x)));
     // Stored as applied on the autosave this edit triggers, not by a call of its own.
     markAiTurnApplied(turn.id);
+    if (formId && knowledge.length > 0) void addKnowledge(formId, knowledge);
 
     const rules = turn.rules ?? 0;
     const removed = turn.removed?.length ?? 0;
@@ -324,7 +373,9 @@ export function AiBar() {
     if (added.length) parts.push(`Added ${added.length} question${added.length > 1 ? "s" : ""}`);
     if (removed) parts.push(`removed ${removed}`);
     if (rules) parts.push(`${rules} branching rule${rules > 1 ? "s" : ""} set up`);
-    toast.success(parts.length ? parts.join(", ") : "Flow updated", { description: "⌘Z to undo." });
+    if (settings.length) parts.push(`${settings.length} setting${settings.length > 1 ? "s" : ""} changed`);
+    const summary = parts.length ? parts.join(", ") : knowledge.length ? "" : "Flow updated";
+    if (summary) toast.success(summary.charAt(0).toUpperCase() + summary.slice(1), { description: "⌘Z to undo." });
   }
 
   return (
@@ -355,7 +406,7 @@ export function AiBar() {
             >
               <div ref={threadRef} className="max-h-[min(28rem,55vh)] space-y-2.5 overflow-y-auto p-3">
                 {turns.map((turn) => (
-                  <Message key={turn.id} turn={turn} onApply={apply} />
+                  <Message key={turn.id} turn={turn} current={doc} onApply={apply} />
                 ))}
                 {busy && (
                   <div className="text-muted-foreground flex items-center gap-2 px-1 text-sm">
@@ -498,9 +549,12 @@ function FadeWidth({ children }: { children: React.ReactNode }) {
 
 function Message({
   turn,
+  current,
   onApply,
 }: {
   turn: Turn;
+  /** The form as it is now, for working out which colours follow a new one. */
+  current: FormDoc | null;
   onApply: (turn: Turn) => void;
 }) {
   if (turn.role === "user") {
@@ -519,10 +573,24 @@ function Message({
   const rules = turn.rules ?? 0;
   const rewired = turn.rewired ?? 0;
   const orphaned = turn.orphaned ?? [];
+  const settings = turn.settings ?? [];
+  const knowledge = turn.knowledge ?? [];
   // An assistant turn is a proposal when it carries one, in any of its forms —
   // questions, removals, changed settings, or nothing but new wiring.
   const isProposal =
-    turn.blocks !== undefined || removed.length > 0 || updated.length > 0 || rules > 0 || rewired > 0;
+    turn.blocks !== undefined ||
+    removed.length > 0 ||
+    updated.length > 0 ||
+    rules > 0 ||
+    rewired > 0 ||
+    settings.length > 0 ||
+    knowledge.length > 0;
+  // Everything it would do is locked: there is nothing to apply, only the rows saying why.
+  const allLocked =
+    settings.length + knowledge.length > 0 &&
+    settings.every((c) => c.locked) &&
+    knowledge.every((k) => k.locked) &&
+    added.length + removed.length + updated.length + rules + rewired === 0;
 
   return (
     <div className="space-y-1.5">
@@ -578,6 +646,9 @@ function Message({
               {rules} branching rule{rules > 1 ? "s" : ""}, so each answer only sees what applies to it
             </p>
           )}
+          {(settings.length > 0 || knowledge.length > 0) && (
+            <SettingRows changes={settings} knowledge={knowledge} doc={current} applied={turn.applied} />
+          )}
           {orphaned.length > 0 && !turn.applied && (
             <p className="flex items-start gap-1 px-1 text-xs text-amber-600 dark:text-amber-400">
               <TriangleAlert className="mt-0.5 size-3 shrink-0" />
@@ -588,7 +659,7 @@ function Message({
               </span>
             </p>
           )}
-          {turn.applied ? (
+          {allLocked ? null : turn.applied ? (
             <p className="text-muted-foreground flex items-center gap-1 px-1 text-xs">
               <Check className="size-3" />
               Applied
