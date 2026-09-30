@@ -148,6 +148,8 @@ export function ThemeField({
  * Sits beside the Theme heading: it is part of how the theme looks.
  */
 export function BackgroundShapesSwitch({ theme, onChange }: { theme: Theme; onChange: (next: Theme) => void }) {
+  // The Chatform theme is always plain, so there is nothing to switch.
+  if (matchFormTheme(theme) === "chatform") return null;
   return (
     <div data-setting="theme.backgroundDecor" className="flex items-center gap-2">
       <Label htmlFor="theme-decor" className="text-muted-foreground text-xs font-normal">

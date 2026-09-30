@@ -5,10 +5,8 @@ import { chatThemeVars } from "../src/lib/chat-theme";
 const layers = (theme: ThemeDoc) => String((chatThemeVars(theme, "demo") as Record<string, unknown>)["--cf-pattern"]);
 
 describe("the Chatform theme is drawn plain", () => {
-  it("has no pattern and only a faint shape, even on a form that stored the old tile", () => {
-    const img = layers(ThemeDoc.parse({ backgroundPattern: "auto" }));
-    expect(img.match(/url\(/g)?.length).toBe(1);
-    expect(img).toContain("0.045");
+  it("has no pattern and no shape, even on a form that stored them", () => {
+    expect(layers(ThemeDoc.parse({ backgroundPattern: "auto", backgroundShape: "wave" }))).toBe("none");
   });
 
   it("draws nothing once Background shapes is off", () => {

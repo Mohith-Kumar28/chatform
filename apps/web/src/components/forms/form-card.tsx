@@ -45,7 +45,7 @@ import {
 } from "@/components/ui/context-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { CHATFORM_SHAPE_ALPHA, chatThemeVars, contrast, isDarkColor, patternAlpha, patternOpacity, plainChatform } from "@/lib/chat-theme";
+import { chatThemeVars, contrast, isDarkColor, patternAlpha, patternOpacity, plainChatform } from "@/lib/chat-theme";
 import { resolveScheme } from "@/lib/form-scheme";
 import { patternImage, patternSize, patternWeight, resolvePattern, resolveShape, rgbaFromHex, shapeLayer } from "@/lib/background-patterns";
 
@@ -1095,7 +1095,7 @@ function thumbSurface(
    * so a negative offset larger than the tile is still the right phase.
    */
   const tilePos = part === "thumb" ? "0 0" : `0 -${THUMB_H}px`;
-  // The Chatform theme is drawn plain: no tile, and only a whisper of a shape.
+  // The Chatform theme is drawn plain: no tile, no shape.
   const plain = !!theme && plainChatform(cardThemeDoc(theme));
   const tile = plain ? null : resolvePattern(theme?.backgroundPattern, seed);
 
@@ -1108,13 +1108,7 @@ function thumbSurface(
      */
     const usable = contrast(theme.background, theme.accent) >= 1.3;
     // The shape sits once in the thumbnail; the bleed below the seam is tile only.
-    const shapeId = plain
-      ? theme.backgroundPattern === "none" && !theme.backgroundShape
-        ? undefined
-        : resolveShape(theme.backgroundShape ?? "auto", seed)
-      : resolveShape(theme.backgroundShape, seed);
-    const shapeAlpha = plain ? CHATFORM_SHAPE_ALPHA.light : 0.14;
-    const shape = part === "thumb" ? shapeLayer(shapeId, rgbaFromHex(usable ? theme.accent : theme.userBubbleText, shapeAlpha)) : null;
+    const shape = part === "thumb" && !plain ? shapeLayer(resolveShape(theme.backgroundShape, seed), rgbaFromHex(usable ? theme.accent : theme.userBubbleText, 0.14)) : null;
     if (!tile && !shape) return { backgroundColor: theme.background };
     const color = theme.backgroundPatternColor || (usable ? theme.accent : theme.userBubbleText);
     const tileImage = tile ? patternImage(tile, rgbaFromHex(color, patternAlpha(theme.background, color, 0.9 * patternWeight(tile) * patternOpacity(theme)))) : "none";

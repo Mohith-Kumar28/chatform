@@ -197,13 +197,10 @@ export function shapeInk(theme: ThemeDoc, alpha?: { light: number; dark: number 
   return rgbaFromHex(usable ? theme.accent : theme.text, isDarkColor(theme.background) ? a.dark : a.light);
 }
 
-/** How faint the one shape on the Chatform theme is: there, but only just. */
-export const CHATFORM_SHAPE_ALPHA = { light: 0.045, dark: 0.07 };
-
 /**
- * Whether the form is on chatform's own theme, which is drawn as plain as it
- * gets: no pattern, and the shape (unless the switch is off) so faint it only
- * warms the corner. Every other theme keeps its pattern and shape as set.
+ * Whether the form is on chatform's own theme, which is drawn plain: no
+ * pattern and no shape, whatever the form stored from before. Every other
+ * theme keeps its pattern and shape as set.
  */
 export function plainChatform(theme: ThemeDoc): boolean {
   return matchFormTheme(theme) === "chatform";
@@ -428,11 +425,7 @@ function RADIUS_STEP(radius: string): ThemeDoc["radius"] {
 function backgroundLayers(theme: ThemeDoc, tile: PatternDef | undefined | null, seed?: string | null): Record<string, string> {
   const tileImage = tile ? patternImage(tile, patternInk(theme, tile)) : "none";
   const tileSize = tile ? patternSize(tile) : "auto";
-  const shape = plainChatform(theme)
-    ? theme.backgroundPattern === "none" && !theme.backgroundShape
-      ? null
-      : shapeLayer(resolveShape(theme.backgroundShape ?? "auto", seed), shapeInk(theme, CHATFORM_SHAPE_ALPHA))
-    : shapeLayer(resolveShape(theme.backgroundShape, seed), shapeInk(theme));
+  const shape = plainChatform(theme) ? null : shapeLayer(resolveShape(theme.backgroundShape, seed), shapeInk(theme));
   if (!shape) return { "--cf-pattern": tileImage, "--cf-pattern-size": tileSize };
   return {
     "--cf-pattern": `${shape.image}, ${tileImage}`,
