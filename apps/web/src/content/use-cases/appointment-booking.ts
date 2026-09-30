@@ -121,7 +121,7 @@ Keep the tone warm and unfussy, the way you would talk to someone at the desk. I
     },
     {
       title: "Tell it the things you get asked all day",
-      body: "In the Agent tab, add short notes: where to park, what a colour costs, whether you do patch tests, what happens if they are late. When somebody asks mid-booking, it answers from your notes and then picks the booking back up exactly where it left off.",
+      body: "In Settings, under Agent, add short notes: where to park, what a colour costs, whether you do patch tests, what happens if they are late. When somebody asks mid-booking, it answers from your notes and then picks the booking back up exactly where it left off.",
       figure: "flow",
     },
     {

@@ -1,7 +1,6 @@
 import {
   BarChart3,
   Blocks,
-  Bot,
   GitBranch,
   Settings as SettingsIcon,
   Share2,
@@ -22,11 +21,11 @@ export const BUILDER_TABS = [
   // Design, Questions and Flow all shape the same form, so Build owns them and
   // they share the toolbar below the header rather than three nav slots.
   { segment: "build", label: "Build", icon: Blocks, hint: "Questions and flow", alsoMatches: ["workflow"] },
-  { segment: "agent", label: "Agent", icon: Bot, hint: "Persona, goal and knowledge", alsoMatches: [] },
   { segment: "results", label: "Results", icon: BarChart3, hint: "Responses and analytics", alsoMatches: [] },
   { segment: "share", label: "Share", icon: Share2, hint: "Link, QR and email", alsoMatches: [] },
   { segment: "integrate", label: "Integrate", icon: Webhook, hint: "Embed, webhooks and spreadsheets", alsoMatches: [] },
-  { segment: "settings", label: "Settings", icon: SettingsIcon, hint: "Access, email and metadata", alsoMatches: [] },
+  // Agent lives here as a section now, not a tab of its own.
+  { segment: "settings", label: "Settings", icon: SettingsIcon, hint: "Agent, access, email and metadata", alsoMatches: [] },
 ] as const;
 
 /** The two views that live under the Build tab. */
@@ -44,6 +43,8 @@ export const BUILDER_SEGMENTS = [
   // over the builder now, not a page you can be on.
   "workflow",
   "design",
+  // Old links; the page redirects to Settings → Agent.
+  "agent",
 ] as readonly string[];
 
 export function isBuilderSegment(value: string): boolean {

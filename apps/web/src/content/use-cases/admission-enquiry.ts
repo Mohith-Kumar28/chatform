@@ -128,7 +128,7 @@ Keep the tone warm and respectful — this is a parent making a big decision abo
     },
     {
       title: "Write down your fees and timings once",
-      body: "This is the step that matters most. In the Agent tab, add short notes for each programme's fee, the instalment plan, batch hours, transport, and anything else your desk repeats all day. From then on, parents get those answers instantly — in the middle of the enquiry, at any hour.",
+      body: "This is the step that matters most. In Settings, under Agent, add short notes for each programme's fee, the instalment plan, batch hours, transport, and anything else your desk repeats all day. From then on, parents get those answers instantly — in the middle of the enquiry, at any hour.",
       figure: "flow",
     },
     {

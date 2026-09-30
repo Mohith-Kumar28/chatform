@@ -173,8 +173,8 @@ const onOff = [
 // ─── where things live ───────────────────────────────────────────────────────
 
 const DESIGN = "Build → Design";
-const AGENT = "Agent";
 const SETTINGS = "Settings";
+const AGENT = `${SETTINGS} → Agent`;
 const EMBED = "Integrate → Put it on your site";
 
 // ─── the list ────────────────────────────────────────────────────────────────
@@ -695,9 +695,11 @@ const BY_KEY = new Map(SETTINGS_REGISTRY.map((d) => [d.key, d]));
 
 /** Where a setting's control is, as the builder routes to it. */
 export interface SettingPlace {
-  tab: "build" | "agent" | "settings" | "integrate";
-  /** The Design sheet on Build, the Agent tab's sub-tab, or the Settings tab's section. */
-  panel?: "design" | "persona" | "goal" | "guardrails" | "general" | "access" | "link" | "completion";
+  tab: "build" | "settings" | "integrate";
+  /** The Design sheet on Build, or the Settings tab's section. */
+  panel?: "design" | "agent" | "general" | "access" | "link" | "completion";
+  /** The Agent section's own sub-tab. */
+  section?: "persona" | "goal" | "guardrails";
 }
 
 /**
@@ -709,9 +711,9 @@ export interface SettingPlace {
 export function settingPlace(key: string): SettingPlace | null {
   const where = settingDef(key)?.where ?? "";
   if (where.startsWith(DESIGN)) return { tab: "build", panel: "design" };
-  if (where.startsWith(`${AGENT} → Persona`)) return { tab: "agent", panel: "persona" };
-  if (where.startsWith(`${AGENT} → Goal`)) return { tab: "agent", panel: "goal" };
-  if (where.startsWith(`${AGENT} → Guardrails`)) return { tab: "agent", panel: "guardrails" };
+  if (where.startsWith(`${AGENT} → Persona`)) return { tab: "settings", panel: "agent", section: "persona" };
+  if (where.startsWith(`${AGENT} → Goal`)) return { tab: "settings", panel: "agent", section: "goal" };
+  if (where.startsWith(`${AGENT} → Guardrails`)) return { tab: "settings", panel: "agent", section: "guardrails" };
   if (where.startsWith(`${SETTINGS} → Access`)) return { tab: "settings", panel: "access" };
   if (where.startsWith(`${SETTINGS} → Link`)) return { tab: "settings", panel: "link" };
   if (where.startsWith(`${SETTINGS} → On completion`)) return { tab: "settings", panel: "completion" };

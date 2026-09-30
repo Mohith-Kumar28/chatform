@@ -58,7 +58,7 @@ export function SettingRows({
       ))}
       {knowledge.length > 0 && (
         <div className="bg-muted/50 rounded-xl px-2.5 py-2">
-          <PlaceLink where="Agent → Knowledge" section="knowledge" />
+          <PlaceLink where="Settings → Agent → Knowledge" section="knowledge" />
           <ul className="space-y-1.5">
             {knowledge.map((k, i) => (
               <li key={i} className={cn("flex items-start gap-2 text-xs", k.locked && "text-muted-foreground")}>
@@ -79,7 +79,7 @@ export function SettingRows({
 /**
  * The place a group of settings lives, as a quiet link to it.
  *
- * The builder's own path ("Agent › Persona"), not a category name: it is the
+ * The builder's own path ("Settings › Agent › Persona"), not a category name: it is the
  * answer to "where would I change this myself", which is what it is for. A
  * setting with no control yet names that plainly and links nowhere.
  */
@@ -96,7 +96,7 @@ function PlaceLink({ where, settingKey, section }: { where: string; settingKey?:
       type="button"
       onClick={() => {
         if (settingKey) revealSetting(settingKey, { formId: formId!, pathname, push: router.push });
-        else router.push(`/forms/${formId}/agent?section=${section}`);
+        else router.push(`/forms/${formId}/settings/agent?section=${section}`);
       }}
       className="text-muted-foreground hover:text-foreground mb-1.5 inline-flex items-center gap-0.5 text-xs underline decoration-dotted decoration-1 underline-offset-[3px] transition-colors"
     >

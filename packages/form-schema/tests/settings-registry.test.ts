@@ -201,7 +201,7 @@ describe("settingPlace", () => {
       else expect(place, d.key).not.toBeNull();
     }
     expect(settingPlace("theme.accent")).toEqual({ tab: "build", panel: "design" });
-    expect(settingPlace("settings.agent.goal")).toEqual({ tab: "agent", panel: "goal" });
+    expect(settingPlace("settings.agent.goal")).toEqual({ tab: "settings", panel: "agent", section: "goal" });
     expect(settingPlace("settings.closeRules.closeAt")).toEqual({ tab: "settings", panel: "access" });
     expect(settingPlace("settings.progressBar")).toEqual({ tab: "settings", panel: "general" });
   });

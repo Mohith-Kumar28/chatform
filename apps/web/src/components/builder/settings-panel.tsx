@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { CircleX, Plus } from "lucide-react";
+import { ArrowRight, Bot, CircleX, Plus } from "lucide-react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,7 @@ import { LockedControl } from "@/components/billing/gate";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { LinkSettings } from "./link-settings";
 import { FollowUpPanel } from "./followup-panel";
+import { AgentSettings } from "./agent-settings";
 import { ShortcutsList } from "@/components/ui/shortcuts-dialog";
 import { useBuilderStore } from "@/stores/builder-store";
 import { SettingsShell } from "@/components/settings/settings-shell";
@@ -47,8 +48,8 @@ interface SettingsPanelProps {
 }
 
 // "Access" and "Access & closing" were two sections covering one concern —
-// who can respond and until when. Merged. The AI Interviewer settings moved to
-// the dedicated Agent tab.
+// who can respond and until when. Merged. Agent was a tab of its own; it is the
+// last section here now, drawn apart in the nav so it is not lost in the list.
 const SECTIONS = [
   { id: "general", label: "General" },
   { id: "access", label: "Access & closing" },
@@ -57,6 +58,7 @@ const SECTIONS = [
   { id: "completion", label: "On completion" },
   { id: "followup", label: "Follow-ups" },
   { id: "shortcuts", label: "Keyboard shortcuts" },
+  { id: "agent", label: "Agent" },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -134,7 +136,24 @@ export function SettingsPanel({
             "md:bg-muted/30 md:mx-0 md:block md:w-56 md:space-y-0.5 md:overflow-visible md:p-3 md:pb-3",
           )}
         >
-          {SECTIONS.map((s) => (
+          {SECTIONS.map((s) => s.id === "agent" ? (
+            <Link
+              key={s.id}
+              href={`/forms/${params.id}/settings/${s.id}`}
+              scroll={false}
+              aria-current={section === s.id ? "page" : undefined}
+              className={cn(
+                "text-primary flex shrink-0 snap-start items-center gap-2 rounded-full border border-dashed border-primary/60 px-3 py-1.5 text-sm font-medium whitespace-nowrap",
+                "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
+                "md:mt-3 md:w-full md:rounded-lg md:px-3 md:py-2",
+                section === s.id ? "bg-primary-soft border-primary" : "hover:bg-primary-soft/60",
+              )}
+            >
+              <Bot className="size-4 shrink-0" strokeWidth={1.75} />
+              <span className="flex-1">{s.label}</span>
+              <ArrowRight className="size-3.5 shrink-0" strokeWidth={2} />
+            </Link>
+          ) : (
             <Link
               key={s.id}
               href={`/forms/${params.id}/settings/${s.id}`}
@@ -206,8 +225,6 @@ export function SettingsPanel({
         </>
       )}
 
-      {/* The AI Interviewer settings moved to the Agent tab, which has room
-          for the persona, goal, knowledge base and guardrails. */}
       {section === "access" && (
         <SettingSection title="Access & closing">
           <SettingGroup label="Who can respond">
@@ -497,6 +514,12 @@ export function SettingsPanel({
             These work whenever you are not typing in a field.
           </p>
           <ShortcutsList shortcuts={shortcuts} />
+        </SettingSection>
+      )}
+
+      {section === "agent" && (
+        <SettingSection title="Agent">
+          <AgentSettings />
         </SettingSection>
       )}
 

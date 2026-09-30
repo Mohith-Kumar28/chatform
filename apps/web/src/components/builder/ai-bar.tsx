@@ -55,7 +55,7 @@ async function addKnowledge(formId: string, items: readonly KnowledgeAdd[]) {
     }
   }
   if (added > 0) toast.success(`Added ${added === 1 ? "1 source" : `${added} sources`} to the knowledge base`, { description: "It is read in the background." });
-  if (added < items.length) toast.error("Some knowledge could not be added. Try it from Agent → Knowledge.");
+  if (added < items.length) toast.error("Some knowledge could not be added. Try it from Settings → Agent → Knowledge.");
 }
 
 /**

@@ -127,7 +127,7 @@ Answer their questions as they come up — what we charge, whether we do hosting
     },
     {
       title: "Add the three things everyone asks you",
-      body: "In the Agent tab, write down your price ranges, your usual timeline, and whether you handle hosting. From then on it answers those mid-conversation, in your words, and picks the enquiry back up straight after.",
+      body: "In Settings, under Agent, write down your price ranges, your usual timeline, and whether you handle hosting. From then on it answers those mid-conversation, in your words, and picks the enquiry back up straight after.",
     },
     {
       title: "Put it where your contact form is now",

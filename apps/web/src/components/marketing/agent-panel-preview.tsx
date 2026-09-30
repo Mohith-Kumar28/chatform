@@ -3,7 +3,7 @@ import { BookOpen, ShieldCheck, Target } from "lucide-react";
 /**
  * The Agent tab, in miniature — persona, goal, the knowledge-base character
  * meter and guardrails. Every control shown here exists in
- * `components/builder/tabs/agent-tab.tsx`, including the 20k character budget.
+ * `components/builder/agent-settings.tsx`, including the 20k character budget.
  */
 export function AgentPanelPreview() {
   return (

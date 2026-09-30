@@ -134,7 +134,7 @@ The tone should be warm and celebratory — these are people planning the bigges
     },
     {
       title: "Write your prices down once",
-      body: "In the Agent tab, put your real starting figures and what most couples spend. Yes, out loud. The couples who cannot afford you were never going to book, and the ones who can will trust you more for saying it.",
+      body: "In Settings, under Agent, put your real starting figures and what most couples spend. Yes, out loud. The couples who cannot afford you were never going to book, and the ones who can will trust you more for saying it.",
     },
     {
       title: "Put the link where couples find you",

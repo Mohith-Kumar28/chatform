@@ -13,6 +13,7 @@ import type { BuilderFeedbackArea } from "@repo/form-schema";
 export function areaFromPath(pathname: string): BuilderFeedbackArea {
   const builder = pathname.match(/^\/forms\/[^/]+\/([^/?#]+)/);
   if (builder) {
+    if (/^\/forms\/[^/]+\/settings\/agent\b/.test(pathname)) return "agent";
     const segment = builder[1];
     switch (segment) {
       case "build":

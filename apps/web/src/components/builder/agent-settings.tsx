@@ -1,0 +1,249 @@
+"use client";
+
+import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Bot, BookOpen, Shield, Target } from "lucide-react";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SettingGroup, SettingRow } from "@/components/ui/setting-row";
+import { NumberField, SwitchField } from "./inspector/fields";
+import { useBuilderStore } from "@/stores/builder-store";
+import { KnowledgePanel } from "@/components/knowledge/knowledge-panel";
+import { InterviewStylePicker } from "./tabs/interview-style-picker";
+import { BufferedInput, BufferedTextarea } from "@/components/ui/buffered-input";
+
+const SECTIONS = [
+  { value: "persona", label: "Persona", icon: Bot },
+  { value: "goal", label: "Goal", icon: Target },
+  { value: "knowledge", label: "Knowledge", icon: BookOpen },
+  { value: "guardrails", label: "Guardrails", icon: Shield },
+] as const;
+
+type Section = (typeof SECTIONS)[number]["value"];
+
+/** What each tone sounds like, in a line. It shapes every AI reply. */
+const TONE_HINT = {
+  friendly: "Warm and casual, like a helpful person.",
+  professional: "Clear and polished, without small talk.",
+  playful: "Light and upbeat, with a bit of fun.",
+} as const;
+
+/**
+ * Settings → Agent — the reason this product isn't Youform.
+ *
+ * Blocks say WHAT to collect. This says who is asking, what they are trying to
+ * achieve, what they may answer from, and what they must not do. It was a tab
+ * of its own; it is the last Settings section now, with the same sub-tabs.
+ */
+export function AgentSettings() {
+  const doc = useBuilderStore((s) => s.doc);
+  const edit = useBuilderStore((s) => s.edit);
+  const formId = useBuilderStore((s) => s.formId);
+  // A link to one of these settings (the AI bar's proposal card) names its
+  // sub-tab; `setting-reveal.ts` then scrolls to the row. Adjusted during
+  // render when the link changes, rather than in an effect.
+  const asked = useSearchParams().get("section");
+  const wanted = SECTIONS.some((x) => x.value === asked) ? (asked as Section) : null;
+  const [section, setSection] = useState<Section>(wanted ?? "persona");
+  const [followed, setFollowed] = useState(wanted);
+  if (wanted !== followed) {
+    setFollowed(wanted);
+    if (wanted) setSection(wanted);
+  }
+
+  if (!doc) return null;
+  const agent = doc.settings.agent;
+
+  const patch = (p: Partial<typeof agent>, coalesceKey?: string) =>
+    edit((d) => {
+      Object.assign(d.settings.agent, p);
+    }, coalesceKey);
+
+  const patchGuards = (p: Partial<typeof agent.guardrails>) =>
+    edit((d) => {
+      Object.assign(d.settings.agent.guardrails, p);
+    });
+
+  return (
+    <div className="min-w-0 space-y-6">
+      <SegmentedControl
+        options={SECTIONS}
+        value={section}
+        onChange={setSection}
+        ariaLabel="Agent settings section"
+      />
+
+      {section === "persona" && (
+        <SettingGroup>
+          <SettingRow
+            setting="settings.agent.mode" label="Interview style"
+            description="How much of the conversation the AI runs. It decides what each response costs."
+            stacked
+          >
+            <InterviewStylePicker value={agent.mode} onChange={(mode) => patch({ mode })} />
+          </SettingRow>
+
+          {/*
+            Only Agentic rewords anything. Hybrid and Scripted always ask the
+            author's words, so the switch would do nothing there.
+          */}
+          {agent.mode === "ai" && (
+            <SettingRow
+              setting="settings.agent.rephraseQuestions" label="Reword questions"
+              description="Off, each is asked exactly as written."
+              control={
+                <SwitchField
+                  label=""
+                  checked={agent.rephraseQuestions}
+                  onChange={(rephraseQuestions) => patch({ rephraseQuestions })}
+                />
+              }
+            />
+          )}
+
+          <SettingRow setting="settings.agent.tone" label="Tone" description={TONE_HINT[agent.tone]} className="max-sm:flex-col max-sm:gap-3" control={
+            <SegmentedControl
+              size="sm"
+              options={[
+                { value: "friendly", label: "Friendly" },
+                { value: "professional", label: "Professional" },
+                { value: "playful", label: "Playful" },
+              ]}
+              value={agent.tone}
+              onChange={(tone) => patch({ tone })}
+            />
+          } />
+
+          <SettingRow
+            setting="settings.agent.personaPrompt" label="Persona"
+            description="Who is this, and how do they talk?"
+            stacked
+          >
+            <BufferedTextarea
+              rows={4}
+              maxLength={2000}
+              value={agent.personaPrompt ?? ""}
+              placeholder="You're Sam from the founding team. Warm, direct, allergic to corporate speak. You've talked to hundreds of customers."
+              onCommit={(v) => patch({ personaPrompt: v || undefined }, "persona")}
+            />
+          </SettingRow>
+        </SettingGroup>
+      )}
+
+      {section === "goal" && (
+        <SettingGroup>
+          <SettingRow setting="settings.agent.goal" label="Goal" stacked>
+            <BufferedTextarea
+              rows={3}
+              maxLength={1000}
+              value={agent.goal ?? ""}
+              placeholder="Qualify the lead and, if they're a fit, get them to book a demo."
+              onCommit={(v) => patch({ goal: v || undefined }, "goal")}
+            />
+          </SettingRow>
+          <SettingRow
+            setting="settings.agent.successCriteria" label="What good looks like"
+            description="When to dig deeper, when to move on."
+            stacked
+          >
+            <BufferedTextarea
+              rows={3}
+              maxLength={1000}
+              value={agent.successCriteria ?? ""}
+              placeholder="We know their team size, budget range and timeline — and they left feeling heard, not processed."
+              onCommit={(v) => patch({ successCriteria: v || undefined }, "success")}
+            />
+          </SettingRow>
+        </SettingGroup>
+      )}
+
+      {section === "knowledge" && (
+        /*
+          No group description. It ran to three lines explaining indexing and
+          per-conversation cost above a panel whose own empty state already
+          says what knowledge is for.
+        */
+        <SettingGroup>
+          <KnowledgePanel formId={formId} />
+        </SettingGroup>
+      )}
+
+      {section === "guardrails" && (
+        <SettingGroup>
+          <SettingRow
+            setting="settings.agent.guardrails.answerOffTopic" label="Answer off-topic questions"
+            description="Off, it politely deflects."
+            control={
+              <SwitchField
+                label=""
+                checked={agent.guardrails.answerOffTopic}
+                onChange={(answerOffTopic) => patchGuards({ answerOffTopic })}
+              />
+            }
+          />
+          <SettingRow setting="settings.agent.guardrails.refusalMessage" label="If it must decline" stacked>
+            <BufferedInput
+              value={agent.guardrails.refusalMessage}
+              maxLength={500}
+              onCommit={(v) => patchGuards({ refusalMessage: v })}
+            />
+          </SettingRow>
+          <SettingRow setting="settings.agent.guardrails.forbiddenTopics" label="Never discuss" description="One topic per line." stacked>
+            <BufferedTextarea
+              rows={3}
+              value={agent.guardrails.forbiddenTopics.join("\n")}
+              placeholder={"competitor pricing\nlegal advice"}
+              onCommit={(v) =>
+                patchGuards({
+                  forbiddenTopics: v
+                    .split("\n")
+                    .map((t) => t.trim())
+                    .filter(Boolean)
+                    .slice(0, 20),
+                })
+              }
+            />
+          </SettingRow>
+          {/*
+            "Max turns" used to sit beside this. It went the same way as the
+            token budget, and for the same reason: it is a ceiling on cost
+            wearing the clothes of a preference. Nobody authoring a form knows
+            what number is safe, the honest answer depends on the plan rather
+            than on the form, and getting it wrong is invisible until a
+            respondent is mid-conversation. The runtime reads it from the plan
+            now (`clampForRuntime`), so leaving the control here would have
+            been a field that quietly did nothing.
+
+            "Give up after" stays, because it is a real authoring decision:
+            how patient the interviewer should be before it stops asking in
+            prose and puts the plain widget on screen.
+          */}
+          <div data-setting="settings.agent.escalateAfterInvalid">
+            <NumberField
+              label="Bad answers before showing a widget"
+              value={agent.escalateAfterInvalid}
+              min={1}
+              max={10}
+              onChange={(v) => patch({ escalateAfterInvalid: v ?? 3 })}
+            />
+          </div>
+        </SettingGroup>
+      )}
+
+      {/*
+        The model picker used to live here, offering Opus at roughly thirty
+        times the cost of the tier below it — which made the per-conversation
+        cost of the platform a choice for whoever opened a dropdown, on a
+        screen that gave them no way to judge it. The model is now ours to
+        pick, and so are the two token limits that sat beside it.
+
+        They were removed for the same reason: "Token budget: 12000" is not a
+        question an author can answer. It reads as a preference and behaves as
+        a cliff — spend it and the interviewer quietly becomes a plain form
+        mid-conversation, which is exactly what happened to a live
+        registration form carrying the old 12,000 default. The runtime now
+        derives the budget from the plan on every read (`clampForRuntime`), so
+        it is right for every existing form without anyone republishing.
+      */}
+    </div>
+  );
+}

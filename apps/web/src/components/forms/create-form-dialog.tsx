@@ -107,7 +107,13 @@ export function CreateFormDialog({
     [templates, search, category],
   );
 
-  const drafting = generation.running || generation.error !== null;
+  /**
+   * Set when the draft is saved and the builder is on its way. The finished
+   * checklist stays up until the route change takes the dialog with it;
+   * without this it fell back to the empty "Create a form" screen meanwhile.
+   */
+  const [leaving, setLeaving] = useState(false);
+  const drafting = generation.running || generation.error !== null || leaving;
 
   /**
    * The short pause between "Generate" and the draft starting, when the
@@ -131,9 +137,11 @@ export function CreateFormDialog({
 
   const createBlank = usePostApiForms<Error>({
     mutation: {
-      onSuccess: async (created) => {
-        await invalidateForms(queryClient);
-        onOpenChange(false);
+      // The dialog stays up until the builder replaces the dashboard (it lives
+      // on the dashboard page, so it goes with it). Closing first flashed the
+      // dashboard for a second or two while the builder loaded.
+      onSuccess: (created) => {
+        void invalidateForms(queryClient);
         router.push(`/forms/${apiData<{ id: string }>(created).id}/build`);
       },
       onError: (e) =>
@@ -182,6 +190,7 @@ export function CreateFormDialog({
         reserveKnowledge: staged.length,
       },
       (result) => {
+        setLeaving(true);
         void invalidateForms(queryClient);
         // The builder's AI thread already opens with this brief: the server
         // wrote it when it saved the form.
@@ -196,10 +205,10 @@ export function CreateFormDialog({
         }
         setPrompt("");
         // A beat on the finished checklist, so the last step is seen landing
-        // rather than replaced mid-animation by a route change.
+        // rather than replaced mid-animation by a route change. The dialog is
+        // not closed: it leaves with the dashboard when the builder arrives,
+        // rather than uncovering the dashboard while the builder loads.
         window.setTimeout(() => {
-          onOpenChange(false);
-          generation.reset();
           router.push(`/forms/${result.formId}/build`);
         }, 450);
       },
@@ -222,6 +231,7 @@ export function CreateFormDialog({
       setClarify(null);
       setImporting(null);
       setAsking(false);
+      setLeaving(false);
       setSearch("");
       setCategory("all");
     }
@@ -258,8 +268,6 @@ export function CreateFormDialog({
                 handOffReport(formId, report);
                 void invalidateForms(queryClient);
                 setPrompt("");
-                setImporting(null);
-                onOpenChange(false);
                 router.push(`/forms/${formId}/build`);
               }}
             />

@@ -36,13 +36,13 @@ export function revealSetting(
     }
     return;
   }
+  const query = new URLSearchParams({ reveal: key });
   // Settings sections are routes of their own; Agent's sub-tabs are a query.
   if (place.tab === "settings") {
-    nav.push(`${base}/settings/${place.panel ?? "general"}?reveal=${encodeURIComponent(key)}`);
+    if (place.section) query.set("section", place.section);
+    nav.push(`${base}/settings/${place.panel ?? "general"}?${query}`);
     return;
   }
-  const query = new URLSearchParams({ reveal: key });
-  if (place.panel) query.set("section", place.panel);
   nav.push(`${base}/${place.tab}?${query}`);
 }
 
