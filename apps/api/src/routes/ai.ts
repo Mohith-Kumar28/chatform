@@ -42,7 +42,16 @@ import { requireWorkspace, formSlug } from "../lib/workspace.js";
 import { enqueueMail } from "../lib/mail.js";
 import { appendAiTurns, proposalTurn, seedAiThread, turnId, type StoredTurn } from "../lib/ai-thread.js";
 import { routeRequest } from "../lib/settings-route.js";
-import { checkSettingsDraft, lockPaidBlockOptions, settingsDraftFields, settingsPrompt, type CheckedSettings, type SettingsDraft } from "../lib/edit-settings.js";
+import {
+  allowedBy,
+  checkSettingsDraft,
+  lockPaidBlockOptions,
+  planNeeded,
+  settingsDraftFields,
+  settingsPrompt,
+  type CheckedSettings,
+  type SettingsDraft,
+} from "../lib/edit-settings.js";
 import { getEntitlements } from "../lib/entitlements.js";
 import { countSources } from "../lib/knowledge-service.js";
 import { withOwnerNotification } from "../lib/owner-notification.js";
@@ -769,13 +778,13 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
     });
     const [route, ent] = await routing;
     if (route.call) ledger.add("edit_route", route.call.model, route.call.usage);
-    // Tools mode has no settings tool yet, so it is offered none rather than
-    // fields it would have no way to fill.
-    const settingsPart = mode === "tools" ? null : settingsPrompt(base, route, ent);
-    const context = [requestContext(prompt, reading, "edit"), settingsPart?.text].filter(Boolean).join("\n\n");
+    const settingsPart = settingsPrompt(base, route, ent, mode);
+    const context = [requestContext(prompt, reading, "edit"), settingsPart.text].filter(Boolean).join("\n\n");
     // The key enum is built per request, so the static type is the loose one.
-    const editSchema = EditDraft.extend(settingsDraftFields(settingsPart?.keys ?? [])) as unknown as z.ZodType<EditDraftOut & SettingsDraft>;
+    const editSchema = EditDraft.extend(settingsDraftFields(settingsPart.keys)) as unknown as z.ZodType<EditDraftOut & SettingsDraft>;
     const parse = { utcOffsetMinutes, now: Date.now() };
+    /** The loop's settings tools see the same keys, plan and clock as the single call's schema. */
+    const settingsScope = { keys: settingsPart.keys, allowed: allowedBy(ent), planFor: planNeeded, parse };
     const usedSources = { value: null as number | null };
     /** A draft's settings and knowledge, checked against the plan, on top of its questions. */
     const settle = async (d: EditDraftOut & SettingsDraft, doc: FormDoc): Promise<CheckedSettings> => {
@@ -822,7 +831,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
           env: c.env,
           system: `${FORM_DESIGNER_SYSTEM}\n\n${EDIT_TOOL_PROTOCOL}`,
           prompt: buildEditPrompt(base, prompt, history as BuilderTurn[], "tools", context),
-          tools: buildEditTools(ctx, (o) => outcomes.push(o)),
+          tools: buildEditTools(ctx, (o) => outcomes.push(o), settingsScope),
           organizationId: c.get("orgId"),
           formId,
           trace,
@@ -976,7 +985,7 @@ It made these changes, which have NOT been applied — you are starting again fr
 ${describeEditChanges(base, attempt)}
 
 Answer the same request again, addressing that.`,
-            tools: buildEditTools(retryCtx, () => {}),
+            tools: buildEditTools(retryCtx, () => {}, settingsScope),
             organizationId: c.get("orgId"),
             formId,
             kind: "edit_retry",

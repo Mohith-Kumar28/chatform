@@ -95,7 +95,9 @@ describe("the tool set itself", () => {
      * Google tightened it — with no deploy on our side. Asserted rather than
      * hoped for.
      */
-    const { tools } = harness();
+    // With the settings tools, as a loop that can change settings is sent.
+    const ctx = buildEditContext(baseForm(), () => ({ introduced: [] }));
+    const tools = buildEditTools(ctx, () => {}, { keys: ["theme.accent"], allowed: () => true, planFor: () => "Pro" });
     let properties = 0;
     for (const t of Object.values(tools)) {
       const json = z.toJSONSchema(t.inputSchema as z.ZodType) as { properties?: Record<string, unknown> };
@@ -103,7 +105,10 @@ describe("the tool set itself", () => {
       // `maxItems` is the one keyword measured to trigger a refusal.
       expect(JSON.stringify(json)).not.toContain("maxItems");
     }
-    expect(properties).toBeLessThanOrEqual(32);
+    // 33 with update_settings and add_knowledge, accepted by both vendors with
+    // every setting key in the enum (`check:schemas`, 2026-09-30). Adding a
+    // property means re-running that check, not just raising this number.
+    expect(properties).toBeLessThanOrEqual(33);
   });
 });
 
@@ -500,5 +505,55 @@ describe("the catalog the guards read", () => {
         }
       }
     }
+  });
+});
+
+describe("settings tools", () => {
+  const scope = (allowed: (f: string) => boolean = () => true) => ({
+    keys: ["theme.accent", "settings.branding.hidePoweredBy", "settings.closeRules.closeAt"],
+    allowed,
+    planFor: () => "Pro",
+    parse: { now: Date.parse("2026-09-30T00:00:00Z") },
+  });
+  function withSettings(allowed?: (f: string) => boolean) {
+    const base = baseForm();
+    const ctx = buildEditContext(base, (draft) => ({ introduced: introducedFlowProblems(base, applyEditDraft(base, draft).doc) }));
+    const tools = buildEditTools(ctx, () => {}, scope(allowed));
+    const call = async (name: string, input: unknown): Promise<string> =>
+      (await (tools[name] as { execute: (i: unknown, o: unknown) => Promise<string> }).execute(input, {})) as string;
+    return { ctx, tools, call };
+  }
+
+  it("has no update_settings when the edit has no setting keys", () => {
+    expect(harness().tools.update_settings).toBeUndefined();
+    expect(withSettings().tools.update_settings).toBeDefined();
+  });
+
+  it("refuses a value the setting cannot take, and says why", async () => {
+    const { call, ctx } = withSettings();
+    const out = await call("update_settings", { changes: [{ key: "settings.closeRules.closeAt", value: "2024-10-30" }] });
+    expect(out).toMatch(/^Rejected: .*has already passed; today is 2026-09-30/);
+    expect(ctx.draft.settings ?? []).toEqual([]);
+  });
+
+  it("keeps a locked setting for the card, and tells the model to say so", async () => {
+    const { call, ctx } = withSettings(() => false);
+    const out = await call("update_settings", { changes: [{ key: "settings.branding.hidePoweredBy", value: "true" }] });
+    expect(out).toMatch(/Not on this plan.*needs Pro/);
+    expect(ctx.draft.settings).toEqual([{ key: "settings.branding.hidePoweredBy", value: "true" }]);
+  });
+
+  it("finishes a turn that only answers a question", async () => {
+    const { call, ctx } = withSettings();
+    const out = await call("finish_edit", { summary: "", answer: "Build, then the Design button, then Brand." });
+    expect(out).toBe("Answered. Edit complete.");
+    expect(ctx.finished).toBe(true);
+    expect(ctx.best?.draft.answer).toBe("Build, then the Design button, then Brand.");
+  });
+
+  it("counts a settings change as a change", async () => {
+    const { call } = withSettings();
+    await call("update_settings", { changes: [{ key: "theme.accent", value: "#1E40AF" }] });
+    expect(await call("finish_edit", { summary: "Made it navy." })).toBe("The flow checks out. Edit complete.");
   });
 });

@@ -77,6 +77,10 @@ export const ROUTE_CASES: {
   { request: "require sign in and notify ops@acme.com of each response", sections: ["access", "completion"] },
   { request: "make it look like our site: dark background, orange buttons, rounded corners", sections: ["design"] },
 
+  { request: "use Lora for the headings and make it more professional", sections: ["design", "agent_persona"] },
+  { request: "hide the progress bar, sound friendlier and email me at ana@acme.com for each response", sections: ["display", "agent_persona", "completion"] },
+  { request: "add a rating question and never discuss competitors", sections: ["guardrails"] },
+
   // how-to
   { request: "where do I upload my logo?", sections: ["design"], howTo: true },
   { request: "how do I see the responses?", sections: [], howTo: true },

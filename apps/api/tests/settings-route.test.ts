@@ -49,10 +49,21 @@ describe("routeRequest", () => {
     expect(route.sections).toEqual(SETTING_SECTION_IDS);
   });
 
-  it("sends everything when Jev fails", async () => {
+  it("sends everything when Jev fails twice", async () => {
     const jev = fakeJev(new Response("overloaded", { status: 503 }));
     const route = await routeRequest(ENV, { request: "make it navy" }, CTX, { fetch: jev.fetch });
     expect(route).toMatchObject({ sections: SETTING_SECTION_IDS, fellBack: true, call: null });
+    expect(jev.sent).toHaveLength(2);
+  });
+
+  it("asks once more when the first call fails", async () => {
+    let calls = 0;
+    const ok = fakeJev({ section_design: 0.9 });
+    const fetch = (async (url: string, init: RequestInit) =>
+      ++calls === 1 ? new Response("rate limited", { status: 429 }) : ok.fetch(url, init)) as unknown as typeof globalThis.fetch;
+    const route = await routeRequest(ENV, { request: "make it navy" }, CTX, { fetch });
+    expect(route.sections).toEqual(["design"]);
+    expect(route.fellBack).toBe(false);
   });
 
   it("sends everything without a key, and asks nobody", async () => {

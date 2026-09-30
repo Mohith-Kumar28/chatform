@@ -137,9 +137,11 @@ const TOOL_FORM = FormDoc.parse({
   logic: [],
 });
 
+// With every setting key in update_settings' enum: the most a loop is ever sent.
 const editTools = buildEditTools(
   buildEditContext(TOOL_FORM, () => ({ introduced: [] })),
   () => {},
+  { keys: SETTINGS_REGISTRY.map((d) => d.key), allowed: () => true, planFor: () => "Pro" },
 );
 
 for (const model of [MODELS.generation, MODELS.generationFallback]) {

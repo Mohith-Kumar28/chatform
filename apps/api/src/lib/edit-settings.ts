@@ -48,12 +48,26 @@ Only the author can upload files (a logo, an image, a document), set a password,
  * General on purpose: which setting a request means is the model's call, made
  * against the labels and current values it is shown, not against examples.
  */
-const BEYOND_QUESTIONS = `Besides the questions, an edit can carry:
+const HOW_TO_CHOOSE = `A request can be entirely about settings and need no change to the questions at all. When it says what the form is for, what a good response looks like, or how the interviewer should sound or behave, that is a setting below: set it, and add a question only when the author asks for something to be asked. When the author names a setting by its label (the quoted name in the list below), they mean that setting, whatever else the sentence could also be read as.
+The builder shows the author every change with its old and new value before anything is applied, so change exactly what was asked and nothing else. When something they asked for cannot be done here, say so in the summary.`;
+
+/**
+ * The same three things in the words each edit path uses: JSON fields for the
+ * single structured call, tools for the loop. The judgement is shared.
+ */
+function beyondQuestions(mode: "object" | "tools"): string {
+  const how =
+    mode === "object"
+      ? `Besides the questions, an edit can carry:
 - "settings": form settings to change, each { "key", "value" } with a key from the settings listed below and the value as text. Only what the author asked for. [] when they asked for nothing about settings.
 - "knowledge": information for the interviewer to answer respondents from, each { "kind": "text", "title", "body" } in the author's own words, or { "kind": "link", "url" } for a page they name that is not already linked in the request (linked pages are added on their own). [] otherwise.
-- "answer": a short reply when the author asked how, where or whether something can be done. "" otherwise.
-A request can be entirely about settings and need no change to the questions at all: when it describes something a setting below already holds, set that setting rather than building questions around it.
-The builder shows the author every change with its old and new value before anything is applied, so change exactly what was asked and nothing else. When something they asked for cannot be done here, say so in the summary.`;
+- "answer": a short reply when the author asked how, where or whether something can be done. "" otherwise.`
+      : `Besides the questions, an edit can:
+- change form settings with update_settings, each by its key from the settings listed below with the value as text;
+- propose information for the interviewer to answer respondents from with add_knowledge (text in the author's own words, or a page they name that is not already linked in the request);
+- answer a question about how, where or whether something can be done, in finish_edit's "answer".`;
+  return `${how}\n${HOW_TO_CHOOSE}`;
+}
 
 /** The draft fields this adds to an edit, with the setting keys this request may name. */
 export function settingsDraftFields(keys: readonly string[]) {
@@ -92,16 +106,16 @@ export function settingsDraftFields(keys: readonly string[]) {
   };
 }
 
-export interface SettingsDraft {
+export type SettingsDraft = {
   settings?: { key: string; value: string }[];
   knowledge?: { kind: "link" | "text"; url?: string; title?: string; body?: string }[];
   answer?: string;
-}
+};
 
 /** What the plan allows, as the registry's `allowed` predicate. */
 export const allowedBy = (ent: Entitlements) => (feature: string) => can(ent, feature as FeatureKey);
 
-function planNeeded(feature: string): string {
+export function planNeeded(feature: string): string {
   return PLANS[minPlanFor(feature as FeatureKey)].name;
 }
 
@@ -109,7 +123,12 @@ function planNeeded(feature: string): string {
  * The prompt section for a request: the builder map always, the settings of
  * the sections Jev picked, and what this plan cannot do.
  */
-export function settingsPrompt(doc: FormDoc, route: RequestRoute, ent: Entitlements): { text: string; keys: string[] } {
+export function settingsPrompt(
+  doc: FormDoc,
+  route: RequestRoute,
+  ent: Entitlements,
+  mode: "object" | "tools" = "object",
+): { text: string; keys: string[] } {
   const allowed = allowedBy(ent);
   /*
    * Every key in the picked sections, locked ones included. A locked change
@@ -118,10 +137,10 @@ export function settingsPrompt(doc: FormDoc, route: RequestRoute, ent: Entitleme
    * than a sentence the author has to act on themselves.
    */
   const keys = settingKeysFor(route.sections, () => true);
-  const parts = [BUILDER_MAP, BEYOND_QUESTIONS, `Today is ${new Date().toISOString().slice(0, 10)}.`];
+  const parts = [BUILDER_MAP, beyondQuestions(mode), `Today is ${new Date().toISOString().slice(0, 10)}.`];
   if (route.asksHowTo) {
     parts.push(
-      "The author may be asking how or where to do something. Answer that in \"answer\", in a sentence or two, naming the place as the map gives it. " +
+      `The author may be asking how or where to do something. Answer that in ${mode === "object" ? '"answer"' : 'finish_edit\'s "answer"'}, in a sentence or two, naming the place as the map gives it. ` +
         "If they also asked for a change you can make, make it too; if it is something only they can do, say where.",
     );
   }

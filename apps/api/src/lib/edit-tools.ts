@@ -6,10 +6,14 @@ import {
   DRAFT_BRANCH_OPS,
   describeBlockType,
   renderBlockCatalog,
+  parseSettingValue,
+  settingDef,
   type BlockType,
   type FormDoc,
+  type ParseContext,
 } from "@repo/form-schema";
 import type { EditDraft } from "./ai.js";
+import type { SettingsDraft } from "./edit-settings.js";
 import { validateBlockConfig } from "./draft-normalize.js";
 
 /**
@@ -81,7 +85,7 @@ export interface EditToolContext {
   blocks: Map<string, EditBlockView>;
   endings: Map<string, { kind: "success" | "screen_out"; title: string }>;
   /** The proposal being accumulated. Never a FormDoc. */
-  draft: EditDraft;
+  draft: EditDraft & SettingsDraft;
   /**
    * Apply-and-check, injected by the caller — the same shape as the interview
    * toolset's `searchKnowledge` and `nextAfter`. Keeps this module free of
@@ -91,7 +95,7 @@ export interface EditToolContext {
   /** How many times `finish_edit` has come back with problems. */
   reviewAttempts: number;
   /** The fewest-problems proposal seen so far, and its problems. */
-  best: { draft: EditDraft; problems: { code: string; message: string }[] } | null;
+  best: { draft: EditDraft & SettingsDraft; problems: { code: string; message: string }[] } | null;
   /** Set once the model has called `finish_edit` and the check passed. */
   finished: boolean;
 }
@@ -155,9 +159,22 @@ export function buildEditContext(
 /** The refs a guard can name back, so a rejection is actionable rather than a "no". */
 const refList = (ctx: EditToolContext): string => ctx.order.join(", ");
 
+/**
+ * What the settings tools may touch on this edit: the keys Jev's sections
+ * allow (see `edit-settings.ts`), which of them the plan locks, and how dates
+ * are read. Absent, the loop has no settings tools at all.
+ */
+export interface EditSettingsScope {
+  keys: readonly string[];
+  allowed: (feature: string) => boolean;
+  planFor: (feature: string) => string;
+  parse?: ParseContext;
+}
+
 export function buildEditTools(
   ctx: EditToolContext,
   collect: (outcome: EditOutcome) => void,
+  settings?: EditSettingsScope,
 ): ToolSet {
   /**
    * Three refused calls in a row and the model stops being asked.
@@ -590,6 +607,79 @@ export function buildEditTools(
      * `ctx.best` keeps the "only if strictly better" rule the route's retry had:
      * a second attempt that makes things worse is discarded, not applied.
      */
+    /**
+     * `update_settings`, checked as it is called.
+     *
+     * The key is an enum of this edit's keys, so a setting outside the sections
+     * Jev picked cannot even be named. The value is parsed by the registry on
+     * the spot, and a refusal names the reason, so the loop fixes a bad colour
+     * or a past date while its work is still in context. A locked setting is
+     * accepted and said to be locked: the author sees it on the card with its
+     * plan, which is the answer to having asked for it.
+     */
+    ...(settings && settings.keys.length > 0
+      ? {
+          update_settings: tool({
+            description:
+              "Change form settings, each by its key from the settings list in the request, with the new value as text. " +
+              "Only what the author asked for. Empty text clears a setting that can be cleared.",
+            inputSchema: z.object({
+              changes: z.array(z.object({ key: z.enum(settings.keys as [string, ...string[]]), value: z.string() })),
+            }),
+            execute: async ({ changes }) => {
+              const stop = blocked("update_settings");
+              if (stop) return stop;
+              const refused: string[] = [];
+              const locked: string[] = [];
+              const list = (ctx.draft.settings ??= []);
+              for (const c of changes) {
+                const d = settingDef(c.key);
+                if (!d) continue;
+                const parsed = parseSettingValue(d, c.value, settings.parse);
+                if (!parsed.ok) {
+                  refused.push(parsed.reason);
+                  continue;
+                }
+                const needs = d.feature && !settings.allowed(d.feature) ? d.feature : null;
+                if (needs) locked.push(`${d.label} needs ${settings.planFor(needs)}`);
+                const at = list.findIndex((x) => x.key === c.key);
+                if (at >= 0) list[at] = c;
+                else list.push(c);
+              }
+              if (refused.length > 0) {
+                return reject("update_settings", `these values were refused, fix and call again: ${refused.join("; ")}`);
+              }
+              const note = locked.length
+                ? ` Not on this plan, so the author will see them locked with the way to upgrade: ${locked.join("; ")}. Say so in your summary.`
+                : "";
+              return accept("update_settings", `Settings noted.${note}`);
+            },
+          }),
+        }
+      : {}),
+
+    add_knowledge: tool({
+      description:
+        "Propose information for the interviewer to answer respondents from: text the author gives you, in their words, " +
+        "or a page they name that is not already linked in the request (linked pages are added on their own). " +
+        "The author approves it before anything is added.",
+      inputSchema: z.object({
+        kind: z.enum(["text", "link"]),
+        content: z.string().describe("For text: the information itself. For a link: the page's address."),
+        title: z.string().optional().describe("For text: a short name for it."),
+      }),
+      execute: async ({ kind, content, title }) => {
+        const stop = blocked("add_knowledge");
+        if (stop) return stop;
+        if (!content.trim()) return reject("add_knowledge", kind === "text" ? "the text is empty." : "a link needs an address.");
+        if (kind === "text" && !title?.trim()) return reject("add_knowledge", "text needs a short title.");
+        const list = (ctx.draft.knowledge ??= []);
+        if (list.length >= 5) return reject("add_knowledge", "at most five knowledge items in one edit.");
+        list.push(kind === "link" ? { kind, url: content } : { kind, title, body: content });
+        return accept("add_knowledge", "Proposed for the knowledge base.");
+      },
+    }),
+
     finish_edit: tool({
       description:
         "Call this once, when the edit is complete. It checks the flow: if your changes leave a question unreachable, or an " +
@@ -598,8 +688,13 @@ export function buildEditTools(
         summary: z
           .string()
           .describe("One plain sentence for the builder, describing only what you actually changed."),
+        answer: z
+          .string()
+          .optional()
+          .describe("A plain reply when the author asked how, where or whether something can be done. Omit otherwise."),
       }),
-      execute: async ({ summary }) => {
+      execute: async ({ summary, answer }) => {
+        if (answer?.trim()) ctx.draft.answer = answer.trim();
         if (degraded) {
           ctx.draft.summary = summary;
           ctx.finished = true;
@@ -612,7 +707,16 @@ export function buildEditTools(
           ctx.draft.updateBlocks.length +
           ctx.draft.removeRefs.length +
           ctx.draft.branches.length +
-          ctx.draft.endings.length;
+          ctx.draft.endings.length +
+          (ctx.draft.settings?.length ?? 0) +
+          (ctx.draft.knowledge?.length ?? 0);
+        // A question about the builder, answered, is a complete turn.
+        if (touched === 0 && ctx.draft.answer) {
+          ctx.draft.summary = summary;
+          ctx.finished = true;
+          ctx.best = { draft: structuredClone(ctx.draft), problems: [] };
+          return accept("finish_edit", "Answered. Edit complete.");
+        }
         if (touched === 0) {
           return reject(
             "finish_edit",
@@ -657,3 +761,4 @@ export function buildEditTools(
     }),
   };
 }
+

@@ -21,10 +21,16 @@ import { askJev, jevAvailable, type JevEnv, type JevQuestion, type JevResult } f
 
 /**
  * The bar a section must clear. Tuned by `pnpm --filter @repo/api eval:route`
- * against labelled builder requests; a miss here is a setting the model cannot
- * see, so the bar leans towards sending a section it did not need.
+ * against labelled builder requests.
+ *
+ * Deliberately low. A section sent that was not needed costs a few lines of
+ * prompt (~150 tokens, a hundredth of a cent); a section missed is a change
+ * the model cannot make at all. Jev scores the second clause of a compound
+ * request low when the first is loud: "use Lora for the headings and make it
+ * more professional" put the interviewer at 0.21. Measured 2026-09-30 on 62
+ * requests: no misses at 0.15, about 1.7 extra sections a request.
  */
-export const T_SECTION = 0.4;
+export const T_SECTION = 0.15;
 export const T_QUESTION = 0.5;
 
 export interface RequestRoute {
@@ -43,10 +49,11 @@ export interface RequestRoute {
 function sectionQuestion(summary: string): JevQuestion {
   return {
     type: "noul",
-    instructions: "Does `request` ask to change, or ask about, this part of the form's settings?",
+    instructions:
+      "A request can ask for several things at once. Does any part of `request`, even one clause of it, ask to change or ask about this part of the form's settings?",
     criteria: {
-      true: `The request is about: ${summary}. It may say so in its own words.`,
-      false: "The request is about something else, such as the questions themselves, their order or their branching.",
+      true: `Some part of the request is about: ${summary}. It may say so in its own words, and other parts may be about something else entirely.`,
+      false: "No part of the request is about this. Every part is about something else, such as the questions themselves, their order or their branching.",
     },
   };
 }
@@ -102,7 +109,16 @@ export async function routeRequest(
   const state: Record<string, unknown> = { request: request.slice(0, 2000) };
   if (input.previous) state.previous_reply = input.previous.slice(0, 1000);
 
-  const call = await askJev(env, state, questions, ctx, { ...opts, kind: "edit_route" });
+  /*
+   * One retry, which the answer gate deliberately does without. There a failed
+   * call costs nothing, because the agent turn it stands in front of runs
+   * anyway. Here it costs the whole prompt: every section sent at once is a
+   * prompt in which the model measurably drifts from the setting asked for
+   * towards building questions. This runs beside the link reader, so the
+   * retry costs time only when the first call has already failed.
+   */
+  const ask = () => askJev(env, state, questions, ctx, { ...opts, kind: "edit_route" });
+  const call = (await ask()) ?? (await ask());
   if (!call) return everything;
 
   const p = (id: string) => {
