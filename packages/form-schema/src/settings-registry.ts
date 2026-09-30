@@ -693,6 +693,33 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
 
 const BY_KEY = new Map(SETTINGS_REGISTRY.map((d) => [d.key, d]));
 
+/** Where a setting's control is, as the builder routes to it. */
+export interface SettingPlace {
+  tab: "build" | "agent" | "settings" | "integrate";
+  /** The Design sheet on Build, the Agent tab's sub-tab, or the Settings tab's section. */
+  panel?: "design" | "persona" | "goal" | "guardrails" | "general" | "access" | "link" | "completion";
+}
+
+/**
+ * The builder's own location for a setting, for a link that takes the author
+ * there. Read off `where`, which is built from the same four constants, so the
+ * words and the route cannot name different places. Null for a setting with
+ * no control of its own yet.
+ */
+export function settingPlace(key: string): SettingPlace | null {
+  const where = settingDef(key)?.where ?? "";
+  if (where.startsWith(DESIGN)) return { tab: "build", panel: "design" };
+  if (where.startsWith(`${AGENT} → Persona`)) return { tab: "agent", panel: "persona" };
+  if (where.startsWith(`${AGENT} → Goal`)) return { tab: "agent", panel: "goal" };
+  if (where.startsWith(`${AGENT} → Guardrails`)) return { tab: "agent", panel: "guardrails" };
+  if (where.startsWith(`${SETTINGS} → Access`)) return { tab: "settings", panel: "access" };
+  if (where.startsWith(`${SETTINGS} → Link`)) return { tab: "settings", panel: "link" };
+  if (where.startsWith(`${SETTINGS} → On completion`)) return { tab: "settings", panel: "completion" };
+  if (where.startsWith(SETTINGS)) return { tab: "settings", panel: "general" };
+  if (where.startsWith(EMBED)) return { tab: "integrate" };
+  return null;
+}
+
 export function settingDef(key: string): SettingDef | undefined {
   return BY_KEY.get(key);
 }

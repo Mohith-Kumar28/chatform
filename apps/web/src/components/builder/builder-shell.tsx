@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -32,6 +32,7 @@ import { ShortcutsDialog } from "@/components/ui/shortcuts-dialog";
 import { FeedbackLauncher } from "@/components/feedback/feedback-launcher";
 import { useBuilderShortcuts } from "./use-builder-shortcuts";
 import { ImportNotice } from "@/components/import/import-notice";
+import { SettingRevealListener } from "./setting-reveal";
 
 /**
  * Owns everything shared by the builder tabs: document loading, store
@@ -163,10 +164,12 @@ export function BuilderShell({
       the answer can be exact, so it seeds the store rather than being recomputed here.
     */
     hydrate(row.id, parsed.data, row.workingRevision, row.hasUnpublishedChanges);
-    // `?design=1` (Integrate's "Edit in Design") opens the sheet that hydrating just closed.
+    // `?design=1` (Integrate's "Edit in Design") opens the sheet that hydrating just
+    // closed; `?design=<setting key>` also scrolls it to that field (`setting-reveal.ts`).
     const url = new URL(window.location.href);
-    if (url.searchParams.has("design")) {
-      useBuilderStore.getState().setDesignOpen(true);
+    const design = url.searchParams.get("design");
+    if (design) {
+      useBuilderStore.getState().setDesignOpen(true, design === "1" ? undefined : design);
       url.searchParams.delete("design");
       window.history.replaceState(window.history.state, "", url);
     }
@@ -344,6 +347,10 @@ export function BuilderShell({
             so as loudly as it does on the dashboard. */}
         <ImpersonationBanner />
         <ImportNotice formId={formId} />
+        {/* A link to a setting (the AI bar's "Agent › Persona") lands here as ?reveal=. */}
+        <Suspense>
+          <SettingRevealListener />
+        </Suspense>
         {/* No chrome over a form that could not be opened: a skeleton header
             above "we couldn't open this form" reads as a page still arriving,
             which is the thing the message exists to stop saying. */}

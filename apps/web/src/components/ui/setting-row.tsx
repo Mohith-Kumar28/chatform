@@ -14,6 +14,7 @@ export function SettingRow({
   children,
   className,
   stacked = false,
+  setting,
 }: {
   label: string;
   description?: React.ReactNode;
@@ -25,9 +26,16 @@ export function SettingRow({
   children?: React.ReactNode;
   className?: string;
   stacked?: boolean;
+  /**
+   * The settings-registry key(s) this row edits, space-separated. A link to the
+   * setting (the AI bar's proposal card) scrolls here and shakes it; see
+   * `components/builder/setting-reveal.ts`.
+   */
+  setting?: string;
 }) {
   return (
     <div
+      data-setting={setting}
       className={cn(
         "bg-card rounded-xl p-4",
         stacked ? "space-y-3" : "flex items-start justify-between gap-6",

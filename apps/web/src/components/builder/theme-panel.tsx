@@ -170,7 +170,7 @@ export function ThemePanel({
       </Section>
 
       <Section title="Appearance">
-        <div className="flex items-center gap-2">
+        <div data-setting="theme.colorScheme" className="flex items-center gap-2">
           <SegmentedControl
             size="sm"
             options={[
@@ -237,7 +237,7 @@ export function ThemePanel({
             const auto = key === "accentText" && stored.toLowerCase() === THEME_DEFAULT_INK.toLowerCase();
             const value = auto ? "" : stored;
             return (
-              <div key={key} className="space-y-1.5">
+              <div key={key} data-setting={`theme.${key}`} className="space-y-1.5">
                 <Label htmlFor={`theme-${key}`}>{label}</Label>
                 <div className="flex items-center gap-2">
                   <input
@@ -308,11 +308,13 @@ export function ThemePanel({
       </Section>
 
       <Section title="Background">
-        <PatternField theme={theme} seed={seed} onChange={patch} />
+        <div data-setting="theme.backgroundPattern theme.backgroundPatternOpacity">
+          <PatternField theme={theme} seed={seed} onChange={patch} />
+        </div>
       </Section>
 
       <Section title="Shape">
-        <div className="space-y-1.5">
+        <div data-setting="theme.radius" className="space-y-1.5">
           <div className="flex items-center gap-1">
             <Label>Corners</Label>
             <InfoHint label="About corners">
@@ -347,11 +349,11 @@ export function ThemePanel({
           preview read the theme, so an embedded form is set in the same faces.
         */}
         <LockedControl feature="custom_fonts" className="space-y-4">
-          <div className="space-y-1.5">
+          <div data-setting="theme.fontHeading" className="space-y-1.5">
             <Label htmlFor="font-heading">Heading</Label>
             <FontPicker id="font-heading" value={theme.fontHeading} onChange={(v) => patch({ fontHeading: v })} />
           </div>
-          <div className="space-y-1.5">
+          <div data-setting="theme.fontBody" className="space-y-1.5">
             <Label htmlFor="font-body">Body</Label>
             <FontPicker id="font-body" value={theme.fontBody} onChange={(v) => patch({ fontBody: v })} />
           </div>

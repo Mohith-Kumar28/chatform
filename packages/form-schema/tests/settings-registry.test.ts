@@ -9,6 +9,7 @@ import {
   renderSettingsForPrompt,
   settingDef,
   settingKeysFor,
+  settingPlace,
   type SettingDef,
 } from "../src/index.js";
 
@@ -189,5 +190,19 @@ describe("colours that follow", () => {
   it("leaves the palette alone when asked to", () => {
     const { doc } = applySettingOps(base(), [{ key: "theme.accent", value: "#228B22" }], { derive: false });
     expect(doc.theme.userBubble).toBe(base().theme.userBubble);
+  });
+});
+
+describe("settingPlace", () => {
+  it("routes every setting with a control to a builder tab, and none without", () => {
+    for (const d of SETTINGS_REGISTRY) {
+      const place = settingPlace(d.key);
+      if (d.where.startsWith("Only through the AI")) expect(place, d.key).toBeNull();
+      else expect(place, d.key).not.toBeNull();
+    }
+    expect(settingPlace("theme.accent")).toEqual({ tab: "build", panel: "design" });
+    expect(settingPlace("settings.agent.goal")).toEqual({ tab: "agent", panel: "goal" });
+    expect(settingPlace("settings.closeRules.closeAt")).toEqual({ tab: "settings", panel: "access" });
+    expect(settingPlace("settings.progressBar")).toEqual({ tab: "settings", panel: "general" });
   });
 });

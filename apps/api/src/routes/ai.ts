@@ -1241,7 +1241,8 @@ Answer the same request again, addressing that.`,
       settings: settingChanges,
       /** Knowledge to add when the builder applies the proposal. */
       knowledge: checked.knowledge,
-      summary: answer && !draft.summary.includes(answer) ? `${draft.summary.trim()} ${answer}`.trim() : draft.summary,
+      // A paragraph apart: the answer may be Markdown with a list of its own.
+      summary: answer && !draft.summary.includes(answer) ? `${draft.summary.trim()}\n\n${answer}`.trim() : draft.summary,
       answer,
       /**
        * The reviewer objected and the second attempt did not fix it.

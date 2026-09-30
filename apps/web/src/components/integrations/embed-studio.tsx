@@ -284,7 +284,7 @@ export function EmbedStudio({
                 )
               }
             >
-              <div className="grid grid-cols-2 gap-1.5">
+              <div data-setting="embed.mode" className="grid grid-cols-2 gap-1.5">
                 {EMBED_MODES.map((m) => (
                   <ModeButton
                     key={m.mode}
@@ -310,7 +310,7 @@ export function EmbedStudio({
                   title="Auto open"
                   hint="Opens by itself at most once a day per visitor. Closed, it won't open again on any page of your site for 24 hours, and on a phone the button shakes instead. Clicking a button always opens it. After scrolling counts from the top: 100% is the bottom of the page."
                 >
-                  <div className="flex items-center gap-2">
+                  <div data-setting="embed.openOn" className="flex items-center gap-2">
                     <Select
                       value={trigger}
                       onValueChange={(v) =>
@@ -363,7 +363,7 @@ export function EmbedStudio({
                       : "Which corner of the screen the button sits in. The form opens from there."
                   }
                 >
-                  <Field label="Screen corner">
+                  <Field setting="embed.position" label="Screen corner">
                     <PositionPicker
                       value={config.position}
                       color={config.color}
@@ -395,7 +395,7 @@ export function EmbedStudio({
                 >
                   {config.launcher ? (
                     <>
-                      <Field label="Button text" hint="Leave empty for an icon-only circle.">
+                      <Field setting="embed.label" label="Button text" hint="Leave empty for an icon-only circle.">
                         <Input
                           value={config.label}
                           placeholder="Icon only"
@@ -418,7 +418,7 @@ export function EmbedStudio({
                           onChange={(v) => set("buttonTextColor", v)}
                         />
                       </Field>
-                      <Field label="Shape">
+                      <Field setting="embed.buttonShape" label="Shape">
                         <SegmentedControl
                           size="sm"
                           options={BUTTON_SHAPES}
@@ -427,7 +427,7 @@ export function EmbedStudio({
                           ariaLabel="Button shape"
                         />
                       </Field>
-                      <Field label="Size">
+                      <Field setting="embed.buttonSize" label="Size">
                         <SegmentedControl
                           size="sm"
                           options={BUTTON_SIZES}
@@ -607,14 +607,17 @@ function Section({
 function Field({
   label,
   hint,
+  setting,
   children,
 }: {
   label: string;
   hint?: string;
+  /** The settings-registry key this field edits, for links that jump to it. */
+  setting?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-2">
+    <div data-setting={setting} className="space-y-2">
       <div className="flex items-center gap-1">
         <p className="text-caption font-medium">{label}</p>
         {hint && <InfoHint label={`About ${label.toLowerCase()}`} align="start">{hint}</InfoHint>}

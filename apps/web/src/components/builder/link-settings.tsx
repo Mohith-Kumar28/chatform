@@ -94,7 +94,7 @@ export function LinkSettings({
             you about — so the live value is needed here, and only the write to
             the document is deferred.
           */}
-          <Field label="Title" count={titleField.value.length} max={TITLE_MAX}>
+          <Field setting="settings.meta.ogTitle" label="Title" count={titleField.value.length} max={TITLE_MAX}>
             <Input
               maxLength={TITLE_MAX}
               placeholder={formTitle}
@@ -104,7 +104,7 @@ export function LinkSettings({
             />
           </Field>
 
-          <Field label="Description" count={descriptionField.value.length} max={DESCRIPTION_MAX}>
+          <Field setting="settings.meta.ogDescription" label="Description" count={descriptionField.value.length} max={DESCRIPTION_MAX}>
             <Textarea
               rows={3}
               maxLength={DESCRIPTION_MAX}
@@ -134,7 +134,7 @@ export function LinkSettings({
             onChange={(key) => patchMeta({ faviconKey: key })}
           />
 
-          <div className="flex items-center justify-between gap-4 border-t pt-5">
+          <div data-setting="settings.meta.noIndex" className="flex items-center justify-between gap-4 border-t pt-5">
             <div className="min-w-0">
               <p className="text-sm font-medium">Hide from search engines</p>
               <p className="text-muted-foreground mt-0.5 text-xs">
@@ -178,15 +178,18 @@ function Field({
   label,
   count,
   max,
+  setting,
   children,
 }: {
   label: string;
   count: number;
   max: number;
+  /** The settings-registry key this field edits, for links that jump to it. */
+  setting?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-2">
+    <div data-setting={setting} className="space-y-2">
       <div className="flex items-baseline justify-between gap-3">
         <Label className="text-sm font-medium">{label}</Label>
         {/* Counts up rather than down, and only once you are actually near the

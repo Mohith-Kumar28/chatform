@@ -31,8 +31,15 @@ export function DesignSheet({
   useEffect(() => {
     if (!open || !reveal) return;
     const t = setTimeout(() => {
-      const el = bodyRef.current?.querySelector<HTMLElement>(`[data-inspect-target="${reveal}"]`);
-      if (el) shake(el);
+      // A preview region names an inspect target; a link from the AI bar names a
+      // setting key (`setting-reveal.ts`). Either way: into view, then shake.
+      const el =
+        bodyRef.current?.querySelector<HTMLElement>(`[data-inspect-target="${CSS.escape(reveal)}"]`) ??
+        bodyRef.current?.querySelector<HTMLElement>(`[data-setting~="${CSS.escape(reveal)}"]`);
+      if (el) {
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        setTimeout(() => shake(el), 300);
+      }
       useBuilderStore.setState({ designReveal: null });
     }, 350);
     return () => clearTimeout(t);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Bot, BookOpen, Shield, Target } from "lucide-react";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingGroup, SettingRow } from "@/components/ui/setting-row";
@@ -36,7 +37,17 @@ export function AgentTab() {
   const doc = useBuilderStore((s) => s.doc);
   const edit = useBuilderStore((s) => s.edit);
   const formId = useBuilderStore((s) => s.formId);
-  const [section, setSection] = useState<Section>("persona");
+  // A link to one of these settings (the AI bar's proposal card) names its
+  // sub-tab; `setting-reveal.ts` then scrolls to the row. Adjusted during
+  // render when the link changes, rather than in an effect.
+  const asked = useSearchParams().get("section");
+  const wanted = SECTIONS.some((x) => x.value === asked) ? (asked as Section) : null;
+  const [section, setSection] = useState<Section>(wanted ?? "persona");
+  const [followed, setFollowed] = useState(wanted);
+  if (wanted !== followed) {
+    setFollowed(wanted);
+    if (wanted) setSection(wanted);
+  }
 
   if (!doc) return null;
   const agent = doc.settings.agent;
@@ -72,7 +83,7 @@ export function AgentTab() {
         {section === "persona" && (
           <SettingGroup>
             <SettingRow
-              label="Interview style"
+              setting="settings.agent.mode" label="Interview style"
               description="How much of the conversation the AI runs. It decides what each response costs."
               stacked
             >
@@ -85,7 +96,7 @@ export function AgentTab() {
             */}
             {agent.mode === "ai" && (
               <SettingRow
-                label="Reword questions"
+                setting="settings.agent.rephraseQuestions" label="Reword questions"
                 description="Off, each is asked exactly as written."
                 control={
                   <SwitchField
@@ -97,7 +108,7 @@ export function AgentTab() {
               />
             )}
 
-            <SettingRow label="Tone" description={TONE_HINT[agent.tone]} className="max-sm:flex-col max-sm:gap-3" control={
+            <SettingRow setting="settings.agent.tone" label="Tone" description={TONE_HINT[agent.tone]} className="max-sm:flex-col max-sm:gap-3" control={
               <SegmentedControl
                 size="sm"
                 options={[
@@ -111,7 +122,7 @@ export function AgentTab() {
             } />
 
             <SettingRow
-              label="Persona"
+              setting="settings.agent.personaPrompt" label="Persona"
               description="Who is this, and how do they talk?"
               stacked
             >
@@ -128,7 +139,7 @@ export function AgentTab() {
 
         {section === "goal" && (
           <SettingGroup>
-            <SettingRow label="Goal" stacked>
+            <SettingRow setting="settings.agent.goal" label="Goal" stacked>
               <BufferedTextarea
                 rows={3}
                 maxLength={1000}
@@ -138,7 +149,7 @@ export function AgentTab() {
               />
             </SettingRow>
             <SettingRow
-              label="What good looks like"
+              setting="settings.agent.successCriteria" label="What good looks like"
               description="When to dig deeper, when to move on."
               stacked
             >
@@ -167,7 +178,7 @@ export function AgentTab() {
         {section === "guardrails" && (
           <SettingGroup>
             <SettingRow
-              label="Answer off-topic questions"
+              setting="settings.agent.guardrails.answerOffTopic" label="Answer off-topic questions"
               description="Off, it politely deflects."
               control={
                 <SwitchField
@@ -177,14 +188,14 @@ export function AgentTab() {
                 />
               }
             />
-            <SettingRow label="If it must decline" stacked>
+            <SettingRow setting="settings.agent.guardrails.refusalMessage" label="If it must decline" stacked>
               <BufferedInput
                 value={agent.guardrails.refusalMessage}
                 maxLength={500}
                 onCommit={(v) => patchGuards({ refusalMessage: v })}
               />
             </SettingRow>
-            <SettingRow label="Never discuss" description="One topic per line." stacked>
+            <SettingRow setting="settings.agent.guardrails.forbiddenTopics" label="Never discuss" description="One topic per line." stacked>
               <BufferedTextarea
                 rows={3}
                 value={agent.guardrails.forbiddenTopics.join("\n")}
@@ -214,13 +225,15 @@ export function AgentTab() {
               how patient the interviewer should be before it stops asking in
               prose and puts the plain widget on screen.
             */}
-            <NumberField
-              label="Bad answers before showing a widget"
-              value={agent.escalateAfterInvalid}
-              min={1}
-              max={10}
-              onChange={(v) => patch({ escalateAfterInvalid: v ?? 3 })}
-            />
+            <div data-setting="settings.agent.escalateAfterInvalid">
+              <NumberField
+                label="Bad answers before showing a widget"
+                value={agent.escalateAfterInvalid}
+                min={1}
+                max={10}
+                onChange={(v) => patch({ escalateAfterInvalid: v ?? 3 })}
+              />
+            </div>
           </SettingGroup>
         )}
 

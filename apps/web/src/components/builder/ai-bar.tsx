@@ -17,6 +17,7 @@ import { streamEvents, type SseEvent } from "@/lib/api/stream";
 import { postApiFormsByIdKnowledgeLink, postApiFormsByIdKnowledgeText } from "@/lib/api/dashboard/dashboard";
 import { applySettingChanges } from "./ai-settings";
 import { SettingRows } from "./ai-setting-rows";
+import { RichText, SAFE_ELEMENTS } from "@/components/chat/rich-text";
 import { ClarifyPanel, type ClarifyAnswer, type ClarifyQuestion } from "@/components/forms/clarify-panel";
 import { customFetch } from "@/lib/api/mutator";
 
@@ -657,7 +658,14 @@ function Message({
 
   return (
     <div className="space-y-1.5">
-      <p className="bg-muted max-w-[90%] rounded-2xl rounded-bl-md px-3 py-1.5 text-sm">{turn.text}</p>
+      {/* Markdown, since a reply to "what can you do" is a list, not a paragraph.
+          The same renderer and element allowlist as the respondent chat's agent. */}
+      <RichText
+        markdown={turn.text}
+        trusted={false}
+        allowedElements={SAFE_ELEMENTS}
+        className="bg-muted max-w-[90%] rounded-2xl rounded-bl-md px-3 py-1.5 text-sm"
+      />
 
       {isProposal && (
         <div className="space-y-1.5 pl-1">

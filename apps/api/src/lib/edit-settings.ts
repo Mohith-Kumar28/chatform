@@ -54,6 +54,18 @@ const HOW_TO_CHOOSE = `A request can be entirely about settings and need no chan
 The builder shows the author every change with its old and new value before anything is applied, so change exactly what was asked and nothing else. When something they asked for cannot be done here, say so in the summary.`;
 
 /**
+ * How an answer to the author is written, said once for both edit paths.
+ *
+ * The builder renders it as Markdown, so an answer with several parts can be
+ * a list or a few headed sections, the way an assistant answers, instead of
+ * one long paragraph with the places in brackets.
+ */
+export const ANSWER_STYLE =
+  "Write it in Markdown, which the builder renders. Lead with the direct answer in one sentence. When there is more than one thing to say, " +
+  "follow with a short bulleted list, or a few short sections with a bold lead-in, naming tabs and settings in **bold** as the map gives them. " +
+  "Brief and plain: no filler, no closing offer to help.";
+
+/**
  * The same three things in the words each edit path uses: JSON fields for the
  * single structured call, tools for the loop. The judgement is shared.
  */
@@ -63,11 +75,11 @@ function beyondQuestions(mode: "object" | "tools"): string {
       ? `Besides the questions, an edit can carry:
 - "settings": form settings to change, each { "key", "value" } with a key from the settings listed below and the value as text. Only what the author asked for. [] when they asked for nothing about settings.
 - "knowledge": information for the interviewer to answer respondents from, each { "kind": "text", "title", "body" } in the author's own words, or { "kind": "link", "url" } for a page they name that is not already linked in the request (linked pages are added on their own). [] otherwise.
-- "answer": a short reply when the author asked how, where or whether something can be done. "" otherwise.`
+- "answer": a reply when the author asked how, where or whether something can be done, or what you can do. "" otherwise. ${ANSWER_STYLE}`
       : `Besides the questions, an edit can:
 - change form settings with update_settings, each by its key from the settings listed below with the value as text;
 - propose information for the interviewer to answer respondents from with add_knowledge (text in the author's own words, or a page they name that is not already linked in the request);
-- answer a question about how, where or whether something can be done, in finish_edit's "answer".`;
+- answer a question about how, where or whether something can be done, or what you can do, in finish_edit's "answer". ${ANSWER_STYLE}`;
   return `${how}\n${HOW_TO_CHOOSE}`;
 }
 
@@ -104,7 +116,7 @@ export function settingsDraftFields(keys: readonly string[]) {
     answer: z
       .string()
       .optional()
-      .describe("A plain answer when the author asked how or where to do something, using the map of the builder."),
+      .describe("A reply, in Markdown, when the author asked how or where to do something or what you can do, using the map of the builder."),
   };
 }
 
@@ -142,7 +154,7 @@ export function settingsPrompt(
   const parts = [BUILDER_MAP, beyondQuestions(mode), `Today is ${new Date().toISOString().slice(0, 10)}.`];
   if (route.asksHowTo) {
     parts.push(
-      `The author may be asking how or where to do something. Answer that in ${mode === "object" ? '"answer"' : 'finish_edit\'s "answer"'}, in a sentence or two, naming the place as the map gives it. ` +
+      `The author may be asking how or where to do something. Answer that in ${mode === "object" ? '"answer"' : 'finish_edit\'s "answer"'}, naming each place as the map gives it. ` +
         "If they also asked for a change you can make, make it too; if it is something only they can do, say where.",
     );
   }

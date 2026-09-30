@@ -161,7 +161,7 @@ export function SettingsPanel({
           <SettingSection title="Form">
             <SettingGroup>
               <SettingRow
-                label="Form name"
+                setting="title" label="Form name"
                 description="Renaming keeps the same link."
               >
                 <FormNameField title={formTitle ?? ""} onChange={onTitleChange} />
@@ -171,7 +171,7 @@ export function SettingsPanel({
         )}
         <SettingSection title="Display">
           <SettingGroup>
-          <SettingRow label="Progress bar">
+          <SettingRow setting="settings.progressBar" label="Progress bar">
             <Select value={settings.progressBar} onValueChange={(v) => patch({ progressBar: v as "percent" | "steps" | "none" })}>
               <SelectTrigger className={CONTROL_WIDTH}>
                 <SelectValue />
@@ -184,7 +184,7 @@ export function SettingsPanel({
             </Select>
           </SettingRow>
           <SettingRow
-            label="Allow skipping optional questions"
+            setting="settings.navigation.allowSkip" label="Allow skipping optional questions"
             checked={settings.navigation.allowSkip}
             onCheckedChange={(v) => patch({ navigation: { ...settings.navigation, allowSkip: v } })}
           />
@@ -196,7 +196,7 @@ export function SettingsPanel({
           */}
           <LockedControl feature="remove_branding">
             <SettingRow
-              label='Hide "Powered by chatform"'
+              setting="settings.branding.hidePoweredBy" label='Hide "Powered by chatform"'
               checked={settings.branding.hidePoweredBy}
               onCheckedChange={(v) => patch({ branding: { ...settings.branding, hidePoweredBy: v } })}
             />
@@ -213,7 +213,7 @@ export function SettingsPanel({
           <SettingGroup label="Who can respond">
           <LockedControl feature="respondent_auth_google">
             <SettingRow
-              label="Require sign-in"
+              setting="settings.requireAuth.enabled" label="Require sign-in"
               description="People verify who they are first."
               checked={settings.requireAuth.enabled}
               onCheckedChange={(v) => patch({ requireAuth: { ...settings.requireAuth, enabled: v } })}
@@ -227,7 +227,7 @@ export function SettingsPanel({
                 same person, so "one response per person" below could be
                 walked around by coming back through the other one.
               */}
-              <SettingRow label="Verify with">
+              <SettingRow setting="settings.requireAuth.method" label="Verify with">
                 <div role="radiogroup" aria-label="Sign-in method" className="flex gap-1.5">
                   {(["google", "email", "phone"] as const).map((m) => {
                     const on = settings.requireAuth.method === m;
@@ -258,7 +258,7 @@ export function SettingsPanel({
                 already said is kept either way.
               */}
               <SettingRow
-                label="Ask after"
+                setting="settings.requireAuth.afterBlocks" label="Ask after"
                 description="Questions before sign-in. 0 means right away."
               >
                 <BufferedInput
@@ -278,7 +278,7 @@ export function SettingsPanel({
                 />
               </SettingRow>
               <SettingRow
-                label="What the agent says"
+                setting="settings.requireAuth.message" label="What the agent says"
                 description="Shown above the sign-in buttons."
                 stacked
               >
@@ -318,7 +318,7 @@ export function SettingsPanel({
               a switch had to be read twice.
             */}
             <SettingRow
-              label="Allow multiple responses"
+              setting="settings.allowResubmissions" label="Allow multiple responses"
               description={
                 settings.allowResubmissions
                   ? "People can answer more than once."
@@ -345,7 +345,7 @@ export function SettingsPanel({
             </SettingRow>
           )}
           <SettingRow
-            label="Captcha"
+            setting="settings.captcha.enabled" label="Captcha"
             description="Blocks bots."
             checked={settings.captcha.enabled}
             onCheckedChange={(v) => patch({ captcha: { ...settings.captcha, enabled: v } })}
@@ -353,7 +353,7 @@ export function SettingsPanel({
           </SettingGroup>
 
           <SettingGroup label="Closing">
-          <SettingRow label="Close on a date">
+          <SettingRow setting="settings.closeRules.closeAt" label="Close on a date">
             <Input
               type="datetime-local"
               className={CONTROL_WIDTH}
@@ -376,13 +376,13 @@ export function SettingsPanel({
           */}
           {settings.closeRules.closeAt && (
             <SettingRow
-              label="Show a countdown"
+              setting="settings.closeRules.showCountdown" label="Show a countdown"
               description="Shows the time left in the chat."
               checked={settings.closeRules.showCountdown}
               onCheckedChange={(v) => patch({ closeRules: { ...settings.closeRules, showCountdown: v } })}
             />
           )}
-          <SettingRow label="Response limit" description="Close after this many responses.">
+          <SettingRow setting="settings.closeRules.maxSubmissions" label="Response limit" description="Close after this many responses.">
             <BufferedInput
               type="number"
               min={1}
@@ -401,7 +401,7 @@ export function SettingsPanel({
           </SettingRow>
           {settings.closeRules.maxSubmissions !== undefined && (
             <SettingRow
-              label="Show spots left"
+              setting="settings.closeRules.showRemaining" label="Show spots left"
               /*
                 Says what it publishes, not just what it does. A remaining
                 count lets anyone holding the link work out how many people
@@ -414,7 +414,7 @@ export function SettingsPanel({
               onCheckedChange={(v) => patch({ closeRules: { ...settings.closeRules, showRemaining: v } })}
             />
           )}
-          <SettingRow label="Closed message" description="Shown when the form is closed." stacked>
+          <SettingRow setting="settings.closeRules.closedMessageMd" label="Closed message" description="Shown when the form is closed." stacked>
             <BufferedTextarea
               rows={2}
               value={settings.closeRules.closedMessageMd}
@@ -453,7 +453,7 @@ export function SettingsPanel({
         <SettingSection title="On completion">
           <SettingGroup>
           <SettingRow
-            label="Notification emails"
+            setting="settings.onComplete.notificationEmails" label="Notification emails"
             description="We email you each new response. Leave it empty to stop."
             issuePath="settings.onComplete.notificationEmails"
           >
@@ -466,7 +466,7 @@ export function SettingsPanel({
           </SettingRow>
           <LockedControl feature="completion_redirect">
           <SettingRow
-            label="Redirect after finishing"
+            setting="settings.onComplete.redirectUrl" label="Redirect after finishing"
             description="Where people go after finishing."
             issuePath="settings.onComplete.redirectUrl"
           >
@@ -605,7 +605,7 @@ function ConfirmationEmailSettings({
   return (
     <SettingGroup label="To the respondent">
       <SettingRow
-        label="Confirmation email"
+        setting="settings.onComplete.autoReplyEmail.enabled" label="Confirmation email"
         description="Sent to the email they gave you."
         checked={confirmation.enabled}
         onCheckedChange={(enabled) => patch({ enabled })}
@@ -613,12 +613,12 @@ function ConfirmationEmailSettings({
       {confirmation.enabled && (
         <>
           <SettingRow
-            label="Include their answers"
+            setting="settings.onComplete.autoReplyEmail.includeAnswers" label="Include their answers"
             checked={confirmation.includeAnswers}
             onCheckedChange={(includeAnswers) => patch({ includeAnswers })}
           />
           <LockedControl feature="auto_reply_email">
-            <SettingRow label="Subject">
+            <SettingRow setting="settings.onComplete.autoReplyEmail.subject" label="Subject">
               <BufferedInput
                 className={CONTROL_WIDTH}
                 value={confirmation.subject}
@@ -627,7 +627,7 @@ function ConfirmationEmailSettings({
               />
             </SettingRow>
             <SettingRow
-              label="Message"
+              setting="settings.onComplete.autoReplyEmail.bodyMd" label="Message"
               description="Write {{form.title}} to include the form name."
               stacked
             >
@@ -795,6 +795,7 @@ function SettingRow({
    */
   stacked = false,
   issuePath,
+  setting,
 }: {
   label: string;
   description?: string;
@@ -810,6 +811,8 @@ function SettingRow({
    * this row draws.
    */
   issuePath?: string;
+  /** The settings-registry key this row edits, for links that jump to it; see `setting-reveal.ts`. */
+  setting?: string;
 }) {
   const issue = useBuilderStore((s) =>
     issuePath ? (s.docIssues.find((i) => i.path === issuePath || i.path.startsWith(`${issuePath}.`)) ?? null) : null,
@@ -840,7 +843,7 @@ function SettingRow({
 
   if (stacked) {
     return (
-      <div className="space-y-2 px-4 py-3.5">
+      <div data-setting={setting} className="space-y-2 px-4 py-3.5">
         <div className="min-w-0">
           <p className="text-sm font-medium">{label}</p>
           {description && <p className="text-muted-foreground mt-0.5 text-xs">{description}</p>}
@@ -855,6 +858,7 @@ function SettingRow({
   const isSwitch = checked !== undefined && onCheckedChange !== undefined;
   return (
     <div
+      data-setting={setting}
       className={cn(
         "flex justify-between gap-4 px-4 py-3.5",
         isSwitch ? "items-center" : "flex-col gap-2 sm:flex-row sm:items-center sm:gap-4",

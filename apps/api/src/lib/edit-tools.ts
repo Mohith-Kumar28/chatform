@@ -691,7 +691,7 @@ export function buildEditTools(
         answer: z
           .string()
           .optional()
-          .describe("A plain reply when the author asked how, where or whether something can be done. Omit otherwise."),
+          .describe("A reply, in Markdown, when the author asked how, where or whether something can be done, or what you can do. Omit otherwise."),
       }),
       execute: async ({ summary, answer }) => {
         if (answer?.trim()) ctx.draft.answer = answer.trim();
