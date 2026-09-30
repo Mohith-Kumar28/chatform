@@ -82,7 +82,10 @@ aiV1Router.post(
     description:
       "Returns the proposed document **without saving it**. Send it to `PUT /v1/forms/{id}/doc` to keep it. " +
       "An edit may add no questions at all: most requests about a working form change the routing rather than the wording. " +
-      "Pass `history` (oldest first) when this is a follow-up, or the model cannot resolve 'also', 'it' or 'instead'.",
+      "Pass `history` (oldest first) when this is a follow-up, or the model cannot resolve 'also', 'it' or 'instead'. " +
+      "A request about the form's settings (its colours, the interviewer's tone, a closing date) comes back in `settings`, one entry per " +
+      "setting with its value before and after, already applied to `doc` unless it is marked `locked` because the plan does not include it. " +
+      "A question about how to do something comes back as `answer`, with no `doc`.",
     responses: {
       200: { description: "The proposed document and what changed", content: { "application/json": { schema: resolver(AiDocumentView) } } },
       402: { description: "Out of generations for this billing period", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },

@@ -211,6 +211,8 @@ export function AiBar() {
       knowledge?: KnowledgeAdd[];
       /** Set when the model stopped to ask rather than to propose. */
       question?: string;
+      /** A reply to "how do I…", with or without a proposal beside it. */
+      answer?: string | null;
       /** Set when a review flagged the proposal and could not fix it. */
       reviewNote?: string | null;
       /** What the server stored for this exchange: the prompt, then the reply. */
@@ -257,8 +259,9 @@ export function AiBar() {
        * request out of nowhere.
        */
       const result: EditResult = res;
-      if (result.question) {
-        settle(result.turns, result.turns?.[1] ?? { id: crypto.randomUUID(), role: "assistant", text: result.question });
+      const reply = result.question ?? (result.doc === undefined ? result.answer : null);
+      if (reply) {
+        settle(result.turns, result.turns?.[1] ?? { id: crypto.randomUUID(), role: "assistant", text: reply });
         return;
       }
 

@@ -42,23 +42,38 @@ export const BUILDER_MAP = `Where things are in the builder (tabs along the top)
 - Top right: Publish sends changes live; the ... menu has Version history.
 Only the author can upload files (a logo, an image, a document), set a password, connect webhooks, spreadsheets or payment accounts, or publish.`;
 
+/**
+ * What the fields beyond the questions are for, said once for every edit.
+ *
+ * General on purpose: which setting a request means is the model's call, made
+ * against the labels and current values it is shown, not against examples.
+ */
+const BEYOND_QUESTIONS = `Besides the questions, an edit can carry:
+- "settings": form settings to change, each { "key", "value" } with a key from the settings listed below and the value as text. Only what the author asked for. [] when they asked for nothing about settings.
+- "knowledge": information for the interviewer to answer respondents from, each { "kind": "text", "title", "body" } in the author's own words, or { "kind": "link", "url" } for a page they name that is not already linked in the request (linked pages are added on their own). [] otherwise.
+- "answer": a short reply when the author asked how, where or whether something can be done. "" otherwise.
+A request can be entirely about settings and need no change to the questions at all: when it describes something a setting below already holds, set that setting rather than building questions around it.
+The builder shows the author every change with its old and new value before anything is applied, so change exactly what was asked and nothing else. When something they asked for cannot be done here, say so in the summary.`;
+
 /** The draft fields this adds to an edit, with the setting keys this request may name. */
 export function settingsDraftFields(keys: readonly string[]) {
-  const settings =
-    keys.length > 0
-      ? z
-          .array(
-            z.object({
-              key: z.enum(keys as [string, ...string[]]),
-              value: z.string().describe("The new value as text, in the format the setting's line gives. Empty clears it."),
-            }),
-          )
-          .max(40)
-          .optional()
-          .describe("Form settings to change. Only when asked; never to restate what is already true.")
-      : z.array(z.object({ key: z.string(), value: z.string() })).max(0).optional();
+  // No `.max()` on any list: the provider counts `maxItems` against a schema
+  // budget and refuses the whole request past it (see `GenerationDraft`).
+  // `clampDraft` trims these on the way back instead, via `DRAFT_LIMITS`.
   return {
-    settings,
+    ...(keys.length > 0
+      ? {
+          settings: z
+            .array(
+              z.object({
+                key: z.enum(keys as [string, ...string[]]),
+                value: z.string().describe("The new value as text, in the format the setting's line gives. Empty clears it."),
+              }),
+            )
+            .optional()
+            .describe("Form settings to change. Only when asked; never to restate what is already true."),
+        }
+      : {}),
     knowledge: z
       .array(
         z.object({
@@ -68,7 +83,6 @@ export function settingsDraftFields(keys: readonly string[]) {
           body: z.string().optional().describe("For text: the information itself, in the author's words."),
         }),
       )
-      .max(5)
       .optional()
       .describe("Pages or text to add to the knowledge base the interviewer answers from. Only when asked."),
     answer: z
@@ -97,20 +111,30 @@ function planNeeded(feature: string): string {
  */
 export function settingsPrompt(doc: FormDoc, route: RequestRoute, ent: Entitlements): { text: string; keys: string[] } {
   const allowed = allowedBy(ent);
-  const keys = settingKeysFor(route.sections, allowed);
-  const offered = new Set(keys);
-  const parts = [BUILDER_MAP];
-  const unpicked = (Object.keys(SETTING_SECTIONS) as SettingSection[]).filter((s) => !route.sections.includes(s));
+  /*
+   * Every key in the picked sections, locked ones included. A locked change
+   * the author asked for comes back, is refused by `applySettingOps`, and
+   * shows on the card with its plan and an upgrade button: a better answer
+   * than a sentence the author has to act on themselves.
+   */
+  const keys = settingKeysFor(route.sections, () => true);
+  const parts = [BUILDER_MAP, BEYOND_QUESTIONS, `Today is ${new Date().toISOString().slice(0, 10)}.`];
+  if (route.asksHowTo) {
+    parts.push(
+      "The author may be asking how or where to do something. Answer that in \"answer\", in a sentence or two, naming the place as the map gives it. " +
+        "If they also asked for a change you can make, make it too; if it is something only they can do, say where.",
+    );
+  }
   if (route.sections.length > 0) {
     parts.push(
       "Form settings you can change, with their current values. Change one only when the author asks for it, " +
-        "by its key, with the value as text. A setting marked LOCKED cannot be changed on this plan: say which plan it needs instead.\n" +
-        renderSettingsForPrompt(doc, route.sections, offered, (key) => {
-          const f = settingDef(key)?.feature;
-          return f ? planNeeded(f) : null;
-        }),
+        "by its key, with the value as text. A setting or value marked LOCKED or [needs <plan>] is not on this plan: " +
+        "when the author asks for it, still include it, since the builder shows it to them locked with the way to upgrade, " +
+        "and say in the summary that it needs that plan rather than that you changed it.\n" +
+        renderSettingsForPrompt(doc, route.sections, allowed, planNeeded),
     );
   }
+  const unpicked = (Object.keys(SETTING_SECTIONS) as SettingSection[]).filter((s) => !route.sections.includes(s));
   if (unpicked.length > 0) {
     parts.push(`Other settings exist (${unpicked.map((s) => SETTING_SECTIONS[s].split(":")[0]).join("; ")}); they are not shown for this request.`);
   }
@@ -145,7 +169,12 @@ export function checkSettingsDraft(
   doc: FormDoc,
   draft: SettingsDraft,
   ent: Entitlements,
-  opts: { parse?: ParseContext; usedSources?: number } = {},
+  opts: {
+    parse?: ParseContext;
+    usedSources?: number;
+    /** Pages the request linked, which the link reader is already adding on its own. */
+    alreadyAdding?: readonly string[];
+  } = {},
 ): CheckedSettings {
   const applied = applySettingOps(doc, draft.settings ?? [], { allowed: allowedBy(ent), parse: opts.parse });
   const knowledge: KnowledgeAdd[] = [];
@@ -160,6 +189,7 @@ export function checkSettingsDraft(
         rejected.push(`knowledge: "${k.url ?? ""}" is not a link`);
         continue;
       }
+      if (opts.alreadyAdding?.some((u) => sameUrl(u, url))) continue;
       knowledge.push({ kind: "link", url, ...(locked ? { locked } : {}) });
     } else {
       const title = (k.title ?? "").trim().slice(0, 200);
@@ -174,6 +204,8 @@ export function checkSettingsDraft(
   }
   return { doc: applied.doc, settings: applied.changes, knowledge, rejected };
 }
+
+const sameUrl = (a: string, b: string) => normaliseUrl(a)?.replace(/\/$/, "") === normaliseUrl(b)?.replace(/\/$/, "");
 
 function normaliseUrl(raw: string): string | null {
   const text = raw.trim();

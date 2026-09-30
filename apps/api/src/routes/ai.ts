@@ -11,6 +11,7 @@ import { isInternalCall } from "../lib/internal-call.js";
 import {
   generateFormDraft,
   generateEdit,
+  EditDraft,
   runEditAgent,
   reviewEdit,
   streamFormDraft,
@@ -40,6 +41,10 @@ import { addPagesToKnowledge } from "../lib/authoring/knowledge.js";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
 import { enqueueMail } from "../lib/mail.js";
 import { appendAiTurns, proposalTurn, seedAiThread, turnId, type StoredTurn } from "../lib/ai-thread.js";
+import { routeRequest } from "../lib/settings-route.js";
+import { checkSettingsDraft, lockPaidBlockOptions, settingsDraftFields, settingsPrompt, type CheckedSettings, type SettingsDraft } from "../lib/edit-settings.js";
+import { getEntitlements } from "../lib/entitlements.js";
+import { countSources } from "../lib/knowledge-service.js";
 import { withOwnerNotification } from "../lib/owner-notification.js";
 
 export const aiRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
@@ -619,6 +624,11 @@ export const EditFormBody = z.object({
     .default([]),
   /** Accepted and ignored. The pre-rename client sent it; see the alias below. */
   count: z.number().int().min(1).max(10).optional(),
+  /**
+   * The author's `Date#getTimezoneOffset()`, so "close it at 6pm on the 30th"
+   * lands at their 6pm. Absent reads a date as UTC.
+   */
+  utcOffsetMinutes: z.number().int().min(-900).max(900).optional(),
 });
 
 /**
@@ -673,7 +683,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
     if (!c.env.OPENROUTER_API_KEY) {
       return { status: 503, body: { error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } } };
     }
-  const { formId, prompt, history } = validBody<z.infer<typeof EditFormBody>>(c);
+  const { formId, prompt, history, utcOffsetMinutes } = validBody<z.infer<typeof EditFormBody>>(c);
   // One Langfuse trace for the whole edit: tool loop, review, any retry.
   const trace = newTrace("edit_form", c.get("userId"), callSource(c));
     /**
@@ -707,6 +717,16 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
      */
     const editStarted = Date.now();
     const ledger = new Ledger();
+    const mode = c.env.AI_EDIT_MODE === "tools" ? "tools" : "object";
+    /**
+     * Which settings this request is about, asked of Jev while the links are
+     * read, so it costs no time of its own. See `settings-route.ts`.
+     */
+    const lastReply = [...(history as BuilderTurn[])].reverse().find((t) => t.role === "assistant")?.text ?? null;
+    const routing = Promise.all([
+      routeRequest(c.env, { request: prompt, previous: lastReply }, { organizationId: c.get("orgId"), formId, ...trace }),
+      getEntitlements(c.env, c.get("orgId")!),
+    ]);
     const reading = await readLinks({
       env: c.env,
       prompt,
@@ -718,7 +738,21 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
         if (p.step === "reading" && p.status === "start") onStage("links");
       },
     });
-    const context = requestContext(prompt, reading, "edit");
+    const [route, ent] = await routing;
+    if (route.call) ledger.add("edit_route", route.call.model, route.call.usage);
+    // Tools mode has no settings tool yet, so it is offered none rather than
+    // fields it would have no way to fill.
+    const settingsPart = mode === "tools" ? null : settingsPrompt(base, route, ent);
+    const context = [requestContext(prompt, reading, "edit"), settingsPart?.text].filter(Boolean).join("\n\n");
+    // The key enum is built per request, so the static type is the loose one.
+    const editSchema = EditDraft.extend(settingsDraftFields(settingsPart?.keys ?? [])) as unknown as z.ZodType<EditDraftOut & SettingsDraft>;
+    const parse = { utcOffsetMinutes, now: Date.now() };
+    const usedSources = { value: null as number | null };
+    /** A draft's settings and knowledge, checked against the plan, on top of its questions. */
+    const settle = async (d: EditDraftOut & SettingsDraft, doc: FormDoc): Promise<CheckedSettings> => {
+      if (d.knowledge?.length && usedSources.value === null) usedSources.value = await countSources(c.env, formId);
+      return checkSettingsDraft(doc, d, ent, { parse, usedSources: usedSources.value ?? 0, alreadyAdding: reading.knowledgeUrls });
+    };
     const sourceForm = reading.sourceForm;
     if (reading.knowledgeUrls.length > 0) {
       c.executionCtx.waitUntil(addPagesToKnowledge(c.env, { organizationId: c.get("orgId"), formId, urls: reading.knowledgeUrls }));
@@ -732,8 +766,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
     // it reached the app's error handler and the builder's chat printed
     // "Internal server error" into the thread — which reads as a bug in
     // chatform and tells the author nothing about what to do next.
-    const mode = c.env.AI_EDIT_MODE === "tools" ? "tools" : "object";
-    let draft: EditDraftOut;
+    let draft: EditDraftOut & SettingsDraft;
     let usedModel: string = MODELS.generation;
     /** Every cost row this edit has written, on each way out. See `Ledger`. */
     const logCalls = () => ledger.log(c.env, { organizationId: c.get("orgId"), userId: c.get("userId"), formId, latencyMs: Date.now() - editStarted });
@@ -803,6 +836,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
           organizationId: c.get("orgId"),
           formId,
           trace,
+          schema: editSchema,
         });
         draft = result.draft;
         usedModel = result.model;
@@ -850,6 +884,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
     onStage("checking");
     let attempt = applyDraft(draft);
     let problems = introduced(attempt.doc);
+    let checked = await settle(draft, attempt.doc);
 
     /**
      * A second opinion, for the half the linter cannot see.
@@ -941,17 +976,32 @@ Answer the same request again, addressing that.`,
     // prefix and with its own work still in context — see `finish_edit`. A
     // second full-prompt redraft here would be the same feedback for ~10 KB
     // more, and would discard the guards the loop just satisfied.
-    if (problems.length > 0 && mode === "object") {
+    /*
+     * A setting value that did not parse goes back the same way: the model
+     * named a real setting and wrote a value it cannot take (a font Google does
+     * not serve, "lots" for a response limit), and one sentence fixes that.
+     */
+    if ((problems.length > 0 || checked.rejected.length > 0) && mode === "object") {
       onStage("repairing");
-      const feedback = [
-        prompt,
-        "",
-        "YOUR PREVIOUS ANSWER TO THIS REQUEST BROKE THE FLOW. With it applied, the form checker reported:",
-        ...problems.map((i) => `  - ${i.message}`),
-        "It routed these branches:",
-        ...draft.branches.map((b) => `  - from ${b.whenRef}: if ${b.op} ${JSON.stringify(b.value)} → ${b.then}`),
-        "Answer the same request again so that every question stays reachable. Remember that answers you do not branch fall through to the question directly below — if a question is only for some answers, the others must be routed past it.",
-      ].join("\n");
+      const flow =
+        problems.length > 0
+          ? [
+              "YOUR PREVIOUS ANSWER TO THIS REQUEST BROKE THE FLOW. With it applied, the form checker reported:",
+              ...problems.map((i) => `  - ${i.message}`),
+              "It routed these branches:",
+              ...draft.branches.map((b) => `  - from ${b.whenRef}: if ${b.op} ${JSON.stringify(b.value)} → ${b.then}`),
+              "Answer the same request again so that every question stays reachable. Remember that answers you do not branch fall through to the question directly below — if a question is only for some answers, the others must be routed past it.",
+            ]
+          : [];
+      const values =
+        checked.rejected.length > 0
+          ? [
+              "THESE SETTINGS IN YOUR PREVIOUS ANSWER WERE REFUSED, and were not applied:",
+              ...checked.rejected.map((r) => `  - ${r}`),
+              "Answer the same request again with values those settings accept.",
+            ]
+          : [];
+      const feedback = [prompt, "", ...flow, ...values].join("\n");
       try {
         const retry = await generateEdit({
           env: c.env,
@@ -961,13 +1011,16 @@ Answer the same request again, addressing that.`,
           formId,
           kind: "edit_retry",
           trace,
+          schema: editSchema,
         });
         ledger.add("edit_retry", retry.model, retry.usage);
         const second = applyDraft(retry.draft);
         const secondProblems = introduced(second.doc);
-        if (secondProblems.length < problems.length) {
+        const secondChecked = await settle(retry.draft, second.doc);
+        if (secondProblems.length + secondChecked.rejected.length < problems.length + checked.rejected.length) {
           attempt = second;
           problems = secondProblems;
+          checked = secondChecked;
           draft = retry.draft;
           // Only adopted with the retry's draft — if the retry was discarded
           // for being no better, the model that produced the KEPT draft is
@@ -996,19 +1049,36 @@ Answer the same request again, addressing that.`,
       const finished = finishSourceForm(attempt.doc, sourceForm);
       attempt = { ...attempt, doc: finished.doc, added: attempt.added.map((b) => ({ ...b, ref: finished.rename.get(b.ref) ?? b.ref }) as typeof b) };
     }
+    // Settings go on last, onto the questions as they finally stand: the
+    // pruning and renaming above rebuilt the document.
+    checked = await settle(draft, attempt.doc);
+    const paid = lockPaidBlockOptions(base, checked.doc, ent);
+    attempt = { ...attempt, doc: paid.doc };
+    const settingChanges = [...checked.settings, ...paid.locked];
+    const answer = draft.answer?.trim() || null;
     const { doc, added, removed, updated, newRules, rewired, endingChanges } = attempt;
 
     // An edit has to change something. This replaces the old "no new blocks"
     // rejection, which is what forced the model to invent one: a routing-only
     // edit is now a complete answer, and only an edit that touches nothing at
     // all is worth telling the builder about.
-    if (
-      added.length === 0 &&
-      removed.length === 0 &&
-      updated.length === 0 &&
-      newRules.length === 0 &&
-      endingChanges.length === 0
-    ) {
+    const questionsUnchanged =
+      added.length === 0 && removed.length === 0 && updated.length === 0 && newRules.length === 0 && endingChanges.length === 0;
+    /**
+     * A question about the builder, answered, with nothing to apply.
+     *
+     * "Where do I upload a logo?" used to come back as `no_change`, an error,
+     * because nothing in the form moved. It is a reply, the same kind the
+     * model sends when it stops to ask, and it is not charged as a generation.
+     */
+    if (questionsUnchanged && settingChanges.length === 0 && checked.knowledge.length === 0 && answer) {
+      ledger.relabel("edit", "edit_answer");
+      await ledger.meter(c.env, c.get("orgId"), { generation: false });
+      await logCalls();
+      console.log("edit_form_answer", { formId, ms: Date.now() - editStarted, sections: route.sections, jevMs: route.call?.latencyMs ?? null });
+      return { status: 200, body: { answer, summary: answer } };
+    }
+    if (questionsUnchanged && settingChanges.length === 0 && checked.knowledge.length === 0) {
       await logCalls();
       return {
         status: 422,
@@ -1047,6 +1117,12 @@ Answer the same request again, addressing that.`,
       updated: updated.length,
       removed: removed.length,
       rules: newRules.length,
+      settings: settingChanges.length,
+      lockedSettings: settingChanges.filter((s) => s.locked).length,
+      knowledge: checked.knowledge.length,
+      sections: route.sections,
+      routeFellBack: route.fellBack,
+      jevMs: route.call?.latencyMs ?? null,
       unresolvedFlowProblems: problems.length,
     });
     // One edit, one generation against the allowance, however many model
@@ -1066,7 +1142,12 @@ Answer the same request again, addressing that.`,
       rewired,
       endings: endingChanges.length,
       endingRefs: endingChanges,
-      summary: draft.summary,
+      /** Every setting it changes, locked ones included and not applied. */
+      settings: settingChanges,
+      /** Knowledge to add when the builder applies the proposal. */
+      knowledge: checked.knowledge,
+      summary: answer && !draft.summary.includes(answer) ? `${draft.summary.trim()} ${answer}`.trim() : draft.summary,
+      answer,
       /**
        * The reviewer objected and the second attempt did not fix it.
        *
@@ -1130,11 +1211,11 @@ aiRouter.post(
         const { formId, prompt } = validBody<z.infer<typeof EditFormBody>>(c);
         const asked: StoredTurn = { id: turnId(), role: "user", text: prompt };
         if (status === 200) {
-          const b = body as { question?: string; doc?: unknown; summary?: string; updatedRefs?: string[]; removedRefs?: string[]; rules?: number; rewired?: number };
+          const b = body as Parameters<typeof proposalTurn>[2] & { question?: string; answer?: string | null; doc?: unknown };
           const proposed = base && !b.question ? FormDoc.safeParse(b.doc) : null;
           const reply: StoredTurn = proposed?.success
             ? proposalTurn(base!, proposed.data, b)
-            : { id: turnId(), role: "assistant", text: b.question ?? b.summary ?? "Done." };
+            : { id: turnId(), role: "assistant", text: b.question ?? b.answer ?? b.summary ?? "Done." };
           await send("done", { ...body, turns: [asked, reply] });
           await appendAiTurns(c.env.DB, formId, [asked, reply]);
         } else {

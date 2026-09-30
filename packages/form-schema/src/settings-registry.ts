@@ -689,6 +689,8 @@ export type ParsedSetting = { ok: true; value: SettingValue } | { ok: false; rea
 export interface ParseContext {
   /** `Date#getTimezoneOffset()` of the author's browser, for dates written in local time. */
   utcOffsetMinutes?: number;
+  /** When given, a date before it is refused: nobody closes a form in the past on purpose. */
+  now?: number;
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -764,15 +766,21 @@ export function parseSettingValue(d: SettingDef, input: string, ctx: ParseContex
     case "language":
       return /^[a-z]{2}$/i.test(raw) ? { ok: true, value: raw.toLowerCase() } : fail("a two-letter language code like en or hi");
     case "date": {
+      let at: number;
       if (/Z$|[+-]\d{2}:\d{2}$/.test(raw) && !Number.isNaN(Date.parse(raw))) {
-        return { ok: true, value: new Date(raw).toISOString() };
+        at = Date.parse(raw);
+      } else {
+        const m = LOCAL_DATE.exec(raw);
+        if (!m) return fail("a date as YYYY-MM-DD or YYYY-MM-DDTHH:mm");
+        const [, y, mo, da, h = "23", mi = "59"] = m;
+        const utc = Date.UTC(Number(y), Number(mo) - 1, Number(da), Number(h), Number(mi));
+        if (Number.isNaN(utc)) return fail("not a real date");
+        at = utc + (ctx.utcOffsetMinutes ?? 0) * 60_000;
       }
-      const m = LOCAL_DATE.exec(raw);
-      if (!m) return fail("a date as YYYY-MM-DD or YYYY-MM-DDTHH:mm");
-      const [, y, mo, da, h = "23", mi = "59"] = m;
-      const utc = Date.UTC(Number(y), Number(mo) - 1, Number(da), Number(h), Number(mi));
-      if (Number.isNaN(utc)) return fail("not a real date");
-      return { ok: true, value: new Date(utc + (ctx.utcOffsetMinutes ?? 0) * 60_000).toISOString() };
+      if (ctx.now !== undefined && at <= ctx.now) {
+        return fail(`${raw} has already passed; today is ${new Date(ctx.now).toISOString().slice(0, 10)}`);
+      }
+      return { ok: true, value: new Date(at).toISOString() };
     }
   }
 }
@@ -855,10 +863,38 @@ export function applySettingOps(
   return { doc, changes, rejected };
 }
 
-/** The keys a request may name: its sections, less the settings the plan locks outright. */
-export function settingKeysFor(sections: readonly SettingSection[], allowed: (feature: string) => boolean): string[] {
+/**
+ * Which values of a setting this plan cannot have, tried one by one.
+ *
+ * Only for the settings with a short list of values, where trying every one is
+ * cheap and exact. Whether "Require sign-in" is paid depends on the sign-in
+ * method the form has, and whether a method is paid depends on whether sign-in
+ * is on, so the answer is read off the gate itself on this document rather
+ * than written down a second time here.
+ */
+function lockedValues(d: SettingDef, doc: FormDoc, allowed: (feature: string) => boolean): { all: boolean; byValue: Map<string, string> } {
+  const byValue = new Map<string, string>();
+  const candidates = d.format === "bool" ? ["true", "false"] : d.format === "enum" ? d.options!.map((o) => o.value) : [];
+  let changing = 0;
+  for (const value of candidates) {
+    const change = applySettingOps(doc, [{ key: d.key, value }], { allowed }).changes[0];
+    if (!change) continue;
+    changing++;
+    if (change.locked) byValue.set(value, change.locked.feature);
+  }
+  return { all: changing > 0 && byValue.size === changing, byValue };
+}
+
+/**
+ * The keys a request may name: its sections, less the settings the plan
+ * locks outright, whether by feature or because every change it could make
+ * on this document is paid.
+ */
+export function settingKeysFor(sections: readonly SettingSection[], allowed: (feature: string) => boolean, doc?: FormDoc): string[] {
   const wanted = new Set(sections);
-  return SETTINGS_REGISTRY.filter((d) => wanted.has(d.section) && (!d.feature || allowed(d.feature))).map((d) => d.key);
+  return SETTINGS_REGISTRY.filter(
+    (d) => wanted.has(d.section) && (!d.feature || allowed(d.feature)) && !(doc && lockedValues(d, doc, allowed).all),
+  ).map((d) => d.key);
 }
 
 function display(d: SettingDef, v: SettingValue): string {
@@ -874,21 +910,34 @@ function display(d: SettingDef, v: SettingValue): string {
  *
  * One line per setting, so a section costs what it holds. Locked ones are named
  * as locked rather than hidden: an author asking for them should hear which
- * plan they need, not an AI that pretends the setting does not exist.
+ * plan they need, not an AI that pretends the setting does not exist. So are
+ * the paid values of a setting that is otherwise free.
  */
 export function renderSettingsForPrompt(
   doc: FormDoc,
   sections: readonly SettingSection[],
-  offered: ReadonlySet<string>,
-  lockedPlan: (key: string) => string | null,
+  allowed: (feature: string) => boolean,
+  /** The plan that unlocks a feature, by name. */
+  planFor: (feature: string) => string,
 ): string {
+  const offered = new Set(settingKeysFor(sections, allowed, doc));
   const lines: string[] = [];
   for (const section of sections) {
     lines.push(`## ${section}: ${SETTING_SECTIONS[section]}`);
     for (const d of SETTINGS_REGISTRY.filter((x) => x.section === section)) {
+      const locks = lockedValues(d, doc, allowed);
+      const paid = (value: string) => {
+        const f = locks.byValue.get(value);
+        return f ? ` [needs ${planFor(f)}]` : "";
+      };
       const kind =
-        d.format === "enum" ? `one of ${d.options!.map((o) => o.value).join("|")}` : d.format === "int" ? `whole number ${d.min}-${d.max}` : d.format;
-      const lock = offered.has(d.key) ? "" : ` [LOCKED: needs ${lockedPlan(d.key) ?? "a higher"} plan]`;
+        d.format === "enum"
+          ? `one of ${d.options!.map((o) => `${o.value}${offered.has(d.key) ? paid(o.value) : ""}`).join(" | ")}`
+          : d.format === "int"
+            ? `whole number ${d.min}-${d.max}`
+            : d.format;
+      const needs = d.feature && !allowed(d.feature) ? d.feature : [...locks.byValue.values()][0];
+      const lock = offered.has(d.key) ? "" : ` [LOCKED: needs ${needs ? planFor(needs) : "a higher"} plan]`;
       const extra = [d.maxLength ? `max ${d.maxLength} chars` : "", d.clearable ? "empty clears it" : "", d.hint ?? ""]
         .filter(Boolean)
         .join("; ");
@@ -896,12 +945,4 @@ export function renderSettingsForPrompt(
     }
   }
   return lines.join("\n");
-}
-
-/** Every setting's name and place, for answering "where do I change X". */
-export function renderSettingsIndex(sections: readonly SettingSection[]): string {
-  const wanted = new Set(sections);
-  return SETTINGS_REGISTRY.filter((d) => wanted.has(d.section))
-    .map((d) => `- ${d.label}: ${d.where}`)
-    .join("\n");
 }

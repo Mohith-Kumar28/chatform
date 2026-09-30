@@ -135,8 +135,30 @@ describe("settings registry", () => {
   });
 
   it("lists only the sections asked for", () => {
-    const text = renderSettingsForPrompt(base(), ["closing"], new Set(settingKeysFor(["closing"], all)), () => null);
+    const text = renderSettingsForPrompt(base(), ["closing"], all, () => "Pro");
     expect(text).toContain("settings.closeRules.maxSubmissions");
     expect(text).not.toContain("theme.accent");
+  });
+});
+
+describe("closing dates", () => {
+  it("refuses one that has already passed, naming today", () => {
+    const parsed = parseSettingValue(settingDef("settings.closeRules.closeAt")!, "2024-10-30T18:00", { now: Date.parse("2026-09-30T00:00:00Z") });
+    expect(parsed).toEqual({ ok: false, reason: "settings.closeRules.closeAt: 2024-10-30T18:00 has already passed; today is 2026-09-30" });
+  });
+});
+
+describe("settings whose price depends on the value", () => {
+  it("locks sign-in on a plan with no sign-in method, and says so", () => {
+    const text = renderSettingsForPrompt(base(), ["access"], (f) => !f.startsWith("respondent_auth"), () => "Pro");
+    expect(text).toMatch(/settings\.requireAuth\.enabled .*\[LOCKED: needs Pro plan\]/);
+    expect(settingKeysFor(["access"], (f) => !f.startsWith("respondent_auth"), base())).not.toContain("settings.requireAuth.enabled");
+  });
+
+  it("marks the paid values of a setting that is otherwise free", () => {
+    const on = applySettingOps(base(), [{ key: "settings.requireAuth.enabled", value: "true" }]).doc;
+    const text = renderSettingsForPrompt(on, ["access"], (f) => f !== "respondent_auth_phone", () => "Business");
+    expect(text).toContain("phone [needs Business]");
+    expect(text).not.toContain("google [needs");
   });
 });

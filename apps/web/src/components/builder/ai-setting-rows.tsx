@@ -89,7 +89,7 @@ function Row({ change: c }: { change: SettingChange }) {
     return (
       <li className="text-muted-foreground flex items-center gap-2 text-xs">
         <span className="min-w-0 flex-1 truncate">{c.label}</span>
-        <Value change={c} value={c.after} muted />
+        <Value change={c} value={c.after} tone="dim" />
         <button
           type="button"
           onClick={() => upgrade({ feature }, { from: "ai_bar" })}
@@ -104,22 +104,24 @@ function Row({ change: c }: { change: SettingChange }) {
   return (
     <li className="flex items-center gap-2 text-xs">
       <span className="min-w-0 flex-1 truncate">{c.label}</span>
-      <Value change={c} value={c.before} muted />
+      <Value change={c} value={c.before} tone="before" />
       <ArrowRight className="text-muted-foreground size-3 shrink-0" />
-      <Value change={c} value={c.after} />
+      <Value change={c} value={c.after} tone="after" />
     </li>
   );
 }
 
-function Value({ change, value, muted }: { change: SettingChange; value: SettingValue; muted?: boolean }) {
-  if (change.format === "color" && typeof value === "string") return <Colour value={value} muted={muted} />;
+/** `before` is struck through, `after` is the new value, `dim` is a value the plan will not take. */
+function Value({ change, value, tone }: { change: SettingChange; value: SettingValue; tone: "before" | "after" | "dim" }) {
+  if (change.format === "color" && typeof value === "string") return <Colour value={value} muted={tone !== "after"} />;
   const text = describe(change, value);
   return (
     <span
       title={text}
       className={cn(
         "max-w-[11rem] shrink-0 truncate",
-        muted ? "text-muted-foreground line-through decoration-[0.5px]" : "font-medium",
+        tone === "before" && "text-muted-foreground line-through decoration-[0.5px]",
+        tone === "after" && "font-medium",
       )}
       style={change.format === "font" && typeof value === "string" ? { fontFamily: `"${value}", sans-serif` } : undefined}
     >

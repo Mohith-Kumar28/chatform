@@ -305,6 +305,9 @@ export const DRAFT_LIMITS = {
   updateBlocks: 12,
   removeRefs: 12,
   rewireRefs: 12,
+  /** Settings and knowledge an edit changes; see `edit-settings.ts`. */
+  settings: 40,
+  knowledge: 5,
 } as const;
 
 /**
@@ -1275,8 +1278,18 @@ async function draftObject<T extends Record<string, unknown>>(opts: {
   return { draft: clampDraft(result.object as T), tokens: usage.input + usage.output, usage, model: usedModel };
 }
 
-export function generateEdit(opts: { env: Bindings; prompt: string; system?: string; organizationId?: string | null; formId?: string | null; kind?: string; trace?: AiTrace }): Promise<{ draft: EditDraft; tokens: number; usage: TokenUsage; model: string }> {
-  return draftObject({ ...opts, schema: EditDraft as z.ZodType<EditDraft>, kind: opts.kind ?? "edit" });
+export function generateEdit<T extends EditDraft = EditDraft>(opts: {
+  env: Bindings;
+  prompt: string;
+  system?: string;
+  organizationId?: string | null;
+  formId?: string | null;
+  kind?: string;
+  trace?: AiTrace;
+  /** `EditDraft` with fields of its own, for an edit that may change more than the questions. */
+  schema?: z.ZodType<T>;
+}): Promise<{ draft: T; tokens: number; usage: TokenUsage; model: string }> {
+  return draftObject({ ...opts, schema: (opts.schema ?? EditDraft) as z.ZodType<T>, kind: opts.kind ?? "edit" });
 }
 
 /** AI flow generator: prompt → loose draft (normalized to FormDoc by the caller). */

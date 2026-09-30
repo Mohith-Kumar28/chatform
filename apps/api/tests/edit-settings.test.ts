@@ -26,11 +26,13 @@ describe("settingsPrompt", () => {
     expect(keys.every((k) => k.startsWith("settings.closeRules."))).toBe(true);
   });
 
-  it("names a locked setting as locked and keeps it out of the keys", () => {
+  it("names a locked setting as locked, and still lets the model name it for the card", () => {
     const { text, keys } = settingsPrompt(base(), route(["display"]), free);
     expect(text).toMatch(/settings\.branding\.hidePoweredBy.*LOCKED: needs Pro/);
-    expect(keys).not.toContain("settings.branding.hidePoweredBy");
-    expect(keys).toContain("settings.progressBar");
+    expect(keys).toContain("settings.branding.hidePoweredBy");
+    const checked = checkSettingsDraft(base(), { settings: [{ key: "settings.branding.hidePoweredBy", value: "true" }] }, free);
+    expect(checked.settings[0]?.locked).toEqual({ feature: "remove_branding" });
+    expect(checked.doc.settings.branding.hidePoweredBy).toBe(false);
   });
 
   it("sends no settings at all for a question edit", () => {

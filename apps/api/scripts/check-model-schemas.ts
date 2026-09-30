@@ -21,9 +21,10 @@ import { readFileSync } from "node:fs";
 import { generateObject, generateText, stepCountIs } from "ai";
 import { z } from "zod";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { extractionSchema, FormDoc, type Block } from "@repo/form-schema";
+import { extractionSchema, FormDoc, SETTINGS_REGISTRY, type Block } from "@repo/form-schema";
 import { GenerationDraft, EditDraft, MODELS, isSchemaRejection, APP_HEADERS, telemetry } from "../src/lib/ai.js";
 import { buildEditContext, buildEditTools } from "../src/lib/edit-tools.js";
+import { settingsDraftFields } from "../src/lib/edit-settings.js";
 
 function apiKey(): string {
   if (process.env.OPENROUTER_API_KEY) return process.env.OPENROUTER_API_KEY;
@@ -79,6 +80,9 @@ const CASES: { name: string; model: string; schema: z.ZodTypeAny; prompt: string
   { name: "GenerationDraft (fallback vendor)", model: MODELS.generationFallback, schema: GenerationDraft, prompt: DRAFT },
   { name: "EditDraft", model: MODELS.generation, schema: EditDraft, prompt: EDIT },
   { name: "EditDraft (fallback vendor)", model: MODELS.generationFallback, schema: EditDraft, prompt: EDIT },
+  // Every setting key at once: a request Jev could not place gets all of them.
+  { name: "EditDraft + every setting", model: MODELS.generation, schema: EditDraft.extend(settingsDraftFields(SETTINGS_REGISTRY.map((d) => d.key))), prompt: `${EDIT} Also make the primary colour #1E40AF.` },
+  { name: "EditDraft + every setting (fallback vendor)", model: MODELS.generationFallback, schema: EditDraft.extend(settingsDraftFields(SETTINGS_REGISTRY.map((d) => d.key))), prompt: `${EDIT} Also make the primary colour #1E40AF.` },
   { name: "extraction: field_group at its ceiling", model: MODELS.extraction, schema: extractionSchema(worstFieldGroup)!, prompt: ROSTER },
 ];
 
