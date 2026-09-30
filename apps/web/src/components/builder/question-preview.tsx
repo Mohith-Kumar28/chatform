@@ -12,6 +12,7 @@ import { QuestionAffordance } from "@/components/chat/question-affordance";
 import { SendRow, TextInput } from "@/components/chat/composers/primitives";
 import { inputSemanticsFor } from "@/components/chat/composers/input-semantics";
 import { chatThemeVars } from "@/lib/chat-theme";
+import { useSchemeTheme } from "@/lib/form-scheme";
 import { useThemeFonts } from "@/lib/theme-fonts";
 import { API_ORIGIN } from "@/lib/api/mutator";
 import { LogoMark } from "@/components/brand/logo";
@@ -47,7 +48,9 @@ export function QuestionPreview({
    */
   slug?: string | null;
 }) {
-  const themeVars = useMemo(() => chatThemeVars(doc.theme, slug), [doc.theme, slug]);
+  // The same light/dark rule the hosted form applies, so the preview is the form.
+  const schemeTheme = useSchemeTheme(doc.theme);
+  const themeVars = useMemo(() => chatThemeVars(schemeTheme, slug), [schemeTheme, slug]);
   useThemeFonts(doc.theme);
   /*
     A verified payment block names an account id, and which gateway that

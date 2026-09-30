@@ -1,6 +1,9 @@
 import type { CSSProperties } from "react";
 import { RATING_RAMP } from "./rating-ramp";
-import { THEME_DEFAULT_INK, type ThemeDoc } from "@repo/form-schema";
+import { contrast, isDarkColor, readableInk, shiftColor, THEME_DEFAULT_INK, type ThemeDoc } from "@repo/form-schema";
+
+// Moved to the shared package (the API derives palettes too); re-exported for existing imports.
+export { contrast, isDarkColor, readableInk };
 import {
   PatternDef,
   patternImage,
@@ -26,6 +29,8 @@ const CARD_RADIUS: Record<ThemeDoc["radius"], string> = { none: "0px", sm: "6px"
 /** Chips and buttons: one line tall, so Large and Pill are both fully round, as they always were. */
 const CONTROL_RADIUS: Record<ThemeDoc["radius"], string> = { none: "0px", sm: "6px", md: "10px", lg: "9999px", full: "9999px" };
 
+const AA_BODY = 4.5;
+
 export const RADIUS_PX: Record<ThemeDoc["radius"], string> = {
   none: "0px",
   sm: "6px",
@@ -33,66 +38,6 @@ export const RADIUS_PX: Record<ThemeDoc["radius"], string> = {
   lg: "18px",
   full: "9999px",
 };
-
-/**
- * Relative luminance of a hex color, for deciding readable foregrounds.
- * ThemeDoc stores hex (it is edited with native color inputs), so derived
- * states are computed here rather than in CSS.
- */
-function luminance(hex: string): number {
-  const h = hex.replace("#", "");
-  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
-  if (full.length !== 6) return 1;
-  const [r, g, b] = [0, 2, 4].map((i) => {
-    const v = parseInt(full.slice(i, i + 2), 16) / 255;
-    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-export function isDarkColor(hex: string): boolean {
-  return luminance(hex) < 0.45;
-}
-
-/** WCAG contrast ratio between two hex colors, 1–21. */
-export function contrast(a: string, b: string): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
-}
-
-/** The ratio body copy has to clear against the surface behind it (WCAG AA). */
-const AA_BODY = 4.5;
-
-/** Blend a hex color toward white or black by `amount` (0–1). */
-function shift(hex: string, amount: number, toward: "light" | "dark"): string {
-  const h = hex.replace("#", "");
-  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
-  if (full.length !== 6) return hex;
-  const target = toward === "light" ? 255 : 0;
-  const out = [0, 2, 4]
-    .map((i) => {
-      const v = parseInt(full.slice(i, i + 2), 16);
-      return Math.round(v + (target - v) * amount)
-        .toString(16)
-        .padStart(2, "0");
-    })
-    .join("");
-  return `#${out}`;
-}
-
-/**
- * The most readable ink for a given fill: the fill itself taken almost to
- * black, or almost to white, whichever wins.
- *
- * Both candidates are the *fill* shifted rather than flat `#000`/`#fff`, so the
- * ink carries a trace of the bubble's hue and reads as part of the palette
- * instead of stamped on top of it.
- */
-export function readableInk(fill: string): string {
-  const dark = shift(fill, 0.88, "dark");
-  const light = shift(fill, 0.96, "light");
-  return contrast(fill, dark) >= contrast(fill, light) ? dark : light;
-}
 
 /**
  * Ink for a fill, honouring a deliberate choice and rescuing everything else.
@@ -115,7 +60,7 @@ export function readableInk(fill: string): string {
  * brand's button, and a label that clears that is still read at a glance.
  */
 function buttonInk(fill: string, stored: string): string {
-  const light = shift(fill, 0.96, "light");
+  const light = shiftColor(fill, 0.96, "light");
   if (stored.trim().toLowerCase() === THEME_DEFAULT_INK.toLowerCase()) {
     return contrast(fill, light) >= 2.8 ? light : readableInk(fill);
   }
@@ -185,6 +130,32 @@ export function patternAlpha(background: string, ink: string, strength = 1): num
 }
 
 /**
+ * The status tokens (`--destructive`, `--success` and their soft pairs), with
+ * the values globals.css gives `:root` and `.dark`. Set on the chat surface so
+ * `text-destructive` and the payment receipt read the form's side.
+ */
+const STATUS_LIGHT = {
+  "--destructive": "oklch(0.585 0.215 27)",
+  "--destructive-foreground": "oklch(0.995 0 0)",
+  "--destructive-soft": "oklch(0.955 0.028 25)",
+  "--destructive-soft-foreground": "oklch(0.42 0.17 27)",
+  "--success": "oklch(0.63 0.165 152)",
+  "--success-foreground": "oklch(0.995 0 0)",
+  "--success-soft": "oklch(0.955 0.035 152)",
+  "--success-soft-foreground": "oklch(0.38 0.11 152)",
+};
+const STATUS_DARK = {
+  "--destructive": "oklch(0.65 0.2 25)",
+  "--destructive-foreground": "oklch(0.98 0 0)",
+  "--destructive-soft": "oklch(0.3 0.06 25)",
+  "--destructive-soft-foreground": "oklch(0.88 0.09 25)",
+  "--success": "oklch(0.7 0.15 152)",
+  "--success-foreground": "oklch(0.19 0.02 60)",
+  "--success-soft": "oklch(0.29 0.05 152)",
+  "--success-soft-foreground": "oklch(0.87 0.09 152)",
+};
+
+/**
  * @param seed the form's slug, which is what decides its tile while
  *   `theme.backgroundPattern` is `auto`. Omitted only where there is no form —
  *   the marketing demo — and the surface then paints the flat background it
@@ -205,14 +176,25 @@ export function chatThemeVars(theme: ThemeDoc, seed?: string | null): CSSPropert
   // literal default hex, which broke for every custom theme.
   const bubbleBlendsIn = theme.botBubble.toLowerCase() === theme.background.toLowerCase();
   const botBorder = bubbleBlendsIn
-    ? shift(theme.botBubble, 0.12, darkSurface ? "light" : "dark")
+    ? shiftColor(theme.botBubble, 0.12, darkSurface ? "light" : "dark")
     : "transparent";
 
   return {
+    /*
+     * The form decides light or dark for everything inside it, not the
+     * viewer's device. The page's own class follows the device (and the
+     * author's dashboard setting), so without this a light form on a dark
+     * phone got dark native pickers and autofill, and a dark form on a light
+     * one got light ones.
+     */
+    colorScheme: darkSurface ? "dark" : "light",
+    // The app's status colours the chat borrows (an error line, a paid
+    // receipt), pinned to the form's side rather than the page's.
+    ...(darkSurface ? STATUS_DARK : STATUS_LIGHT),
     "--cf-bg": theme.background,
     "--cf-surface": theme.surface,
     "--cf-text": theme.text,
-    "--cf-muted": shift(theme.text, 0.4, darkSurface ? "dark" : "light"),
+    "--cf-muted": shiftColor(theme.text, 0.4, darkSurface ? "dark" : "light"),
     "--cf-accent": theme.accent,
     "--cf-accent-text": buttonInk(theme.accent, theme.accentText),
     "--cf-bot-bubble": theme.botBubble,
@@ -244,7 +226,7 @@ export function chatThemeVars(theme: ThemeDoc, seed?: string | null): CSSPropert
       (darkSurface ? RATING_RAMP.dark : RATING_RAMP.light).map((c, i) => [`--cf-rating-${i + 1}`, c]),
     ),
     "--cf-chip-bg": theme.surface,
-    "--cf-chip-border": shift(theme.text, 0.82, darkSurface ? "dark" : "light"),
+    "--cf-chip-border": shiftColor(theme.text, 0.82, darkSurface ? "dark" : "light"),
     /*
      * A fill for a panel that holds other controls — one entry of a repeating
      * group, say. It cannot be the surface, because the inputs inside it are
@@ -253,7 +235,7 @@ export function chatThemeVars(theme: ThemeDoc, seed?: string | null): CSSPropert
      * read as a container on both a white page and a near-black one, not enough
      * to become a second background the author never chose.
      */
-    "--cf-sunken": shift(theme.surface, 0.045, darkSurface ? "light" : "dark"),
+    "--cf-sunken": shiftColor(theme.surface, 0.045, darkSurface ? "light" : "dark"),
     "--cf-radius": RADIUS_PX[theme.radius],
     // The Corners setting reached the bubbles and nothing else: chips, buttons,
     // the answer box and the cards were all hard-coded round, so "Square" left

@@ -1,5 +1,18 @@
-import { THEME_DEFAULT_INK, type ThemeDoc } from "@repo/form-schema";
-import { contrast, isDarkColor, readableInk } from "@/lib/chat-theme";
+import { CHROMATIC, hueDistance, labToLch, oklchToHex, rgbToOklab, themeFromAccent, type Oklab, type Palette } from "@repo/form-schema";
+
+// The colour maths and the one-colour theme moved to the shared package, so
+// the API can derive a palette too; re-exported for existing imports.
+export {
+  bubbleHue,
+  hexToOklch,
+  hexToRgb,
+  hueDistance,
+  isDarkTheme,
+  oklchToHex,
+  themeFromAccent,
+  type Oklch,
+  type Palette,
+} from "@repo/form-schema";
 
 /**
  * A whole theme from one colour, and that colour from a logo.
@@ -17,97 +30,6 @@ import { contrast, isDarkColor, readableInk } from "@/lib/chat-theme";
  */
 
 // ---------------------------------------------------------------------------
-// Colour maths
-// ---------------------------------------------------------------------------
-
-type Rgb = [number, number, number];
-type Oklab = [number, number, number];
-export interface Oklch {
-  l: number;
-  c: number;
-  h: number;
-}
-
-const toLinear = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-const toGamma = (v: number) => (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055);
-
-function rgbToOklab([r, g, b]: Rgb): Oklab {
-  const [lr, lg, lb] = [r / 255, g / 255, b / 255].map(toLinear) as Rgb;
-  const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
-  const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
-  const s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
-  return [
-    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
-    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
-  ];
-}
-
-/** Linear sRGB, unclamped, so the caller can tell whether it left the gamut. */
-function oklabToLinear([L, a, b]: Oklab): Rgb {
-  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  return [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-  ];
-}
-
-const inGamut = (rgb: Rgb) => rgb.every((v) => v >= -0.0005 && v <= 1.0005);
-
-export function hexToRgb(hex: string): Rgb | null {
-  const h = hex.trim().replace(/^#/, "");
-  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h.slice(0, 6);
-  if (!/^[0-9a-fA-F]{6}$/.test(full)) return null;
-  return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16)) as Rgb;
-}
-
-const rgbToHex = (rgb: Rgb) =>
-  `#${rgb.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0")).join("")}`;
-
-function labToLch([l, a, b]: Oklab): Oklch {
-  const c = Math.hypot(a, b);
-  const h = ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360;
-  return { l, c, h };
-}
-
-export function hexToOklch(hex: string): Oklch | null {
-  const rgb = hexToRgb(hex);
-  return rgb ? labToLch(rgbToOklab(rgb)) : null;
-}
-
-/**
- * OKLCH to hex, keeping lightness and hue and giving up chroma until the colour
- * exists in sRGB. Clipping channels instead would shift the hue, which is the
- * one property every derived colour here is meant to share with the brand.
- */
-export function oklchToHex({ l, c, h }: Oklch): string {
-  const L = Math.min(1, Math.max(0, l));
-  const rad = (h * Math.PI) / 180;
-  const at = (chroma: number): Rgb => oklabToLinear([L, chroma * Math.cos(rad), chroma * Math.sin(rad)]);
-  let lo = 0;
-  let hi = Math.max(0, c);
-  if (!inGamut(at(hi))) {
-    for (let i = 0; i < 20; i++) {
-      const mid = (lo + hi) / 2;
-      if (inGamut(at(mid))) lo = mid;
-      else hi = mid;
-    }
-    hi = lo;
-  }
-  const lin = at(hi).map((v) => Math.min(1, Math.max(0, v))) as Rgb;
-  return rgbToHex(lin.map((v) => toGamma(v) * 255) as Rgb);
-}
-
-/** Shortest distance between two hues, 0–180. */
-export function hueDistance(a: number, b: number): number {
-  const d = Math.abs(a - b) % 360;
-  return d > 180 ? 360 - d : d;
-}
-
-// ---------------------------------------------------------------------------
 // Logo → swatches
 // ---------------------------------------------------------------------------
 
@@ -120,8 +42,6 @@ export interface Swatch {
   h: number;
 }
 
-/** Below this chroma a colour reads as grey, and grey is not a brand hue. */
-const CHROMATIC = 0.045;
 
 /**
  * The colours a logo is made of, most-used first.
@@ -207,112 +127,6 @@ export function pickBrand(swatches: Swatch[]): { primary: Swatch; secondary: Swa
     chromatic.find((s) => s !== primary && s.weight >= 0.03 && hueDistance(s.h, primary.h) >= 40) ?? null;
   return { primary, secondary };
 }
-
-// ---------------------------------------------------------------------------
-// One colour → a theme
-// ---------------------------------------------------------------------------
-
-type Palette = Pick<
-  ThemeDoc,
-  "background" | "surface" | "text" | "accent" | "accentText" | "botBubble" | "userBubble" | "userBubbleText"
->;
-
-/**
- * Every theme colour, derived from the accent.
- *
- * The rules are the ones the hand-made presets in the theme panel already
- * follow, written down so any accent gets them:
- *
- *   - The accent is the thing you press, so it keeps its colour. It is only
- *     moved when it would vanish into the page — a near-white accent on a light
- *     page, a navy one on a dark page — and then only in lightness.
- *   - The page is the accent's hue at almost no chroma: warm under orange,
- *     cool under blue, never a stark #fff that belongs to nobody.
- *   - The respondent's bubble is a tint, not the accent: light enough that ink
- *     sits well above AA on it, far enough from the page to read as a bubble.
- *     With a second brand hue it takes that one, which is what the Chatform
- *     preset does with its orange action and violet bubble.
- *   - Ink on the accent and on the bubble is left to `readableInk` by storing
- *     the sentinel default, so it is derived from whatever fill it lands on.
- *
- * `dark` keeps a dark form dark: the same relationships, mirrored.
- */
-export function themeFromAccent(
-  accent: string,
-  { dark = false, secondary = null }: { dark?: boolean; secondary?: string | null } = {},
-): Palette | null {
-  const a = hexToOklch(accent);
-  if (!a) return null;
-  const b = (secondary && hexToOklch(secondary)) || a;
-  const neutral = a.c < CHROMATIC;
-  // A grey brand's hue is noise; tint its page toward nothing rather than
-  // toward whatever angle a rounding error landed on.
-  const tint = (max: number, share: number) => (neutral ? 0 : Math.min(max, a.c * share));
-  const bubbleChroma = b.c < CHROMATIC ? 0.006 : Math.min(0.09, Math.max(0.035, b.c * 0.45));
-
-  let out: Palette;
-  if (!dark) {
-    out = {
-      background: oklchToHex({ l: 0.985, c: tint(0.012, 0.08), h: a.h }),
-      surface: "#ffffff",
-      text: oklchToHex({ l: 0.22, c: tint(0.03, 0.15), h: a.h }),
-      accent: oklchToHex(a),
-      accentText: THEME_DEFAULT_INK,
-      botBubble: "#ffffff",
-      userBubble: oklchToHex({ l: 0.88, c: bubbleChroma, h: b.h }),
-      userBubbleText: THEME_DEFAULT_INK,
-    };
-  } else {
-    out = {
-      background: oklchToHex({ l: 0.18, c: tint(0.02, 0.12), h: a.h }),
-      surface: oklchToHex({ l: 0.22, c: tint(0.02, 0.12), h: a.h }),
-      text: oklchToHex({ l: 0.96, c: tint(0.01, 0.05), h: a.h }),
-      accent: oklchToHex(a),
-      accentText: THEME_DEFAULT_INK,
-      botBubble: oklchToHex({ l: 0.25, c: tint(0.025, 0.15), h: a.h }),
-      userBubble: oklchToHex({ l: 0.38, c: bubbleChroma, h: b.h }),
-      userBubbleText: THEME_DEFAULT_INK,
-    };
-  }
-
-  /*
-   * The button has to stand off the page. 1.5:1 on a light page is deliberately
-   * gentle: a sunshine-yellow brand on cream is a legitimate choice (its ink is
-   * dark and derived), and pushing every light accent to 3:1 would turn it
-   * mustard. This only catches accents that would otherwise disappear. A dark
-   * page asks for more, because a navy or black accent on near-black reads as
-   * a hole rather than a button.
-   */
-  const standOff = dark ? 2.2 : 1.5;
-  let fixed = a;
-  for (let i = 0; i < 30 && contrast(oklchToHex(fixed), out.background) < standOff; i++) {
-    fixed = { ...fixed, l: fixed.l + (dark ? 0.02 : -0.02) };
-  }
-  /*
-   * And its label has to read. A saturated mid-tone (rose, some reds) is the
-   * one lightness where neither near-black nor near-white ink quite clears AA,
-   * so it is walked a step at a time away from its ink, at most 0.06 in
-   * lightness — a shade nobody would call a different colour.
-   */
-  for (let i = 0; i < 6; i++) {
-    const hex = oklchToHex(fixed);
-    const ink = readableInk(hex);
-    if (contrast(hex, ink) >= 4.5) break;
-    fixed = { ...fixed, l: fixed.l + (isDarkColor(ink) ? 0.01 : -0.01) };
-  }
-  out.accent = oklchToHex(fixed);
-
-  // And the bubble has to stand off the page, or it is just more page.
-  let bubble = hexToOklch(out.userBubble)!;
-  for (let i = 0; i < 10 && contrast(out.userBubble, out.background) < 1.2; i++) {
-    bubble = { ...bubble, l: bubble.l + (dark ? 0.03 : -0.03) };
-    out.userBubble = oklchToHex(bubble);
-  }
-  return out;
-}
-
-/** Whether a theme is a dark one, which decides which way `themeFromAccent` mirrors. */
-export const isDarkTheme = (theme: Pick<ThemeDoc, "background">) => isDarkColor(theme.background);
 
 /** A full palette from a logo's swatches, or null when the logo has no usable colour. */
 export function themeFromSwatches(swatches: Swatch[], dark: boolean): Palette | null {

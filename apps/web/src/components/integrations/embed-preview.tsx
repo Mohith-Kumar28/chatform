@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Lock, MessageCircle, RotateCcw, SendHorizontal, X } from "lucide-react";
 import type { Block, ThemeDoc } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
+import { useSchemeTheme } from "@/lib/form-scheme";
 import { fontStack, useThemeFonts } from "@/lib/theme-fonts";
 import { isOverlay, type EmbedConfig } from "@/lib/embed-snippet";
 import { cn } from "@/lib/utils";
@@ -530,9 +531,10 @@ function MockConversation({
   // read "Question 2 of 9" here, a mode the form has to be switched into.
   const pct = Math.round((1 / Math.max(script.total, 2)) * 100);
   useThemeFonts(theme);
+  const schemeTheme = useSchemeTheme(theme);
 
   return (
-    <div className="chat-surface flex h-full flex-col overflow-hidden" style={chatThemeVars(theme, slug)}>
+    <div className="chat-surface flex h-full flex-col overflow-hidden" style={chatThemeVars(schemeTheme, slug)}>
       <header className="shrink-0">
         <div className={cn("flex items-center gap-3 py-3", pad)}>
           {logoUrl ? (

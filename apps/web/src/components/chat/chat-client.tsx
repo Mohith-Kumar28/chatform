@@ -20,6 +20,7 @@ import { safeHref, safeMediaSrc } from "@repo/guard";
 import { QuestionDescription, RichText, SAFE_ELEMENTS } from "./rich-text";
 import type { PublicBlock, PublicFormConfig } from "@repo/form-schema";
 import { chatThemeVars } from "@/lib/chat-theme";
+import { useSchemeTheme } from "@/lib/form-scheme";
 import { useThemeFonts } from "@/lib/theme-fonts";
 import { LogoMark } from "@/components/brand/logo";
 import { AuthCard } from "./auth-card";
@@ -398,9 +399,12 @@ export function ChatSurface({
 
   // The slug is the pattern seed, so the background tile a respondent sees is
   // the one the dashboard card and the builder preview already showed.
+  // Light or dark as the author chose (following the device on `auto`).
+  const schemeTheme = useSchemeTheme(config.theme);
+  usePageBackground(!previewMode, schemeTheme.background);
   const themeVars = useMemo(
-    () => chatThemeVars(config.theme, config.slug),
-    [config.theme, config.slug],
+    () => chatThemeVars(schemeTheme, config.slug),
+    [schemeTheme, config.slug],
   );
   useThemeFonts(config.theme);
 
@@ -814,7 +818,7 @@ export function ChatSurface({
           {chat.ending && (
             <EndingCard
               ending={chat.ending}
-              theme={config.theme}
+              theme={schemeTheme}
               allowRepeat={config.allowResubmissions}
               onRestart={() => void chat.startOver()}
               /*
@@ -846,7 +850,7 @@ export function ChatSurface({
             <AlreadySubmittedCard
               submitted={chat.submitted}
               title={agentName}
-              theme={config.theme}
+              theme={schemeTheme}
               /*
                 A form with resubmissions switched off is not expecting a second
                 answer. `canRepeat` overrides it when the *server* refused this
@@ -2536,4 +2540,19 @@ function placeholderFor(type: PublicBlock["type"]): string {
     default:
       return "Type your answer…";
   }
+}
+
+/**
+ * The page behind the form wears the form's background. The form fills the
+ * window, but a phone shows the page itself when it bounces past the top or
+ * bottom, and the page follows the device's light or dark, not the form's.
+ */
+function usePageBackground(active: boolean, color: string) {
+  useEffect(() => {
+    if (!active) return;
+    const targets = [document.documentElement, document.body];
+    const before = targets.map((el) => el.style.backgroundColor);
+    for (const el of targets) el.style.backgroundColor = color;
+    return () => targets.forEach((el, i) => (el.style.backgroundColor = before[i]!));
+  }, [active, color]);
 }

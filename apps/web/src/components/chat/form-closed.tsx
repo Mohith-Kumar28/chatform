@@ -5,6 +5,7 @@ import { CalendarX2, Clock, Users } from "lucide-react";
 import { CLOSED_MESSAGE_DEFAULT, type PublicFormConfig } from "@repo/form-schema";
 import { safeMediaSrc } from "@repo/guard";
 import { chatThemeVars } from "@/lib/chat-theme";
+import { useSchemeTheme } from "@/lib/form-scheme";
 import { useThemeFonts } from "@/lib/theme-fonts";
 import { LogoMark } from "@/components/brand/logo";
 import { RichText, SAFE_ELEMENTS } from "./rich-text";
@@ -80,11 +81,12 @@ export function FormClosed({
 
   const full = config.closedReason === "capacity";
   useThemeFonts(config.theme);
+  const schemeTheme = useSchemeTheme(config.theme);
 
   return (
     <div
       className={cn("chat-surface flex flex-col", contained ? "h-full min-h-0" : "cf-chat-viewport")}
-      style={chatThemeVars(config.theme, config.slug)}
+      style={chatThemeVars(schemeTheme, config.slug)}
     >
       {/*
         `overflow-x-hidden` beside the vertical scroll, and it is not belt and

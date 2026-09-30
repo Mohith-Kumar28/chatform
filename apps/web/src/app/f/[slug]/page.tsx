@@ -1,6 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
-import type { PublicFormConfig } from "@repo/form-schema";
+import { isDarkColor, resolveScheme, ThemeDoc, type PublicFormConfig } from "@repo/form-schema";
 import { ChatClient } from "@/components/chat/chat-client";
 import { FormClosed } from "@/components/chat/form-closed";
 import { ViewPing } from "@/components/chat/view-ping";
@@ -21,6 +21,30 @@ async function getConfig(slug: string): Promise<PublicFormConfig | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * The browser's own colour (a phone's address bar, the page under a bounce)
+ * matches the form, light or dark, instead of chatform's. On Auto it is both,
+ * and the device picks. The config fetch is the one `generateMetadata` makes.
+ */
+export async function generateViewport({ params }: PageProps<"/f/[slug]">): Promise<Viewport> {
+  const { slug } = await params;
+  const config = await getConfig(slug);
+  const parsed = config ? ThemeDoc.safeParse(config.theme) : null;
+  if (!parsed?.success) return {};
+  const theme = parsed.data;
+  if (theme.colorScheme === "auto") {
+    return {
+      colorScheme: "light dark",
+      themeColor: [
+        { media: "(prefers-color-scheme: light)", color: resolveScheme(theme, false).background },
+        { media: "(prefers-color-scheme: dark)", color: resolveScheme(theme, true).background },
+      ],
+    };
+  }
+  const background = resolveScheme(theme, false).background;
+  return { colorScheme: isDarkColor(background) ? "dark" : "light", themeColor: background };
 }
 
 export async function generateMetadata({ params }: PageProps<"/f/[slug]">): Promise<Metadata> {

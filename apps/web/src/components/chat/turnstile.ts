@@ -24,6 +24,7 @@ interface TurnstileApi {
     opts: {
       sitekey: string;
       appearance?: "always" | "execute" | "interaction-only";
+      theme?: "light" | "dark" | "auto";
       callback?: (token: string) => void;
       "error-callback"?: () => void;
       "before-interactive-callback"?: () => void;
@@ -104,6 +105,9 @@ export function getTurnstileToken(
         widgetId = api.render(host, {
           sitekey: siteKey,
           appearance: interactive ? "always" : "interaction-only",
+          // It hangs off <body>, outside the form, so it is told the form's
+          // side (see `colorScheme` in `chatThemeVars`) rather than guessing.
+          theme: formScheme(),
           callback: (token) => finish(token),
           "error-callback": () => finish(undefined),
           "timeout-callback": () => finish(undefined),
@@ -118,4 +122,10 @@ export function getTurnstileToken(
       }
     });
   });
+}
+
+/** Light or dark, as the form on the page renders. */
+function formScheme(): "light" | "dark" {
+  const surface = document.querySelector<HTMLElement>(".chat-surface");
+  return surface && getComputedStyle(surface).colorScheme === "dark" ? "dark" : "light";
 }

@@ -66,3 +66,17 @@ describe("chatThemeVars", () => {
     expect(contrast("#1c1917", v["--cf-bot-bubble-text"])).toBeGreaterThanOrEqual(AA);
   });
 });
+
+describe("the form decides light or dark inside it", () => {
+  const vars = (theme: ThemeDoc) => chatThemeVars(theme) as Record<string, string>;
+
+  it("sets the colour scheme and the status colours from the form, not the device", () => {
+    const light = vars(ThemeDoc.parse({}));
+    const dark = vars(ThemeDoc.parse({ background: "#14111c", text: "#f5f3f8", botBubble: "#221d30", surface: "#1b1726" }));
+    expect([light.colorScheme, dark.colorScheme]).toEqual(["light", "dark"]);
+    // The app's own light and dark values (globals.css), pinned to the form's side.
+    expect(light["--destructive"]).toBe("oklch(0.585 0.215 27)");
+    expect(dark["--destructive"]).toBe("oklch(0.65 0.2 25)");
+    expect(dark["--success-soft"]).toBe("oklch(0.29 0.05 152)");
+  });
+});

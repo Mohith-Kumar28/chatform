@@ -1512,6 +1512,18 @@
   color: var(--cf-text);
 }
 
+/* Inside a form, the scrollbar and a text selection take the form's colours,
+   not the page's: a light form on a dark device kept a dark scrollbar and a
+   selection tinted for the dashboard. */
+.chat-surface,
+.chat-surface * {
+  scrollbar-color: var(--cf-chip-border) transparent;
+}
+.chat-surface ::selection {
+  background: color-mix(in oklab, var(--cf-accent) 30%, transparent);
+  color: var(--cf-text);
+}
+
 /* Markdown inside a bubble. Tight rhythm: a chat message is not an article,
    so paragraph spacing is minimal and headings barely differ in size. */
 

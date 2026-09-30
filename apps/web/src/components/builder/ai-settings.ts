@@ -1,5 +1,6 @@
 import { settingDef, type FormDoc, type SettingChange, type ThemeDoc } from "@repo/form-schema";
 import { isDarkTheme, themeFromAccent } from "@/lib/brand-palette";
+import { withAppearance } from "@/lib/form-scheme";
 
 /**
  * Settings an AI proposal changes, applied the way the builder's own controls
@@ -43,6 +44,11 @@ export const PALETTE_LABELS: Record<PaletteKey, string> = {
 export function applySettingChanges(doc: FormDoc, changes: readonly SettingChange[]): void {
   const live = changes.filter((c) => !c.locked);
   for (const c of live) settingDef(c.key)?.set(doc, c.after);
+
+  // Light or dark: the same switch the Design panel makes, colours and all.
+  if (live.some((c) => c.key === "theme.colorScheme")) {
+    doc.theme = withAppearance(doc.theme, doc.theme.colorScheme);
+  }
 
   if (!live.some((c) => settingDef(c.key)?.derives === "palette")) return;
   const palette = themeFromAccent(doc.theme.accent, { dark: isDarkTheme(doc.theme) });

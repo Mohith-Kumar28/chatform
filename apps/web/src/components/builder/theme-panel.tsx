@@ -15,6 +15,8 @@ import { BufferedInput } from "@/components/ui/buffered-input";
 import { Switch } from "@/components/ui/switch";
 import { FontPicker } from "./font-picker";
 import { isDarkTheme, themeFromAccent } from "@/lib/brand-palette";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { appearanceOf, withAppearance } from "@/lib/form-scheme";
 
 type Theme = FormDoc["theme"];
 
@@ -138,6 +140,10 @@ export function ThemePanel({
     patch(derived ? { ...derived, accent: value } : ({ [key]: value } as Partial<Theme>), `theme:${key}`);
   };
 
+  // Light, dark, or the respondent's own device: one rule, shared with the builder AI.
+  const appearance = appearanceOf(theme);
+  const setAppearance = (next: Theme["colorScheme"]) => onChange(withAppearance(latest.current, next), "theme:colorScheme");
+
   return (
     <div className="w-full space-y-6">
       <Section title="Brand">
@@ -163,6 +169,25 @@ export function ThemePanel({
         </div>
       </Section>
 
+      <Section title="Appearance">
+        <div className="flex items-center gap-2">
+          <SegmentedControl
+            size="sm"
+            options={[
+              { value: "light", label: "Light" },
+              { value: "dark", label: "Dark" },
+              { value: "auto", label: "Auto" },
+            ]}
+            value={appearance}
+            onChange={setAppearance}
+            ariaLabel="Appearance"
+          />
+          <InfoHint label="About appearance">
+            Auto shows each person the form in light or dark to match their device.
+          </InfoHint>
+        </div>
+      </Section>
+
       <Section title="Presets">
         <div className="grid grid-cols-2 gap-2">
           {PRESETS.map((p) => {
@@ -176,7 +201,10 @@ export function ThemePanel({
               key={p.name}
               type="button"
               aria-pressed={active}
-              onClick={() => patch(p.theme)}
+              // A dark preset makes the form dark; a light one keeps Auto if it is on.
+              onClick={() =>
+                patch({ ...p.theme, colorScheme: isDarkTheme(p.theme as Theme) ? "dark" : theme.colorScheme === "auto" ? "auto" : "light" })
+              }
               className={cn(
                 "flex items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-colors",
                 active ? "border-primary bg-primary/5" : "hover:bg-muted/60 border-transparent",

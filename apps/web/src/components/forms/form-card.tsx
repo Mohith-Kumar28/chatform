@@ -46,6 +46,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { chatThemeVars, contrast, isDarkColor, patternAlpha, patternOpacity } from "@/lib/chat-theme";
+import { resolveScheme } from "@/lib/form-scheme";
 import { patternImage, patternSize, patternWeight, resolvePattern, rgbaFromHex } from "@/lib/background-patterns";
 
 /**
@@ -458,7 +459,9 @@ export function FormCard({
    * so the mix always runs away from the plate and toward the readable end,
    * in either theme, with no `dark:` twin.
    */
-  const thumbIsDark = form.theme ? isDarkColor(form.theme.background) : null;
+  // The card draws the form as it renders, light or dark (see `cardThemeDoc`).
+  const cardTheme = form.theme ? cardThemeDoc(form.theme) : null;
+  const thumbIsDark = cardTheme ? isDarkColor(cardTheme.background) : null;
   const thumbPlate: Record<string, string> =
     thumbIsDark === null
       ? {
@@ -683,7 +686,7 @@ export function FormCard({
                 aria-hidden
                 className="pointer-events-none absolute inset-x-0 top-0 z-0"
                 style={{
-                  ...thumbSurface(form.theme ?? null, "bleed", form.slug),
+                  ...thumbSurface(cardTheme, "bleed", form.slug),
                   height: SEAM_BELOW,
                   maskImage: SEAM_BLEED_MASK,
                   WebkitMaskImage: SEAM_BLEED_MASK,
@@ -923,7 +926,7 @@ function ChatThumb({
    * and clip at the thumbnail's real width.
    */
   return (
-    <ThumbFrame pills={pills} style={thumbSurface(theme ?? null, "thumb", slug)}>
+    <ThumbFrame pills={pills} style={thumbSurface(theme ? doc : null, "thumb", slug)}>
       <div className="flex flex-col gap-3 [zoom:0.7]" style={chatThemeVars(doc, slug)}>
         <div className="flex justify-start">
           <ChatBubble from="bot">
@@ -953,7 +956,9 @@ function cardThemeDoc(theme: FormRow["theme"] | undefined): ThemeDoc {
   // The logo is not drawn here, and a URL the schema would refuse should not
   // cost the card every other value.
   const parsed = ThemeDoc.safeParse({ ...theme, logoUrl: null });
-  return parsed.success ? parsed.data : ThemeDoc.parse({});
+  // Dark when the author chose dark, as the form itself renders; a card on
+  // `auto` shows the light form, the same on every screen.
+  return resolveScheme(parsed.success ? parsed.data : ThemeDoc.parse({}), false);
 }
 
 /**

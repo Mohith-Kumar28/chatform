@@ -391,7 +391,8 @@ function GoogleSignIn({
     host.current.replaceChildren(); // never stack two buttons
     idRef.current?.renderButton(host.current, {
       type: "standard",
-      theme: "outline",
+      // Google's dark button on a dark form; the form sets `color-scheme`.
+      theme: getComputedStyle(host.current).colorScheme === "dark" ? "filled_black" : "outline",
       size: "large",
       shape: "pill",
       text: "continue_with",
