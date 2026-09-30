@@ -1,10 +1,11 @@
 "use client";
 
-import { FormDoc } from "@repo/form-schema";
+import { applyBackgroundPreset, BACKGROUND_PRESETS, FormDoc, matchBackgroundPreset, type BackgroundPreset } from "@repo/form-schema";
 import { useState } from "react";
 import { Ban, Shuffle } from "lucide-react";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger } from "@/components/ui/select";
+import { InfoHint } from "@/components/ui/info-hint";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger } from "@/components/ui/select";
 import {
   PATTERNS,
   PATTERN_AUTO,
@@ -75,6 +76,23 @@ function Swatch({
   );
 }
 
+/** Select values for a preset, kept apart from tile ids. */
+const PRESET_PREFIX = "preset:";
+
+/**
+ * A preset's tile: its page, its pattern and a pair of its bubbles, drawn from
+ * the theme the preset would leave, so the swatch is the look you get.
+ */
+function PresetSwatch({ theme, preset, className }: { theme: Theme; preset: BackgroundPreset; className?: string }) {
+  const next = applyBackgroundPreset(theme, preset.id);
+  return (
+    <Swatch theme={next} pattern={resolvePattern(preset.pattern)} className={cn("flex-col items-stretch justify-center gap-1 px-1.5", className)}>
+      <span className="h-1.5 w-3/5 rounded-full" style={{ backgroundColor: next.botBubble }} />
+      <span className="h-1.5 w-3/5 self-end rounded-full" style={{ backgroundColor: next.userBubble }} />
+    </Swatch>
+  );
+}
+
 /**
  * The background-tile picker.
  *
@@ -103,19 +121,33 @@ export function PatternField({
   const current = resolvePattern(value, seed);
   const isAuto = value === PATTERN_AUTO;
   const isNone = value === PATTERN_NONE;
+  // A preset still intact names the control; one tweaked by hand shows its tile.
+  const preset = matchBackgroundPreset(theme);
+  // A background writes its whole look, the same function the builder AI applies.
+  const select = (v: string) =>
+    onChange(v.startsWith(PRESET_PREFIX) ? applyBackgroundPreset(theme, v.slice(PRESET_PREFIX.length)) : { backgroundPattern: v });
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_5.5rem] items-end gap-x-2 gap-y-1.5">
-      <Label htmlFor="theme-pattern">Background pattern</Label>
+      <div className="flex items-center gap-1">
+        <Label htmlFor="theme-pattern">Style</Label>
+        <InfoHint label="About backgrounds">
+          A pattern only changes the texture. A background sets the page, bubbles, primary colour and pattern together.
+        </InfoHint>
+      </div>
       <Label htmlFor="theme-pattern-opacity">Opacity</Label>
-      <Select value={value} onValueChange={(v) => onChange({ backgroundPattern: v })}>
+      <Select value={preset ? `${PRESET_PREFIX}${preset.id}` : value} onValueChange={select}>
         <SelectTrigger id="theme-pattern" className="h-auto w-full py-1.5">
           <span className="flex min-w-0 items-center gap-2.5">
-            <Swatch theme={theme} pattern={isNone ? null : current} className="h-7 w-12">
-              {isNone ? <Ban className="text-muted-foreground size-3.5" /> : null}
-            </Swatch>
+            {preset ? (
+              <PresetSwatch theme={theme} preset={preset} className="h-7 w-12" />
+            ) : (
+              <Swatch theme={theme} pattern={isNone ? null : current} className="h-7 w-12">
+                {isNone ? <Ban className="text-muted-foreground size-3.5" /> : null}
+              </Swatch>
+            )}
             <span className="truncate text-sm">
-              {isNone ? "None" : isAuto ? "Auto" : (current?.label ?? "Auto")}
+              {preset ? preset.name : isNone ? "None" : isAuto ? "Auto" : (current?.label ?? "Auto")}
             </span>
           </span>
         </SelectTrigger>
@@ -127,35 +159,50 @@ export function PatternField({
           viewport as soon as the choice was near the bottom of the list.
         */}
         <SelectContent position="popper" align="start" className="max-h-[22rem]">
-          <SelectItem value={PATTERN_AUTO} className="py-1.5">
-            <Swatch theme={theme} pattern={autoTile} className="h-10 w-20" />
-            <span className="flex min-w-0 flex-col">
-              <span className="flex items-center gap-1.5 font-medium">
-                <Shuffle className="size-3.5" />
-                Auto
-              </span>
-              <span className="text-muted-foreground text-xs">Picked from the form&rsquo;s link</span>
-            </span>
-          </SelectItem>
-
-          <SelectItem value={PATTERN_NONE} className="py-1.5">
-            <Swatch theme={theme} pattern={null} className="h-10 w-20">
-              <Ban className="text-muted-foreground size-4" />
-            </Swatch>
-            <span className="flex min-w-0 flex-col">
-              <span className="font-medium">None</span>
-              <span className="text-muted-foreground text-xs">Flat background</span>
-            </span>
-          </SelectItem>
+          <SelectGroup>
+            <SelectLabel>Backgrounds</SelectLabel>
+            {BACKGROUND_PRESETS.map((p) => (
+              <SelectItem key={p.id} value={`${PRESET_PREFIX}${p.id}`} className="py-1.5">
+                <PresetSwatch theme={theme} preset={p} className="h-10 w-20" />
+                <span className="truncate">{p.name}</span>
+              </SelectItem>
+            ))}
+          </SelectGroup>
 
           <SelectSeparator />
 
-          {PATTERNS.map((p) => (
-            <SelectItem key={p.id} value={p.id} className="py-1.5">
-              <Swatch theme={theme} pattern={p} className="h-10 w-20" />
-              <span className="truncate">{p.label}</span>
+          <SelectGroup>
+            <SelectLabel>Patterns</SelectLabel>
+            <SelectItem value={PATTERN_AUTO} className="py-1.5">
+              <Swatch theme={theme} pattern={autoTile} className="h-10 w-20" />
+              <span className="flex min-w-0 flex-col">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Shuffle className="size-3.5" />
+                  Auto
+                </span>
+                <span className="text-muted-foreground text-xs">Picked from the form&rsquo;s link</span>
+              </span>
             </SelectItem>
-          ))}
+
+            <SelectItem value={PATTERN_NONE} className="py-1.5">
+              <Swatch theme={theme} pattern={null} className="h-10 w-20">
+                <Ban className="text-muted-foreground size-4" />
+              </Swatch>
+              <span className="flex min-w-0 flex-col">
+                <span className="font-medium">None</span>
+                <span className="text-muted-foreground text-xs">Flat background</span>
+              </span>
+            </SelectItem>
+
+            <SelectSeparator />
+
+            {PATTERNS.map((p) => (
+              <SelectItem key={p.id} value={p.id} className="py-1.5">
+                <Swatch theme={theme} pattern={p} className="h-10 w-20" />
+                <span className="truncate">{p.label}</span>
+              </SelectItem>
+            ))}
+          </SelectGroup>
         </SelectContent>
       </Select>
       <OpacityInput

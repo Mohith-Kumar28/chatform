@@ -2,9 +2,13 @@ import type { FormDoc } from "./form-doc";
 import { CLOSED_MESSAGE_DEFAULT, DEFAULT_CONFIRMATION_BODY, DEFAULT_CONFIRMATION_SUBJECT, THEME_COLOR_PATTERN } from "./settings";
 import { GOOGLE_FONTS } from "./google-fonts.generated";
 import { isDarkTheme, themeFromAccent, withAppearance } from "./palette";
+import { applyBackgroundPreset, BACKGROUND_PRESETS, matchBackgroundPreset } from "./background-presets";
 import type { ThemeDoc } from "./settings";
 
 const GOOGLE_FONT_FAMILIES = GOOGLE_FONTS.map(([family]) => family);
+
+/** A setting with no field of its own: it writes a whole look (`applyBackgroundPreset`). */
+export const BACKGROUND_PRESET_KEY = "theme.backgroundPreset";
 
 /**
  * Every form setting the builder AI may change, in one list.
@@ -28,7 +32,7 @@ const GOOGLE_FONT_FAMILIES = GOOGLE_FONTS.map(([family]) => family);
  */
 
 export const SETTING_SECTIONS = {
-  design: "How the form looks: its colours, fonts, corner roundness and background pattern",
+  design: "How the form looks: its colours, fonts, corner roundness, background pattern, and ready-made looks for a style or mood",
   display: "The progress indicator, whether optional questions can be skipped, and the Powered by chatform badge",
   agent_persona: "Who the AI interviewer is: its interview style, tone of voice, persona, name, and whether it rewords questions",
   agent_goal: "The interviewer's written goal and its description of what a good response contains, which steer how deep it probes",
@@ -181,6 +185,24 @@ const EMBED = "Integrate → Put it on your site";
 
 export const SETTINGS_REGISTRY: readonly SettingDef[] = [
   // design
+  def({
+    key: BACKGROUND_PRESET_KEY,
+    section: "design",
+    label: "Background preset",
+    where: `${DESIGN} → Background`,
+    format: "enum",
+    options: BACKGROUND_PRESETS.map((p) => ({ value: p.id, label: p.name })),
+    hint:
+      "a ready-made look that sets the page, text, bubbles, primary colour and pattern together. " +
+      "When the author asks for a look or feel rather than exact colours, pick the preset whose description fits the request and the form best; " +
+      "a colour set in the same edit is kept on top of it. " +
+      `The presets: ${BACKGROUND_PRESETS.map((p) => `${p.id} (${p.description})`).join("; ")}`,
+    // No field of its own: read off the colours it sets, and written as all of them.
+    get: (doc) => matchBackgroundPreset(doc.theme)?.id,
+    set: (doc, value) => {
+      if (typeof value === "string") doc.theme = applyBackgroundPreset(doc.theme, value);
+    },
+  }),
   def({
     key: "theme.accent",
     section: "design",
@@ -882,7 +904,10 @@ export function applySettingOps(
   const rejected: string[] = [];
   const pending: { d: SettingDef; before: SettingValue; after: SettingValue }[] = [];
 
-  for (const op of ops) {
+  // A preset first, whatever order it was named in: it writes every colour, and
+  // a colour named beside it is a change on top of the preset, not under it.
+  const ordered = [...ops].sort((a, b) => Number(b.key === BACKGROUND_PRESET_KEY) - Number(a.key === BACKGROUND_PRESET_KEY));
+  for (const op of ordered) {
     const d = settingDef(op.key);
     if (!d) {
       rejected.push(`${op.key}: not a setting`);
@@ -936,6 +961,8 @@ export const PALETTE_KEYS = [
  * settings and `/v1`, so none of them can leave white bubbles on a navy page.
  */
 export function deriveTheme(doc: FormDoc, changed: ReadonlySet<string>): void {
+  // A preset is a finished palette: nothing around it is recomputed.
+  if (changed.has(BACKGROUND_PRESET_KEY)) return;
   if (changed.has("theme.colorScheme")) doc.theme = withAppearance(doc.theme, doc.theme.colorScheme);
   if (![...changed].some((k) => settingDef(k)?.derives === "palette")) return;
   const palette = themeFromAccent(doc.theme.accent, { dark: isDarkTheme(doc.theme) });
