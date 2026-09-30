@@ -24,6 +24,7 @@ import {
   TYPE_META,
   type TemplateSeed,
 } from "./templates/index.js";
+import { templatePreset } from "./templates/define.js";
 
 /**
  * A fixed timestamp, not `Date.now()`.
@@ -122,13 +123,14 @@ function sqlFor(): string {
  * said is put in their mouth. Without choices the thumbnail shows the next
  * question instead, the same shape the dashboard card uses.
  */
-function previewOf(t: TemplateSeed): { greeting: string; question: string; answer?: string; next?: string } {
+function previewOf(t: TemplateSeed): { preset: string; greeting: string; question: string; answer?: string; next?: string } {
   const asked = t.doc.blocks.filter((b) => b.type !== "welcome" && b.type !== "statement");
   const first = asked[0] as { title: string; options?: { label: string }[] } | undefined;
   const second = asked[1] as { title: string } | undefined;
   const greeting = t.doc.blocks.find((b) => b.type === "welcome")?.title ?? t.title;
   const answer = first?.options?.[0]?.label;
   return {
+    preset: templatePreset(t.slug),
     greeting,
     question: first?.title ?? "",
     ...(answer ? { answer } : second ? { next: second.title } : {}),

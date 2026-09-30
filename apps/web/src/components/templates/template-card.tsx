@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import tiles from "@/content/templates/tiles.generated.json";
 import { TemplateThumb } from "./gallery/template-tile";
 
-type TileInfo = { kind: string; preview: { greeting: string; question: string; answer?: string; next?: string } };
+type TileInfo = { kind: string; preview: { preset: string; greeting: string; question: string; answer?: string; next?: string } };
 const TILES = tiles as Record<string, TileInfo>;
 
 /**

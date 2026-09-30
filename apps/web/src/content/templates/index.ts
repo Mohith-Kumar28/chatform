@@ -46,7 +46,7 @@ export interface TemplateCardData {
   estMinutes: number;
   facts: TemplateFacts;
   /** The opening the card's thumbnail draws. See `previewOf` in the generator. */
-  preview: { greeting: string; question: string; answer?: string; next?: string };
+  preview: { preset: string; greeting: string; question: string; answer?: string; next?: string };
   /** `/form-templates/<slug>`. */
   path: string;
 }

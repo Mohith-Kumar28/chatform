@@ -5,6 +5,8 @@ import {
   lintFormDoc,
   SettingsDoc,
   ThemeDoc,
+  BACKGROUND_PRESETS,
+  applyBackgroundPreset,
   type BlockInput,
   type ConditionOp,
   type DraftBranch,
@@ -660,9 +662,43 @@ function factsOf(input: TemplateInput, doc: FormDoc): TemplateFacts {
   };
 }
 
+/**
+ * The background a template ships with: one of the builder's colourful presets
+ * (the quiet greys and the near-black ones are left for authors to choose), picked
+ * from the slug so it never changes between runs. Real, selectable looks, so
+ * the card in the gallery, the live try on its page and the form somebody
+ * copies all show the same colours and pattern, and the author can switch it
+ * in the builder like any other.
+ */
+const TEMPLATE_PRESETS = [
+  "peach-linen",
+  "lilac-haze",
+  "mint-fresh",
+  "sky-breeze",
+  "butter-cream",
+  "rose-petal",
+  "sand-dune",
+  "sage-garden",
+  "party-confetti",
+  "teal-lagoon",
+  "tangerine",
+  "violet-pop",
+  "deep-navy",
+].filter((id) => BACKGROUND_PRESETS.some((p) => p.id === id));
+
+export function templatePreset(slug: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < slug.length; i++) h = Math.imul(h ^ slug.charCodeAt(i), 16777619);
+  return TEMPLATE_PRESETS[(h >>> 0) % TEMPLATE_PRESETS.length]!;
+}
+
 export function defineTemplate(input: TemplateInput): TemplateSeed {
   checkTemplate(input);
-  const { doc, blockCount, estMinutes } = buildAuthoredDoc(input);
+  const preset = templatePreset(input.slug);
+  const { doc, blockCount, estMinutes } = buildAuthoredDoc({
+    ...input,
+    theme: input.theme ?? applyBackgroundPreset(ThemeDoc.parse({}), preset),
+  });
   return {
     slug: input.slug,
     title: input.title,

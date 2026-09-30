@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, RefreshCw, SendHorizonal } from "lucide-react";
-import { toPublicConfig, type FormDoc } from "@repo/form-schema";
-import { ChatBubble } from "@/components/chat/chat-bubble";
-import { ChatClient } from "@/components/chat/chat-client";
+import { ArrowUpRight, RefreshCw } from "lucide-react";
+import { toPublicBlock, toPublicConfig, type FormDoc } from "@repo/form-schema";
+import { ChatClient, ChatSurface } from "@/components/chat/chat-client";
+import { toChatState } from "@/components/chat/chat-snapshot";
 import { getTurnstileToken } from "@/components/chat/turnstile";
 import { Button } from "@/components/ui/button";
 import { API_ORIGIN } from "@/lib/api/mutator";
-import { chatThemeVars } from "@/lib/chat-theme";
 import { getRespondentSignal } from "@/lib/respondent-signal";
 import { cn } from "@/lib/utils";
 
@@ -43,12 +42,33 @@ export function TemplateTryLive({ slug, doc, useHref }: { slug: string; doc: For
   // The template's own theme: the live try looks exactly like the form a
   // respondent opens once it is published.
   const config = useMemo(() => toPublicConfig(doc, { slug, brandingHidden: true }), [doc, slug]);
-  const vars = useMemo(() => chatThemeVars(doc.theme, slug), [doc.theme, slug]);
-
-  const greeting = doc.blocks.find((b) => b.type === "welcome")?.title;
-  const first = doc.blocks.find((b) => b.type !== "welcome" && b.type !== "statement") as
-    | { title: string; options?: { id: string; label: string }[] }
-    | undefined;
+  const still = useMemo(() => {
+    const greeting = doc.blocks.find((b) => b.type === "welcome");
+    const first = doc.blocks.find((b) => b.type !== "welcome" && b.type !== "statement");
+    const asked = doc.blocks.filter((b) => b.type !== "welcome" && b.type !== "statement").length;
+    return toChatState({
+      v: 1,
+      capturedAt: 0,
+      config,
+      messages: [
+        ...(greeting ? [{ id: "still-greeting", role: "assistant" as const, text: greeting.title }] : []),
+        ...(first ? [{ id: "still-first", role: "assistant" as const, text: first.title }] : []),
+      ],
+      question: first ? { block: toPublicBlock(first), progress: { answered: 0, totalEstimate: asked, pct: 0 } } : null,
+      review: null,
+      ending: null,
+      submitted: null,
+      auth: null,
+      verify: null,
+      status: "ready",
+      error: null,
+      thinking: false,
+      validationHint: null,
+      viewport: { width: 0, height: 0, dpr: 1 },
+      timezone: null,
+      path: null,
+    });
+  }, [doc, config]);
 
   // Warm the device id while the visitor reads, so starting does not wait on it.
   useEffect(() => {
@@ -124,60 +144,22 @@ export function TemplateTryLive({ slug, doc, useHref }: { slug: string; doc: For
         {state.kind === "live" ? (
           <ChatClient config={config} existingSession={state.session} previewMode onRestart={() => void start()} />
         ) : (
+          /*
+            Before the first touch: the real chat screen, drawn from a still
+            state (the greeting and the first question, waiting). The same
+            `ChatSurface` the hosted form renders, so header, chips and composer
+            are the form's own; it is `inert`, and the wrapper catches the first
+            click, tap or keypress and starts the live conversation in its place.
+          */
           <div
             role="button"
             tabIndex={0}
             aria-label="Start the conversation"
             onPointerDown={() => state.kind === "idle" && void start()}
             onKeyDown={(e) => state.kind === "idle" && (e.key === "Enter" || e.key.length === 1) && void start()}
-            className="chat-surface flex h-full cursor-text flex-col focus-visible:outline-none"
-            style={vars}
+            className="h-full cursor-text focus-visible:outline-none"
           >
-            <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-start gap-3 px-5 pt-[4.5rem] pb-4">
-              {greeting && (
-                <div className="flex justify-start">
-                  <ChatBubble from="bot">{greeting}</ChatBubble>
-                </div>
-              )}
-              {first && (
-                <div className="flex justify-start">
-                  <ChatBubble from="bot">{first.title}</ChatBubble>
-                </div>
-              )}
-              {first?.options && first.options.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {first.options.slice(0, 5).map((o) => (
-                    <span
-                      key={o.id}
-                      className="rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3.5 py-1.5 text-sm font-medium"
-                    >
-                      {o.label}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {state.kind === "starting" && (
-                <div className="flex justify-start">
-                  <ChatBubble from="bot" aria-label="Typing">
-                    <span className="flex gap-1 py-1">
-                      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.2s]" />
-                      <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.1s]" />
-                      <span className="size-1.5 animate-bounce rounded-full bg-current" />
-                    </span>
-                  </ChatBubble>
-                </div>
-              )}
-            </div>
-            <div className="mx-auto w-full max-w-2xl px-5 pb-5">
-              <div className="flex items-center gap-3 rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 py-3">
-                <span className="flex-1 text-[0.9375rem] text-[var(--cf-muted)]">
-                  {state.kind === "starting" ? "Starting the conversation…" : "Type your answer, or tap one above…"}
-                </span>
-                <span className="grid size-8 place-items-center rounded-full bg-[var(--cf-accent)] text-[var(--cf-accent-text)]">
-                  <SendHorizonal className="size-4" />
-                </span>
-              </div>
-            </div>
+            <ChatSurface chat={still} config={config} replay />
           </div>
         )}
 

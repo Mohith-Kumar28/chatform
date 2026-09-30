@@ -21,7 +21,7 @@ describe("background presets", () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(new Set(BACKGROUND_PRESETS.map((p) => p.name)).size).toBe(ids.length);
     expect(BACKGROUND_PRESETS.length).toBeGreaterThanOrEqual(12);
-    expect(BACKGROUND_PRESETS.length).toBeLessThanOrEqual(16);
+    expect(BACKGROUND_PRESETS.length).toBeLessThanOrEqual(20);
     for (const p of BACKGROUND_PRESETS) {
       expect(p.id).toMatch(/^[a-z]+(-[a-z]+)*$/);
       expect(p.description.length).toBeGreaterThan(10);

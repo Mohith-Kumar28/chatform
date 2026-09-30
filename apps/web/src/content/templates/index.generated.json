@@ -280,6 +280,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Thanks for your interest in reselling with us. This takes about four minutes and helps us reply with something useful.",
     "question": "Who should we get back to?",
     "next": "What is your business called?"
@@ -329,6 +330,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Got a talk in you? Tell us about it. Most people finish in about five minutes.",
     "question": "Who is proposing the talk?",
     "next": "Which pronouns should we use in the programme?"
@@ -379,6 +381,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Thanks for choosing us. A few details and your account is ready.",
     "question": "First, who are you?",
     "next": "Are you signing up for yourself or for a business?"
@@ -427,6 +430,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Hi! Tell us what you'd like to book and we'll check availability.",
     "question": "What's the booking for?",
     "answer": "A private event"
@@ -475,6 +479,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Hello! Walk us through your event and we'll build a menu and quote around it.",
     "question": "What's the occasion?",
     "answer": "Wedding"
@@ -524,6 +529,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Hi there! Let's find a time that works for you.",
     "question": "Which service would you like to book?",
     "answer": "Initial consultation"
@@ -572,6 +578,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Hey! Tell us about the tattoo you have in mind.",
     "question": "Are you 18 or older?",
     "next": "Will this be your first tattoo?"
@@ -621,6 +628,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "Thinking of working together? Tell us what you have in mind.",
     "question": "Who are we talking to?",
     "next": "And which company?"
@@ -667,6 +675,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Let's find you a time.",
     "question": "Your name and the best number to reach you",
     "next": "What's the appointment for?"
@@ -713,6 +722,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "You're a couple of minutes away from being entered. Let's check you're eligible first.",
     "question": "Are you 18 or older?",
     "next": "Where should we contact you if you win?"
@@ -759,6 +769,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Got an idea that would make things better here? We'd like to hear it, big or small.",
     "question": "What is your suggestion about?",
     "answer": "How we work day to day"
@@ -806,6 +817,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Something not working? Tell us what you're seeing and we'll get the right person on it.",
     "question": "Who is reporting this?",
     "next": "Which system, app or service is affected?"
@@ -856,6 +868,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Welcome aboard! A few details now saves a lot of back and forth later. It takes about five minutes.",
     "question": "Who will be our main contact?",
     "next": "What is your role or job title?"
@@ -906,6 +919,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Hi! Tell us about the job and we'll come back with an estimate. It takes about three minutes.",
     "question": "Who is the estimate for?",
     "next": "What kind of job is it?"
@@ -955,6 +969,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Looking for cover? Answer a few questions and one of our advisers will come back with a quote.",
     "question": "What would you like cover for?",
     "answer": "Home"
@@ -1001,6 +1016,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "Just off a call? Log it now while it's fresh. Two minutes, tops.",
     "question": "Who made the call?",
     "next": "When was the call?"
@@ -1048,6 +1064,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Hi there. Ask us anything and we'll get it to the right person.",
     "question": "First, what's your name?",
     "next": "What's your inquiry about?"
@@ -1096,6 +1113,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Planning an event? Tell us a bit about it and we'll come back with ideas and a quote.",
     "question": "What's the occasion?",
     "answer": "Wedding"
@@ -1146,6 +1164,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "Thanks for getting in touch. A few questions now means we can skip the basics on our call.",
     "question": "Let's start with who you are.",
     "next": "What's your business or organisation called, if you have one?"
@@ -1193,6 +1212,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Hi! Tell me about the project and I'll get back to you with next steps.",
     "question": "What would you like designed?",
     "answer": "Logo or brand identity"
@@ -1241,6 +1261,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Hi! Tell me about the shoot you have in mind and I'll check my availability.",
     "question": "What kind of shoot is it?",
     "answer": "Wedding or elopement"
@@ -1285,6 +1306,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Hello! This will only take a minute.",
     "question": "What's your name?",
     "next": "What can we help with?"
@@ -1337,6 +1359,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Hi! What can we help you with?",
     "question": "Let's start with your name and email.",
     "next": "What's it about?"
@@ -1386,6 +1409,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Hello, and thanks for getting in touch. Pick what your message is about and we'll pass it to the team that handles it.",
     "question": "First, who are we talking to?",
     "next": "Which company or organisation are you with?"
@@ -1434,6 +1458,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Rather talk it through? Leave your number and we'll call you back.",
     "question": "Who should we ask for when we call?",
     "next": "What's the best number to reach you on?"
@@ -1480,6 +1505,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Hi. Send us anything about your project here and it'll reach the right person on the team.",
     "question": "Your name and email",
     "next": "Which company are you with?"
@@ -1527,6 +1553,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Thanks for your interest. A few questions and we'll come back with something useful, not a brochure.",
     "question": "Who should we reply to?",
     "next": "Which company are you buying for?"
@@ -1574,6 +1601,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "We're sorry something went wrong. Tell us what happened and we'll look into it properly.",
     "question": "Your name and email, so we can reply",
     "next": "What is your complaint about?"
@@ -1617,6 +1645,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "Hi! What can we help you with today?",
     "question": "Your name and email",
     "next": "What's your question about?"
@@ -1668,6 +1697,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Welcome! A few questions so we can look after you properly.",
     "question": "Your contact details",
     "next": "Are you buying for yourself or for a business?"
@@ -1717,6 +1747,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Welcome aboard! A few questions now will save us a lot of back and forth later.",
     "question": "Who will be our main point of contact?",
     "next": "What's your company or brand called?"
@@ -1765,6 +1796,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Sorry something's broken. Let's get the details down so we can fix it.",
     "question": "In one line, what went wrong?",
     "next": "What steps lead to it? Number them if you can."
@@ -1814,6 +1846,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Sorry your order didn't go the way it should. Tell us what happened and we'll work out how to put it right.",
     "question": "First, your name and the email you used when you bought",
     "next": "Where did you buy from us?"
@@ -1861,6 +1894,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "Hi! Ask us anything about our products or your order.",
     "question": "What's your name?",
     "next": "And your email address?"
@@ -1907,6 +1941,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Hi! Tell us what you need and we'll get the right person on it.",
     "question": "Who is the request for?",
     "next": "Your customer, order or account number"
@@ -1955,6 +1990,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Couldn't find what you were looking for? Ask here and we'll use it to improve our answers.",
     "question": "What question couldn't you find an answer to?",
     "next": "Which area is it about?"
@@ -2001,6 +2037,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "You can ask us to delete the personal data we hold about you. It only takes a few minutes.",
     "question": "What's your full name?",
     "next": "Which email address do we know you by?"
@@ -2047,6 +2084,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Let's sort this out. First, a few details about the order.",
     "question": "Which email did you use for the order?",
     "next": "Your order or invoice number"
@@ -2090,6 +2128,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "How can we help? Tell us what's going on.",
     "question": "What's the email on your account?",
     "next": "What's this about?"
@@ -2140,6 +2179,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Welcome! Tell us a little about what you're here to do and we'll help you get started.",
     "question": "What's your name and email?",
     "next": "Which company or team are you with?"
@@ -2190,6 +2230,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Thanks for trying the product. A few questions on how it held up in real use.",
     "question": "Which product are you evaluating?",
     "next": "What did you use it for?"
@@ -2240,6 +2281,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "You've had time with the tool. Let's capture what you found while it's fresh.",
     "question": "Which software are you evaluating?",
     "next": "Which best describes your part in this evaluation?"
@@ -2286,6 +2328,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "This is your space to reflect before your review. Honest beats polished.",
     "question": "What's your name?",
     "next": "What's your role, and which team are you on?"
@@ -2336,6 +2379,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Welcome! Let's get you registered and tell you where to join.",
     "question": "Who's registering?",
     "next": "Which organisation are you with, if any?"
@@ -2385,6 +2429,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Thanks for offering to help! This takes a few minutes and helps us put you in the right place.",
     "question": "How can we reach you?",
     "next": "Are you 18 or over?"
@@ -2433,6 +2478,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Ready to build something? Let's get you registered for the hackathon.",
     "question": "Who's hacking?",
     "next": "Which best describes you right now?"
@@ -2478,6 +2524,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "Save your seat. It takes about a minute.",
     "question": "What's your name?",
     "next": "Where should we send the joining link?"
@@ -2525,6 +2572,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Let's get you registered. A few details and you're set.",
     "question": "What's your name?",
     "next": "What email should the prep instructions go to?"
@@ -2573,6 +2621,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Glad you're interested! Let's get you on the list. It takes about a minute.",
     "question": "Who should we put on the list?",
     "next": "How are you planning to join?"
@@ -2621,6 +2670,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "You're invited! 🎉 Let us know if you can make it.",
     "question": "What's your full name?",
     "next": "What email should we send the details to nearer the time?"
@@ -2671,6 +2721,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Thanks for looking over the new design. A few quick questions and your comments will be in one tidy place.",
     "question": "Which page are you reviewing?",
     "next": "Which best describes you?"
@@ -2721,6 +2772,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Let's review a call. Have the recording or transcript open while you go.",
     "question": "Which agent took the call?",
     "next": "When was the call?"
@@ -2771,6 +2823,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Thanks for eating with us. How was it? This takes about a minute.",
     "question": "How did you eat with us?",
     "answer": "Dined in"
@@ -2819,6 +2872,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Thanks for shopping with us. Tell us how your visit went, it takes about a minute.",
     "question": "Which store did you visit?",
     "next": "What brought you in today?"
@@ -2868,6 +2922,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Thanks for taking a few minutes. Your answers shape how we spend our next sessions.",
     "question": "What's your first name?",
     "next": "What's the main goal you're working on with me?"
@@ -2917,6 +2972,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "Thanks for listening. A couple of minutes of honest feedback helps the next talk a lot.",
     "question": "Which talk or session are you giving feedback on?",
     "next": "How well did you know the topic beforehand?"
@@ -2968,6 +3024,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "We've just shipped an update. Tell us how it's going for you, it takes about two minutes.",
     "question": "Which version are you using, if you know?",
     "next": "How often do you use the product?"
@@ -3015,6 +3072,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Thanks for working with us. Got two minutes to tell us how it went?",
     "question": "Which project are you reviewing?",
     "next": "Overall, how happy are you with the result?"
@@ -3064,6 +3122,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Thanks for sending us your music. This takes about five minutes, and every track gets listened to.",
     "question": "What's your artist or band name?",
     "next": "Who should we contact about this submission?"
@@ -3112,6 +3171,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "Welcome to the photo contest. Entering takes about three minutes. Have your photo ready.",
     "question": "Who's entering?",
     "next": "How old are you?"
@@ -3161,6 +3221,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Ready to submit your project? This takes about five minutes. Have your files and links to hand.",
     "question": "Who's submitting?",
     "next": "What's the project called?"
@@ -3210,6 +3271,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Thanks for submitting your work. This takes about five minutes. Have images of the piece ready.",
     "question": "Who's the artist?",
     "next": "Your website or online portfolio, if you have one"
@@ -3259,6 +3321,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "Thanks for your interest in working with us. This takes about four minutes, and it helps to have two or three recent photos on your phone.",
     "question": "First, who are we talking to?",
     "next": "How old are you?"
@@ -3306,6 +3369,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Glad you're interested in joining us. This takes a few minutes, and you can attach your CV near the end.",
     "question": "Let's start with your details",
     "next": "Where are you based?"
@@ -3358,6 +3422,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Hi. This takes about two minutes and keeps the details we hold for you accurate.",
     "question": "Are you new to us, or updating details we already have?",
     "answer": "I'm new here"
@@ -3409,6 +3474,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Planning a group stay or an event with us? Tell us what you have in mind and we'll check availability.",
     "question": "What is your arrival date, or the date the event starts?",
     "next": "How many nights?"
@@ -3460,6 +3526,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Thanks for thinking of us. A few questions now means our first conversation can get straight to the useful part.",
     "question": "Let's start with your name and email.",
     "next": "Which company or project is this for?"
@@ -3511,6 +3578,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Thinking about a new website? Tell us about the project and we'll come back with a proposal.",
     "question": "Who are we putting the quote together for?",
     "next": "Tell us about your business in a sentence or two."
@@ -3557,6 +3625,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Let's set up your demo. Two minutes of questions so we can show you what matters and skip what doesn't.",
     "question": "Who should we be speaking to?",
     "next": "Which company are you with?"
@@ -3605,6 +3674,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Your guide is nearly ready. Tell us where to send it.",
     "question": "What's your work email?",
     "next": "And your first name?"
@@ -3651,6 +3721,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Hi! Interested in what we do? A few quick questions and we'll point you to the right next step.",
     "question": "What's your name?",
     "next": "What's your work email?"
@@ -3697,6 +3768,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Thanks for reaching out. A few questions now means our first conversation can be about you, not a questionnaire.",
     "question": "Who should we speak to?",
     "next": "Which company are you with?"
@@ -3743,6 +3815,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "Hi there! Tell us a little about what you're after and we'll come back to you with something useful.",
     "question": "What's your name?",
     "next": "What email should we reply to?"
@@ -3792,6 +3865,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "Thanks for claiming your free gift! Tell us who you are and how you'd like to receive it, and we'll take care of the rest.",
     "question": "Who's claiming?",
     "next": "Have you claimed this giveaway from us before?"
@@ -3843,6 +3917,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "Before we can open your account we need to confirm a few details about you. It takes about five minutes, and it helps to have an ID and a recent bill or bank statement nearby.",
     "question": "Let's start with your contact details",
     "next": "Are you applying as an individual or on behalf of a business?"
@@ -3894,6 +3969,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "Not sure what to choose? Answer a few questions and one of our team will send you a personal recommendation.",
     "question": "What are you looking for?",
     "next": "Who is it for?"
@@ -3943,6 +4019,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Welcome! A few questions now means we can spend our first session on the real work.",
     "question": "First, your details",
     "next": "Which organisation are you with, if any?"
@@ -3994,6 +4071,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Hi! We'd like to get to know your business properly. This takes about four minutes.",
     "question": "Who are we talking to?",
     "next": "What's your role there?"
@@ -4043,6 +4121,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Thanks for joining the demo today. Could you spare two minutes to tell us how it went?",
     "question": "Your name and work email",
     "next": "Which company are you with?"
@@ -4093,6 +4172,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "Hi! Tell us about your project and we'll come to the consultation with some ideas already.",
     "question": "Your name and email",
     "next": "What's the business or brand called?"
@@ -4145,6 +4225,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Welcome! Let's get you registered. First, a couple of quick details.",
     "question": "Your name, email and phone",
     "next": "How would you like to register?"
@@ -4197,6 +4278,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Planning something? Tell us about the event and we'll come to the consultation with ideas ready.",
     "question": "Your name, email and phone",
     "next": "What's the occasion?"
@@ -4246,6 +4328,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Let's get the campaign brief down. It takes about five minutes and saves a lot of back and forth.",
     "question": "Who's sending the brief?",
     "next": "Which brand or product is this for?"
@@ -4296,6 +4379,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Would you say a few words about working with us? It really helps.",
     "question": "Your name and email",
     "next": "How would you rate your experience with us?"
@@ -4346,6 +4430,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Welcome! Register here and we'll review your details before your access is switched on. It takes a minute or two.",
     "question": "Are you 16 or older?",
     "next": "Your name and email"
@@ -4396,6 +4481,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Great to have you! Let's get your membership set up. It takes about three minutes.",
     "question": "Your name, email and phone",
     "next": "Your date of birth"
@@ -4443,6 +4529,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Sorry to see you go. This takes about a minute, and the feedback questions at the end are optional.",
     "question": "Your name and the email on your membership",
     "next": "Membership number, if you have it"
@@ -4492,6 +4579,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Glad you want to join us. A few questions and we'll take it from there.",
     "question": "Your name, email and phone",
     "next": "Your date of birth"
@@ -4542,6 +4630,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Hi there. Tell us about the job and we'll get it planned.",
     "question": "First, who should we contact about this order?",
     "next": "Is this for your home or for a business?"
@@ -4592,6 +4681,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Hello! Let's get your catering order down. Have your guest numbers and menu choice to hand.",
     "question": "Who's placing the order?",
     "next": "Are you ordering for a company or organisation? If so, which one?"
@@ -4640,6 +4730,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Hi! Let's get your photography order sorted.",
     "question": "Your details first.",
     "next": "What are you ordering?"
@@ -4691,6 +4782,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Let's review this period. Plan on five minutes, and have their numbers to hand.",
     "question": "Which salesperson are you reviewing?",
     "next": "Which period does this review cover?"
@@ -4736,6 +4828,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "You've been asked for feedback on a colleague. Honest and specific is the most useful thing you can give.",
     "question": "Who are you giving feedback about?",
     "next": "How do you work with them?"
@@ -4784,6 +4877,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "You've made it through week one! A quick check that your induction covered everything.",
     "question": "Your name and work email, please.",
     "next": "Which team and role have you joined?"
@@ -4832,6 +4926,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "Hello! Tell me about the picture you'd like and I'll see how I can bring it to life.",
     "question": "What should I call you?",
     "next": "What would you like drawn?"
@@ -4880,6 +4975,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Welcome aboard! A few details so everything's ready on your first day.",
     "question": "What's your full legal name?",
     "next": "What name and pronouns should we use in the team directory?"
@@ -4925,6 +5021,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Know someone great? Put them forward. It only takes a few minutes.",
     "question": "First, your name and work email, so we can keep you posted.",
     "next": "Which team are you on?"
@@ -4977,6 +5074,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Tell us what you're planning and we'll put together an estimate for you.",
     "question": "First, who are we preparing this for?",
     "next": "What's the business called?"
@@ -5024,6 +5122,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Need an electrician? Tell us about the job and we'll come back with a price or a time to look.",
     "question": "First, a safety check: is anything sparking, smelling of burning, or has anyone had a shock?",
     "next": "What kind of work is it?"
@@ -5072,6 +5171,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Hi! Tell me about your project and I'll send you a quote.",
     "question": "What's your name?",
     "next": "And the best email for the quote?"
@@ -5122,6 +5222,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Looking for a designer? Tell me what you need and I'll put a quote together.",
     "question": "Who am I talking to?",
     "next": "What's the business or project called?"
@@ -5168,6 +5269,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Plumbing problem or a new job? Tell us about it and we'll come back with a price.",
     "question": "How urgent is it?",
     "answer": "Water is leaking or flooding right now"
@@ -5216,6 +5318,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Need something translated? Tell us about it and we'll send you a quote.",
     "question": "What language is the original in?",
     "next": "Which language or languages should it be translated into?"
@@ -5266,6 +5369,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Tell us what you need and we'll come back with a price.",
     "question": "What's your name?",
     "next": "Where should we send the quote?"
@@ -5318,6 +5422,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Ready to enter? This takes a few minutes, and you'll upload your entry at the end.",
     "question": "First, your details so we can reach you about your entry",
     "next": "Are you 18 or older?"
@@ -5366,6 +5471,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Welcome! Let's find the right class for you.",
     "question": "Let's start with your details",
     "next": "Which class would you like to join?"
@@ -5417,6 +5523,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Thanks for your purchase! Registering takes a couple of minutes and helps us support you.",
     "question": "Which product and model are you registering?",
     "next": "What's the serial number?"
@@ -5466,6 +5573,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Welcome! Let's get you enrolled.",
     "question": "First, your details",
     "next": "Which course would you like to join?"
@@ -5515,6 +5623,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Thanks for offering to help! Tell us when you're free and what you'd like to do.",
     "question": "First, your details",
     "next": "Are you 18 or over?"
@@ -5562,6 +5671,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "Time to log an entry. It takes about a minute.",
     "question": "Who is logging this entry?",
     "next": "Which day was this work done?"
@@ -5609,6 +5719,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Need something from marketing? Tell us what it is and we'll take it from here.",
     "question": "Who is asking?",
     "next": "Which team are you on?"
@@ -5653,6 +5764,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "Hello. Tell us about your story and we'll get back to you before your deadline where we can.",
     "question": "Your name and how to reach you",
     "next": "Which outlet or publication are you with?"
@@ -5699,6 +5811,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Setting up access for someone new? This takes about three minutes.",
     "question": "First, who is making the request?",
     "next": "What is the new user's full name?"
@@ -5745,6 +5858,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Looking for some information from us? Tell us what you need and we'll get it to you.",
     "question": "Who should we reply to?",
     "next": "Which best describes you?"
@@ -5792,6 +5906,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Let's start on your logo. The more you tell us here, the closer the first drafts will be.",
     "question": "Your name and email",
     "next": "What name should appear in the logo, exactly as written?"
@@ -5838,6 +5953,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "Where are you headed? Let's get your ride booked.",
     "question": "Your name and a number the driver can call",
     "next": "Where should we pick you up?"
@@ -5884,6 +6000,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Need transport arranged? Tell us what's moving and we'll plan the rest.",
     "question": "Who is making the request?",
     "next": "Which team, department or organisation is it for?"
@@ -5928,6 +6045,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Need something done? Tell us what and why, and we'll pick it up.",
     "question": "Who is making the request?",
     "next": "Which team or location are you in?"
@@ -5976,6 +6094,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Have something you'd like built or changed? Start with the problem and we'll work out the solution together.",
     "question": "Who is making the request?",
     "next": "Which team or department are you in?"
@@ -6022,6 +6141,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "Got an idea? Tell us what you're trying to do and we'll take it from there.",
     "question": "In one line, what would you like to be able to do?",
     "next": "What are you trying to accomplish when you need it?"
@@ -6073,6 +6193,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "Glad you're joining us. This takes about two minutes, then you're in.",
     "question": "First, who are you?",
     "next": "Are you signing up just for yourself, or for a group?"
@@ -6122,6 +6243,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Want early access? Tell us a little about how you'd use it.",
     "question": "What email should the invite go to?",
     "next": "And your name?"
@@ -6170,6 +6292,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "Thanks for your interest. Get on the list and we'll tell you the moment we're live.",
     "question": "What's your email?",
     "next": "And your name?"
@@ -6215,6 +6338,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Want the newsletter? Tell us what to send and how often.",
     "question": "What's your email?",
     "next": "First name, so we're not writing to a stranger?"
@@ -6265,6 +6389,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Hi! We'd love to hear how training with us is going. It takes about three minutes.",
     "question": "How long have you been a member?",
     "answer": "Less than 3 months"
@@ -6311,6 +6436,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Hi! We're working out our pricing and want your honest view. It takes about four minutes.",
     "question": "Which of these describes you?",
     "answer": "I pay for it now"
@@ -6360,6 +6486,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Thanks for eating with us! We're planning the next few months and would love your view. It takes about three minutes.",
     "question": "What was your most recent visit for?",
     "answer": "Breakfast or brunch"
@@ -6409,6 +6536,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Thanks for trying the system. A few questions about how that went, about four minutes.",
     "question": "What were you trying to do just now?",
     "next": "Did you manage to do it?"
@@ -6458,6 +6586,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Hi! Got a minute to tell us how your visit to our website went?",
     "question": "What brought you to the site today?",
     "answer": "Finding out what you offer"
@@ -6506,6 +6635,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Quick one about what you just did with us. It takes under a minute.",
     "question": "What were you trying to do?",
     "answer": "Get help from support"
@@ -6553,6 +6683,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Thanks for getting in touch with us recently. How did we do?",
     "question": "How did you get in touch?",
     "answer": "Live chat"
@@ -6602,6 +6733,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Thanks for eating with us! Can we ask how it went?",
     "question": "When did you eat with us?",
     "next": "How did you have your meal?"
@@ -6651,6 +6783,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Hi! We'd like to hear how your course is going. It takes about three minutes.",
     "question": "Which course or programme are you studying?",
     "next": "Which year are you in?"
@@ -6702,6 +6835,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Thanks for visiting us! How did your appointment go?",
     "question": "What did you have done?",
     "answer": "Cut"
@@ -6750,6 +6884,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "Thanks for coming! A few quick questions while the event is fresh.",
     "question": "How did you attend?",
     "answer": "In person"
@@ -6799,6 +6934,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "Hello! We'd like to know how living here is going for you. It takes about four minutes.",
     "question": "Which building or street do you live in?",
     "next": "How long have you lived here?"
@@ -6848,6 +6984,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Hi! As a member, your view shapes what we do next. This takes about three minutes.",
     "question": "How long have you been a member?",
     "answer": "Less than a year"
@@ -6895,6 +7032,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "How did that go? A couple of questions while it's fresh.",
     "question": "What are you rating today?",
     "answer": "A conversation with support"
@@ -6941,6 +7079,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "One quick question, plus a follow-up. It takes about a minute.",
     "question": "How likely are you to recommend us to a friend or colleague?",
     "next": "What would it take for you to give us a 9 or a 10?"
@@ -6988,6 +7127,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "We're trying to understand how people plan staff shifts today. No sales pitch, just a few questions.",
     "question": "Which of these describes you best?",
     "answer": "I own or run the business"
@@ -7036,6 +7176,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "You've stuck with us, and we'd love to know why. A few quick questions.",
     "question": "How long have you been a customer?",
     "answer": "Less than 6 months"
@@ -7084,6 +7225,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Help us understand what you need from us. It takes about three minutes.",
     "question": "What are you trying to get done when you come to us?",
     "next": "How often do you need to do that?"
@@ -7131,6 +7273,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Your help desk request was closed. Mind telling us how it went? It takes a minute.",
     "question": "What was the ticket number, if you have it?",
     "next": "What did you contact us about?"
@@ -7180,6 +7323,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "Thanks for staying with us. How was it? A few questions, about two minutes.",
     "question": "When did you check out?",
     "next": "What brought you here?"
@@ -7227,6 +7371,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "We'd like to know how well our service did its job for you. About two minutes.",
     "question": "Which service are you evaluating?",
     "next": "What did you need this service to do for you?"
@@ -7277,6 +7422,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Help us make the software better for you. About three minutes.",
     "question": "How long have you been using our software?",
     "answer": "Less than a month"
@@ -7326,6 +7472,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "This survey is anonymous and takes about four minutes. Honest answers help most.",
     "question": "Which part of the company do you work in?",
     "answer": "Operations"
@@ -7375,6 +7522,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Welcome aboard! Tell us how your first few weeks have gone. About three minutes.",
     "question": "How long ago did you start?",
     "answer": "Less than two weeks"
@@ -7423,6 +7571,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "How well is your tech working for you? A few quick questions for the IT team.",
     "question": "Where do you mostly work?",
     "answer": "In the office"
@@ -7468,6 +7617,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Quick pulse check. Anonymous, and under two minutes.",
     "question": "Which team are you in?",
     "answer": "Operations"
@@ -7517,6 +7667,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "This is a few minutes of honest feedback about your manager. Answer for how things usually are, not your best or worst week.",
     "question": "Which manager is this feedback about?",
     "next": "How long have you reported to this manager?"
@@ -7565,6 +7716,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "You're registered, thank you! A few quick questions now help us shape the day around the people actually coming.",
     "question": "What's your name?",
     "next": "Which parts of the event are you planning to attend?"
@@ -7614,6 +7766,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Thanks for being part of the event. We'd like an honest look back to plan the next one well.",
     "question": "How were you involved?",
     "answer": "Attendee"
@@ -7664,6 +7817,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Let's pin down what this event needs to be. Answer what you know; rough guesses are fine.",
     "question": "Who should we talk to about this event?",
     "next": "Which organisation or team is the event for?"
@@ -7712,6 +7866,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "We're planning an event and want to build it around what you'd actually come to. This takes about two minutes.",
     "question": "Which best describes you?",
     "answer": "Individual contributor"
@@ -7759,6 +7914,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Thanks for coming! A few quick questions on how it went.",
     "question": "How would you rate each part?",
     "next": "And the event as a whole?"
@@ -7809,6 +7965,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "We want to spend next year's development time and budget where it helps you most. Five minutes?",
     "question": "Which best describes your role?",
     "answer": "Individual contributor"
@@ -7859,6 +8016,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Hi! A few quick questions about the app. Your answers go straight to the people who build it.",
     "question": "Which phone do you use the app on?",
     "answer": "iPhone"
@@ -7906,6 +8064,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Thanks for taking the course. Your feedback shapes how it runs next time, and it takes about four minutes.",
     "question": "Which course are you giving feedback on?",
     "next": "How much do you agree with each of these?"
@@ -7955,6 +8114,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Thank you for sponsoring. We'd like to know what worked for you and what we should do better next time.",
     "question": "Which company are you answering for?",
     "next": "Which sponsorship level did you have?"
@@ -8005,6 +8165,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Thank you for giving your time. Could you tell us how it went? It takes about three minutes.",
     "question": "Which activity or event did you volunteer at?",
     "next": "Was this your first time volunteering with us?"
@@ -8053,6 +8214,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Hi! We're asking people about the brands they buy. There are no right answers, and it takes about three minutes.",
     "question": "How often do you buy coffee to make at home?",
     "answer": "Every week or more"
@@ -8102,6 +8264,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "This survey is anonymous. We want to know how work is managed here, honestly, so we can fix what isn't working.",
     "question": "Which area do you work in?",
     "answer": "Operations"
@@ -8150,6 +8313,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Thanks for joining the training. A few questions about what you'll take back to work, about three minutes.",
     "question": "Which training did you attend?",
     "next": "How did you take it?"
@@ -8194,6 +8358,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Before you go: your honest answers help the people who are staying. This is confidential.",
     "question": "How long have you worked here?",
     "answer": "Less than a year"
@@ -8244,6 +8409,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Thanks for using the product. Five minutes of your honest opinion will shape what we build next.",
     "question": "In a sentence, what do you mainly use it for?",
     "next": "How often do you use it?"
@@ -8294,6 +8460,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Before we start on your brand, we'd like to understand the business behind it. This takes about ten minutes.",
     "question": "First, who are we working with?",
     "next": "What's the name of the business?"
@@ -8339,6 +8506,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Sorry to see you go. A couple of quick questions, and then you're done. Your cancellation goes ahead either way.",
     "question": "What's the main reason you're cancelling?",
     "answer": "Too expensive"
@@ -8385,6 +8553,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Thanks for agreeing to share your story. Answer in your own words; we'll do the tidying up and show you the draft before anything goes out.",
     "question": "Let's start with your details.",
     "next": "Which company do you work for?"
@@ -8436,6 +8605,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "Let's plan your email. A few questions now saves a round of revisions later.",
     "question": "Who should we send the designs to?",
     "next": "Which company or brand is this for?"
@@ -8483,6 +8653,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "We're learning how teams like yours handle this problem. A few quick questions, and you decide at the end whether we follow up.",
     "question": "Which best describes your role?",
     "answer": "Founder or owner"
@@ -8532,6 +8703,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "Welcome aboard. Tell us how your first few days went, so we can make them easier for you and everyone after you.",
     "question": "When you signed up, what were you hoping to get done first?",
     "next": "How are you using it?"
@@ -8580,6 +8752,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "Thanks for working with us. We'd like to know how things are really going. This takes about three minutes.",
     "question": "Which service or account are you answering about?",
     "next": "Overall, how satisfied are you with working with us?"
@@ -8629,6 +8802,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "This survey is about how information moves around here. There are no right answers, and honest ones help most.",
     "question": "Which part of the organisation do you work in?",
     "answer": "Leadership"
@@ -8676,6 +8850,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "We're reviewing our benefits and want to spend on what matters to you. Your answers are anonymous and take about five minutes.",
     "question": "How long have you worked here?",
     "answer": "Less than a year"
@@ -8724,6 +8899,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "This survey is anonymous and takes about five minutes. Please don't include patient names or details in any answer.",
     "question": "Which best describes your role?",
     "answer": "Nurse or midwife"
@@ -8774,6 +8950,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "You recently looked at a few options, us among them. Mind telling us how that comparison went? Honest answers help most.",
     "question": "What was your part in the decision?",
     "answer": "I made the final call"
@@ -8820,6 +8997,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "A few questions about how you like to work. There are no right answers, and nothing here is a test.",
     "question": "What should we call you?",
     "next": "Before we start: who would you like to see your answers?"
@@ -8868,6 +9046,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Hi! This is a short survey about everyday eating habits. Answers are for general research, and nothing here is judged.",
     "question": "Do you follow a particular way of eating?",
     "answer": "No particular diet"
@@ -8914,6 +9093,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "Thanks for being part of our community on Facebook. We'd love to know what you want from it. It takes about two minutes.",
     "question": "How did you first find us on Facebook?",
     "answer": "A friend shared or invited me"
@@ -8966,6 +9146,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Hi! A few questions so our adviser understands what you need before you talk. It takes about three minutes.",
     "question": "Who is the cover for?",
     "answer": "Me or my family"
@@ -9015,6 +9196,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "We noticed we haven't seen you in a while. Would you tell us what changed? It takes about three minutes.",
     "question": "How long were you buying from us?",
     "answer": "Less than 3 months"
@@ -9063,6 +9245,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "You've been with us a while, and we'd like to keep earning that. Mind answering a few questions?",
     "question": "How long have you been a customer?",
     "answer": "Less than 6 months"
@@ -9111,6 +9294,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Hi! We're a fashion brand trying to understand how you like to shop. It takes about three minutes.",
     "question": "Which age group are you in?",
     "answer": "Under 18"
@@ -9159,6 +9343,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Hello! We're learning about the businesses we work with. A few quick questions about your company.",
     "question": "Which industry is your company in?",
     "answer": "Software and technology"
@@ -9209,6 +9394,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Hungry for a quick chat? We'd love to hear what you like to eat.",
     "question": "Do you follow any of these diets?",
     "answer": "No particular diet"
@@ -9257,6 +9443,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Thanks for reading us. We'd like to know what you love, what you skip and what's missing.",
     "question": "How do you usually read the magazine?",
     "answer": "In print"
@@ -9305,6 +9492,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Hi! We're trying to understand the different kinds of people we could help. This takes about four minutes.",
     "question": "Rank these goals by how important they are to you right now.",
     "next": "How often do you run into the problem you'd most like solved?"
@@ -9353,6 +9541,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Hi! We're curious how you keep up with news and entertainment. A few quick questions.",
     "question": "How often do you use each of these?",
     "next": "On a typical day, how much time do you spend with media of any kind?"
@@ -9399,6 +9588,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Thanks for joining the meeting. Two minutes to help make the next one better?",
     "question": "Which meeting are you giving feedback on?",
     "next": "What was your part in it?"
@@ -9450,6 +9640,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Thanks for completing this visit. Please fill this in as soon as you can, while the details are fresh.",
     "question": "Your details",
     "next": "Which store or branch did you visit?"
@@ -9495,6 +9686,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Hi! You get our newsletter, and we want to make it worth opening. Got a minute?",
     "question": "How do you usually read the newsletter?",
     "answer": "I read most of every issue"
@@ -9544,6 +9736,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "You make this community what it is. Help us decide what to build next? It takes about four minutes.",
     "question": "How long have you been part of the community?",
     "answer": "Less than a month"
@@ -9592,6 +9785,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Thanks for your recent purchase! We'd love to hear how you got here. It's about three minutes.",
     "question": "What did you buy from us most recently?",
     "next": "What first made you start looking for it?"
@@ -9642,6 +9836,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "Interviewer: open this before you dial, and fill it in as the call goes. Read the questions exactly as written.",
     "question": "Your name (interviewer)",
     "next": "Number called"
@@ -9689,6 +9884,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Hey, thanks for listening! Got three minutes to help us plan the next season?",
     "question": "How long have you been listening?",
     "answer": "This is my first episode"
@@ -9738,6 +9934,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Thanks for coming to the talk. Two minutes of honest feedback would help the speaker a lot.",
     "question": "Which talk or session are you giving feedback on?",
     "next": "How did you watch it?"
@@ -9784,6 +9981,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "We're reviewing how we price and explain what we sell. Could you give us three minutes?",
     "question": "Where are you with us right now?",
     "answer": "I'm a current customer"
@@ -9834,6 +10032,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "You know this process better than anyone. Help us find what's slowing it down? About four minutes.",
     "question": "Which process are you giving feedback on?",
     "next": "What's your part in it?"
@@ -9884,6 +10083,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Thanks for taking part in the program. Could you tell us how it's going? It takes about four minutes.",
     "question": "Which program did you take part in?",
     "next": "Where are you in the program?"
@@ -9931,6 +10131,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Ready to log a quality review? Have the item and your notes to hand.",
     "question": "Reviewer name",
     "next": "Date of the review"
@@ -9978,6 +10179,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Retro time. Answer on your own before we meet, so we can spend the meeting on what matters.",
     "question": "Which sprint, project or period is this for?",
     "next": "How did this stretch of work feel for you?"
@@ -10026,6 +10228,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Tell us about your skincare routine? It takes about three minutes, and this isn't a skin assessment, just your habits and preferences.",
     "question": "How would you describe your skin most days?",
     "answer": "Oily"
@@ -10072,6 +10275,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "We're planning what to post next and would rather ask than guess. Two or three minutes, and every answer shapes what you'll see from us.",
     "question": "Which of these do you use at least once a week?",
     "answer": "Instagram"
@@ -10123,6 +10327,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "We're deciding which changes to make first to reduce our environmental impact, and we'd like your view. It takes about three minutes.",
     "question": "When you choose where to buy, how much does a company's environmental impact matter to you?",
     "next": "Which of these do you already do most of the time?"
@@ -10171,6 +10376,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "We're working on a way to make keeping track of household bills less of a chore, and we're trying to learn who struggles with it most. About three minutes.",
     "question": "Who would you be solving this for?",
     "answer": "Just me"
@@ -10219,6 +10425,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "We're reviewing the tools and devices people use at work. Tell us what helps and what gets in the way. It takes about three minutes.",
     "question": "Which team are you in?",
     "answer": "Operations"
@@ -10265,6 +10472,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "Thanks for taking part. A few quick questions about how the session was run, so the next group gets a better one.",
     "question": "Which session did you attend?",
     "next": "Overall, how would you rate the session?"
@@ -10312,6 +10520,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "We'd like to know how using our product is going for you. Five minutes at most, and your answers go straight to the team building it.",
     "question": "The last time you used it, what were you trying to get done?",
     "next": "Did you manage it?"
@@ -10358,6 +10567,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "We're testing how we describe something new, and we'd value your honest first reaction. About three minutes.",
     "question": "In your own words, what does this offer do, and who is it for?",
     "next": "How clear was that description?"
@@ -10406,6 +10616,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "We rely on our suppliers, and we'd like to be a customer that's easy to work with. Tell us honestly how we're doing. About four minutes.",
     "question": "Which company are you answering for?",
     "next": "How long have you been supplying us?"
@@ -10453,6 +10664,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "Quick question about your visit today: did our website help you do what you came for? It takes two minutes.",
     "question": "What did you come to the site to do?",
     "answer": "Learn about a product or service"
@@ -10504,6 +10716,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Thanks for joining the workshop. A few quick questions while it's fresh, so we can make the next one better. About three minutes.",
     "question": "Which workshop did you take part in?",
     "next": "Overall, how would you rate it?"
@@ -10552,6 +10765,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "We're trying to see ourselves the way you see us. Five minutes, and honest answers help most.",
     "question": "How well do you know us?",
     "answer": "I buy from you regularly"
@@ -10598,6 +10812,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Quick one: if our brand were a person, what would they be like? No right answers here.",
     "question": "How do you know us?",
     "answer": "I'm a customer"
@@ -10646,6 +10861,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "We want to understand how the recent change is affecting your work. It takes about four minutes.",
     "question": "Which change are you telling us about?",
     "next": "Which team or area do you work in?"
@@ -10694,6 +10910,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "We noticed you've stepped away, and we'd like to understand why. It takes two minutes and shapes what we fix next.",
     "question": "Which of these fits you best?",
     "answer": "I cancelled my account"
@@ -10743,6 +10960,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Looking forward to working together. A few questions first, so our first call can get straight to the useful part.",
     "question": "Let's start with you. Who are we talking to?",
     "next": "What's the name of your business?"
@@ -10792,6 +11010,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Thanks for coming to the conference. Tell us how it went for you, and help shape the next one.",
     "question": "How did you take part?",
     "answer": "Attendee"
@@ -10839,6 +11058,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "We're studying how people make buying decisions. Think of one recent purchase and we'll walk through it together.",
     "question": "Think of the last thing you bought that took some thought, not an everyday top-up. What was it?",
     "next": "When did you buy it?"
@@ -10885,6 +11105,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "We're designing something new and want it to fit how you actually choose. A few quick questions.",
     "question": "How often do you buy or use this kind of product?",
     "answer": "Every week"
@@ -10932,6 +11153,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "We're deciding where to focus our social and environmental work, and we'd like your view. About four minutes.",
     "question": "What's your connection to us?",
     "answer": "I work here"
@@ -10980,6 +11202,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Thanks for being a customer. We'd love to understand you a little better. It takes about four minutes.",
     "question": "Did you buy from us for yourself or for work?",
     "answer": "For myself or my household"
@@ -11026,6 +11249,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "We'd like to hear how you honestly feel about our product. It takes about three minutes.",
     "question": "How long have you been using our product?",
     "answer": "Less than a month"
@@ -11075,6 +11299,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Hi! This is a quick check-in on how you're feeling here lately. It takes about three minutes, and there are no wrong answers.",
     "question": "Over the past month, how happy have you felt here?",
     "next": "Compared with a few months ago, is that..."
@@ -11124,6 +11349,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Hi! We're asking people in the area about the public issues that matter to them. It takes about four minutes, and every view is welcome.",
     "question": "Which town, city or area do you live in?",
     "next": "In general, do you think things in your area are heading in the right direction or on the wrong track?"
@@ -11171,6 +11397,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "Hi! We're trying to understand the people we build for. A few questions about your work and how you get it done, about four minutes.",
     "question": "Which of these best describes your role?",
     "answer": "Founder or owner"
@@ -11217,6 +11444,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "Hi! You've been asked for input on a colleague's performance ahead of their review. It takes about five minutes, and specific examples help far more than general praise or criticism.",
     "question": "Whose performance are you giving input on?",
     "next": "How do you work with them?"
@@ -11264,6 +11492,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Hi! We want to know whether the way we set goals, give feedback and run reviews is actually helping. This is about the process, not your performance, and it takes about four minutes.",
     "question": "Do you manage other people?",
     "answer": "Yes, I manage people"
@@ -11311,6 +11540,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "deep-navy",
     "greeting": "Hi! We want to understand how work fits with the rest of your life, and what would make it fit better. About four minutes, and your answers are anonymous.",
     "question": "How do you mostly work at the moment?",
     "answer": "On site"
@@ -11361,6 +11591,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Hi! We're planning training for the months ahead and want it to fit the work you really do. It takes about five minutes.",
     "question": "Which team or department are you in?",
     "next": "How long have you been in your current role?"
@@ -11408,6 +11639,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Thanks for taking part in the training! Two or three minutes of feedback helps us make the next session better.",
     "question": "Which training session did you attend?",
     "next": "How did you take part?"
@@ -11456,6 +11688,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "We're planning how to make getting here easier. Tell us about your usual journey in; it takes about two minutes.",
     "question": "In a typical week, how many days do you travel in?",
     "answer": "5 days or more"
@@ -11504,6 +11737,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "We're researching how households plan and cook their weekly meals. It takes about three minutes, and there are no right answers.",
     "question": "Who usually decides what gets cooked in your home?",
     "answer": "Mostly me"
@@ -11550,6 +11784,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "We're trying to understand how people handle invoicing before we build anything. It's about four minutes, and honest answers help most.",
     "question": "Which best describes your work?",
     "answer": "Freelancer or sole trader"
@@ -11597,6 +11832,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Thanks for applying to work with us. Whatever the outcome, we'd value two minutes of honest feedback on how our process felt.",
     "question": "Which role did you apply for?",
     "next": "How clearly did the job ad describe the role and what it would involve?"
@@ -11643,6 +11879,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "This survey is about how your job feels right now. It takes about three minutes, and answers are reported only as team totals.",
     "question": "Which part of the organisation do you work in?",
     "answer": "Operations"
@@ -11690,6 +11927,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Your review is coming up. This helps you and your manager start from the same page, and takes about ten minutes to answer thoughtfully.",
     "question": "What's your name?",
     "next": "What's your current job title?"
@@ -11736,6 +11974,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "Tell us how supervision works on your shifts. It's anonymous and takes about three minutes.",
     "question": "Who is the supervisor you're giving feedback on?",
     "next": "Which shift do you usually work with them?"
@@ -11781,6 +12020,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "A few questions about you. They help us understand who took part, and you can skip anything you'd rather not share.",
     "question": "How we'll use your answers",
     "next": "How old are you?"
@@ -11827,6 +12067,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "We're working on a new idea and would love your honest first impressions. It takes about four minutes.",
     "question": "What's your first reaction?",
     "next": "In a sentence or two, what do you think this does?"
@@ -11874,6 +12115,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Thanks for taking part in our focus group. A few questions on your own first, so every view gets heard.",
     "question": "What's your first name?",
     "next": "Is the session still ahead of you, or has it already happened?"
@@ -11923,6 +12165,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "We're getting ready to launch something new and want to build it around what you actually need. About four minutes.",
     "question": "How often do you run into the problem this product is built to solve?",
     "answer": "Every week or more"
@@ -11973,6 +12216,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Thanks for your purchase. Now that you've had some time with it, how is it going?",
     "question": "Which product are you reviewing?",
     "next": "How long have you been using it?"
@@ -12021,6 +12265,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Thanks for testing for us. Tell us what happened while it's fresh; the problems are the most useful part.",
     "question": "What's your name or tester ID?",
     "next": "What did you test it on?"
@@ -12064,6 +12309,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "A few questions about how you use us. Honest answers help most, including critical ones.",
     "question": "How often do you use the product?",
     "answer": "Every day"
@@ -12109,6 +12355,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "We'd love your honest take on the product. A handful of short questions, about two minutes.",
     "question": "How much have you used the product recently?",
     "answer": "Regularly in the past couple of weeks"
@@ -12154,6 +12401,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Welcome! A few quick questions about you help us plan support that fits. Everything personal is optional.",
     "question": "Which course or programme are you on?",
     "next": "Which year of study are you in?"
@@ -12200,6 +12448,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Hi. This is a quick check-in on how things are going for you. There are no right answers, and it takes about three minutes.",
     "question": "Which year group are you in?",
     "answer": "Year 7"
@@ -12247,6 +12496,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "We want to know what our school really feels like from the inside. It takes about five minutes, and answers are anonymous.",
     "question": "How much do you agree with each of these?",
     "next": "How much do you feel you belong in this school community?"
@@ -12294,6 +12544,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "How is this class going for you? Five minutes of honest feedback helps us teach it better.",
     "question": "Which course or class is this about?",
     "next": "How would you rate each part?"
@@ -12340,6 +12591,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "You came from our ad about getting fit at home. Answer a few quick questions and we'll match you to a starting plan.",
     "question": "What's the main thing you want to change?",
     "answer": "Lose some weight"
@@ -12386,6 +12638,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "How well do you know your money? Eight multiple choice questions, no calculator needed.",
     "question": "You put 100 into a savings account paying 5% interest a year. How much is there after one year, if you take nothing out?",
     "answer": "95"
@@ -12432,6 +12685,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Do you plan the week on Sunday or decide on Monday morning? Answer six everyday situations to find your work style.",
     "question": "Whose work style are we reading today?",
     "next": "A free Saturday opens up. What happens?"
@@ -12477,6 +12731,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Think you know your flags? I'll describe each one, you name the country. Nine rounds, and a result at the end.",
     "question": "What name should go on the scoreboard?",
     "next": "A red maple leaf on a white square, with a red band on each side. Whose flag is it?"
@@ -12520,6 +12775,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Welcome to the Harry Potter trivia quiz. Every question comes from the seven books, and there are spoilers for all of them. Ready?",
     "question": "What name should go on the scoreboard?",
     "next": "Just for fun, no points: which house would the Sorting Hat put you in?"
@@ -12564,6 +12820,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Fáilte! Ten questions about Ireland, from rivers to writers. Let's see how you get on.",
     "question": "What name should go on the scoreboard?",
     "next": "An easy one to start. On what date is St Patrick's Day?"
@@ -12609,6 +12866,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "What kind of leader are you on a normal Tuesday? Six quick situations, no right or wrong answers. Pick what you would actually do, not what sounds best.",
     "question": "What's your first name?",
     "next": "How many people report to you?"
@@ -12653,6 +12911,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "You see these logos every day. But do you know what's hidden in them? Ten questions, then your result.",
     "question": "What name should go on the scoreboard?",
     "next": "What's hidden in the white space between the 'E' and the 'x' of the FedEx logo?"
@@ -12698,6 +12957,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Let's see how you'd run a real research project. Ten scenarios on sampling, questions and results. Take your time with each one.",
     "question": "What's your name?",
     "next": "You read a government census report to size your market. What kind of data is that?"
@@ -12744,6 +13004,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Looking for a plant that will actually last? Tell me a little about your home and I'll pick one for the spot you have in mind.",
     "question": "First, what should I call you?",
     "next": "Is this plant a gift for someone else?"
@@ -12787,6 +13048,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Welcome to Hawkins. This quiz covers seasons 1 to 4, with spoilers all the way up to Vecna. Ten questions, then your result.",
     "question": "What name should go on the scoreboard?",
     "next": "In which US state is the town of Hawkins?"
@@ -12835,6 +13097,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "Where is your growth getting stuck? Answer nine quick questions and you'll get a recommendation for what to fix first.",
     "question": "What kind of business do you run?",
     "answer": "Service business or consultancy"
@@ -12879,6 +13142,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "violet-pop",
     "greeting": "Think you know your CTR from your UTM? Eight questions, and a result at the end.",
     "question": "What name should go on your result?",
     "next": "What does SEO stand for?"
@@ -12923,6 +13187,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Ready to test your ad sense? Eight questions on audiences, media and measurement.",
     "question": "What name should go on your result?",
     "next": "In advertising, what does CPM measure?"
@@ -12966,6 +13231,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "How well do you know the founders behind some famous fortunes? Eight questions, then your result.",
     "question": "What name should go on the scoreboard?",
     "next": "Who founded Amazon?"
@@ -13011,6 +13277,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "A brand is more than a logo. Eight questions to see how well you know the rest.",
     "question": "What name should go on your result?",
     "next": "What is a brand promise?"
@@ -13056,6 +13323,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "Why do people buy what they buy? Eight questions on the psychology behind every basket.",
     "question": "What name should go on your result?",
     "next": "Most people in a survey say they would pay more for eco-friendly packaging, but sales barely change. What is this called?"
@@ -13100,6 +13368,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "What kind of team do you do your best work in? Six everyday situations, no right or wrong answers, and a team culture match at the end.",
     "question": "What's your first name?",
     "next": "Your team is thinking about switching to a new tool. How should that happen?"
@@ -13145,6 +13414,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "party-confetti",
     "greeting": "Got a business idea? A few questions about where it stands, and a practical next step at the end.",
     "question": "Describe your idea in a sentence or two.",
     "next": "Where is the idea right now?"
@@ -13191,6 +13461,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "Trivia time. Eight questions from all over the map, one tiebreaker, and your result at the end.",
     "question": "What name or team name should go on the scoreboard?",
     "next": "How many hearts does an octopus have?"
@@ -13233,6 +13504,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Six quick scenarios, no right or wrong answers. Pick what you'd honestly do, and we'll tell you where you get your energy.",
     "question": "First, what should we call you?",
     "next": "It's Saturday night and it's pouring with rain. Your friends still want to go out. You..."
@@ -13276,6 +13548,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "How well do you know social media? Eight questions on the ideas behind the posts, then your result.",
     "question": "What's your name?",
     "next": "Which describes you best?"
@@ -13322,6 +13595,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Not sure which coffee to try? Answer a few quick questions and we'll point you to the one that suits how you drink it.",
     "question": "How do you usually make coffee at home?",
     "answer": "Espresso machine"
@@ -13363,6 +13637,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "lilac-haze",
     "greeting": "Every friend group has a listener, a planner, a hype person and an adventurer. Five scenarios and we'll tell you which one you are.",
     "question": "What's your first name?",
     "next": "What's your role in the group chat?"
@@ -13411,6 +13686,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "rose-petal",
     "greeting": "Shopping for running shoes? Tell us a little about how you run and we'll point you to the pair that suits you.",
     "question": "What's your first name?",
     "next": "Where are you with running right now?"
@@ -13455,6 +13731,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Welcome! This short test helps us find the right class for you. It starts easy and gets harder, so don't worry if the last questions feel difficult.",
     "question": "What's your full name?",
     "next": "What email address should we send your result to?"
@@ -13499,6 +13776,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Ready for some math? Ten questions, no calculator needed, and your score at the end.",
     "question": "What's your name?",
     "next": "Which class or group are you in?"
@@ -13541,6 +13819,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "Time for some science. These questions ask why things happen, so think it through before you pick.",
     "question": "What's your name?",
     "next": "During a storm, why do you see lightning before you hear thunder?"
@@ -13583,6 +13862,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "teal-lagoon",
     "greeting": "Spelling test time. Each word comes in a sentence, so read it through before you pick.",
     "question": "What's your name?",
     "next": "Which class or group are you in?"
@@ -13628,6 +13908,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "peach-linen",
     "greeting": "A short quiz. No pressure: tell us how much you know and we'll pick the right questions for you.",
     "question": "What should we call you?",
     "next": "How would you rate your general knowledge?"
@@ -13672,6 +13953,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "butter-cream",
     "greeting": "Ready to test your geography? Seven questions, and you'll get a result at the end.",
     "question": "What name should go on the scoreboard?",
     "next": "What is the capital of Australia?"
@@ -13720,6 +14002,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "mint-fresh",
     "greeting": "Not sure which 3D scanner fits your work? A few questions about what you scan, and we'll point you to the right kind.",
     "question": "What size are the objects you'll scan most often?",
     "answer": "Small enough to hold in one hand"
@@ -13766,6 +14049,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Let's find your nail style. A few quick questions and we'll suggest a length and shape that suits you.",
     "question": "Have you had acrylics before?",
     "answer": "Never, this would be my first set"
@@ -13813,6 +14097,7 @@
     "scored": true
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Let's find bedding you'll sleep well in. Tell us how you sleep and we'll suggest a set.",
     "question": "What size is your bed?",
     "answer": "Single or twin"
@@ -13860,6 +14145,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Looking for new wheels? Let's check what fits your bike, then find what suits your riding.",
     "question": "What wheel size does your bike use?",
     "answer": "700c"
@@ -13905,6 +14191,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sky-breeze",
     "greeting": "Looking for your next favourite game? Tell us about your table and we'll suggest where to start.",
     "question": "How long do you want a game to last?",
     "answer": "Under 30 minutes"
@@ -13950,6 +14237,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Stuck on what to read next? Answer a few questions and we'll suggest a book to pick up.",
     "question": "What's a book you loved recently?",
     "next": "How long do you like a book to be?"
@@ -13995,6 +14283,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "tangerine",
     "greeting": "Choosing pétanque boules? A few questions about how you play and we'll suggest the right set.",
     "question": "How long have you been playing?",
     "answer": "I'm just starting out"
@@ -14042,6 +14331,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sand-dune",
     "greeting": "Congratulations! Let's find the finishing touches for your wedding look.",
     "question": "When's the wedding?",
     "next": "What neckline does your dress have?"
@@ -14090,6 +14380,7 @@
     "scored": false
    },
    "preview": {
+    "preset": "sage-garden",
     "greeting": "Dressing the bridal party? Let's work out an approach that looks great and works for everyone.",
     "question": "Who's taking the quiz?",
     "answer": "The bride or couple"
