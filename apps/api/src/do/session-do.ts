@@ -169,6 +169,12 @@ interface DoSessionMeta {
   startedAt: number;
   hiddenFields: Record<string, string>;
   ipHash: string | null;
+  /**
+   * Most messages this conversation may take, when lower than the platform's
+   * ceiling. Set for a template try on the public gallery, which we pay for and
+   * which only needs to be long enough to get through the template.
+   */
+  turnLimit?: number;
   /** Salted device key, from `lib/respondent-key.ts`. Null when nothing identified the device. */
   fingerprint?: string | null;
   /**
@@ -723,6 +729,8 @@ export class SessionDO extends DurableObject<Bindings> {
     context?: RespondentContext | null;
     /** Opened with a test-mode key: real rows, excluded from every count. */
     isTest?: boolean;
+    /** See `DoSessionMeta.turnLimit`. */
+    turnLimit?: number;
     /**
      * Continue a response that was abandoned, from a follow-up link.
      *
@@ -769,6 +777,7 @@ export class SessionDO extends DurableObject<Bindings> {
       context: params.context ?? null,
       source: params.source ?? "chat",
       isTest: params.isTest === true,
+      ...(params.turnLimit ? { turnLimit: params.turnLimit } : {}),
       ...(params.heldResume ? { heldResume: params.heldResume } : {}),
     };
     // Shares the `degraded` flag with the reliability floor (three guard rejections drop a
@@ -4204,7 +4213,7 @@ export class SessionDO extends DurableObject<Bindings> {
       await this.emitAuthRequired();
       return { accepted: false, error: "auth_required" };
     }
-    if (this.turnCount >= 500) return { accepted: false, error: "too_many_turns" };
+    if (this.turnCount >= Math.min(500, this.meta.turnLimit ?? 500)) return { accepted: false, error: "too_many_turns" };
 
     this.turnCount += 1;
     await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);

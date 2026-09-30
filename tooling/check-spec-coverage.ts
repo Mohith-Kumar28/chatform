@@ -206,6 +206,7 @@ const DASHBOARD_ONLY: Record<string, string> = {
   "/api/feedback": "a signed-in person telling the chatform team something, not a thing an integration does",
   "/api/import/preview": "the marketing page's public converter: a trial form for someone without an account; /v1/import is the API form",
   "/api/import/claim": "moves a signed-out visitor's trial into the account they just made; a key never has a trial",
+  "/api/templates/{slug}/demo-sessions": "the public template page's try-it chat, capped per visitor per day; an integration uses /v1/templates/{slug}/use and its own form",
 
   /**
    * The platform console, and the one group here that must never gain a `/v1`

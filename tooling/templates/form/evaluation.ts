@@ -1,0 +1,548 @@
+import { defineTemplate, type TemplateSeed } from "../define.js";
+
+export const FORM_EVALUATION: TemplateSeed[] = [
+  defineTemplate({
+    slug: "product-evaluation-form",
+    type: "form",
+    category: "evaluation",
+    goals: ["collect-feedback", "conduct-research"],
+    roles: ["product-research", "operations"],
+    searchName: "Product evaluation form",
+    title: "Product evaluation",
+    icon: "ClipboardCheck",
+    metaDescription:
+      "Rate a product against clear criteria: usefulness, ease of use, quality and value. Reviewers who find gaps say what is missing and whether it is a dealbreaker.",
+    description: "Score a product on the job it has to do, and find out exactly where it falls short.",
+    blurb:
+      "Starts from the job the product was used for, then scores it on the same criteria for every reviewer so products can be compared fairly. If it falls even slightly short, the form asks what is missing and whether that rules it out, instead of asking for praise it has not earned.",
+    tags: ["product evaluation", "product review", "product testing", "evaluation criteria", "branching"],
+    greeting: "Thanks for trying the product. A few questions on how it held up in real use.",
+    questions: [
+      { ref: "product", type: "short_text", title: "Which product are you evaluating?", required: true, maxLength: 120 },
+      {
+        ref: "use_case",
+        type: "long_text",
+        title: "What did you use it for?",
+        description: "The actual task or situation, so your scores have context.",
+        required: true,
+        maxLength: 800,
+      },
+      {
+        ref: "time_used",
+        type: "single_select",
+        title: "How long have you been using it?",
+        required: true,
+        options: [
+          { label: "Less than a week" },
+          { label: "1–4 weeks" },
+          { label: "1–6 months" },
+          { label: "Longer than 6 months" },
+        ],
+      },
+      {
+        ref: "criteria",
+        type: "matrix",
+        title: "How does it score on each of these?",
+        required: true,
+        rows: ["Usefulness for the job", "Ease of use", "Quality and reliability", "Design and finish", "Value for money"],
+        columns: ["Poor", "Fair", "Good", "Excellent"],
+      },
+      {
+        ref: "overall",
+        type: "rating",
+        title: "Overall, how would you rate it?",
+        required: true,
+        scale: 5,
+      },
+      {
+        ref: "fit",
+        type: "single_select",
+        title: "Does it do everything you need it to?",
+        required: true,
+        options: [{ label: "Yes, fully" }, { label: "Mostly" }, { label: "No, something important is missing" }],
+      },
+
+      // Meets the need
+      {
+        ref: "strengths",
+        type: "long_text",
+        title: "What does it do best?",
+        required: false,
+        maxLength: 800,
+      },
+
+      // Falls short
+      {
+        ref: "gaps",
+        type: "long_text",
+        title: "What is missing, or what got in your way?",
+        description: "A specific example is more useful than a general complaint.",
+        required: true,
+        maxLength: 1000,
+      },
+      {
+        ref: "dealbreaker",
+        type: "yes_no",
+        title: "Is that a dealbreaker for you?",
+        required: true,
+        yesLabel: "Yes, it rules it out",
+        noLabel: "No, I can work around it",
+      },
+
+      // Everyone
+      {
+        ref: "compared",
+        type: "single_select",
+        title: "Compared with what you used before, is it better or worse?",
+        required: false,
+        options: [
+          { label: "Better" },
+          { label: "About the same" },
+          { label: "Worse" },
+          { label: "I had nothing before this" },
+        ],
+      },
+      {
+        ref: "improvements",
+        type: "ranking",
+        title: "Rank these by how much they would improve the product for you",
+        required: false,
+        items: ["Simpler to use", "Better quality", "More features", "Lower price", "Better instructions and support"],
+      },
+      {
+        ref: "keep_using",
+        type: "opinion_scale",
+        title: "How likely are you to keep using it, or to buy it?",
+        required: true,
+        steps: 10,
+        startAt: 1,
+        labelLow: "Very unlikely",
+        labelHigh: "Very likely",
+      },
+      {
+        ref: "email",
+        type: "email",
+        title: "If we have a follow-up question, where can we reach you?",
+        description: "Optional. Leave it blank to stay anonymous.",
+        required: false,
+      },
+    ],
+    branches: [
+      { when: "fit", is: "Yes, fully", then: "strengths" },
+      { when: "fit", is: "Mostly", then: "gaps" },
+      { when: "fit", is: "No, something important is missing", then: "gaps" },
+      { when: "strengths", always: true, then: "compared" },
+    ],
+    ending: {
+      title: "Thanks for the honest review",
+      body: "Your scores go next to everyone else's, and the written answers are what we read first.",
+    },
+    guide: {
+      questionsToConsider: [
+        "Which criteria matter most for this product? Rename the rows in the scoring grid to match them.",
+        "Are reviewers comparing several products, and should each product get its own link?",
+        "Do you want named reviewers you can follow up with, or anonymous ones who may be more candid?",
+        "What counts as a dealbreaker for your team, and who decides?",
+      ],
+      howToUseResponses:
+        "Put the grid scores for each product side by side, then read the use case next to each low score: a poor ease-of-use rating from someone doing an unusual task means something different from one on the core job. Count the dealbreakers separately, because one hard no can outweigh a good average. The ranking question tells you what to fix, or what to ask the supplier about, first.",
+      customizeSteps: [
+        "Edit the grid rows to the criteria your team agreed on before testing started.",
+        "Change the options in the time question to match how long your trial actually runs.",
+        "Share one link per product, or add a question at the start so reviewers can pick which product they tested.",
+      ],
+      faqs: [
+        {
+          q: "What should a product evaluation form include?",
+          a: "What the product was used for, a score on each agreed criterion, an overall rating, and room to explain what worked and what did not. This one also asks whether any gap is a dealbreaker.",
+        },
+        {
+          q: "How is a product evaluation different from product feedback?",
+          a: "An evaluation checks the product against criteria you set in advance, usually to decide whether to adopt, buy or change it. Feedback is more open and can cover anything a user wants to say.",
+        },
+        {
+          q: "How many people should evaluate a product?",
+          a: "Enough to cover the different ways it will be used. A few reviewers who each did the real task tell you more than many who only looked at it.",
+        },
+        {
+          q: "Can I edit the questions in this template?",
+          a: "Yes. Use this template copies it into your account, where you can change every question, then share it by link or embed it on your site.",
+        },
+      ],
+    },
+  }),
+
+  defineTemplate({
+    slug: "software-evaluation-form",
+    type: "form",
+    category: "evaluation",
+    goals: ["collect-feedback", "conduct-research"],
+    roles: ["operations", "product-research"],
+    searchName: "Software evaluation form",
+    title: "Software evaluation",
+    icon: "Laptop",
+    metaDescription:
+      "Have reviewers score software on the tasks your team really does: requirements met, ease of use, limitations and a clear recommendation with their reasons.",
+    description: "Test software on real work and get a recommendation each reviewer can explain.",
+    blurb:
+      "Built for a team trial: each reviewer records what they tested, how the tool met each requirement and what broke. Security concerns get their own follow-up, and the final recommendation branches so a conditional yes says what the conditions are and a no says why.",
+    tags: ["software evaluation", "software selection", "tool comparison", "vendor evaluation", "requirements", "IT"],
+    greeting: "You've had time with the tool. Let's capture what you found while it's fresh.",
+    questions: [
+      { ref: "software", type: "short_text", title: "Which software are you evaluating?", required: true, maxLength: 120 },
+      {
+        ref: "reviewer_role",
+        type: "single_select",
+        title: "Which best describes your part in this evaluation?",
+        required: true,
+        options: [
+          { label: "I'd use it every day" },
+          { label: "I manage the people who'd use it" },
+          { label: "IT, security or admin" },
+          { label: "Finance or purchasing" },
+        ],
+      },
+      {
+        ref: "tasks",
+        type: "long_text",
+        title: "Which tasks did you try in it?",
+        description: "The real work you'd use it for, not the vendor's demo.",
+        required: true,
+        maxLength: 1000,
+      },
+      {
+        ref: "hours",
+        type: "number",
+        title: "Roughly how many hours did you spend testing it?",
+        required: false,
+        min: 0,
+        max: 500,
+      },
+      {
+        ref: "requirements",
+        type: "matrix",
+        title: "How well does it meet each requirement?",
+        required: true,
+        rows: [
+          "Covers our core workflow",
+          "Works with the tools we already use",
+          "Reporting and exports",
+          "User permissions and admin controls",
+          "Speed and reliability",
+        ],
+        columns: ["Doesn't meet", "Partly meets", "Fully meets", "Didn't test"],
+      },
+      {
+        ref: "ease",
+        type: "opinion_scale",
+        title: "How easy was it to finish your tasks without help?",
+        required: true,
+        steps: 5,
+        startAt: 1,
+        labelLow: "Needed help constantly",
+        labelHigh: "No help needed",
+      },
+      {
+        ref: "ramp_up",
+        type: "single_select",
+        title: "How long before you felt productive in it?",
+        required: true,
+        options: [{ label: "Under an hour" }, { label: "About a day" }, { label: "About a week" }, { label: "I'm still not there" }],
+      },
+      {
+        ref: "limitations",
+        type: "long_text",
+        title: "What limitations, bugs or workarounds did you run into?",
+        required: false,
+        maxLength: 1500,
+      },
+      {
+        ref: "security_concern",
+        type: "yes_no",
+        title: "Did anything raise a security, privacy or compliance concern?",
+        required: true,
+      },
+      {
+        ref: "security_detail",
+        type: "long_text",
+        title: "What was it? Include where you saw it, so someone can check.",
+        required: true,
+        maxLength: 1000,
+      },
+      {
+        ref: "verdict",
+        type: "single_select",
+        title: "What's your recommendation?",
+        required: true,
+        options: [
+          { label: "Adopt it" },
+          { label: "Adopt it, with conditions" },
+          { label: "Keep looking" },
+          { label: "Don't adopt it" },
+        ],
+      },
+
+      // Conditional yes
+      {
+        ref: "conditions",
+        type: "long_text",
+        title: "What would need to be true before we adopt it?",
+        description: "A missing feature, a contract term, training, anything.",
+        required: true,
+        maxLength: 1000,
+      },
+
+      // No
+      {
+        ref: "reason_against",
+        type: "long_text",
+        title: "What's the main reason against it?",
+        required: true,
+        maxLength: 1000,
+      },
+
+      // Everyone
+      {
+        ref: "confidence",
+        type: "opinion_scale",
+        title: "How confident are you in that recommendation?",
+        required: true,
+        steps: 5,
+        startAt: 1,
+        labelLow: "Not very",
+        labelHigh: "Completely",
+      },
+      {
+        ref: "evidence",
+        type: "file_upload",
+        title: "Any screenshots or notes to attach?",
+        description: "Optional. Screenshots of bugs or missing features help the most.",
+        required: false,
+        accept: ["image/*", "application/pdf"],
+        maxFiles: 5,
+        maxSizeMB: 10,
+      },
+    ],
+    branches: [
+      { when: "security_concern", is: true, then: "security_detail" },
+      { when: "security_concern", is: false, then: "verdict" },
+      { when: "verdict", is: "Adopt it", then: "confidence" },
+      { when: "verdict", is: "Adopt it, with conditions", then: "conditions" },
+      { when: "verdict", is: "Keep looking", then: "reason_against" },
+      { when: "verdict", is: "Don't adopt it", then: "reason_against" },
+      { when: "conditions", always: true, then: "confidence" },
+    ],
+    ending: {
+      title: "Evaluation recorded",
+      body: "Thanks. Your notes go to whoever is making the final call, alongside the other reviewers'.",
+    },
+    guide: {
+      questionsToConsider: [
+        "What are your must-have requirements? Write them as the rows of the grid before anyone starts testing.",
+        "Which tasks should every reviewer try, so the scores are comparable?",
+        "Do you need separate views from daily users, IT and finance, and who weighs them?",
+        "Are you evaluating one tool or several, and will each get its own link?",
+        "Who follows up on a security concern, and how quickly?",
+      ],
+      howToUseResponses:
+        "Group responses by tool, then by reviewer role, because a daily user and an IT admin judge the same tool on different things. Any requirement marked \"Doesn't meet\" by more than one reviewer is worth checking with the vendor before you decide. Read every security concern first. The answers from reviewers who said \"adopt it, with conditions\" make a good checklist for the contract or rollout plan.",
+      customizeSteps: [
+        "Replace the grid rows with your own requirements, keeping each one short enough to judge at a glance.",
+        "List the tasks you want tested in the description of the tasks question, so every reviewer covers the same ground.",
+        "Send the link at the end of the trial and export the responses to CSV to build your comparison table.",
+      ],
+      faqs: [
+        {
+          q: "What should a software evaluation form include?",
+          a: "The tasks tested, how well each requirement is met, ease of use, limitations found, any security concerns and a recommendation with reasons. Asking how long the reviewer spent testing helps you weigh their answers.",
+        },
+        {
+          q: "How do you compare several software options fairly?",
+          a: "Agree the requirements and test tasks before anyone starts, and have every reviewer fill in the same form for each tool. Then compare requirement by requirement rather than on overall impressions.",
+        },
+        {
+          q: "Who should take part in a software evaluation?",
+          a: "The people who would use it daily, someone who manages them, and someone from IT or security. Finance often wants a say on cost and contract terms too.",
+        },
+        {
+          q: "Can I use this form for a vendor evaluation?",
+          a: "Yes. Edit the grid rows to cover vendor criteria such as support, contract terms and roadmap, and keep the recommendation question at the end.",
+        },
+      ],
+    },
+  }),
+
+  defineTemplate({
+    slug: "self-evaluation-form",
+    type: "form",
+    category: "evaluation",
+    goals: ["collect-feedback"],
+    roles: ["hr-people", "operations"],
+    searchName: "Self evaluation form",
+    title: "Self evaluation",
+    icon: "UserCheck",
+    metaDescription:
+      "Help employees prepare for a performance review: wins with real examples, progress on goals, strengths, challenges and the support they need next period.",
+    description: "A reflective self-review that gives the review conversation real examples to work from.",
+    blurb:
+      "Asks for evidence rather than adjectives: a win with an example, how goals actually went and a challenge handled. Missed goals and a heavy workload each get a follow-up question, so the manager walks into the review knowing what got in the way.",
+    tags: ["self evaluation", "self assessment", "performance review", "employee review", "HR"],
+    greeting: "This is your space to reflect before your review. Honest beats polished.",
+    questions: [
+      { ref: "name", type: "short_text", title: "What's your name?", required: true, maxLength: 80 },
+      { ref: "role", type: "short_text", title: "What's your role, and which team are you on?", required: true, maxLength: 120 },
+      {
+        ref: "review_type",
+        type: "single_select",
+        title: "Which review is this for?",
+        required: true,
+        options: [
+          { label: "Quarterly check-in" },
+          { label: "Mid-year review" },
+          { label: "Annual review" },
+          { label: "End of probation" },
+        ],
+      },
+      {
+        ref: "proudest",
+        type: "long_text",
+        title: "What are you proudest of from this period?",
+        description: "Give one or two concrete examples: what you did and what changed because of it.",
+        required: true,
+        maxLength: 1500,
+      },
+      {
+        ref: "goals_met",
+        type: "single_select",
+        title: "How did you do against the goals set at the start of the period?",
+        required: true,
+        options: [{ label: "Met or beat all of them" }, { label: "Met most" }, { label: "Met some" }, { label: "Met few or none" }],
+      },
+      {
+        ref: "goals_blockers",
+        type: "long_text",
+        title: "What got in the way of the ones you missed?",
+        description: "Priorities changing, resources, skills, anything. This is not about blame.",
+        required: true,
+        maxLength: 1000,
+      },
+      {
+        ref: "self_rating",
+        type: "matrix",
+        title: "How would you rate yourself on each of these?",
+        required: true,
+        rows: ["Quality of work", "Communication", "Working with others", "Ownership and follow-through", "Learning new skills"],
+        columns: ["Needs work", "Solid", "A real strength"],
+      },
+      {
+        ref: "challenge",
+        type: "long_text",
+        title: "Describe a challenge you faced and how you handled it.",
+        required: false,
+        maxLength: 1500,
+      },
+      {
+        ref: "workload",
+        type: "opinion_scale",
+        title: "How manageable has your workload been?",
+        required: true,
+        steps: 5,
+        startAt: 1,
+        labelLow: "Unsustainable",
+        labelHigh: "Very manageable",
+      },
+      {
+        ref: "workload_detail",
+        type: "long_text",
+        title: "What's making it hard to manage?",
+        required: false,
+        maxLength: 800,
+      },
+      {
+        ref: "growth",
+        type: "multi_select",
+        title: "Where do you most want to grow next? Pick up to three.",
+        required: true,
+        minSelections: 1,
+        maxSelections: 3,
+        allowOther: true,
+        options: [
+          { label: "Technical or craft skills" },
+          { label: "Leading people" },
+          { label: "Communication and presenting" },
+          { label: "Planning and prioritising" },
+          { label: "Strategic thinking" },
+          { label: "Knowledge of the wider business" },
+        ],
+      },
+      {
+        ref: "next_goals",
+        type: "long_text",
+        title: "What do you want to achieve next period?",
+        description: "Two or three goals in your own words. You'll agree the final version with your manager.",
+        required: true,
+        maxLength: 1000,
+      },
+      {
+        ref: "support",
+        type: "long_text",
+        title: "What support would help you most next period?",
+        description: "From your manager, the team, training, tools or time.",
+        required: true,
+        maxLength: 1000,
+      },
+      {
+        ref: "raise",
+        type: "long_text",
+        title: "Anything else you want to raise in the review conversation?",
+        required: false,
+        maxLength: 1000,
+      },
+    ],
+    branches: [
+      { when: "goals_met", is: "Met or beat all of them", then: "self_rating" },
+      { when: "goals_met", is: "Met most", then: "goals_blockers" },
+      { when: "goals_met", is: "Met some", then: "goals_blockers" },
+      { when: "goals_met", is: "Met few or none", then: "goals_blockers" },
+      { when: "workload", op: "gte", is: 3, then: "growth" },
+      { when: "workload", op: "lte", is: 2, then: "workload_detail" },
+    ],
+    ending: {
+      title: "Thanks for taking the time",
+      body: "Your manager will read this before your review, so you can spend the conversation on what matters.",
+    },
+    guide: {
+      questionsToConsider: [
+        "Which review cycle is this for, and do the options in the review question match your own calendar?",
+        "Do the rows in the rating grid match your company's values or competencies?",
+        "Should employees see last period's goals before they answer, for example in the question description?",
+        "Who reads the answers: only the manager, or HR as well? Say so in the greeting.",
+      ],
+      howToUseResponses:
+        "Ask managers to read each self-evaluation before writing their own view, then start the review by comparing the two ratings: the rows where they differ are the conversation. Treat an answer about blockers or workload as something to act on, not just note. Across a team, look at the growth choices to plan training, and export to CSV if HR tracks them over several cycles.",
+      customizeSteps: [
+        "Rename the grid rows to your own competencies or values, keeping to five or six.",
+        "Edit the greeting to say when the review is and who will read the answers.",
+        "Send the link a week before reviews start, so people have time to think rather than rush.",
+      ],
+      faqs: [
+        {
+          q: "What should I write in a self evaluation?",
+          a: "Specific examples of what you did and the difference it made, an honest view of goals you missed and why, and the support you need next. Examples carry more weight than adjectives.",
+        },
+        {
+          q: "What questions should a self evaluation form ask?",
+          a: "Achievements with evidence, progress against goals, strengths and areas to improve, a challenge handled, goals for the next period and what support would help. A question about workload often surfaces problems early.",
+        },
+        {
+          q: "When should employees complete a self evaluation?",
+          a: "About a week before the review meeting, so the manager has time to read it and the employee is not rushing.",
+        },
+        {
+          q: "Should self evaluations be anonymous?",
+          a: "No. A self evaluation feeds a conversation with a named manager, so it needs the employee's name. Use a separate anonymous survey for feedback about managers or the company.",
+        },
+      ],
+    },
+  }),
+];

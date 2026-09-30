@@ -8,7 +8,11 @@ import {
   type BlockInput,
   type ConditionOp,
   type DraftBranch,
+  type LogicRuleInput,
 } from "@repo/form-schema";
+
+/** The variable a scored template totals into. */
+const SCORE_VARIABLE = "score";
 import type { z } from "zod";
 
 /**
@@ -29,36 +33,19 @@ import type { z } from "zod";
  * show are computed rather than typed.
  */
 
-export const CATEGORIES = [
-  "Sales",
-  "Product",
-  "Marketing",
-  "Events",
-  "HR",
-  "Support",
-  "Education",
-  "Services",
-  "Community",
-] as const;
-
-export type Category = (typeof CATEGORIES)[number];
-
-/**
- * Accent per category. Mirrors `CATEGORY_ACCENT` in the web app's
- * `lib/category-accent.ts`; stored on the row so the database stays the
- * authority and the frontend map is only a fallback for a row without one.
- */
-export const CATEGORY_ACCENT: Record<Category, string> = {
-  Sales: "choice",
-  Product: "scale",
-  Marketing: "content",
-  Events: "number",
-  HR: "contact",
-  Support: "advanced",
-  Education: "text",
-  Services: "text",
-  Community: "content",
-};
+export * from "./taxonomy.js";
+import {
+  accentFor,
+  CATEGORIES_BY_TYPE,
+  GOALS,
+  ROLES,
+  TEMPLATE_ICONS,
+  type Goal,
+  type Role,
+  type TemplateCategory,
+  type TemplateIcon,
+  type TemplateType,
+} from "./taxonomy.js";
 
 /**
  * A question, minus the identifiers the generator assigns.
@@ -171,6 +158,14 @@ export interface AuthoredForm {
   /** Conditional routing. Every arm of a decision, including the shared ones. */
   branches?: TemplateBranch[];
   /**
+   * Which ending a scored form lands on, by total score.
+   *
+   * The total is the sum of `score` on every option the respondent picked.
+   * Bands are checked highest first; a total under every band gets the default
+   * `ending`. Every `then` must be one of `endings`.
+   */
+  scoreEndings?: { atLeast: number; then: string }[];
+  /**
    * Anything the defaults do not already say.
    *
    * Passed to `FormDoc.parse` as-is, so it is a partial: every key `SettingsDoc`
@@ -182,19 +177,61 @@ export interface AuthoredForm {
   theme?: z.input<typeof ThemeDoc>;
 }
 
+/**
+ * The long-form copy on a template's public page.
+ *
+ * Authored per template, never assembled from a pattern: two hundred pages that
+ * say the same three sentences with the noun swapped are thin content to a
+ * search engine and to a reader, and the whole point of the page is that it is
+ * specific advice for this one form.
+ */
+export interface TemplateGuide {
+  /** 3 to 5 questions worth considering when adapting it, phrased as the question itself. */
+  questionsToConsider: string[];
+  /** A short paragraph: what to do with the answers once they arrive. */
+  howToUseResponses: string;
+  /** Exactly 3 steps to adapt and share it. */
+  customizeSteps: string[];
+  /** 3 to 5 questions somebody searching for this template actually asks. */
+  faqs: { q: string; a: string }[];
+}
+
 export interface TemplateInput extends AuthoredForm {
-  category: Category;
+  type: TemplateType;
+  /** One of `CATEGORIES_BY_TYPE[type]`. */
+  category: TemplateCategory;
+  goals: Goal[];
+  roles: Role[];
+  /** The phrase people search for, e.g. "Client feedback form". The public h1 adds "template". */
+  searchName: string;
+  /** 120 to 160 characters, for the meta description and the card. */
+  metaDescription: string;
   /** Two or three sentences, in the preview panel. */
   blurb: string;
   tags: string[];
-  /** A key into the web app's icon registry. */
-  icon: string;
+  icon: TemplateIcon;
+  guide: TemplateGuide;
+}
+
+/** What the template shows off, worked out from the document rather than claimed. */
+export interface TemplateFacts {
+  /** Distinct question types, in first-use order. */
+  blockTypes: string[];
+  /** Conditional routes an author wrote (not the derived rejoins). */
+  branches: number;
+  endings: number;
+  scored: boolean;
 }
 
 export interface TemplateSeed {
   slug: string;
   title: string;
-  category: Category;
+  type: TemplateType;
+  category: TemplateCategory;
+  goals: Goal[];
+  roles: Role[];
+  searchName: string;
+  metaDescription: string;
   description: string;
   blurb: string;
   tags: string[];
@@ -202,6 +239,8 @@ export interface TemplateSeed {
   accent: string;
   blockCount: number;
   estMinutes: number;
+  guide: TemplateGuide;
+  facts: TemplateFacts;
   doc: FormDoc;
 }
 
@@ -296,6 +335,39 @@ function longestPath(doc: FormDoc): number {
     best[i] = asked[i]! + (onward.length > 0 ? Math.max(...onward) : 0);
   }
   return best[0] ?? 0;
+}
+
+/**
+ * Jumps to the default ending, rerouted through the score bands.
+ *
+ * `endingRules` only run when the flow falls off the last question. A jump
+ * straight to `end_thanks` ends the conversation there, and `buildFlowRules`
+ * writes exactly that jump to close every arm of a branch that is not the last
+ * one. On a scored quiz that meant everyone who took the first arm got the
+ * lowest result, however well they did. So in front of each such jump goes one
+ * copy per band, highest first, carrying the jump's own condition plus the
+ * band's threshold; the original stays last as the fallback.
+ */
+function withScoreBands(logic: LogicRuleInput[], bands: { atLeast: number; then: string }[]): LogicRuleInput[] {
+  if (bands.length === 0) return logic;
+  const ordered = [...bands].sort((a, b) => b.atLeast - a.atLeast);
+  return logic.flatMap((rule) => {
+    if (rule.action_kind !== "goto" || rule.target !== "end_thanks") return [rule];
+    const own = rule.when && ((rule.when.conditions?.length ?? 0) > 0 || (rule.when.groups?.length ?? 0) > 0) ? [rule.when] : [];
+    return [
+      ...ordered.map((band) => ({
+        ...rule,
+        target: band.then,
+        targetKind: "ending" as const,
+        when: {
+          op: "and" as const,
+          conditions: [{ left: { kind: "variable" as const, name: SCORE_VARIABLE }, op: "gte" as const, value: band.atLeast }],
+          groups: own,
+        },
+      })),
+      rule,
+    ];
+  });
 }
 
 /** What `buildAuthoredDoc` works out that a caller would otherwise have to recount. */
@@ -396,6 +468,54 @@ export function buildAuthoredDoc(input: AuthoredForm): AuthoredDoc {
       then: br.then,
     }));
 
+  /**
+   * Scoring, when any option carries a `score`.
+   *
+   * `applyLogicRules` re-applies every matching `add_score` each time the flow
+   * advances, so an `add_score` alone counts an early right answer once per
+   * question that follows it. Zeroing the total first, in the same pass, makes
+   * each pass recompute it from the answers held so far: the reset runs, then
+   * every picked option adds its points exactly once.
+   */
+  const scoring: LogicRuleInput[] = [];
+  const scoreEndingRules: LogicRuleInput[] = [];
+  for (const b of blocks as { ref: string; type: string; options?: { id: string; score?: number }[] }[]) {
+    for (const o of b.options ?? []) {
+      if (!o.score) continue;
+      scoring.push({
+        id: "rl_placeholder",
+        action_kind: "add_score",
+        variable: SCORE_VARIABLE,
+        amount: o.score,
+        when: {
+          op: "and",
+          conditions: [{ left: { kind: "ref", ref: b.ref }, op: b.type === "multi_select" ? "includes" : "eq", value: o.id }],
+          groups: [],
+        },
+      });
+    }
+  }
+  if (scoring.length > 0) {
+    scoring.unshift({ id: "rl_placeholder", action_kind: "set_variable", variable: SCORE_VARIABLE, expr: 0, when: null });
+  }
+  for (const band of [...(input.scoreEndings ?? [])].sort((a, b) => b.atLeast - a.atLeast)) {
+    if (!endingRefs.has(band.then)) throw new Error(`form "${input.slug}" scores into unknown ending "${band.then}"`);
+    scoreEndingRules.push({
+      id: `rs_${code}${String(scoreEndingRules.length + 1).padStart(2, "0")}`,
+      action_kind: "goto",
+      target: band.then,
+      targetKind: "ending",
+      when: {
+        op: "and",
+        conditions: [{ left: { kind: "variable", name: SCORE_VARIABLE }, op: "gte", value: band.atLeast }],
+        groups: [],
+      },
+    });
+  }
+  if (scoreEndingRules.length > 0 && scoring.length === 0) {
+    throw new Error(`form "${input.slug}" has scoreEndings but no option carries a score`);
+  }
+
   const doc = FormDoc.parse({
     title: input.title,
     description: input.description,
@@ -412,7 +532,12 @@ export function buildAuthoredDoc(input: AuthoredForm): AuthoredDoc {
     // regenerates it and diffs, so a random id makes every run report drift in
     // a file nobody changed. Nothing inside a generated template refers to a
     // rule by id, so renaming them costs nothing.
-    logic: [...jumps, ...buildFlowRules(branches, blocks as never, [...endingRefs], jumps)].map(
+    ...(scoring.length > 0 ? { variables: [{ name: SCORE_VARIABLE, type: "number", initial: 0 }] } : {}),
+    ...(scoreEndingRules.length > 0 ? { endingRules: scoreEndingRules } : {}),
+    logic: withScoreBands(
+      [...scoring, ...jumps, ...buildFlowRules(branches, blocks as never, [...endingRefs], jumps)],
+      input.scoreEndings ?? [],
+    ).map(
       (rule, i) => ({ ...rule, id: `rl_${code}${String(i + 1).padStart(2, "0")}` }),
     ),
     // Spread only when present. `SettingsDoc`/`ThemeDoc` are `.prefault({})`, so
@@ -443,7 +568,7 @@ export function buildAuthoredDoc(input: AuthoredForm): AuthoredDoc {
    * thanked for coming instead.
    */
   const aimedAt = new Set(
-    doc.logic.filter((r) => r.action_kind === "goto" && (r.targetKind ?? "block") === "ending").map((r) => r.target),
+    [...doc.logic, ...doc.endingRules].filter((r) => r.action_kind === "goto" && (r.targetKind ?? "block") === "ending").map((r) => r.target),
   );
   const orphaned = endings.slice(1).filter((e) => !aimedAt.has(e.ref));
   if (orphaned.length > 0) {
@@ -468,19 +593,94 @@ export function buildAuthoredDoc(input: AuthoredForm): AuthoredDoc {
   };
 }
 
+/** Every string a visitor reads on the template's page or in its conversation. */
+function visibleCopy(input: TemplateInput): string[] {
+  const g = input.guide;
+  return [
+    input.title, input.searchName, input.metaDescription, input.description, input.blurb, input.greeting,
+    input.ending.title, input.ending.body ?? "",
+    ...(input.endings ?? []).flatMap((e) => [e.title, e.body ?? ""]),
+    ...input.questions.flatMap((q) => [
+      q.title,
+      "description" in q && typeof q.description === "string" ? q.description : "",
+      ...(q.options ?? []).flatMap((o) => [o.label, o.description ?? ""]),
+      ...(q.items ?? []), ...(q.rows ?? []), ...(q.columns ?? []),
+    ]),
+    ...g.questionsToConsider, g.howToUseResponses, ...g.customizeSteps,
+    ...g.faqs.flatMap((f) => [f.q, f.a]),
+  ];
+}
+
+/**
+ * The rules a public template page has to meet, checked at generation.
+ *
+ * Nearly three hundred of these are written in parallel, and a rule that lives
+ * only in the brief is a rule a third of them break. So the brief's hard
+ * constraints are here, where breaking one fails `pnpm gen:templates`.
+ */
+function checkTemplate(input: TemplateInput): void {
+  const fail = (why: string) => {
+    throw new Error(`template "${input.slug}": ${why}`);
+  };
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(input.slug)) fail("slug must be kebab-case");
+  if (!(input.category in CATEGORIES_BY_TYPE[input.type])) fail(`category "${input.category}" is not a ${input.type} category`);
+  if (input.goals.some((g) => !(g in GOALS))) fail("unknown goal");
+  if (input.roles.length === 0 || input.roles.some((r) => !(r in ROLES))) fail("needs at least one known role");
+  if (!(TEMPLATE_ICONS as readonly string[]).includes(input.icon)) fail(`unknown icon "${input.icon}"`);
+  const md = input.metaDescription.length;
+  if (md < 110 || md > 165) fail(`metaDescription is ${md} characters; keep it 110 to 165`);
+  if (!input.searchName.trim() || /template/i.test(input.searchName)) fail('searchName is the bare phrase, without "template"');
+  const g = input.guide;
+  if (g.questionsToConsider.length < 3 || g.questionsToConsider.length > 5) fail("guide.questionsToConsider needs 3 to 5");
+  if (g.customizeSteps.length !== 3) fail("guide.customizeSteps needs exactly 3");
+  if (g.faqs.length < 3 || g.faqs.length > 5) fail("guide.faqs needs 3 to 5");
+  if (g.howToUseResponses.length < 80) fail("guide.howToUseResponses is too thin");
+  const questions = input.questions.filter((q) => q.type !== "statement");
+  if (questions.length < 4) fail("needs at least 4 questions");
+  if (input.type === "quiz" && !input.scoreEndings?.length && !(input.endings?.length)) {
+    fail("a quiz needs a result: scoreEndings or more than one ending");
+  }
+  for (const text of visibleCopy(input)) {
+    if (text.includes("\u2014")) fail(`em dash in "${text.slice(0, 60)}"`);
+    if (/\s\u2013\s/.test(text)) fail(`spaced en dash in "${text.slice(0, 60)}"`);
+  }
+}
+
+function factsOf(input: TemplateInput, doc: FormDoc): TemplateFacts {
+  const blockTypes: string[] = [];
+  for (const b of doc.blocks) {
+    if (b.type === "welcome" || b.type === "statement") continue;
+    if (!blockTypes.includes(b.type)) blockTypes.push(b.type);
+  }
+  return {
+    blockTypes,
+    branches: (input.branches ?? []).filter((b) => !b.always).length + (input.scoreEndings?.length ?? 0),
+    endings: doc.endings.length,
+    scored: doc.variables.length > 0,
+  };
+}
+
 export function defineTemplate(input: TemplateInput): TemplateSeed {
+  checkTemplate(input);
   const { doc, blockCount, estMinutes } = buildAuthoredDoc(input);
   return {
     slug: input.slug,
     title: input.title,
+    type: input.type,
     category: input.category,
+    goals: input.goals,
+    roles: input.roles,
+    searchName: input.searchName,
+    metaDescription: input.metaDescription,
     description: input.description,
     blurb: input.blurb,
     tags: input.tags,
     icon: input.icon,
-    accent: CATEGORY_ACCENT[input.category],
+    accent: accentFor(input.type, input.category),
     blockCount,
     estMinutes,
+    guide: input.guide,
+    facts: factsOf(input, doc),
     doc,
   };
 }

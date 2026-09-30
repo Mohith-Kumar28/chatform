@@ -3,7 +3,7 @@ import { source } from "@/lib/source";
 import { posts } from "@/lib/blog-source";
 import { COMPARISONS } from "@/content/compare";
 import { USE_CASES } from "@/content/use-cases";
-import { TEMPLATES } from "@/content/templates";
+import { GOALS, ROLES, TEMPLATES, TYPES, byCategory, byGoal, byRole, categoryPath, goalPath, rolePath, typePath } from "@/content/templates";
 import { SITE_ORIGIN } from "@/lib/seo";
 
 /**
@@ -48,6 +48,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly" as const,
       priority: 0.8,
     })),
+
+    // Template hubs: every type, category, goal and role that has a page.
+    ...[
+      ...TYPES.map((t) => typePath(t.type)),
+      ...TYPES.flatMap((t) => t.categories.filter((c) => byCategory(t.type, c.slug).length > 0).map((c) => categoryPath(t.type, c.slug))),
+      ...GOALS.filter((g) => byGoal(g.slug).length > 0).map((g) => goalPath(g.slug)),
+      ...ROLES.filter((r) => byRole(r.slug).length > 0).map((r) => rolePath(r.slug)),
+    ].map((path) => ({ url: `${SITE_ORIGIN}${path}`, changeFrequency: "monthly" as const, priority: 0.8 })),
 
     ...TEMPLATES.map((template) => ({
       url: `${SITE_ORIGIN}${template.path}`,

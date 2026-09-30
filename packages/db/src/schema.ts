@@ -2030,3 +2030,14 @@ export const importQuota = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.keyHash, t.day] })],
 );
+
+/** Live template tries per visitor per UTC day. Keyed by device or user, never IP. See migration 0053. */
+export const templateDemoQuota = sqliteTable(
+  "template_demo_quota",
+  {
+    keyHash: text("key_hash").notNull(),
+    day: text("day").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.keyHash, t.day] })],
+);

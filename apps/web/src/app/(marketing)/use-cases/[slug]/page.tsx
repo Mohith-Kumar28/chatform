@@ -11,7 +11,7 @@ import { UseCaseFigure } from "@/components/marketing/use-case-figure";
 import { HandNote } from "@/components/marketing/annotate";
 import { JsonLd } from "@/components/seo/json-ld";
 import { USE_CASES, getUseCase } from "@/content/use-cases";
-import { getTemplate } from "@/content/templates";
+import { loadTemplate } from "@/content/templates";
 import { TemplatePanes } from "@/components/templates/template-detail";
 import { breadcrumbLd, canonical, faqPageLd, howToLd, openGraphBase } from "@/lib/seo";
 
@@ -59,7 +59,7 @@ export default async function UseCasePage({ params }: { params: Promise<{ slug: 
   const entry = getUseCase((await params).slug);
   if (!entry) notFound();
 
-  const template = entry.template ? getTemplate(entry.template.slug) : undefined;
+  const template = entry.template ? await loadTemplate(entry.template.slug) : undefined;
 
   const related = entry.related
     .map((slug) => getUseCase(slug))

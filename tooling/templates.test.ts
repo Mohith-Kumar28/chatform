@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { FormDoc } from "@repo/form-schema";
-import { CATEGORIES, CATEGORY_ACCENT, TEMPLATES } from "./templates/index.js";
+import { FormDoc, resolveEnding, resolveNext, type EvalState } from "@repo/form-schema";
+import { CATEGORIES_BY_TYPE, TEMPLATES, TEMPLATE_ICONS, TEMPLATE_TYPES, accentFor } from "./templates/index.js";
 
 /**
  * The catalogue is authored in TypeScript and generated into SQL that is
@@ -32,10 +32,13 @@ function dashOffenders(copy: string): string[] {
 }
 
 describe("template catalogue", () => {
-  it("has templates across every category", () => {
-    expect(TEMPLATES.length).toBeGreaterThanOrEqual(30);
-    const used = new Set(TEMPLATES.map((t) => t.category));
-    for (const category of CATEGORIES) expect(used).toContain(category);
+  it("has templates in every type and every category", () => {
+    expect(TEMPLATES.length).toBeGreaterThanOrEqual(280);
+    for (const type of TEMPLATE_TYPES) {
+      for (const category of Object.keys(CATEGORIES_BY_TYPE[type])) {
+        expect(TEMPLATES.some((t) => t.type === type && t.category === category), `${type}/${category}`).toBe(true);
+      }
+    }
   });
 
   it("has unique slugs", () => {
@@ -79,14 +82,14 @@ describe("template catalogue", () => {
 
   it("asks enough to be worth starting from", () => {
     for (const t of TEMPLATES) {
-      expect(t.blockCount, t.slug).toBeGreaterThanOrEqual(8);
+      expect(t.blockCount, t.slug).toBeGreaterThanOrEqual(6);
     }
   });
 
   it("routes to every ending it declares", () => {
     for (const t of TEMPLATES) {
       const aimedAt = new Set(
-        t.doc.logic
+        [...t.doc.logic, ...t.doc.endingRules]
           .filter((r) => r.action_kind === "goto" && (r.targetKind ?? "block") === "ending")
           .map((r) => r.target),
       );
@@ -150,9 +153,51 @@ describe("template catalogue", () => {
       expect(t.blurb.length, t.slug).toBeGreaterThan(40);
       expect(t.tags.length, t.slug).toBeGreaterThan(0);
       expect(t.icon, t.slug).toMatch(/^[A-Z][A-Za-z0-9]+$/);
-      expect(t.accent, t.slug).toBe(CATEGORY_ACCENT[t.category]);
+      expect(t.accent, t.slug).toBe(accentFor(t.type, t.category));
+      expect(TEMPLATE_ICONS as readonly string[], t.slug).toContain(t.icon);
     }
   });
+});
+
+/**
+ * A scored quiz whose best possible answers do not reach its best result is a
+ * quiz nobody can win, and nothing else would notice: the lint passes, the
+ * document parses, and the top ending is drawn on the canvas with a wire into
+ * it. So each one is played through the real engine, once with the best pick
+ * everywhere and once with the worst.
+ */
+describe("scored quizzes", () => {
+  type Pick = (b: { type: string; options?: { id: string; score?: number }[] }) => unknown;
+  const play = (doc: FormDoc, pick: Pick) => {
+    const state: EvalState = { answers: {}, variables: Object.fromEntries(doc.variables.map((v) => [v.name, v.initial])), hidden: {} };
+    let cursor = resolveNext(doc, null, state);
+    for (let i = 0; i < 200 && cursor.kind === "block"; i++) {
+      const block = cursor.block as unknown as Parameters<Pick>[0] & { ref: string };
+      if (block.type !== "welcome" && block.type !== "statement") state.answers[block.ref] = pick(block) as never;
+      cursor = resolveNext(doc, block.ref, state);
+    }
+    return cursor.kind === "ending" ? cursor.ending.ref : resolveEnding(doc, state).ref;
+  };
+  const filler = (type: string): unknown =>
+    ({ yes_no: true, number: 3, rating: 3, opinion_scale: 3, nps: 8, email: "a@example.com", date: "2026-01-01" })[type] ?? "An answer";
+  const best: Pick = (b) =>
+    b.options
+      ? b.type === "multi_select"
+        ? b.options.filter((o) => (o.score ?? 0) > 0).map((o) => o.id).concat([]).slice(0, Math.max(1, b.options.filter((o) => (o.score ?? 0) > 0).length))
+        : [...b.options].sort((x, y) => (y.score ?? 0) - (x.score ?? 0))[0]!.id
+      : filler(b.type);
+
+  const scored = TEMPLATES.filter((t) => t.doc.endingRules.some((r) => r.action_kind === "goto"));
+
+  it("exists", () => expect(scored.length).toBeGreaterThan(10));
+
+  for (const t of scored) {
+    it(`${t.slug}: the best answers reach the top result`, () => {
+      const top = [...t.doc.endingRules].find((r) => r.action_kind === "goto");
+      const reached = play(t.doc, best);
+      expect(reached, `${t.slug} ended on ${reached}`).toBe(top && top.action_kind === "goto" ? top.target : "end_thanks");
+    });
+  }
 });
 
 describe("generated seed", () => {

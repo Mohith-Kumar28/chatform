@@ -1,92 +1,169 @@
 import type { FormDoc } from "@repo/form-schema";
-import type { TemplateDetailPayload, TemplateSummary } from "@/lib/templates";
+import type { TemplateSummary } from "@/lib/templates";
 import { USE_CASES, type UseCase } from "@/content/use-cases";
-import catalogue from "./catalogue.generated.json";
+import index from "./index.generated.json";
+import { DOC_LOADERS } from "./docs/loaders.generated";
 
 /**
  * The official template catalogue, for the public pages at `/form-templates`.
  *
- * Read from `catalogue.generated.json`, which `pnpm gen:templates` writes from
- * `tooling/templates/` in the same run as the seed SQL — so the page a visitor
- * reads is the template the app creates, question for question. Server-only in
- * practice: the gallery passes summaries to the client, and a detail page
- * passes exactly one document.
+ * Read from files `pnpm gen:templates` writes from `tooling/templates/` in the
+ * same run as the seed SQL, so the page a visitor reads is the template the app
+ * creates, question for question.
+ *
+ * Cards and the taxonomy come from one index; a template's document and guide
+ * are loaded only by its own page (`loadTemplate`), because all of them
+ * together are several megabytes.
  */
 
-export interface PublicTemplate extends TemplateDetailPayload {
-  doc: FormDoc;
+export type TemplateType = "form" | "survey" | "quiz";
+
+export interface TemplateFacts {
+  blockTypes: string[];
+  branches: number;
+  endings: number;
+  scored: boolean;
+}
+
+export interface TemplateCardData {
+  slug: string;
+  /** The short in-app name. */
+  title: string;
   /** The phrase somebody types into a search box, e.g. "Client intake form". */
   searchName: string;
+  type: TemplateType;
+  category: string;
+  goals: string[];
+  roles: string[];
+  description: string;
+  metaDescription: string;
+  blurb: string;
+  tags: string[];
+  icon: string;
+  accent: string;
+  blockCount: number;
+  estMinutes: number;
+  facts: TemplateFacts;
   /** `/form-templates/<slug>`. */
   path: string;
 }
 
-/**
- * What each template is called by the person searching for it.
- *
- * The catalogue's titles are written for someone already inside the product
- * ("New client intake", "Launch waitlist"). Nobody searches for those. They
- * search for "client intake form template" — so the public h1, title tag and
- * card name use the search phrase, and the catalogue keeps its own names for
- * the app. A slug missing from this map falls back to the catalogue title, so
- * a new template is never unpublishable, only less well named.
- */
-export const SEARCH_NAMES: Record<string, string> = {
-  waitlist: "Waitlist form",
-  "newsletter-signup": "Newsletter signup form",
-  "webinar-registration": "Webinar registration form",
-  "content-download": "Content download form",
-  "event-rsvp": "Event RSVP form",
-  "event-feedback": "Event feedback form",
-  "speaker-submission": "Call for speakers form",
-  "workshop-registration": "Workshop registration form",
-  "lead-capture": "Lead capture form",
-  "demo-request": "Demo request form",
-  "quote-request": "Quote request form",
-  "partnership-inquiry": "Partnership inquiry form",
-  "nps-survey": "NPS survey",
-  "csat-survey": "Customer satisfaction survey",
-  "product-market-fit": "Product-market fit survey",
-  "feature-request": "Feature request form",
-  "beta-signup": "Beta signup form",
-  "cancellation-survey": "Cancellation survey",
-  "course-enrollment": "Course enrollment form",
-  "student-feedback": "Student feedback form",
-  quiz: "Online quiz",
-  "client-intake": "Client intake form",
-  "appointment-booking": "Appointment booking form",
-  "job-application": "Job application form",
-  "employee-onboarding": "Employee onboarding form",
-  "exit-interview": "Exit interview form",
-  "engagement-pulse": "Employee pulse survey",
-  "referral-submission": "Employee referral form",
-  "bug-report": "Bug report form",
-  "support-ticket": "Support ticket form",
-  "contact-us": "Contact form",
-  "refund-request": "Refund request form",
-  "volunteer-signup": "Volunteer signup form",
-  "membership-application": "Membership application form",
-  "testimonial-request": "Testimonial request form",
+export interface TemplateGuide {
+  questionsToConsider: string[];
+  howToUseResponses: string;
+  customizeSteps: string[];
+  faqs: { q: string; a: string }[];
+}
+
+export interface PublicTemplate extends TemplateCardData {
+  doc: FormDoc;
+  guide: TemplateGuide;
+}
+
+interface Labelled {
+  slug: string;
+  label: string;
+}
+
+export interface TypeInfo {
+  type: TemplateType;
+  label: string;
+  plural: string;
+  /** The URL segment, e.g. "surveys". */
+  path: string;
+  categories: Labelled[];
+}
+
+const raw = index as unknown as {
+  taxonomy: { types: TypeInfo[]; goals: Labelled[]; roles: Labelled[] };
+  templates: Omit<TemplateCardData, "path">[];
 };
 
-export const TEMPLATES: readonly PublicTemplate[] = (
-  catalogue as unknown as (TemplateDetailPayload & { doc: FormDoc })[]
-).map((row) => ({
+export const TYPES: readonly TypeInfo[] = raw.taxonomy.types;
+export const GOALS: readonly Labelled[] = raw.taxonomy.goals;
+export const ROLES: readonly Labelled[] = raw.taxonomy.roles;
+
+export const TEMPLATES: readonly TemplateCardData[] = raw.templates.map((row) => ({
   ...row,
-  searchName: SEARCH_NAMES[row.slug] ?? row.title,
   path: `/form-templates/${row.slug}`,
 }));
 
-export function getTemplate(slug: string): PublicTemplate | undefined {
+export const TEMPLATE_COUNT = TEMPLATES.length;
+
+export function getTemplate(slug: string): TemplateCardData | undefined {
   return TEMPLATES.find((t) => t.slug === slug);
 }
 
-/** The card's data, without the document — what the gallery hands the client. */
-export function summaryOf(template: PublicTemplate): TemplateSummary {
+/** A template with its document and guide. Server-side, at build time. */
+export async function loadTemplate(slug: string): Promise<PublicTemplate | undefined> {
+  const card = getTemplate(slug);
+  const load = DOC_LOADERS[slug];
+  if (!card || !load) return undefined;
+  const { guide, doc } = (await load()).default as { guide: TemplateGuide; doc: FormDoc };
+  return { ...card, guide, doc };
+}
+
+export function typeInfo(type: TemplateType): TypeInfo {
+  return TYPES.find((t) => t.type === type)!;
+}
+
+export function typeByPath(path: string): TypeInfo | undefined {
+  return TYPES.find((t) => t.path === path);
+}
+
+export function categoryLabel(type: TemplateType, category: string): string {
+  return typeInfo(type).categories.find((c) => c.slug === category)?.label ?? category;
+}
+
+/** "Survey · Feedback", the line above a card's name. */
+export function kindLine(t: Pick<TemplateCardData, "type" | "category">): string {
+  return `${typeInfo(t.type).label} · ${categoryLabel(t.type, t.category)}`;
+}
+
+export function goalLabel(slug: string): string | undefined {
+  return GOALS.find((g) => g.slug === slug)?.label;
+}
+
+export function roleLabel(slug: string): string | undefined {
+  return ROLES.find((r) => r.slug === slug)?.label;
+}
+
+export const byType = (type: TemplateType) => TEMPLATES.filter((t) => t.type === type);
+export const byCategory = (type: TemplateType, category: string) =>
+  TEMPLATES.filter((t) => t.type === type && t.category === category);
+export const byGoal = (goal: string) => TEMPLATES.filter((t) => t.goals.includes(goal));
+export const byRole = (role: string) => TEMPLATES.filter((t) => t.roles.includes(role));
+
+export const categoryPath = (type: TemplateType, category: string) =>
+  `/form-templates/c/${typeInfo(type).path}/${category}`;
+export const typePath = (type: TemplateType) => `/form-templates/c/${typeInfo(type).path}`;
+export const goalPath = (goal: string) => `/form-templates/goals/${goal}`;
+export const rolePath = (role: string) => `/form-templates/roles/${role}`;
+
+/**
+ * Templates to show beside this one: same category first, then the same goal,
+ * then the same type, never itself.
+ */
+export function relatedTo(t: TemplateCardData, count = 3): TemplateCardData[] {
+  const picked: TemplateCardData[] = [];
+  const add = (list: readonly TemplateCardData[]) => {
+    for (const other of list) {
+      if (picked.length >= count) return;
+      if (other.slug !== t.slug && !picked.includes(other)) picked.push(other);
+    }
+  };
+  add(byCategory(t.type, t.category));
+  for (const goal of t.goals) add(byGoal(goal));
+  add(byType(t.type));
+  return picked;
+}
+
+/** The card's data in the shape `TemplateCard` takes. */
+export function summaryOf(template: TemplateCardData): TemplateSummary {
   return {
     slug: template.slug,
     title: template.searchName,
-    category: template.category,
+    category: kindLine(template),
     description: template.description,
     blurb: template.blurb,
     tags: template.tags,
@@ -97,14 +174,7 @@ export function summaryOf(template: PublicTemplate): TemplateSummary {
   };
 }
 
-/** Categories in catalogue order, each with its templates. */
-export function templatesByCategory(): { category: string; items: PublicTemplate[] }[] {
-  const groups = new Map<string, PublicTemplate[]>();
-  for (const t of TEMPLATES) groups.set(t.category, [...(groups.get(t.category) ?? []), t]);
-  return [...groups.entries()].map(([category, items]) => ({ category, items }));
-}
-
-/** The use-case guides that start from this template — the long-form version of the page. */
+/** The use-case guides that start from this template: the long-form version of the page. */
 export function guidesFor(slug: string): UseCase[] {
   return USE_CASES.filter((entry) => entry.template?.slug === slug);
 }

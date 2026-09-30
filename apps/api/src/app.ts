@@ -33,6 +33,7 @@ import { formPaymentsRouter } from "./routes/form-payments.js";
 import { previewRouter } from "./routes/preview.js";
 import { templatesRouter } from "./routes/templates.js";
 import { importRouter } from "./routes/import.js";
+import { templateDemoRouter } from "./routes/template-demo.js";
 import { auditRouter } from "./routes/audit.js";
 import { formHistoryRouter } from "./routes/form-history.js";
 import { adminRouter } from "./routes/admin/index.js";
@@ -352,6 +353,8 @@ export function createApp() {
    * session guards are scoped to its own paths.
    */
   app.route("/api", importRouter);
+  /** Trying a template live from the public gallery. Public for the same reason. */
+  app.route("/api", templateDemoRouter);
 
   app.route("/health", healthRouter);
   publicRouter.route("/", uploadsRouter);

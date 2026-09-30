@@ -1,0 +1,193 @@
+import { defineTemplate, type TemplateSeed } from "../define.js";
+
+export const SURVEY_HEALTHCARE: TemplateSeed[] = [
+  defineTemplate({
+    slug: "healthcare-employee-satisfaction-survey",
+    type: "survey",
+    category: "healthcare",
+    goals: ["collect-feedback", "conduct-research"],
+    roles: ["hr-people", "operations"],
+    searchName: "Healthcare employee satisfaction survey",
+    title: "Healthcare staff satisfaction",
+    icon: "Stethoscope",
+    metaDescription:
+      "An anonymous survey for clinical and support staff on workload, staffing, equipment, breaks, burnout and whether they plan to stay. No patient details collected.",
+    description: "Understand how healthcare staff experience their work, without collecting patient details.",
+    blurb:
+      "Written for wards, clinics and practices, where satisfaction depends on staffing, handovers, breaks and feeling safe to speak up. Staff who say they often feel burned out are asked what drives it, and anyone unsure about staying is asked what would keep them. Open questions remind people to leave patient details out.",
+    tags: [
+      "healthcare employee survey",
+      "nurse satisfaction survey",
+      "hospital staff survey",
+      "staff burnout",
+      "clinical staff feedback",
+    ],
+    greeting:
+      "This survey is anonymous and takes about five minutes. Please don't include patient names or details in any answer.",
+    questions: [
+      {
+        ref: "role",
+        type: "single_select",
+        title: "Which best describes your role?",
+        required: true,
+        options: [
+          { label: "Nurse or midwife" },
+          { label: "Doctor" },
+          { label: "Allied health professional" },
+          { label: "Healthcare assistant or support worker" },
+          { label: "Admin or reception" },
+          { label: "Other" },
+        ],
+      },
+      {
+        ref: "shift_pattern",
+        type: "single_select",
+        title: "What shift pattern do you mostly work?",
+        required: true,
+        options: [
+          { label: "Days" },
+          { label: "Nights" },
+          { label: "Rotating days and nights" },
+          { label: "Regular office hours" },
+        ],
+      },
+      {
+        ref: "satisfaction",
+        type: "rating",
+        title: "Overall, how satisfied are you working here?",
+        required: true,
+        scale: 5,
+      },
+      {
+        ref: "workload",
+        type: "opinion_scale",
+        title: "How manageable is your workload on a typical shift?",
+        required: true,
+        steps: 5,
+        startAt: 1,
+        labelLow: "Unmanageable",
+        labelHigh: "Very manageable",
+      },
+      {
+        ref: "conditions",
+        type: "matrix",
+        title: "How often is each of these true for you?",
+        required: true,
+        rows: [
+          "I have the equipment and supplies I need",
+          "Staffing levels let me give safe care",
+          "Handovers give me what I need",
+          "I can take my breaks",
+          "Managers keep me informed about changes",
+          "I feel safe raising concerns",
+        ],
+        columns: ["Never", "Sometimes", "Usually", "Always"],
+      },
+      {
+        ref: "burnout",
+        type: "single_select",
+        title: "How often do you finish a shift feeling burned out?",
+        required: true,
+        options: [{ label: "Rarely" }, { label: "Sometimes" }, { label: "Often" }, { label: "Most shifts" }],
+      },
+      {
+        ref: "burnout_causes",
+        type: "multi_select",
+        title: "What contributes to that most?",
+        required: true,
+        minSelections: 1,
+        maxSelections: 7,
+        options: [
+          { label: "Understaffing" },
+          { label: "Long or unpredictable hours" },
+          { label: "Missed breaks" },
+          { label: "Emotional demands of the work" },
+          { label: "Paperwork and admin" },
+          { label: "Little support from leaders" },
+          { label: "Conflict with colleagues" },
+        ],
+      },
+      {
+        ref: "valued",
+        type: "opinion_scale",
+        title: "How valued do you feel for the work you do?",
+        required: true,
+        steps: 5,
+        startAt: 1,
+        labelLow: "Not at all",
+        labelHigh: "Very valued",
+      },
+      {
+        ref: "staying",
+        type: "single_select",
+        title: "Do you see yourself working here a year from now?",
+        required: true,
+        options: [{ label: "Yes" }, { label: "Not sure" }, { label: "No" }],
+      },
+      {
+        ref: "keep_you",
+        type: "long_text",
+        title: "What would make you more likely to stay?",
+        description: "Please leave out patient names or details.",
+        required: false,
+        maxLength: 1000,
+      },
+      {
+        ref: "one_change",
+        type: "long_text",
+        title: "What one change would most improve your working day?",
+        description: "Please leave out patient names or details.",
+        required: false,
+        maxLength: 1000,
+      },
+      {
+        ref: "recommend",
+        type: "nps",
+        title: "How likely are you to recommend this as a place to work?",
+        required: true,
+      },
+    ],
+    branches: [
+      { when: "burnout", is: "Rarely", then: "valued" },
+      { when: "burnout", is: "Sometimes", then: "valued" },
+      { when: "staying", is: "Yes", then: "one_change" },
+    ],
+    ending: {
+      title: "Thank you for your time 💙",
+      body: "Results are reported by staff group only, and we'll share what we're changing once the survey closes.",
+    },
+    guide: {
+      questionsToConsider: [
+        "Are your staff groups large enough to report by role and shift pattern without identifying anyone?",
+        "Which of the working-condition statements match problems you already hear about, such as missed breaks?",
+        "How will staff without a work computer, such as night-shift or bank staff, get the link?",
+        "Who owns the action plan, and when will you tell staff what changed?",
+      ],
+      howToUseResponses:
+        "Split the working-conditions grid by role and shift pattern: night staff who can't take breaks or healthcare assistants who don't feel safe raising concerns need different fixes. Treat any group where most people report burnout on most shifts as urgent, and read their causes before anything else. The 'what would keep you' answers from people unsure about staying are your retention plan. Share a short summary and two or three commitments with staff within a month.",
+      customizeSteps: [
+        "Edit the roles and shift patterns to match your wards, clinics or practice, and merge small groups.",
+        "Adjust the working-condition statements to issues specific to your setting, such as parking, rota notice or on-call load.",
+        "Share the link by QR code in staff rooms and by message, and leave it open for two to three weeks so every shift pattern can answer.",
+      ],
+      faqs: [
+        {
+          q: "What should a healthcare employee satisfaction survey ask?",
+          a: "Workload, staffing, equipment, breaks, communication from managers, whether staff feel safe raising concerns, burnout and whether they plan to stay. An open question about the one change they want is often the most useful.",
+        },
+        {
+          q: "How do I keep patient information out of staff survey answers?",
+          a: "Say it in the greeting and under every open question, as this template does, and avoid questions that invite stories about specific patients.",
+        },
+        {
+          q: "Should a healthcare staff survey be anonymous?",
+          a: "Yes. Staff are more honest about staffing and safety when they can't be identified, so don't ask for names and keep role groups broad.",
+        },
+        {
+          q: "How can I reach night and part-time staff?",
+          a: "Share the link by message or as a QR code in break rooms, and keep it open long enough to cover every rota. The chat format is quick to answer on a phone.",
+        },
+      ],
+    },
+  }),
+];

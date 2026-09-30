@@ -43,7 +43,7 @@ export default function TemplatesPage() {
         title="Templates"
         description={
           templates.length > 0
-            ? `${templates.length} ready-made conversations across ${categories.length} categories. Every one is fully editable.`
+            ? `${templates.length} ready-made conversations: forms, surveys and quizzes. Every one is fully editable.`
             : "Start from a proven structure — every template is fully editable."
         }
         actions={

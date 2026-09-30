@@ -11,8 +11,12 @@
  * take those slots because they are the two questions somebody arriving from a
  * search actually has — "is this better than the thing I already use", and "why
  * would a chat be better than a form" — and neither had a destination before.
+ *
+ * `Templates` sits first: with nearly three hundred of them, each tryable live,
+ * the gallery is where most people arriving from a search are headed next.
  */
 export const MARKETING_LINKS = [
+  { href: "/form-templates", label: "Templates" },
   { href: "/why-conversation-works", label: "Why chat?" },
   { href: "/compare", label: "Compare" },
   { href: "/pricing", label: "Pricing" },
