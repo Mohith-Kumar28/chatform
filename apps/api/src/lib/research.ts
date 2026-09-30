@@ -1,6 +1,7 @@
 import { embedFromUrl } from "@repo/form-schema";
 import { guardedFetch, isBlockedHost, readTruncatedText } from "@repo/guard";
-import { extractSourceForm, type SourceForm } from "./form-import.js";
+import { sourceFormOf, type SourceForm } from "./form-import.js";
+import { formInPage, readImport, resolveImportUrl } from "./import/read.js";
 /**
  * Reading the web before drafting a form.
  *
@@ -143,6 +144,8 @@ export function htmlToText(html: string): string {
  * a timeout, a non-2xx, a PDF, an empty client-rendered shell.
  */
 export async function fetchSiteText(url: string): Promise<SiteReading | null> {
+  const builder = await builderForm(url);
+  if (builder) return { url, title: builder.title, text: "", form: builder };
   try {
     /**
      * `guardedFetch` rather than `fetch`, and the difference that matters is
@@ -172,11 +175,28 @@ export async function fetchSiteText(url: string): Promise<SiteReading | null> {
     // but its first half is still worth reading.
     const html = await readTruncatedText(response, MAX_BYTES);
     const text = htmlToText(html);
-    const form = extractSourceForm(html, url);
+    // The same detector the converter and the dashboard's Import use.
+    const found = await formInPage(html, url).catch(() => null);
+    const form = found ? sourceFormOf(found) : null;
     // A client-rendered shell yields a nav bar and nothing else. Below this it
     // is noise that would only mislead the generator, unless there is a form.
     if (text.length < 200 && !form) return null;
     return { url, title: extractTitle(html), text, form };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A Typeform, Google Forms, Tally, Jotform or Youform link, read the way the
+ * "Switch to chatform" converter reads it. Those builders render in script,
+ * so the page text below would have nothing in it. Null for any other link,
+ * or when the builder turns us away, and the page is read as a page.
+ */
+async function builderForm(url: string): Promise<SourceForm | null> {
+  try {
+    if (!resolveImportUrl(url).provider) return null;
+    return sourceFormOf(await readImport(url));
   } catch {
     return null;
   }

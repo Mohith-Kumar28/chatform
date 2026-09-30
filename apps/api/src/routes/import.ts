@@ -51,7 +51,7 @@ importRouter.post("/import/forms", requirePermission("form", "create"), requireG
 const Url = z.string().trim().min(4).max(2000);
 
 export const ImportReportSchema = z.object({
-  provider: z.enum(["typeform", "google_forms", "tally", "jotform", "youform"]),
+  provider: z.enum(["typeform", "google_forms", "tally", "jotform", "youform", "website"]),
   sourceUrl: z.string(),
   questions: z.number(),
   branches: z.number(),

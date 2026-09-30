@@ -26,8 +26,8 @@ export interface ImportSourcePage {
     accent: string;
     body: string;
     steps: [string, string, string];
-    /** The existing comparison page for this builder. */
-    compare: string;
+    /** The existing comparison page for this builder, when there is one. */
+    compare?: string;
     /** A block-family colour from globals.css, for the panel's ground. */
     family: "content" | "advanced" | "contact" | "number" | "scale";
   };
@@ -254,6 +254,45 @@ export const IMPORT_PAGES: ImportSourcePage[] = [
       {
         question: "Can I import a Youform that isn't published?",
         answer: "No. The importer reads the public link, so the form has to be published and open without signing in.",
+      },
+      shared.responses,
+      shared.original,
+    ],
+  },
+  {
+    source: "website",
+    slug: "website",
+    name: "Website",
+    title: "Turn any website form into a conversational form, free | chatform",
+    description:
+      "Paste a link to any page with a form on it, like a contact page, signup or application, and get it back as a conversational form with the same fields, options and required settings. Free, no account needed to try.",
+    h1: "Bring a form over from any website.",
+    lede: "Paste the link to a page with a form on it. You get the same fields and options, asked one at a time as a conversation.",
+    comesWith: [
+      "Every field, with its label and placeholder",
+      "Dropdowns, radio buttons and checkboxes, with their options in order",
+      "Email, phone, website, number and date fields, by their type or their label",
+      "Required fields, when the page marks them",
+      "A Typeform, Google Form, Tally, Jotform or Youform embedded in the page",
+    ],
+    check: [
+      "A form the page builds only after it loads can't be read: link to the form itself",
+      "Search boxes and single-field signups are skipped",
+      "Where the page doesn't mark required fields, every field comes over optional",
+    ],
+    band: {
+      tagline: "Any page with a form",
+      title: "Your contact page.",
+      accent: "Now it's a conversation.",
+      body: "Fields, dropdowns, checkboxes and required marks come over from any page's form, asked one question at a time.",
+      steps: ["Paste the link to a page with a form.", "Talk to it as a conversation, right here.", "Sign up free to keep it, then publish."],
+      family: "contact",
+    },
+    faq: [
+      shared.account,
+      {
+        question: "What if the page has no form?",
+        answer: "We tell you we couldn't find one. Paste the link to the page the form is on, or to the form itself.",
       },
       shared.responses,
       shared.original,

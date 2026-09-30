@@ -32,6 +32,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_ORIGIN}/import/tally`, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE_ORIGIN}/import/jotform`, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE_ORIGIN}/import/youform`, changeFrequency: "monthly", priority: 0.7 },
+    { url: `${SITE_ORIGIN}/import/website`, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE_ORIGIN}/why-conversation-works`, changeFrequency: "monthly", priority: 0.9 },
     { url: `${SITE_ORIGIN}/form-statistics`, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE_ORIGIN}/compare`, changeFrequency: "monthly", priority: 0.8 },

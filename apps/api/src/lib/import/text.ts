@@ -22,7 +22,9 @@ export function htmlToMarkdown(html: string): string {
     .replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1>/gi, (_, _t, inner: string) => wrap(inlineText(inner), "_"))
     .replace(/<li\b[^>]*>/gi, "\n- ")
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|h[1-6]|li|ul|ol)>/gi, "\n")
+    // A paragraph ends in a blank line, or markdown runs the next one into it.
+    .replace(/<\/(p|div|h[1-6])>/gi, "\n\n")
+    .replace(/<\/(li|ul|ol)>/gi, "\n")
     .replace(/<[^>]+>/g, "");
   return decodeEntities(md)
     .replace(/[ \t ]+/g, " ")
@@ -49,4 +51,21 @@ export function imageUrlOf(raw: unknown): string | undefined {
   if (typeof raw !== "string") return undefined;
   const url = raw.trim();
   return /^https:\/\/[^\s"'<>]+$/i.test(url) ? url : undefined;
+}
+
+/**
+ * The answer a plain text box is really asking for, from what the page says
+ * about it: its name, autocomplete hint, placeholder and label. Null when
+ * nothing points anywhere, and the generator decides.
+ */
+export function inferTextType(hints: { name?: string | null; autocomplete?: string | null; placeholder?: string | null; label?: string | null }): string | null {
+  const name = `${hints.name ?? ""} ${hints.autocomplete ?? ""}`.toLowerCase();
+  const placeholder = (hints.placeholder ?? "").toLowerCase();
+  const label = (hints.label ?? "").toLowerCase();
+  const all = `${name} ${label}`;
+  if (/e-?mail/.test(all) || /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/.test(placeholder.trim())) return "email";
+  if (/\b(phone|mobile|tel|whatsapp|contact number)\b/.test(all) || /^\+?[\d\s()-]{7,}$/.test(placeholder.trim())) return "phone";
+  if (/(website|\burl\b|homepage|linkedin|site\b|link\b)/.test(all) || /^(https?:\/\/|www\.)/.test(placeholder.trim())) return "url";
+  if (/\b(date of birth|dob|birthday|date)\b/.test(all) || /^(dd|mm|yyyy)[/-]/.test(placeholder.trim())) return "date";
+  return null;
 }

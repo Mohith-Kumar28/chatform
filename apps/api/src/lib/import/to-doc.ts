@@ -9,7 +9,7 @@ import {
 } from "@repo/form-schema";
 import type { GenerationDraft } from "../ai.js";
 import { draftToDoc, pruneOrphanEndings } from "../draft-normalize.js";
-import { uniqueRef } from "../form-import.js";
+import { askedTitle, uniqueRef } from "../form-import.js";
 import type { ImportedConditionGroup, ImportedForm, ImportedItem, ImportReport } from "./types.js";
 
 /**
@@ -26,11 +26,14 @@ import type { ImportedConditionGroup, ImportedForm, ImportedItem, ImportReport }
  * semantics are ours (fire after the question, carry on from where you land),
  * so each jump is written as one goto rule, in the source's order.
  *
- * Titles are copied as written. The chat interviewer already puts every
- * question in its own words; rephrasing "Your first name" here as well would
- * only move the result away from the form the author recognises.
+ * Titles are the source's, made to read as questions the way a linked form
+ * in the AI builder is (`askedTitle`): "Email Address" is asked as "What's
+ * your email address?", and anything already a question or a sentence is
+ * kept exactly. The chat does not reword them later: the default hybrid mode
+ * asks every question in the words on the block.
  */
-export function importedToDoc(form: ImportedForm): { doc: FormDoc; report: ImportReport } {
+export function importedToDoc(source: ImportedForm): { doc: FormDoc; report: ImportReport } {
+  const form = { ...source, items: picturesOnQuestions(source.items) };
   const taken = new Set<string>(["welcome"]);
   const refOf = new Map<string, string>();
   const notCopied = new Set(form.notCopied);
@@ -53,7 +56,7 @@ export function importedToDoc(form: ImportedForm): { doc: FormDoc; report: Impor
     blocks.push({
       ref,
       type: item.type,
-      title: clip(item.title || "Untitled question", 2000),
+      title: clip(item.type === "statement" ? item.title : askedTitle(item.title || "Untitled question"), 2000),
       description: clip(item.description, 5000),
       required: item.required,
       options: item.options.map((o) => clip(o, 500)).filter(Boolean),
@@ -357,4 +360,26 @@ const ruleId = () => `rl_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
 
 function clip(s: string, max: number): string {
   return (s ?? "").slice(0, max);
+}
+
+/**
+ * A picture on a message moves to the question after it.
+ *
+ * The chat shows a statement's words and carries straight on, and it draws
+ * a block's picture only while that block is the one on screen, so a picture
+ * left on a statement never appears. On the next question it lands between
+ * the two, which is where the source showed it: the message, the picture,
+ * then what is being asked.
+ */
+function picturesOnQuestions(items: ImportedItem[]): ImportedItem[] {
+  const out = items.map((it) => ({ ...it }));
+  out.forEach((it, i) => {
+    if (it.type !== "statement" || !it.imageUrl) return;
+    const next = out.slice(i + 1).find((n) => n.type !== "statement");
+    if (next && !next.imageUrl) {
+      next.imageUrl = it.imageUrl;
+      delete it.imageUrl;
+    }
+  });
+  return out;
 }

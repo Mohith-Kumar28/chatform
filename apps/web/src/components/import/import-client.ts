@@ -13,7 +13,7 @@ import { getRespondentSignal } from "@/lib/respondent-signal";
  * no model call, so these are plain requests, not a stream.
  */
 
-export type ImportSource = "typeform" | "google_forms" | "tally" | "jotform" | "youform";
+export type ImportSource = "typeform" | "google_forms" | "tally" | "jotform" | "youform" | "website";
 
 export const IMPORT_SOURCES: {
   id: ImportSource;
@@ -59,6 +59,13 @@ export const IMPORT_SOURCES: {
     placeholder: "https://app.youform.com/forms/…",
     where: "In Youform, open the form, choose Share, and copy the link.",
   },
+  {
+    id: "website",
+    name: "Website",
+    slug: "website",
+    placeholder: "https://yoursite.com/contact",
+    where: "Any page with a form on it: a contact page, a signup or an application.",
+  },
 ];
 
 export const SOURCE_NAME: Record<ImportSource, string> = {
@@ -67,6 +74,7 @@ export const SOURCE_NAME: Record<ImportSource, string> = {
   tally: "Tally",
   jotform: "Jotform",
   youform: "Youform",
+  website: "Website",
 };
 
 export interface ImportReport {

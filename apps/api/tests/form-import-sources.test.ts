@@ -25,6 +25,9 @@ import { readJotform } from "../src/lib/import/jotform.js";
 import { parseYouformData, readYouform } from "../src/lib/import/youform.js";
 import { rehostImages } from "../src/lib/import/rehost.js";
 import youform1 from "./fixtures/import/youform-1.html?raw";
+import googleMemorie from "./fixtures/import/google-memorie.html?raw";
+import { parseGoogleData } from "../src/lib/import/google.js";
+import { formInPage } from "../src/lib/import/read.js";
 
 /**
  * Imports, against real public forms saved as fixtures (Typeform's API JSON,
@@ -50,7 +53,8 @@ const convert = {
 };
 
 const block = (doc: FormDoc, title: string) => {
-  const b = doc.blocks.find((x) => x.title.startsWith(title));
+  // Titles are asked as questions ("Contact Details" → "What's your contact details?").
+  const b = doc.blocks.find((x) => x.title.toLowerCase().includes(title.toLowerCase()));
   if (!b) throw new Error(`no block titled ${title}`);
   return b;
 };
@@ -480,5 +484,55 @@ describe("POST /api/import/forms", () => {
     expect(report.questions).toBe(30);
     const row = await env.DB.prepare(`SELECT workspace_id, status FROM forms WHERE id = ?`).bind(formId).first();
     expect(row).toEqual({ workspace_id: t.workspaceId, status: "draft" });
+  });
+});
+
+describe("Google Forms, as the page renders it", () => {
+  const form = readGoogleForm(parseGoogleData(googleMemorie)!, "https://docs.google.com/forms/d/e/x/viewform", googleMemorie);
+  const { doc } = importedToDoc(form);
+
+  it("keeps the bold and the paragraphs of the description", () => {
+    expect(form.description).toContain("**WhatsApp messages, screenshots, saving Insta reels only to never find them again?**");
+    expect(form.description).toContain("organises it.\n\nLooking for something specific?");
+  });
+
+  it("copies an image item as a message, its picture shown with the question after it", () => {
+    const hello = block(doc, "Hi, I am Memorie");
+    expect(hello.type).toBe("statement");
+    // The chat draws a picture only for the block on screen, and a message is never on screen.
+    expect((hello as { media?: unknown }).media ?? null).toBeNull();
+    const email = block(doc, "email address") as { media?: { url: string } };
+    expect(email.media?.url).toMatch(/^https:\/\/docs\.google\.com\/forms-images-rt\/.+=w1200$/);
+    expect(form.notCopied).not.toContain("Images");
+  });
+
+  it("asks a bare label as a question and keeps a question as written", () => {
+    const titles = doc.blocks.map((b) => b.title);
+    expect(titles).toContain("What's your email address?");
+    expect(titles).toContain("What's your first name?");
+    expect(titles).toContain("What's your phone number?");
+    expect(titles).toContain("What device are you most likely to use Memorie on upon launch?");
+    expect(titles).toContain("Anything you want to add? OPTIONAL");
+  });
+});
+
+describe("a form on any web page", () => {
+  const page = `<html><head><title>Contact us</title></head><body><h1>Talk to sales</h1>
+    <form><label for="n">Full name *</label><input id="n" name="name" required>
+    <label for="e">Work email</label><input id="e" type="email" name="email" required>
+    <label for="s">Team size</label><select id="s" name="size"><option value="">Pick one</option><option>1-10</option><option>11-50</option></select>
+    <textarea name="msg" placeholder="How can we help?"></textarea></form></body></html>`;
+
+  it("is found by the same detector the AI builder uses, and converts", async () => {
+    const form = (await formInPage(page, "https://acme.test/contact"))!;
+    expect(form.provider).toBe("website");
+    const { doc } = importedToDoc(form);
+    expect(block(doc, "full name").type).toBe("short_text");
+    expect(block(doc, "work email").type).toBe("email");
+    expect(block(doc, "team size").options.map((o) => o.label)).toEqual(["1-10", "11-50"]);
+  });
+
+  it("says so when a page has no form", async () => {
+    expect(await formInPage("<html><body><h1>About us</h1><p>We make things.</p></body></html>", "https://acme.test/about")).toBeNull();
   });
 });

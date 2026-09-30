@@ -52,13 +52,21 @@ export function SwitchPanel({
           {page.band.body}
         </p>
         <ConvertField source={page.source} onDetect={onDetect} className="mt-7 max-w-xl" />
-        <Link
-          href={page.band.compare}
-          className="text-foreground/80 hover:text-foreground mt-2 inline-flex items-center gap-1.5 px-2 text-sm font-medium underline-offset-4 hover:underline"
-        >
-          chatform vs {page.name}
-          <ArrowRight className="size-3.5" aria-hidden />
-        </Link>
+        {/* No comparison page (a website) keeps the line empty, so the panel is no shorter. */}
+        {page.band.compare ? (
+          <Link
+            href={page.band.compare}
+            className="text-foreground/80 hover:text-foreground mt-2 inline-flex items-center gap-1.5 px-2 text-sm font-medium underline-offset-4 hover:underline"
+          >
+            chatform vs {page.name}
+            <ArrowRight className="size-3.5" aria-hidden />
+          </Link>
+        ) : (
+          <span aria-hidden className="invisible mt-2 inline-flex items-center gap-1.5 px-2 text-sm font-medium">
+            chatform
+            <ArrowRight className="size-3.5" />
+          </span>
+        )}
       </div>
 
       <div className="flex flex-col p-6 sm:p-9">

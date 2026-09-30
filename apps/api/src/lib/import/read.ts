@@ -4,6 +4,7 @@ import { parseTallyData, readTallyForm } from "./tally.js";
 import { readTypeform } from "./typeform.js";
 import { readJotform } from "./jotform.js";
 import { parseYouformData, readYouform } from "./youform.js";
+import { readHtmlForm } from "./html-form.js";
 import { ImportError, type ImportedForm, type ImportProvider } from "./types.js";
 
 /**
@@ -180,7 +181,7 @@ async function fetchGoogle(url: string): Promise<ImportedForm> {
     if (/no longer accepting responses/i.test(page.body)) throw new ImportError("closed_hidden");
     throw new ImportError("not_found");
   }
-  return withQuestions(readGoogleForm(data, page.finalUrl.replace(/\?.*$/, "")));
+  return withQuestions(readGoogleForm(data, page.finalUrl.replace(/\?.*$/, ""), page.body));
 }
 
 async function fetchTally(url: string): Promise<ImportedForm> {
@@ -222,36 +223,63 @@ async function fetchJotform(url: string): Promise<ImportedForm> {
 
 /**
  * A page that is not a builder's own domain: a custom domain, or a website
- * with a form embedded in it. Read once, and handed to whichever reader
- * recognises what is inside.
+ * with a form embedded in it or written into it.
  */
 async function sniff(url: string): Promise<ImportedForm> {
   const page = await get(url);
   if (page.status === 404) throw new ImportError("not_found");
   if (page.status !== 200) throw new ImportError("unreachable");
-  const html = page.body;
+  const form = await formInPage(page.body, page.finalUrl);
+  if (!form) throw new ImportError("no_form");
+  return withQuestions(form);
+}
+
+/**
+ * The form on a page that has already been fetched, or null when there is none.
+ *
+ * The one detector, most specific first: a builder's own data in the page,
+ * then a builder's form embedded by link or snippet (fetched from that
+ * builder), then the page's own `<form>`. The importer calls it for any link
+ * that is not a builder's domain, and the AI builder for every page it reads,
+ * so a contact page pasted into either is copied the same way.
+ */
+export async function formInPage(html: string, url: string): Promise<ImportedForm | null> {
   const google = parseGoogleData(html);
-  if (google) return withQuestions(readGoogleForm(google, page.finalUrl));
+  if (google) return readGoogleForm(google, url, html);
   const tally = parseTallyData(html);
-  if (tally && Array.isArray(tally.blocks)) return withQuestions(readTallyForm(tally, page.finalUrl));
+  if (tally && Array.isArray(tally.blocks)) return readTallyForm(tally, url);
   const typeformForm = rendererForm(html);
-  if (typeformForm) return withQuestions(readTypeform(typeformForm, page.finalUrl));
+  if (typeformForm) return readTypeform(typeformForm, url);
+  if (/<li\b[^>]*data-type="control_[a-z]/.test(html) && /JotForm/.test(html)) return readJotform(html, url);
+  const youform = parseYouformData(html);
+  if (youform) return readYouform(youform, url);
+
   // Embedded: an iframe or embed snippet pointing at one of the builders.
+  // A builder that turns us away leaves the page's own markup to try.
+  const embedded = embeddedLink(html);
+  if (embedded) {
+    try {
+      return await readImport(embedded);
+    } catch {
+      // fall through
+    }
+  }
+  return readHtmlForm(html, url);
+}
+
+function embeddedLink(html: string): string | null {
   const typeformId =
     html.match(/typeform\.com\/to\/([A-Za-z0-9]{6,12})/)?.[1] ?? html.match(/data-tf-(?:widget|popup|slider|popover|sidetab|live)="([A-Za-z0-9]{6,12})"/)?.[1];
-  if (typeformId) return fetchTypeform(typeformId);
+  if (typeformId) return `https://form.typeform.com/to/${typeformId}`;
   const tallyId = html.match(/tally\.so\/(?:r|embed)\/([A-Za-z0-9]{4,12})/)?.[1] ?? html.match(/data-tally-(?:src|open)="(?:https:\/\/tally\.so\/(?:r|embed)\/)?([A-Za-z0-9]{4,12})/)?.[1];
-  if (tallyId) return fetchTally(`https://tally.so/r/${tallyId}`);
-  if (/<li\b[^>]*data-type="control_[a-z]/.test(html) && /JotForm/.test(html)) return withQuestions(readJotform(html, page.finalUrl));
-  const youform = parseYouformData(html);
-  if (youform) return withQuestions(readYouform(youform, page.finalUrl));
+  if (tallyId) return `https://tally.so/r/${tallyId}`;
   const youformSlug = html.match(/app\.youform\.com\/forms\/([A-Za-z0-9]{4,20})/)?.[1];
-  if (youformSlug) return fetchYouform(`https://app.youform.com/forms/${youformSlug}`);
+  if (youformSlug) return `https://app.youform.com/forms/${youformSlug}`;
   const jotformId = html.match(/(?:form\.jotform\.com|jotform\.com\/jsform)\/(\d{10,})/)?.[1];
-  if (jotformId) return fetchJotform(`https://form.jotform.com/${jotformId}`);
+  if (jotformId) return `https://form.jotform.com/${jotformId}`;
   const googleId = html.match(/docs\.google\.com\/forms\/d\/e\/([A-Za-z0-9_-]{20,})/)?.[1];
-  if (googleId) return fetchGoogle(`https://docs.google.com/forms/d/e/${googleId}/viewform`);
-  throw new ImportError("unsupported_url");
+  if (googleId) return `https://docs.google.com/forms/d/e/${googleId}/viewform`;
+  return null;
 }
 
 function withQuestions(form: ImportedForm): ImportedForm {

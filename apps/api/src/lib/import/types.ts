@@ -16,9 +16,10 @@
 export const IMPORT_TRIAL_ORG = "org_import_trials";
 export const IMPORT_TRIAL_WORKSPACE = "ws_import_trials";
 
-export type ImportProvider = "typeform" | "google_forms" | "tally" | "jotform" | "youform";
+/** `website` is any other page with a `<form>` on it: a contact page, a signup, an application. */
+export type ImportProvider = "typeform" | "google_forms" | "tally" | "jotform" | "youform" | "website";
 
-export const IMPORT_PROVIDERS: readonly ImportProvider[] = ["typeform", "google_forms", "tally", "jotform", "youform"];
+export const IMPORT_PROVIDERS: readonly ImportProvider[] = ["typeform", "google_forms", "tally", "jotform", "youform", "website"];
 
 export const PROVIDER_NAMES: Record<ImportProvider, string> = {
   typeform: "Typeform",
@@ -26,6 +27,7 @@ export const PROVIDER_NAMES: Record<ImportProvider, string> = {
   tally: "Tally",
   jotform: "Jotform",
   youform: "Youform",
+  website: "Website",
 };
 
 /** One question or statement, in the draft vocabulary `normalizeBlock` reads. */
@@ -49,6 +51,10 @@ export interface ImportedItem {
   placeholder?: string;
   /** An image shown with the question, as the source hosts it. Copied into our storage on import. */
   imageUrl?: string;
+  /** The type is our reading of a plain text box's label, not something the page stated. */
+  typeGuessed?: boolean;
+  /** The page marks no field required, so it checks in script and `required` says nothing. */
+  requiredUnknown?: boolean;
   /** Per option, same order as `options`: a picture-choice answer's image. */
   optionImages?: (string | null)[];
   /** Applied after normalizing, where the draft has no field for them. */
@@ -135,10 +141,11 @@ export type ImportErrorCode =
   | "closed_hidden"
   | "password_protected"
   | "no_questions"
+  | "no_form"
   | "unreachable";
 
 export const IMPORT_ERROR_MESSAGES: Record<ImportErrorCode, string> = {
-  unsupported_url: "Paste a link to a Typeform, Google Form, Tally, Jotform or Youform form.",
+  unsupported_url: "Paste a link to a form, or to a page with a form on it.",
   edit_link:
     "That's the editor link, which only you can open. In Google Forms, press Send, copy the link, and paste that one.",
   not_found: "We couldn't find a form at that link. Check that it's published and opens in a private window.",
@@ -148,6 +155,7 @@ export const IMPORT_ERROR_MESSAGES: Record<ImportErrorCode, string> = {
     "This form is closed, and Google hides a closed form's questions. Turn on Accepting responses for a minute, import it, then turn it off.",
   password_protected: "This form is password-protected, so its questions can't be read. Remove the password, then try again.",
   no_questions: "We opened the form but found no questions to copy.",
+  no_form: "We couldn't find a form on that page. Paste the link to the form itself.",
   unreachable: "We couldn't reach that form just now. Try again in a minute.",
 };
 

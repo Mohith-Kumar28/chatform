@@ -30,11 +30,11 @@ export function SwitchBand() {
           <span className="font-hand text-primary block text-[1.1em] leading-[1.05] font-normal">Bring your questions with you.</span>
         </h2>
         <p className="text-muted-foreground mt-5 max-w-xl text-lg leading-relaxed text-pretty">
-          Paste a Typeform, Google Forms, Tally, Jotform or Youform link. We copy the questions and the logic, and you can talk to it before you sign up.
+          Paste a Typeform, Google Forms, Tally, Jotform or Youform link, or any page with a form on it. We copy the questions and the logic, and you can talk to it before you sign up.
         </p>
       </div>
 
-      <div role="tablist" aria-label="Your current form builder" className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div role="tablist" aria-label="Your current form builder" className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {IMPORT_PAGES.map((p) => {
           const selected = p.source === active;
           return (

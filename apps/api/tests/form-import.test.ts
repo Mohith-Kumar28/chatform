@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { lintFormDoc } from "@repo/form-schema";
-import { applySourceForm, applySourceFormToDoc, extractSourceForm, mergeSourceForms, sourceFormPrompt } from "../src/lib/form-import.js";
+import { applySourceForm, applySourceFormToDoc, mergeSourceForms, sourceFormOf, sourceFormPrompt } from "../src/lib/form-import.js";
+import { parseGoogleData, readGoogleForm } from "../src/lib/import/google.js";
+import { readHtmlForm } from "../src/lib/import/html-form.js";
+
+/** What `formInPage` gives the AI builder for a page with no embedded builder link, synchronously. */
+function extractSourceForm(html: string, url: string) {
+  const google = parseGoogleData(html);
+  const form = google ? readGoogleForm(google, url, html) : readHtmlForm(html, url);
+  return form ? sourceFormOf(form) : null;
+}
 import { draftToDoc } from "../src/lib/draft-normalize.js";
 import type { GenerationDraft } from "../src/lib/ai.js";
 
@@ -43,28 +52,29 @@ describe("extractSourceForm: Google Forms", () => {
       ["Country", "dropdown", false],
       ["Interested in running brackets?", "single_select", true],
       ["Bracket experience", "multi_select", false],
+      // A section header is words for the respondent, and the target of its jump.
+      ["Other roles", "statement", false],
       ["How sure are you?", "opinion_scale", true],
       ["Anything else?", "long_text", false],
     ]);
   });
 
   it("keeps options in order, the Other box, section jumps and scale labels", () => {
-    const [, email, pronouns, country, brackets, , scale] = form.fields;
+    const [, email, pronouns, country, brackets, , , scale] = form.fields;
     expect(email!.description).toBe("We reply here.");
     expect(pronouns!.options).toEqual(["She/Her", "He/Him"]);
     expect(pronouns!.allowOther).toBe(true);
     expect(country!.options).toEqual(["India", "Nepal"]);
-    expect(brackets!.jumps).toEqual({ "No, other ways": "section: Other roles" });
+    expect(brackets!.jumps).toEqual({ "No, other ways": "question: Other roles" });
     expect(scale!.scale).toBe(5);
     expect(scale!.scaleLabels).toEqual({ low: "Not at all", high: "Very", startAt: 1 });
-    expect(scale!.section).toBe("Other roles");
   });
 
   it("puts every field in the prompt under its src ref, as JSON strings", () => {
     const prompt = sourceFormPrompt(form);
     expect(prompt).toContain(`- src_1 | short_text? | required | title="FULL NAME"`);
     expect(prompt).toContain(`options=["India","Nepal"]`);
-    expect(prompt).toContain(`-- section "Other roles" --`);
+    expect(prompt).toContain(`- src_7 | statement | optional | title="Other roles"`);
   });
 });
 
@@ -89,7 +99,7 @@ describe("extractSourceForm: HTML forms", () => {
   const form = extractSourceForm(html, "https://acme.test/contact")!;
 
   it("reads labels, types, options and required from the markup, skipping the search box", () => {
-    expect(form.provider).toBe("html");
+    expect(form.provider).toBe("website");
     expect(form.title).toBe("Contact Acme");
     expect(form.fields.map((f) => [f.title, f.type, f.required])).toEqual([
       ["Full name", "short_text", true],
@@ -221,7 +231,7 @@ describe("applySourceForm", () => {
   it("overwrites wording, type and options, and restores dropped fields in order", () => {
     const fixed = applySourceForm(draft, form);
     expect(fixed.blocks.map((b) => b.ref)).toEqual([
-      "welcome", "src_1", "src_2", "src_3", "src_4", "src_5", "src_6", "src_7", "src_8", "q_extra",
+      "welcome", "src_1", "src_2", "src_3", "src_4", "src_5", "src_6", "src_7", "src_8", "src_9", "q_extra",
     ]);
     const pronouns = fixed.blocks.find((b) => b.ref === "src_3")!;
     // A bare label is asked as a question; its options stay exactly as written.

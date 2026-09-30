@@ -1,5 +1,5 @@
 import { decodeEntities } from "../research.js";
-import { inferTextType } from "../form-import.js";
+import { inferTextType } from "./text.js";
 import { htmlToMarkdown, htmlToPlain, imageUrlOf } from "./text.js";
 import { skippedNote, visibilityToJumps, type VisibilityRule } from "./show-hide.js";
 import type { ImportedCondition, ImportedConditionGroup, ImportedForm, ImportedItem } from "./types.js";

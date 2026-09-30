@@ -2261,6 +2261,7 @@ export const PostApiImportPreview200ReportProvider = {
   tally: 'tally',
   jotform: 'jotform',
   youform: 'youform',
+  website: 'website',
 } as const;
 
 export type PostApiImportPreview200ReportOutlineItem = {
@@ -2325,6 +2326,7 @@ export const PostApiImportClaim200ReportProvider = {
   tally: 'tally',
   jotform: 'jotform',
   youform: 'youform',
+  website: 'website',
 } as const;
 
 export type PostApiImportClaim200ReportOutlineItem = {
@@ -2367,6 +2369,7 @@ export const PostApiImportForms200ReportProvider = {
   tally: 'tally',
   jotform: 'jotform',
   youform: 'youform',
+  website: 'website',
 } as const;
 
 export type PostApiImportForms200ReportOutlineItem = {
@@ -6309,6 +6312,7 @@ export const PostV1Import200ReportProvider = {
   tally: 'tally',
   jotform: 'jotform',
   youform: 'youform',
+  website: 'website',
 } as const;
 
 export type PostV1Import200ReportOutlineItem = {

@@ -40,6 +40,16 @@ export function SourceLogo({ source, className }: { source: ImportSource; classN
           </g>
         </svg>
       );
+    case "website":
+      // A page with a form on it: a browser window, two fields and a button.
+      return (
+        <svg viewBox="0 0 32 32" {...common}>
+          <rect x="3.5" y="5" width="25" height="22" rx="4" fill="none" stroke="currentColor" strokeWidth="2" />
+          <path d="M3.5 10.5h25" stroke="currentColor" strokeWidth="2" />
+          <rect x="8" y="14" width="16" height="3" rx="1.5" fill="currentColor" opacity="0.45" />
+          <rect x="8" y="19.5" width="16" height="3" rx="1.5" fill="currentColor" opacity="0.45" />
+        </svg>
+      );
     case "youform":
       return (
         <svg viewBox="0 0 32 32" {...common}>
