@@ -10,6 +10,7 @@ import { TemplateTile } from "@/components/templates/gallery/template-tile";
 import { TemplatePanes } from "@/components/templates/template-detail";
 import { toneOf } from "@/lib/block-tone";
 import { TemplateTryLive } from "@/components/templates/template-try-live";
+import { BackLink } from "@/components/templates/back-link";
 import {
   TEMPLATES,
   categoryLabel,
@@ -64,7 +65,7 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ s
   const type = typeInfo(template.type);
   const guides = guidesFor(template.slug);
   const related = relatedTo(template, 3);
-  const useHref = `/templates/${template.slug}`;
+  const useHref = `/templates/${template.slug}/use`;
   const { guide, facts } = template;
   const catLabel = categoryLabel(template.type, template.category);
 
@@ -90,11 +91,13 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ s
       />
 
       <div className="mx-auto w-full max-w-6xl px-4 pt-8 sm:px-6 lg:pt-12">
+        <div className="flex flex-wrap items-center gap-4">
+        <BackLink />
         <nav aria-label="Breadcrumb" className="text-foreground/65 flex flex-wrap items-center gap-1 text-sm">
           {trail.map((c, i) => (
             <span key={c.path} className="inline-flex items-center gap-1">
               {i < trail.length - 1 ? (
-                <Link href={c.path} className="hover:text-foreground transition-colors duration-[var(--duration-micro)]">
+                <Link prefetch={false} href={c.path} className="hover:text-foreground transition-colors duration-[var(--duration-micro)]">
                   {c.name}
                 </Link>
               ) : (
@@ -106,6 +109,7 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ s
             </span>
           ))}
         </nav>
+        </div>
 
         <header className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div className="max-w-3xl">
@@ -142,9 +146,9 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ s
             </div>
           </div>
           <div className="flex flex-col items-start gap-2.5 lg:items-end">
-            <Link
+            <Link prefetch={false}
               href={useHref}
-              className="bg-brand-gradient inline-flex items-center gap-2 rounded-2xl px-6 py-3.5 text-base font-semibold text-white shadow-md transition-[filter,transform] duration-200 hover:brightness-110 active:scale-[0.98]"
+              className="bg-brand-drift text-on-primary inline-flex h-12 items-center gap-2 rounded-md px-6 text-base font-semibold shadow-[0_1px_0_rgb(255_255_255/0.25)_inset,0_8px_20px_-8px_color-mix(in_oklab,var(--brand-violet)_60%,transparent)] transition-[transform,box-shadow] duration-200 hover:-translate-y-px active:translate-y-0 motion-reduce:hover:translate-y-0"
             >
               Use this template
               <ArrowRight className="size-4" />
@@ -159,7 +163,7 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ s
         <div className="text-foreground/70 mt-8 flex flex-wrap items-center gap-2 text-sm">
           <span>Explore more:</span>
           {explore.map((e) => (
-            <Link key={e.href} href={e.href} className="border-border/80 hover:border-foreground/40 text-foreground rounded-full border px-3 py-1 transition-colors">
+            <Link prefetch={false} key={e.href} href={e.href} className="border-border/80 hover:border-foreground/40 text-foreground rounded-full border px-3 py-1 transition-colors">
               {e.label}
             </Link>
           ))}
@@ -231,7 +235,7 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ s
                 <ul className="mt-4 space-y-2">
                   {guides.map((g) => (
                     <li key={g.slug}>
-                      <Link href={g.path} className="text-foreground hover:text-primary inline-flex items-center gap-1.5 font-semibold">
+                      <Link prefetch={false} href={g.path} className="text-foreground hover:text-primary inline-flex items-center gap-1.5 font-semibold">
                         {g.title}
                         <ArrowRight className="size-4" />
                       </Link>
@@ -248,7 +252,7 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ s
             <p className="text-primary text-xs font-bold tracking-[0.14em] uppercase">A few more possibilities</p>
             <div className="mt-2 flex items-end justify-between gap-4">
               <h2 className="font-display text-foreground text-3xl font-semibold tracking-tight">Keep the ideas coming.</h2>
-              <Link href={typePath(template.type)} className="text-foreground hover:text-primary inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold">
+              <Link prefetch={false} href={typePath(template.type)} className="text-foreground hover:text-primary inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold">
                 Explore all {type.plural.toLowerCase()}
                 <ArrowRight className="size-4" />
               </Link>

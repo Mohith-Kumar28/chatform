@@ -184,6 +184,20 @@ function writeWebCatalogue(root: string): void {
   };
   writeFileSync(join(root, "index.generated.json"), `${JSON.stringify(index, null, 1)}\n`);
 
+  // Just what a card's thumbnail needs, for the app's own gallery and the new
+  // form dialog: small enough to ship with the dashboard, where the full index
+  // is not.
+  const tiles = Object.fromEntries(
+    TEMPLATES.map((t) => [
+      t.slug,
+      {
+        kind: `${TYPE_META[t.type].label} · ${(CATEGORIES_BY_TYPE[t.type] as Record<string, string>)[t.category]}`,
+        preview: previewOf(t),
+      },
+    ]),
+  );
+  writeFileSync(join(root, "tiles.generated.json"), `${JSON.stringify(tiles)}\n`);
+
   const docs = join(root, "docs");
   mkdirSync(docs, { recursive: true });
   const keep = new Set(TEMPLATES.map((t) => `${t.slug}.json`));

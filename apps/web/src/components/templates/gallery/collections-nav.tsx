@@ -77,7 +77,7 @@ export function CollectionsNav({ current }: { current?: string }) {
 
       <div className="border-border/70 mt-3 border-t pt-5">
         <p className="text-foreground/70 text-sm">Have something else in mind?</p>
-        <Link href="/ai-form-builder" className="text-foreground hover:text-primary mt-1.5 inline-flex items-center gap-1.5 text-sm font-semibold">
+        <Link prefetch={false} href="/ai-form-builder" className="text-foreground hover:text-primary mt-1.5 inline-flex items-center gap-1.5 text-sm font-semibold">
           <Sparkles className="text-primary size-4" />
           Build it with AI
         </Link>
@@ -123,7 +123,7 @@ function NavLink({
 }) {
   return (
     <li className="list-none">
-      <Link
+      <Link prefetch={false}
         href={href}
         aria-current={active ? "page" : undefined}
         className={cn(

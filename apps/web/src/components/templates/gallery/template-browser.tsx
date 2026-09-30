@@ -69,7 +69,7 @@ export function TemplateBrowser({
           {crumbs.map((c, i) => (
             <span key={c.path} className="inline-flex items-center gap-1">
               {i < crumbs.length - 1 ? (
-                <Link href={c.path} className="hover:text-foreground transition-colors duration-[var(--duration-micro)]">
+                <Link prefetch={false} href={c.path} className="hover:text-foreground transition-colors duration-[var(--duration-micro)]">
                   {c.name}
                 </Link>
               ) : (
@@ -125,7 +125,7 @@ export function TemplateBrowser({
           ) : (
             <p className="text-foreground/75 mt-6">
               Nothing matches that. Try a broader word, or{" "}
-              <Link href="/ai-form-builder" className="text-primary font-medium underline-offset-4 hover:underline">
+              <Link prefetch={false} href="/ai-form-builder" className="text-primary font-medium underline-offset-4 hover:underline">
                 describe your form to the AI builder
               </Link>
               .
@@ -140,7 +140,7 @@ export function TemplateBrowser({
               <section key={s.href} className="border-border/70 mt-10 border-b pb-12">
                 <div className="flex items-end justify-between gap-4">
                   <h2 className="font-display text-foreground text-2xl font-semibold tracking-tight sm:text-[1.75rem]">{s.title}</h2>
-                  <Link href={s.href} className="text-foreground hover:text-primary inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold">
+                  <Link prefetch={false} href={s.href} className="text-foreground hover:text-primary inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold">
                     View all {s.count}
                     <ArrowRight className="size-4" />
                   </Link>

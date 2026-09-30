@@ -11,9 +11,7 @@ import { Button } from "@/components/ui/button";
 import { API_ORIGIN } from "@/lib/api/mutator";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { getRespondentSignal } from "@/lib/respondent-signal";
-import { patternImage, patternSize, patternWeight, resolvePattern } from "@/lib/background-patterns";
 import { cn } from "@/lib/utils";
-import { themeFor } from "./gallery/template-tile";
 
 /** How long starting waits on Cloudflare's bot check before going ahead without it. */
 const TURNSTILE_WAIT_MS = 10_000;
@@ -42,9 +40,10 @@ export function TemplateTryLive({ slug, doc, useHref }: { slug: string; doc: For
   const [state, setState] = useState<State>({ kind: "idle" });
   const busy = useRef(false);
 
-  const theme = useMemo(() => themeFor(slug), [slug]);
-  const themed = useMemo(() => ({ ...doc, theme: { ...doc.theme, ...theme } }), [doc, theme]);
-  const config = useMemo(() => toPublicConfig(themed, { slug, brandingHidden: true }), [themed, slug]);
+  // The template's own theme: the live try looks exactly like the form a
+  // respondent opens once it is published.
+  const config = useMemo(() => toPublicConfig(doc, { slug, brandingHidden: true }), [doc, slug]);
+  const vars = useMemo(() => chatThemeVars(doc.theme, slug), [doc.theme, slug]);
 
   const greeting = doc.blocks.find((b) => b.type === "welcome")?.title;
   const first = doc.blocks.find((b) => b.type !== "welcome" && b.type !== "statement") as
@@ -105,15 +104,6 @@ export function TemplateTryLive({ slug, doc, useHref }: { slug: string; doc: For
     }
   }, [slug]);
 
-  const pattern = resolvePattern("auto", slug);
-  const ground = pattern
-    ? {
-        backgroundColor: theme.background,
-        backgroundImage: patternImage(pattern, `rgba(0,0,0,${0.05 * patternWeight(pattern)})`),
-        backgroundSize: patternSize(pattern),
-      }
-    : { backgroundColor: theme.background };
-
   return (
     <div className="border-border/80 bg-card overflow-hidden rounded-3xl border shadow-xl">
       <div className="border-border/70 flex items-center justify-between gap-3 border-b px-5 py-3">
@@ -124,13 +114,13 @@ export function TemplateTryLive({ slug, doc, useHref }: { slug: string; doc: For
           </span>
           The real thing. Go ahead, try it.
         </p>
-        <Link href={useHref} className="text-foreground hover:text-primary inline-flex items-center gap-1 text-sm font-semibold">
+        <Link prefetch={false} href={useHref} className="text-foreground hover:text-primary inline-flex items-center gap-1 text-sm font-semibold">
           Use this template
           <ArrowUpRight className="size-4" />
         </Link>
       </div>
 
-      <div className="relative h-[36rem] [&_.chat-surface]:rounded-none" style={ground}>
+      <div className="relative h-[36rem] [&_.chat-surface]:rounded-none">
         {state.kind === "live" ? (
           <ChatClient config={config} existingSession={state.session} previewMode onRestart={() => void start()} />
         ) : (
@@ -140,8 +130,8 @@ export function TemplateTryLive({ slug, doc, useHref }: { slug: string; doc: For
             aria-label="Start the conversation"
             onPointerDown={() => state.kind === "idle" && void start()}
             onKeyDown={(e) => state.kind === "idle" && (e.key === "Enter" || e.key.length === 1) && void start()}
-            className="flex h-full cursor-text flex-col focus-visible:outline-none"
-            style={chatThemeVars(theme, slug)}
+            className="chat-surface flex h-full cursor-text flex-col focus-visible:outline-none"
+            style={vars}
           >
             <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-start gap-3 px-5 pt-[4.5rem] pb-4">
               {greeting && (
@@ -159,8 +149,7 @@ export function TemplateTryLive({ slug, doc, useHref }: { slug: string; doc: For
                   {first.options.slice(0, 5).map((o) => (
                     <span
                       key={o.id}
-                      className="rounded-full border px-3.5 py-1.5 text-sm font-medium"
-                      style={{ borderColor: theme.accent, color: theme.text, background: theme.botBubble }}
+                      className="rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3.5 py-1.5 text-sm font-medium"
                     >
                       {o.label}
                     </span>
@@ -180,14 +169,11 @@ export function TemplateTryLive({ slug, doc, useHref }: { slug: string; doc: For
               )}
             </div>
             <div className="mx-auto w-full max-w-2xl px-5 pb-5">
-              <div
-                className="flex items-center gap-3 rounded-2xl border bg-white/90 px-4 py-3 shadow-sm"
-                style={{ borderColor: theme.accent }}
-              >
-                <span className="flex-1 text-[0.9375rem] text-stone-500">
+              <div className="flex items-center gap-3 rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 py-3">
+                <span className="flex-1 text-[0.9375rem] text-[var(--cf-muted)]">
                   {state.kind === "starting" ? "Starting the conversation…" : "Type your answer, or tap one above…"}
                 </span>
-                <span className="grid size-8 place-items-center rounded-full text-white" style={{ background: theme.accent }}>
+                <span className="grid size-8 place-items-center rounded-full bg-[var(--cf-accent)] text-[var(--cf-accent-text)]">
                   <SendHorizonal className="size-4" />
                 </span>
               </div>
@@ -203,11 +189,11 @@ export function TemplateTryLive({ slug, doc, useHref }: { slug: string; doc: For
                 {state.kind === "limit" ? (
                   <>
                     <Button asChild shape="pill">
-                      <Link href={useHref}>Use this template</Link>
+                      <Link prefetch={false} href={useHref}>Use this template</Link>
                     </Button>
                     {!state.signedIn && (
                       <Button asChild shape="pill" variant="outline">
-                        <Link href={`/signin?next=${encodeURIComponent(useHref)}`}>Sign in</Link>
+                        <Link prefetch={false} href={`/signin?next=${encodeURIComponent(useHref)}`}>Sign in</Link>
                       </Button>
                     )}
                   </>

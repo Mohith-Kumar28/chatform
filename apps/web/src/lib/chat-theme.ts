@@ -156,12 +156,36 @@ const STATUS_DARK = {
 };
 
 /**
+ * A theme whose text can be read, whatever colours it was given.
+ *
+ * Everything in the chat that is not a bubble inherits `text`: the form's name
+ * and progress in the header, the answer chips, the composer. A theme that
+ * pairs a dark background with dark text (a dark colour picked on its own, an
+ * AI-made theme, an old theme after the defaults moved) put that header in
+ * near-black on deep violet, where nobody could read it.
+ *
+ * So text that does not reach body contrast against the background is swapped
+ * for the readable ink of that background. Surfaces follow: if the chips and
+ * the composer are still a light fill under what is now light ink, they become
+ * the background lifted a step, so every piece of text keeps its contrast on
+ * whatever sits behind it. A theme that was already readable is returned as is.
+ */
+export function readableTheme(theme: ThemeDoc): ThemeDoc {
+  if (contrast(theme.background, theme.text) >= AA_BODY) return theme;
+  const text = readableInk(theme.background);
+  if (contrast(theme.surface, text) >= AA_BODY) return { ...theme, text };
+  const dark = isDarkColor(theme.background);
+  return { ...theme, text, surface: shiftColor(theme.background, 0.14, dark ? "light" : "dark") };
+}
+
+/**
  * @param seed the form's slug, which is what decides its tile while
  *   `theme.backgroundPattern` is `auto`. Omitted only where there is no form —
  *   the marketing demo — and the surface then paints the flat background it
  *   always did unless the theme names a tile outright.
  */
-export function chatThemeVars(theme: ThemeDoc, seed?: string | null): CSSProperties {
+export function chatThemeVars(themeIn: ThemeDoc, seed?: string | null): CSSProperties {
+  const theme = readableTheme(themeIn);
   const darkSurface = isDarkColor(theme.background);
 
   /*

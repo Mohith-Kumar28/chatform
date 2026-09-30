@@ -783,6 +783,22 @@
    Every looping or transform animation collapses under reduced-motion.        */
 
 /* "Look here": a short shake for a section the author was sent to. Collapsed by reduced-motion. */
+/* The brand sweep, drifting. For the one ask on a template page: a gradient
+   twice the button's width, sliding slowly back and forth, so the colour moves
+   through the button instead of sitting on it. Still under reduced motion. */
+@keyframes brand-drift {
+  from { background-position: 0% 50%; }
+  to { background-position: 100% 50%; }
+}
+@utility bg-brand-drift {
+  background-image: linear-gradient(100deg, var(--brand-orange) 0%, var(--brand-violet) 50%, var(--brand-orange) 100%);
+  background-size: 200% 100%;
+  animation: brand-drift 7s ease-in-out infinite alternate;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
 @keyframes attention {
   0%,
   100% {

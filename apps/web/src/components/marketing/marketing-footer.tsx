@@ -128,7 +128,7 @@ export function MarketingFooter() {
             <ul className="mt-3 flex flex-col gap-2">
               {col.links.map((link) => (
                 <li key={link.label}>
-                  <Link
+                  <Link prefetch={false}
                     href={link.href}
                     className="text-body text-muted-foreground hover:text-foreground transition-colors duration-[var(--duration-micro)]"
                   >
