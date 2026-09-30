@@ -2,7 +2,7 @@ import type { FormDoc } from "./form-doc";
 import { CLOSED_MESSAGE_DEFAULT, DEFAULT_CONFIRMATION_BODY, DEFAULT_CONFIRMATION_SUBJECT, THEME_COLOR_PATTERN } from "./settings";
 import { GOOGLE_FONTS } from "./google-fonts.generated";
 import { isDarkTheme, themeFromAccent, withAppearance } from "./palette";
-import { applyFormTheme, backgroundDecorOn, FORM_THEMES, matchFormTheme, themeFont, withoutFormTheme } from "./form-themes";
+import { applyFormTheme, backgroundDecorOn, matchFormTheme, THEME_CHOICES, themeFont, withoutFormTheme } from "./form-themes";
 import type { ThemeDoc } from "./settings";
 
 const GOOGLE_FONT_FAMILIES = GOOGLE_FONTS.map(([family]) => family);
@@ -195,12 +195,12 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
     label: "Theme",
     where: `${DESIGN} → Theme`,
     format: "enum",
-    options: FORM_THEMES.map((t) => ({ value: t.id, label: t.name })),
+    options: THEME_CHOICES.map((t) => ({ value: t.id, label: t.name })),
     hint:
       "a ready-made theme that sets the page, text, bubbles, buttons, borders, fonts, corners and shadows together, with its own light and dark sides. " +
       "When the author asks for a look or feel rather than exact colours, pick the theme whose description fits the request and the form best; " +
       "a colour set in the same edit replaces the theme with hand-picked colours. " +
-      `The themes: ${FORM_THEMES.map((t) => `${t.id} (${t.description})`).join("; ")}`,
+      `The themes: ${THEME_CHOICES.map((t) => `${t.id} (${t.description})`).join("; ")}`,
     // No field of its own: read off the theme the form is on, and written as all of it.
     get: (doc) => matchFormTheme(doc.theme),
     set: (doc, value) => {

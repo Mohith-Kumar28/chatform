@@ -11,6 +11,7 @@ import {
   matchFormTheme,
   resolveScheme,
   settingDef,
+  THEME_CHOICES,
   themeTokenVars,
   withAppearance,
 } from "../src/index.js";
@@ -69,12 +70,29 @@ describe("form themes (tweakcn)", () => {
   });
 
   it("turns the background shapes on and off as one switch", () => {
-    const on = applySettingOps(base(), [{ key: "theme.backgroundDecor", value: "true" }]).doc;
+    const flat = applySettingOps(base(), [{ key: "theme.backgroundDecor", value: "false" }]).doc;
+    const on = applySettingOps(flat, [{ key: "theme.backgroundDecor", value: "true" }]).doc;
     expect(on.theme.backgroundPattern).toBe("auto");
     expect(on.theme.backgroundShape).toBe("auto");
     const off = applySettingOps(on, [{ key: "theme.backgroundDecor", value: "false" }]).doc;
     expect(off.theme.backgroundPattern).toBe("none");
     expect(off.theme.backgroundShape).toBeUndefined();
+  });
+});
+
+describe("the chatform theme", () => {
+  it("is what a new form is on, first in the list, and picking it brings the brand look back", () => {
+    expect(THEME_CHOICES[0]!.id).toBe("chatform");
+    expect(matchFormTheme(ThemeDoc.parse({}))).toBe("chatform");
+    const themed = applyFormTheme(ThemeDoc.parse({}), "cyberpunk");
+    expect(matchFormTheme(themed)).toBe("cyberpunk");
+    const back = applyFormTheme(themed, "chatform");
+    expect(back.styles).toBeUndefined();
+    expect(back.accent).toBe(ThemeDoc.parse({}).accent);
+    expect(back.fontHeading).toBe("Bricolage Grotesque");
+    expect(matchFormTheme(back)).toBe("chatform");
+    // Dark keeps the brand's own dark mirror and still reads as chatform.
+    expect(matchFormTheme(withAppearance(ThemeDoc.parse({}), "dark"))).toBe("chatform");
   });
 });
 

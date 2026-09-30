@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type CSSProperties } from "react";
-import { applyFormTheme, backgroundDecorOn, FORM_THEMES, FormDoc, matchFormTheme } from "@repo/form-schema";
+import { applyFormTheme, backgroundDecorOn, FormDoc, matchFormTheme, THEME_CHOICES } from "@repo/form-schema";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,14 +42,12 @@ export function ThemeField({
   const shown = useMemo(() => {
     if (open) {
       const q = query.trim().toLowerCase();
-      return q ? FORM_THEMES.filter((t) => `${t.name} ${t.description}`.toLowerCase().includes(q)) : FORM_THEMES;
+      return q ? THEME_CHOICES.filter((t) => `${t.name} ${t.description}`.toLowerCase().includes(q)) : THEME_CHOICES;
     }
-    const head = FORM_THEMES.slice(0, FOLDED);
-    const picked = FORM_THEMES.find((t) => t.id === current);
+    const head = THEME_CHOICES.slice(0, FOLDED);
+    const picked = THEME_CHOICES.find((t) => t.id === current);
     return picked && !head.includes(picked) ? [...head.slice(0, FOLDED - 1), picked] : head;
   }, [open, query, current]);
-
-  const decor = backgroundDecorOn(theme);
 
   return (
     <div data-setting="theme.backgroundPreset" className="space-y-3">
@@ -59,7 +57,7 @@ export function ThemeField({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Search ${FORM_THEMES.length} themes`}
+            placeholder={`Search ${THEME_CHOICES.length} themes`}
             aria-label="Search themes"
             className="pl-8"
           />
@@ -138,21 +136,31 @@ export function ThemeField({
         }}
         aria-expanded={open}
       >
-        {open ? "Show less" : `Show all ${FORM_THEMES.length}`}
+        {open ? "Show less" : `Show all ${THEME_CHOICES.length}`}
         <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />
       </Button>
+    </div>
+  );
+}
 
-      <div data-setting="theme.backgroundDecor" className="flex items-center justify-between gap-3">
-        <Label htmlFor="theme-decor">Background shapes</Label>
-        <Switch
-          id="theme-decor"
-          size="sm"
-          checked={decor}
-          onCheckedChange={(on) =>
-            onChange({ ...theme, backgroundPattern: on ? "auto" : "none", backgroundShape: on ? "auto" : undefined })
-          }
-        />
-      </div>
+/**
+ * The pattern and the large shape behind the conversation, as one switch.
+ * Sits beside the Theme heading: it is part of how the theme looks.
+ */
+export function BackgroundShapesSwitch({ theme, onChange }: { theme: Theme; onChange: (next: Theme) => void }) {
+  return (
+    <div data-setting="theme.backgroundDecor" className="flex items-center gap-2">
+      <Label htmlFor="theme-decor" className="text-muted-foreground text-xs font-normal">
+        Background shapes
+      </Label>
+      <Switch
+        id="theme-decor"
+        size="sm"
+        checked={backgroundDecorOn(theme)}
+        onCheckedChange={(on) =>
+          onChange({ ...theme, backgroundPattern: on ? "auto" : "none", backgroundShape: on ? "auto" : undefined })
+        }
+      />
     </div>
   );
 }

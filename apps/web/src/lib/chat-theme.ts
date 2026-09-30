@@ -357,7 +357,7 @@ function tweakcnVars(theme: ThemeDoc): Record<string, string> {
     "--cf-user-bubble-text": "var(--primary-foreground)",
     "--cf-composer-bg": "var(--card)",
     "--cf-chip-bg": "var(--card)",
-    "--cf-chip-border": "var(--border)",
+    "--cf-chip-border": visibleOutline(vars),
     "--cf-sunken": "var(--muted)",
     "--cf-bubble-shadow": "var(--shadow-sm)",
     // tweakcn's scale: controls at the radius, cards a step rounder, bubbles two.
@@ -366,6 +366,35 @@ function tweakcnVars(theme: ThemeDoc): Record<string, string> {
     "--cf-radius": "calc(var(--radius) * 1.6)",
     letterSpacing: "var(--letter-spacing)",
   };
+}
+
+/**
+ * The outline of the answer box and the choice chips, made to show.
+ *
+ * tweakcn's `--border` is drawn for cards on a page, and on several dark
+ * themes it sits a hair off both the page and the box (Twitter: #242628
+ * around #17181c on #000), so the box read as part of the background. It is
+ * eased toward the text until it clears both, and left exactly as tweakcn set
+ * it wherever it already does.
+ */
+function visibleOutline(vars: Record<string, string>): string {
+  const border = cssColorToHex(vars["--border"] ?? "");
+  const page = cssColorToHex(vars["--background"] ?? "");
+  const box = cssColorToHex(vars["--card"] ?? "");
+  const ink = cssColorToHex(vars["--foreground"] ?? "");
+  if (!border || !page || !box || !ink) return "var(--border)";
+  const clears = (c: string) => contrast(c, page) >= 1.6 && contrast(c, box) >= 1.6;
+  if (clears(border)) return "var(--border)";
+  for (let i = 1; i <= 10; i++) {
+    const mixed = mixHex(border, ink, i * 0.07);
+    if (clears(mixed)) return mixed;
+  }
+  return mixHex(border, ink, 0.7);
+}
+
+function mixHex(a: string, b: string, t: number): string {
+  const ch = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
+  return `#${[0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t).toString(16).padStart(2, "0")).join("")}`;
 }
 
 /** tweakcn's radius as the nearest Corners step, the same rule `applyFormTheme` uses. */

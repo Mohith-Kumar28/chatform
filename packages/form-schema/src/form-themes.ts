@@ -1,4 +1,5 @@
-import { cssColorToHex } from "./palette";
+import { cssColorToHex, withAppearance } from "./palette";
+import { ThemeDoc as ThemeSchema } from "./settings";
 import type { ThemeDoc } from "./settings";
 import { FORM_THEMES, formTheme, type ThemeStyleProps, type ThemeStyles } from "./tweakcn";
 
@@ -13,6 +14,46 @@ import { FORM_THEMES, formTheme, type ThemeStyleProps, type ThemeStyles } from "
  */
 
 export { FORM_THEMES, formTheme };
+
+/**
+ * chatform's own theme: the brand look every new form opens in (warm paper,
+ * the orange, peach replies, Bricolage and Inter). It is the schema's
+ * defaults rather than a token set, so a form nobody has styled is on it
+ * without any migration, and its dark side is the brand's own mirror
+ * (`resolveScheme`).
+ */
+export const CHATFORM_THEME_ID = "chatform";
+
+/** Every theme a form can pick: chatform first, then tweakcn's. */
+export const THEME_CHOICES: readonly { id: string; name: string; description: string }[] = [
+  { id: CHATFORM_THEME_ID, name: "Chatform", description: "chatform's own look: warm paper, a bright orange and peach replies; friendly and fits anything; Bricolage Grotesque headings with Inter (sans-serif), rounded corners, flat, with light and dark sides" },
+  ...FORM_THEMES.map(({ id, name, description }) => ({ id, name, description })),
+];
+
+const COLOR_KEYS = ["background", "surface", "text", "accent", "accentText", "botBubble", "userBubble", "userBubbleText"] as const;
+
+/** The form on chatform's theme: the brand colours, fonts and corners, on the side it shows. */
+function applyChatform(theme: ThemeDoc): ThemeDoc {
+  const base = ThemeSchema.parse({});
+  const next: ThemeDoc = {
+    ...theme,
+    ...Object.fromEntries(COLOR_KEYS.map((k) => [k, base[k]])),
+    radius: base.radius,
+    fontHeading: base.fontHeading,
+    fontBody: base.fontBody,
+    styles: undefined,
+    themeId: undefined,
+    ...(backgroundDecorOn(theme) ? {} : { backgroundPattern: "none", backgroundShape: undefined }),
+    colorScheme: theme.colorScheme,
+  };
+  return theme.colorScheme === "light" ? next : withAppearance({ ...next, colorScheme: "light" }, theme.colorScheme);
+}
+
+function isChatform(theme: ThemeDoc): boolean {
+  if (theme.styles) return false;
+  const ref = applyChatform(theme);
+  return COLOR_KEYS.every((k) => String(theme[k]).toLowerCase() === String(ref[k]).toLowerCase());
+}
 
 /** tweakcn's radius (a CSS length) as the nearest Corners step. */
 function radiusStep(radius: string): ThemeDoc["radius"] {
@@ -62,6 +103,7 @@ export function withThemeSide(theme: ThemeDoc, dark: boolean): ThemeDoc {
  * shows flat, the way tweakcn draws it. An unknown id changes nothing.
  */
 export function applyFormTheme(theme: ThemeDoc, id: string): ThemeDoc {
+  if (id === CHATFORM_THEME_ID) return applyChatform(theme);
   const t = formTheme(id);
   if (!t) return theme;
   const light = t.styles.light;
@@ -80,7 +122,8 @@ export function applyFormTheme(theme: ThemeDoc, id: string): ThemeDoc {
 
 /** The theme a form is on, or undefined for hand-picked colours. */
 export function matchFormTheme(theme: ThemeDoc): string | undefined {
-  return theme.styles && theme.themeId && formTheme(theme.themeId) ? theme.themeId : undefined;
+  if (theme.styles && theme.themeId && formTheme(theme.themeId)) return theme.themeId;
+  return isChatform(theme) ? CHATFORM_THEME_ID : undefined;
 }
 
 /** The form's colours taken off its theme: what editing a colour by hand does. */
@@ -89,9 +132,13 @@ export function withoutFormTheme(theme: ThemeDoc): ThemeDoc {
   return { ...theme, styles: undefined, themeId: undefined };
 }
 
-/** Whether the form shows its background shapes: the pattern and the large shape, one switch. */
+/**
+ * Whether the form shows background shapes: any decoration at all. Turning
+ * the switch on sets the pattern and the large shape together; a form from
+ * before the switch that has only its pattern reads as on, because it shows.
+ */
 export function backgroundDecorOn(theme: Pick<ThemeDoc, "backgroundPattern" | "backgroundShape">): boolean {
-  return theme.backgroundPattern !== "none" && !!theme.backgroundShape;
+  return theme.backgroundPattern !== "none";
 }
 
 /**

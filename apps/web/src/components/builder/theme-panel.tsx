@@ -7,7 +7,7 @@ import { InfoHint } from "@/components/ui/info-hint";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { BrandField } from "./brand-field";
-import { ThemeField } from "./theme-field";
+import { BackgroundShapesSwitch, ThemeField } from "./theme-field";
 import { LockedControl } from "@/components/billing/gate";
 import { BufferedInput } from "@/components/ui/buffered-input";
 import { Switch } from "@/components/ui/switch";
@@ -49,10 +49,13 @@ const COLOR_FIELDS: { key: keyof Theme; label: string }[] = [
   { key: "accentText", label: "Button text" },
 ];
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
-      <h3 className="text-muted-foreground text-[0.6875rem] font-medium tracking-wide uppercase">{title}</h3>
+      <div className="flex min-h-5 items-center justify-between gap-3">
+        <h3 className="text-muted-foreground text-[0.6875rem] font-medium tracking-wide uppercase">{title}</h3>
+        {action}
+      </div>
       {children}
     </section>
   );
@@ -139,10 +142,6 @@ export function ThemePanel({
         </div>
       </Section>
 
-      <Section title="Theme">
-        <ThemeField theme={theme} seed={seed} onChange={(next) => onChange(next)} />
-      </Section>
-
       <Section title="Appearance">
         <div data-setting="theme.colorScheme" className="flex items-center gap-2">
           <SegmentedControl
@@ -161,6 +160,11 @@ export function ThemePanel({
           </InfoHint>
         </div>
       </Section>
+
+      <Section title="Theme" action={<BackgroundShapesSwitch theme={theme} onChange={(next) => onChange(next)} />}>
+        <ThemeField theme={theme} seed={seed} onChange={(next) => onChange(next)} />
+      </Section>
+
 
       <Section title="Colours">
         <div className="flex items-center justify-between gap-3">

@@ -78,6 +78,34 @@ const DESCRIPTIONS: Record<string, string> = {
   "sage-garden": "muted sage green, calm and natural",
 };
 
+/**
+ * What a theme looks like, read off its tokens: the typeface, how round the
+ * corners are and what its shadows do. Appended to the description so the
+ * builder AI can match "sharp corners", "a serif" or "hard shadows" to a
+ * theme from the theme itself, not from a list somebody has to keep up.
+ */
+function traits(styles: ThemeStyles): string {
+  const l = styles.light;
+  const font = l["font-sans"].split(",")[0]!.trim().replace(/^["']|["']$/g, "");
+  const families = l["font-sans"].split(",").map((f) => f.trim().toLowerCase());
+  const kind = families.some((f) => f.includes("mono") || f.includes("courier"))
+    ? "monospace"
+    : families.includes("serif")
+      ? "serif"
+      : /daughter|hand/i.test(font)
+        ? "handwritten"
+        : "sans-serif";
+  const r = parseFloat(l.radius);
+  const rem = l.radius.trim().endsWith("px") ? r / 16 : r;
+  const corners = rem <= 0.05 ? "square corners" : rem < 0.4 ? "slightly rounded corners" : rem < 0.8 ? "rounded corners" : "very round corners";
+  const blur = parseFloat(l["shadow-blur"]);
+  const offset = Math.abs(parseFloat(l["shadow-offset-x"])) + Math.abs(parseFloat(l["shadow-offset-y"]));
+  const opacity = parseFloat(l["shadow-opacity"]);
+  const shadow = opacity >= 0.2 && blur === 0 && offset > 0 ? "hard offset shadows" : opacity >= 0.15 && blur > 0 ? "soft shadows" : "flat, barely any shadow";
+  const system = /^ui-sans-serif|system-ui/.test(l["font-sans"]);
+  return `${system ? "system sans-serif font" : `${font} (${kind})`}, ${corners}, ${shadow}, with light and dark sides`;
+}
+
 export interface FormTheme {
   id: string;
   name: string;
@@ -90,15 +118,13 @@ export const FORM_THEMES: readonly FormTheme[] = [
   {
     id: "default",
     name: "Default",
-    description: DESCRIPTIONS.default!,
+    description: `${DESCRIPTIONS.default!}; ${traits({ light: defaultLightThemeStyles, dark: defaultDarkThemeStyles })}`,
     styles: { light: defaultLightThemeStyles, dark: defaultDarkThemeStyles },
   },
-  ...Object.entries(defaultPresets).map(([id, preset]) => ({
-    id,
-    name: preset.label ?? id,
-    description: DESCRIPTIONS[id] ?? preset.label ?? id,
-    styles: mergePresetWithDefaults(preset.styles),
-  })),
+  ...Object.entries(defaultPresets).map(([id, preset]) => {
+    const styles = mergePresetWithDefaults(preset.styles);
+    return { id, name: preset.label ?? id, description: `${DESCRIPTIONS[id] ?? preset.label ?? id}; ${traits(styles)}`, styles };
+  }),
 ];
 
 export function formTheme(id: string | null | undefined): FormTheme | undefined {
