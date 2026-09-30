@@ -55,7 +55,9 @@ export function TheMoment() {
   return (
     <Band id="the-moment" tone="brand" size="tall">
       <div className="max-w-2xl">
-        <BandTitle>It answers their questions, too.</BandTitle>
+        <BandTitle accent="like a person would." accentClassName="text-[var(--on-band-vivid)]">
+          It answers their questions, too.
+        </BandTitle>
         <BandLede tone="brand">
           Watch the respondent stop answering and start asking.
         </BandLede>

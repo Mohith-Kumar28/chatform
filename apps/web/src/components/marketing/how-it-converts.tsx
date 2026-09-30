@@ -49,7 +49,7 @@ export function HowItConverts() {
   return (
     <Band id="how-it-works">
       <div className="max-w-2xl">
-        <BandTitle>Three pillars behind more submissions.</BandTitle>
+        <BandTitle accent="and zero tricks.">Three pillars behind more submissions.</BandTitle>
         <BandLede>It talks like a person, follows up on its own, and answers back.</BandLede>
       </div>
 

@@ -11,8 +11,6 @@ import { PricingSection } from "@/components/marketing/pricing-section";
 import { CtaBand } from "@/components/marketing/cta-band";
 import { ChatformEmbed } from "@/components/marketing/chatform-embed";
 import { Band, BandTitle, BandLede } from "@/components/marketing/band";
-import { InView } from "@/components/marketing/in-view";
-import { ArrowMark, HandNote } from "@/components/marketing/annotate";
 import { JsonLd } from "@/components/seo/json-ld";
 import { buildCatalogue, dollars } from "@/lib/pricing-catalogue";
 import { canonical, openGraphBase, softwareApplicationLd } from "@/lib/seo";
@@ -148,24 +146,11 @@ export default function LandingPage() {
 
       <Band id="pricing" size="tall">
         <div className="max-w-2xl">
-          <BandTitle>Free until you outgrow it.</BandTitle>
+          {/* "Free" on a pricing page is the most distrusted word in software,
+              and the answer to the distrust is the thing somebody would have
+              scribbled next to it, so it is the heading's own second line. */}
+          <BandTitle accent="no card to start.">Free until you outgrow it.</BandTitle>
           <BandLede>Build, publish and collect for free, forever.</BandLede>
-          {/* The pricing band's one mark. "Free" on a pricing page is the most
-              distrusted word in software, and the sentence that answers the
-              distrust is not another line of body copy — it is the thing
-              somebody would have scribbled next to it. */}
-          <InView className="mt-3 flex items-start gap-1">
-            <ArrowMark
-              dir="up-right"
-              positioned={false}
-              draw
-              delay={200}
-              className="size-10 shrink-0 opacity-50"
-            />
-            <HandNote tilt={-4} className="cf-a-rise mt-3" style={{ animationDelay: "620ms" }}>
-              no card to start
-            </HandNote>
-          </InView>
         </div>
         <div className="mt-12">
           <PricingSection />

@@ -178,10 +178,19 @@ export function Band({
  */
 export function BandTitle({
   children,
+  accent,
+  accentClassName,
   className,
   as: Comp = "h2",
 }: {
   children: React.ReactNode;
+  /**
+   * A second line in the hand, the way the switch band's heading answers
+   * itself. Orange by default, which holds on cream, sand and ink; a vivid
+   * band passes its own ink through `accentClassName`.
+   */
+  accent?: React.ReactNode;
+  accentClassName?: string;
   className?: string;
   as?: "h1" | "h2";
 }) {
@@ -201,6 +210,16 @@ export function BandTitle({
       )}
     >
       {children}
+      {accent && (
+        <span
+          className={cn(
+            "font-hand text-primary block text-[1.12em] leading-[1.05] font-normal tracking-normal",
+            accentClassName,
+          )}
+        >
+          {accent}
+        </span>
+      )}
     </Comp>
   );
 }

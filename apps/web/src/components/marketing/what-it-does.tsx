@@ -160,9 +160,11 @@ export function WhatItDoes() {
           written from a competitor's point of view: it needs you to already
           know what a form builder does before it lands, and it never once says
           what you actually do here. You do not build. You ask. */}
-      <BandTitle className="max-w-3xl">You don&rsquo;t build it. You just ask.</BandTitle>
+      <BandTitle className="max-w-3xl" accent="You just ask.">
+        You don&rsquo;t build it.
+      </BandTitle>
       <BandLede>
-        The AI writes the questions, the wording and the branching &mdash; and then stays on to
+        The AI writes the questions, the wording and the branching, and then stays on to
         ask them. You change your mind by saying so.
       </BandLede>
 

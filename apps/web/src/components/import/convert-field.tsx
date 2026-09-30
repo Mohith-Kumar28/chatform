@@ -76,7 +76,7 @@ export function ConvertField({
             {meta.where} It has to open without signing in.
           </InfoHint>
         </div>
-        <Button type="submit" shape="pill" size="lg" className="h-11 px-6" disabled={busy || url.trim().length < 4}>
+        <Button type="submit" shape="pill" size="lg" className="h-11 rounded-full px-6" disabled={busy || url.trim().length < 4}>
           {busy ? <Loader2 className="size-4 animate-spin" /> : null}
           {busy ? "Converting…" : `Convert`}
           {!busy && <ArrowRight className="size-4" />}

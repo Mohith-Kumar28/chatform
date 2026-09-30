@@ -47,7 +47,7 @@ export function Developers() {
     <Band id="developers" tone="ink" size="tall">
       <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-center lg:gap-16">
         <div>
-          <BandTitle>Every form is an API.</BandTitle>
+          <BandTitle accent="if you want one.">Every form is an API.</BandTitle>
           {/*
             The lede's first job is to give most readers permission to leave.
             This band sits on a dark ground in the middle of a page written for
@@ -58,7 +58,7 @@ export function Developers() {
           */}
           <BandLede tone="ink">
             If you have a developer, this bit is for them. If you do not, you will never
-            need any of it — skip straight to the pricing.
+            need any of it. Skip straight to the pricing.
           </BandLede>
 
           <ul className="mt-9 flex flex-col gap-5">
