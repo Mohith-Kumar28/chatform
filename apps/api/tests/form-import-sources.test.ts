@@ -506,13 +506,17 @@ describe("Google Forms, as the page renders it", () => {
     expect(form.notCopied).not.toContain("Images");
   });
 
-  it("asks a bare label as a question and keeps a question as written", () => {
+  it("keeps the source's words when no model words them", () => {
     const titles = doc.blocks.map((b) => b.title);
-    expect(titles).toContain("What's your email address?");
-    expect(titles).toContain("What's your first name?");
-    expect(titles).toContain("What's your phone number?");
+    expect(titles).toContain("Email Address");
     expect(titles).toContain("What device are you most likely to use Memorie on upon launch?");
-    expect(titles).toContain("Anything you want to add? OPTIONAL");
+  });
+
+  it("takes the model's wording per question, and nothing else from it", () => {
+    const email = form.items.find((it) => it.title === "Email Address")!;
+    const worded = importedToDoc(form, new Map([[email.key, "What's the best email to reach you?"]])).doc;
+    const block = worded.blocks.find((b) => b.title === "What's the best email to reach you?")!;
+    expect([block.type, block.required]).toEqual(["email", true]);
   });
 });
 

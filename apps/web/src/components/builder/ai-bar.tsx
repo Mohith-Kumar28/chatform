@@ -40,11 +40,12 @@ function describeEdit(added: number, updated: number, removed: number, rules: nu
  * step.
  */
 /** The steps an edit reports, matching the server's `EditStage`. */
-type EditStage = "reading" | "editing" | "checking" | "repairing";
+type EditStage = "reading" | "links" | "editing" | "checking" | "repairing";
 
 /** What each looks like to somebody watching. */
 const STAGE_COPY: Record<EditStage, string> = {
   reading: "Reading your form",
+  links: "Reading your link",
   editing: "Making the change",
   checking: "Checking the flow",
   repairing: "Fixing the flow",

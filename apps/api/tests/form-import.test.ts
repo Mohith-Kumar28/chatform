@@ -149,17 +149,18 @@ describe("extractSourceForm: a React form with plain text boxes and button choic
     expect(form.fields.every((f) => !f.requiredKnown)).toBe(true);
   });
 
+  // The words are the model's, the options the page's.
   it("keeps the generator's type and required flag where the page said nothing", () => {
     const draft: GenerationDraft = {
       title: "VC",
       description: "",
       blocks: [
         { ref: "welcome", type: "welcome", title: "Hi", description: "", required: false, options: [], scale: 0, config: "" },
-        { ref: "src_1", type: "short_text", title: "Your name", description: "", required: true, options: [], scale: 0, config: "" },
-        { ref: "src_2", type: "short_text", title: "Mail", description: "", required: true, options: [], scale: 0, config: "" },
-        { ref: "src_3", type: "url", title: "Site", description: "", required: false, options: [], scale: 0, config: "" },
-        { ref: "src_4", type: "single_select", title: "Type", description: "", required: true, options: ["x"], scale: 0, config: "" },
-        { ref: "src_5", type: "single_select", title: "Heard?", description: "", required: false, options: ["LinkedIn", "Referral"], scale: 0, config: "" },
+        { ref: "src_1", type: "short_text", title: "What's your name?", description: "", required: true, options: [], scale: 0, config: "" },
+        { ref: "src_2", type: "short_text", title: "What's your email?", description: "", required: true, options: [], scale: 0, config: "" },
+        { ref: "src_3", type: "url", title: "What's your firm website?", description: "", required: false, options: [], scale: 0, config: "" },
+        { ref: "src_4", type: "single_select", title: "What's the portfolio company type you're investing in?", description: "", required: true, options: ["x"], scale: 0, config: "" },
+        { ref: "src_5", type: "single_select", title: "Where did you hear about us?", description: "", required: false, options: ["LinkedIn", "Referral"], scale: 0, config: "" },
       ],
       endings: [{ ref: "end", title: "Thanks", body: "", kind: "success", requirements: "", redirectUrl: "" }],
       branches: [],
@@ -176,17 +177,6 @@ describe("extractSourceForm: a React form with plain text boxes and button choic
     const doc = applySourceFormToDoc(draftToDoc(applySourceForm(draft, form)).doc, form);
     const name = doc.blocks.find((b) => b.title === "What's your name?")!;
     expect(name.type === "short_text" && name.placeholder).toBe("your full name");
-  });
-});
-
-describe("askedTitle", () => {
-  it("asks a bare label, keeps a question, a sentence or a first-person statement", async () => {
-    const { askedTitle } = await import("../src/lib/form-import.js");
-    expect(askedTitle("Name")).toBe("What's your name?");
-    expect(askedTitle("Current MRR")).toBe("What's your current MRR?");
-    expect(askedTitle("Firm Website", "What's your firm's website?")).toBe("What's your firm's website?");
-    expect(askedTitle("Where did you hear about us?", "Source?")).toBe("Where did you hear about us?");
-    expect(askedTitle("I agree to the terms")).toBe("I agree to the terms");
   });
 });
 
@@ -234,9 +224,9 @@ describe("applySourceForm", () => {
       "welcome", "src_1", "src_2", "src_3", "src_4", "src_5", "src_6", "src_7", "src_8", "src_9", "q_extra",
     ]);
     const pronouns = fixed.blocks.find((b) => b.ref === "src_3")!;
-    // A bare label is asked as a question; its options stay exactly as written.
+    // The model's wording stands; type, options and required are the source's.
     expect([pronouns.title, pronouns.type, pronouns.options, pronouns.required]).toEqual([
-      "What's your pronouns?", "single_select", ["She/Her", "He/Him"], true,
+      "Your pronouns", "single_select", ["She/Her", "He/Him"], true,
     ]);
     expect(fixed.blocks.find((b) => b.ref === "q_extra")!.title).toBe("Your Discord?");
   });
@@ -246,13 +236,14 @@ describe("applySourceForm", () => {
     const out = applySourceFormToDoc(doc, form);
     const byTitle = Object.fromEntries(out.blocks.map((b) => [b.title, b]));
     expect(byTitle["What's your full name?"]!.ref).toBe("full_name");
-    expect(byTitle["What's your email address?"]!.type).toBe("email");
-    const pronouns = byTitle["What's your pronouns?"]!;
+    // Dropped by the model and put back: the source's own words.
+    expect(byTitle["Email Address"]!.type).toBe("email");
+    const pronouns = byTitle["Your pronouns"]!;
     expect(pronouns.type === "single_select" && pronouns.allowOther).toBe(true);
     const scale = byTitle["How sure are you?"]!;
     // Already a question: kept exactly.
     expect(scale.type === "opinion_scale" && [scale.steps, scale.labelLow, scale.labelHigh]).toEqual([5, "Not at all", "Very"]);
-    const brackets = byTitle["Interested in running brackets?"]!;
+    const brackets = byTitle["Brackets?"]!;
     expect(out.logic.some((r) => r.action_kind === "goto" && r.from === brackets.ref && r.target === "end_thanks")).toBe(true);
     expect(JSON.stringify(out)).not.toContain("src_");
     expect(lintFormDoc(out).filter((i) => i.level === "error")).toEqual([]);

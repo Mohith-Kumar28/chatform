@@ -30,7 +30,7 @@ import {
 import { logAiGeneration } from "../lib/ai-usage.js";
 import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL, CLARIFY_SYSTEM, withClarifications, type BuilderTurn } from "../lib/agent-prompts.js";
 import { draftToDoc, pruneOrphanEndings } from "../lib/draft-normalize.js";
-import { applySourceForm, applySourceFormToDoc, mergeSourceForms, sourceFormPrompt, type SourceForm } from "../lib/form-import.js";
+import { applySourceForm, applySourceFormToDoc, linkedFormForEdit, mergeSourceForms, sourceFormPrompt, type SourceForm } from "../lib/form-import.js";
 import { withDefaultPaymentAccount } from "../lib/payments/default-account.js";
 import { applyEditDraft, dropEndings, introducedFlowProblems, describeEditChanges } from "../lib/edit-apply.js";
 import { buildEditContext, buildEditTools, type EditOutcome } from "../lib/edit-tools.js";
@@ -495,6 +495,19 @@ async function researchFor(
   };
 }
 
+/** What `researchFor` found behind a builder-chat request's links, worded for an edit. */
+function linkedForEdit(brief: { brief: string } | null, form: SourceForm | null): string {
+  const page = brief?.brief
+    ? `
+
+WHAT THE LINKED PAGES SAY (read just now, from the pages themselves and a web search):
+${brief.brief}
+
+Use it where the request needs it, in its own words. Never contradict it.`
+    : "";
+  return page + (form ? linkedFormForEdit(form) : "");
+}
+
 // ─── streaming generation ───
 
 /**
@@ -788,7 +801,7 @@ type EditDraftOut = Awaited<ReturnType<typeof generateEdit>>["draft"];
  * tool loop's own steps are not stages — "step 4 of 8" means nothing to
  * somebody who asked for an email question.
  */
-type EditStage = "reading" | "editing" | "checking" | "repairing";
+type EditStage = "reading" | "links" | "editing" | "checking" | "repairing";
 
 /** One edit's outcome, before it is either serialised or streamed. */
 type EditOutcomeResult = {
@@ -839,6 +852,28 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
       .first<{ working_schema: string }>();
     if (!row) return { status: 404, body: { error: { code: "not_found", message: "Form not found" } } };
     const base = FormDoc.parse(migrateFormDoc(JSON.parse(row.working_schema)));
+
+    /**
+     * Any link in the request, read the way the AI box reads one when a form
+     * is created (`researchFor`): a form on it is copied out by code, any
+     * other page is summarised. What to do with it is the request's to say,
+     * so it goes to the model as context, not as an instruction.
+     */
+    let linked = "";
+    let linkedTokens = 0;
+    let linkedUsage: TokenUsage = NO_USAGE;
+    if (extractUrls(prompt).length > 0) {
+      onStage("links");
+      try {
+        const read = await researchFor(c.env, prompt, c.get("orgId"), trace);
+        linked = linkedForEdit(read.brief, read.sourceForm);
+        linkedTokens = read.tokens;
+        linkedUsage = read.usage;
+      } catch (err) {
+        // A page that will not load costs the edit its context, never the edit.
+        console.error("edit_links_failed", { formId, message: err instanceof Error ? err.message : String(err) });
+      }
+    }
     onStage("editing");
 
     // The model call is a network call to a third party, and it fails: two 504s
@@ -865,6 +900,8 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
      * author once for the whole edit. This is only about what gets written down.
      */
     const billed: { kind: string; model: string; usage: TokenUsage }[] = [];
+    // Reading the links: its own row, on the research tier, like generation's.
+    if (linkedTokens > 0) billed.push({ kind: "research", model: MODELS.research, usage: linkedUsage });
     /**
      * Write everything collected so far, once.
      *
@@ -911,7 +948,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
         const result = await runEditAgent({
           env: c.env,
           system: `${FORM_DESIGNER_SYSTEM}\n\n${EDIT_TOOL_PROTOCOL}`,
-          prompt: buildEditPrompt(base, prompt, history as BuilderTurn[], "tools"),
+          prompt: buildEditPrompt(base, prompt, history as BuilderTurn[], "tools", linked),
           tools: buildEditTools(ctx, (o) => outcomes.push(o)),
           organizationId: c.get("orgId"),
           formId,
@@ -943,7 +980,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
          */
         if (result.question) {
           const orgId = c.get("orgId");
-          if (orgId && tokens > 0) await meter(c.env, orgId, "ai_tokens", tokens);
+          if (orgId && tokens + linkedTokens > 0) await meter(c.env, orgId, "ai_tokens", tokens + linkedTokens);
           // The call happened and was billed; only its purpose differs.
           for (const row of billed) row.kind = "edit_question";
           await flushBilled(Date.now() - editStarted);
@@ -954,7 +991,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
         const result = await generateEdit({
           env: c.env,
           system: FORM_DESIGNER_SYSTEM,
-          prompt: buildEditPrompt(base, prompt, history as BuilderTurn[]),
+          prompt: buildEditPrompt(base, prompt, history as BuilderTurn[], "object", linked),
           organizationId: c.get("orgId"),
           formId,
           trace,
@@ -1060,7 +1097,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
           const retry = await runEditAgent({
             env: c.env,
             system: `${FORM_DESIGNER_SYSTEM}\n\n${EDIT_TOOL_PROTOCOL}`,
-            prompt: `${buildEditPrompt(base, prompt, history as BuilderTurn[], "tools")}
+            prompt: `${buildEditPrompt(base, prompt, history as BuilderTurn[], "tools", linked)}
 
 YOUR PREVIOUS ANSWER TO THIS REQUEST WAS REVIEWED AND SENT BACK:
   ${review.problem.trim()}
@@ -1115,7 +1152,7 @@ Answer the same request again, addressing that.`,
         const retry = await generateEdit({
           env: c.env,
           system: FORM_DESIGNER_SYSTEM,
-          prompt: buildEditPrompt(base, feedback, history as BuilderTurn[]),
+          prompt: buildEditPrompt(base, feedback, history as BuilderTurn[], "object", linked),
           organizationId: c.get("orgId"),
           formId,
           kind: "edit_retry",
@@ -1210,7 +1247,7 @@ Answer the same request again, addressing that.`,
       // One edit, one generation against the allowance, however many model
       // calls it took to answer — the author asked once.
       await meter(c.env, orgId, "ai_generations");
-      if (tokens > 0) await meter(c.env, orgId, "ai_tokens", tokens);
+      if (tokens + linkedTokens > 0) await meter(c.env, orgId, "ai_tokens", tokens + linkedTokens);
     }
     // The cost record is per call, and each carries the model that actually
     // answered it — a kept fallback is logged as the fallback, and the reviewer

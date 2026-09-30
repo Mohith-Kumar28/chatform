@@ -12,8 +12,7 @@ import { publishForm } from "../lib/forms-service.js";
 import { enqueueMail } from "../lib/mail.js";
 import { withOwnerNotification } from "../lib/owner-notification.js";
 import { formSlug, requireWorkspace } from "../lib/workspace.js";
-import { readImport } from "../lib/import/read.js";
-import { importedToDoc } from "../lib/import/to-doc.js";
+import { convertImport } from "../lib/import/phrase.js";
 import { IMPORT_TRIAL_ORG, IMPORT_TRIAL_WORKSPACE, ImportError, type ImportReport } from "../lib/import/types.js";
 import { quotaKeys, remainingImports, spendImport } from "../lib/import-quota.js";
 
@@ -148,9 +147,9 @@ importRouter.post(
       }
     }
 
-    let converted: ReturnType<typeof importedToDoc>;
+    let converted: Awaited<ReturnType<typeof convertImport>>;
     try {
-      converted = importedToDoc(await readImport(url));
+      converted = await convertImport(c.env, url, IMPORT_TRIAL_ORG);
     } catch (err) {
       return importFailed(c, err);
     }
@@ -292,9 +291,9 @@ importRouter.post(
     if (!ws) return c.json({ error: { code: "no_workspace", message: "No workspace to add it to" } }, ws === undefined ? 404 : 403);
     const denied = await assertPermission(c, "form", "create", { workspaceId: ws.wsId });
     if (denied) return denied;
-    let converted: ReturnType<typeof importedToDoc>;
+    let converted: Awaited<ReturnType<typeof convertImport>>;
     try {
-      converted = importedToDoc(await readImport(url));
+      converted = await convertImport(c.env, url, ws.orgId);
     } catch (err) {
       return importFailed(c, err);
     }
@@ -308,11 +307,6 @@ importRouter.post(
     return c.json({ formId, report: converted.report });
   },
 );
-
-/** For `/v1/import`: the conversion alone, nothing saved. */
-export async function convertForApi(url: string): Promise<{ doc: FormDoc; report: ImportReport }> {
-  return importedToDoc(await readImport(url));
-}
 
 /**
  * Trials nobody claimed, a day on. Soft-deleted like any form (the chat

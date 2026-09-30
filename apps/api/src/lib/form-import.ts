@@ -151,7 +151,8 @@ const srcRef = (i: number) => `src_${i + 1}`;
  * must use. JSON strings so a label with a quote or a newline in it survives
  * the trip exactly.
  */
-export function sourceFormPrompt(form: SourceForm): string {
+/** The linked form, one line per field under its `src_N` ref: shared by generation and edits. */
+function sourceFormListing(form: SourceForm): string {
   const lines: string[] = [];
   let from: string | undefined;
   form.fields.forEach((f, i) => {
@@ -173,15 +174,39 @@ export function sourceFormPrompt(form: SourceForm): string {
     ].filter(Boolean);
     lines.push(`- ${parts.join(" | ")}`);
   });
+  return `THE FORM${form.fields.some((f) => f.form) ? "S" : ""} AT ${form.url} (read from the page itself, so the words are exact):
+Title: ${JSON.stringify(form.title)}
+${form.description ? `Description: ${JSON.stringify(form.description)}\n` : ""}${lines.join("\n")}`;
+}
+
+/**
+ * A form linked in the builder's chat, for an edit.
+ *
+ * What to do with it is the author's call, made in their own words: copy it
+ * in, add a few of its questions, swap the form for it, or only use it as a
+ * reference. So this states what the form is and how to copy from it, and
+ * leaves the what to the request.
+ */
+export function linkedFormForEdit(form: SourceForm): string {
   return `
 
-THE FORM${form.fields.some((f) => f.form) ? "S" : ""} AT ${form.url} (read from the page itself, so the words are exact):
-Title: ${JSON.stringify(form.title)}
-${form.description ? `Description: ${JSON.stringify(form.description)}\n` : ""}${lines.join("\n")}
+THE AUTHOR LINKED A FORM. ${sourceFormListing(form)}
+
+Do with it what the request asks: add all or some of its questions, replace this form's questions with them, or only use it as a reference. When the request only pastes the link, judge from the form above: one with no real questions yet takes the linked form whole, and one that has questions gets the linked form's questions added after its own.
+For anything you take from it:
+- ${QUESTION_WORDING}
+- Copy options, descriptions and placeholders letter for letter, and keep its required settings where it states them.
+- A type with no "?" is what the page uses. One ending in "?" is our guess: pick the best question type yourself.`;
+}
+
+export function sourceFormPrompt(form: SourceForm): string {
+  return `
+
+${sourceFormListing(form)}
 
 The author wants THIS form. Rules for it, which override the sizing guidance:
 - Include every field above as its own question, in this order, with ref exactly as given (src_1, src_2, ...).
-- This is a conversation, so every title must read as a question. A title that is already a question is copied letter for letter. A bare field label ("Name", "Firm Website", "Current Stage") becomes a short, natural question built from its own words ("What's your name?", "What's your firm's website?", "What stage is your company at?"): same meaning, nothing added.
+- ${QUESTION_WORDING}
 - Copy each description, placeholder and option letter for letter, including capitals, punctuation and typos. Do not reword, shorten, merge, split or translate them.
 - A type with no "?" is what the page uses: keep it. A type ending in "?" is only our guess, because the page used a plain text box or its own buttons: choose the best block for the question (email, url, phone, number, date, single_select or multi_select with sensible options, and so on), keeping the words.
 - "required" and "optional" are the page's own; keep them. "required?" means the page does not say: decide as you would for any form.
@@ -272,52 +297,17 @@ function mergeField(model: GenerationDraft["blocks"][number], f: SourceField): O
 }
 
 /**
- * The field's label as a question.
- *
- * Copied word for word, "Name" and "Firm Website" sat in the chat as bare
- * labels, which reads like a web form pasted into a conversation. A source
- * title that is already a question, or a sentence, is kept exactly; a label
- * takes the generator's phrasing of it, and failing that a plain "What's
- * your …?".
+ * How every copied question is worded, for the three places a model words
+ * one: a linked form in the AI box, one in the builder chat, and an import
+ * (`lib/import/phrase.ts`). The words come from the model, judged per field;
+ * code never rewrites a title into a template.
  */
-export function askedTitle(source: string, model?: string): string {
-  const label = source.trim();
-  if (isQuestion(label)) return label;
-  const proposed = (model ?? "").trim();
-  if (proposed && proposed.toLowerCase() !== label.toLowerCase() && isQuestion(proposed)) return proposed;
-  // "Firm Website" and "FULL NAME" read as "firm website" and "full name"
-  // mid-sentence; a short acronym ("MRR", "URL") keeps its capitals.
-  // "Share your LinkedIn", "Upload your CV": already an instruction to them.
-  if (/^[a-z]+\s+your\b/i.test(label)) return label.replace(/[:*\s]+$/, "");
-  const words = label
-    .replace(/[:*\s]+$/, "")
-    // "Your first name" is asked as "What's your first name?", not "What's the your …".
-    .replace(/^your\s+/i, "")
-    .split(/\s+/)
-    .map((w) => (/^[A-Z0-9]{2,4}$/.test(w) ? w : w.toLowerCase()))
-    .join(" ");
-  // A label that already speaks to them ("… you're investing in") takes
-  // "the", or it reads "What's your portfolio company type you're investing in?".
-  return /\byou(r|'re|’re|'ve|’ve)?\b/i.test(words) ? `What's the ${words}?` : `What's your ${words}?`;
-}
-
-/**
- * Already reads right in a chat: a question, a sentence, or a statement in
- * the first person ("I agree to the terms"), which is what a consent box says.
- */
-function isQuestion(text: string): boolean {
-  return (
-    // "Anything to add? (optional)" is a question with a note after it.
-    /\?/.test(text) ||
-    text.split(/\s+/).length > 7 ||
-    /[.!]\s*$/.test(text) ||
-    /^(i|i'm|i’m|i've|i’ve|yes|please)\b/i.test(text)
-  );
-}
+export const QUESTION_WORDING =
+  "A source's title is the label it put beside a box, not always what to ask. Word each one as a person would naturally ask it in a chat, judged by what that field collects: same meaning, same language, nothing added or left out. Keep one that already reads well as it is.";
 
 /** Words for the respondent (a statement) are shown as written; everything else is asked. */
 function titleFor(f: SourceField, model?: string): string {
-  return f.type === "statement" ? f.title : askedTitle(f.title, model);
+  return f.type === "statement" ? f.title : model?.trim() || f.title;
 }
 
 function draftFields(f: SourceField): Omit<GenerationDraft["blocks"][number], "ref"> {

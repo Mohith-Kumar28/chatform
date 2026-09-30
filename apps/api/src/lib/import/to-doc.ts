@@ -9,7 +9,7 @@ import {
 } from "@repo/form-schema";
 import type { GenerationDraft } from "../ai.js";
 import { draftToDoc, pruneOrphanEndings } from "../draft-normalize.js";
-import { askedTitle, uniqueRef } from "../form-import.js";
+import { uniqueRef } from "../form-import.js";
 import type { ImportedConditionGroup, ImportedForm, ImportedItem, ImportReport } from "./types.js";
 
 /**
@@ -26,13 +26,16 @@ import type { ImportedConditionGroup, ImportedForm, ImportedItem, ImportReport }
  * semantics are ours (fire after the question, carry on from where you land),
  * so each jump is written as one goto rule, in the source's order.
  *
- * Titles are the source's, made to read as questions the way a linked form
- * in the AI builder is (`askedTitle`): "Email Address" is asked as "What's
- * your email address?", and anything already a question or a sentence is
- * kept exactly. The chat does not reword them later: the default hybrid mode
- * asks every question in the words on the block.
+ * Titles are worded for a chat by the model (`asked`, from `convertImport`).
+ * Without it they stay the source's own words: a template would read worse
+ * than the author's label. The chat does not reword them later: the default
+ * hybrid mode asks every question in the words on the block.
  */
-export function importedToDoc(source: ImportedForm): { doc: FormDoc; report: ImportReport } {
+export function importedToDoc(
+  source: ImportedForm,
+  /** Item key → the question as the model worded it for a chat (`convertImport`). */
+  asked: Map<string, string> | null = null,
+): { doc: FormDoc; report: ImportReport } {
   const form = { ...source, items: picturesOnQuestions(source.items) };
   const taken = new Set<string>(["welcome"]);
   const refOf = new Map<string, string>();
@@ -56,7 +59,7 @@ export function importedToDoc(source: ImportedForm): { doc: FormDoc; report: Imp
     blocks.push({
       ref,
       type: item.type,
-      title: clip(item.type === "statement" ? item.title : askedTitle(item.title || "Untitled question"), 2000),
+      title: clip(item.type === "statement" ? item.title : (asked?.get(item.key) || item.title || "Untitled question"), 2000),
       description: clip(item.description, 5000),
       required: item.required,
       options: item.options.map((o) => clip(o, 500)).filter(Boolean),

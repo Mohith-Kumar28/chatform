@@ -738,6 +738,12 @@ export function buildEditPrompt(
    * state, and no tool description can carry it.
    */
   mode: "object" | "tools" = "object",
+  /**
+   * What the links in the request turned out to be, read before the edit:
+   * a form to copy from, and what any other page says. See `linkedForEdit`
+   * in routes/ai.ts. Empty when the request has no links.
+   */
+  linked = "",
 ): string {
   const gotos = doc.logic.filter((r) => r.action_kind === "goto");
 
@@ -838,6 +844,7 @@ ${rules}
 ${conversation}
 WHAT THE BUILDER ASKED FOR:
 ${request}
+${linked}
 ${mode === "tools" ? `
 WORK OUT WHAT KIND OF EDIT THIS IS FIRST. Most requests about a working form change the ROUTING, not the questions: who gets asked what, in which order. Those need NO new questions, and adding one to have something to show is the commonest way an edit goes wrong.
 

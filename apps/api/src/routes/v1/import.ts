@@ -8,7 +8,7 @@ import { requireScope, type AuthzVars } from "../../lib/authorize.js";
 import { validator } from "../../lib/validator.js";
 import { ImportedDocumentView } from "../../lib/v1-schemas.js";
 import { ImportError } from "../../lib/import/types.js";
-import { convertForApi } from "../import.js";
+import { convertImport } from "../../lib/import/phrase.js";
 
 /**
  * Converting a Typeform, Google Form or Tally form, for an integration.
@@ -39,7 +39,8 @@ importV1Router.post(
   }),
   async (c) => {
     try {
-      return c.json(await convertForApi(c.req.valid("json").url));
+      // Nothing is saved: the conversion alone, worded by the model on the caller's org.
+      return c.json(await convertImport(c.env, c.req.valid("json").url, c.get("orgId") as string));
     } catch (err) {
       if (err instanceof ImportError) {
         return c.json({ error: { code: err.code, message: err.message } }, err.code === "unreachable" ? 502 : 422);
