@@ -12,12 +12,6 @@ export interface Crumb {
   path: string;
 }
 
-/** The opening sentence, for the heading area; the rest of the intro sits by the FAQs. */
-function firstSentence(text: string): string {
-  const m = text.match(/^.+?[.!?](?=\s|$)/);
-  return m ? m[0] : text;
-}
-
 export function browsable(templates: readonly TemplateCardData[]): BrowsableTemplate[] {
   return templates.map((t) => ({
     tile: tileOf(t),
@@ -83,7 +77,7 @@ export function HubPage({
             <h1 className="font-display text-foreground mt-3 text-4xl leading-[1.05] font-bold tracking-tight sm:text-5xl lg:text-[3.5rem]">
               {heading ?? copy.h1}
             </h1>
-            <p className="text-foreground/75 mt-4 max-w-2xl text-lg leading-relaxed">{lede ?? firstSentence(copy.intro)}</p>
+            <p className="text-foreground/75 mt-4 max-w-2xl text-lg leading-relaxed">{lede ?? copy.metaDescription}</p>
 
             <div className="mt-8">
               <TemplateBrowser templates={browsable(templates)} sections={sections} crumbs={trail} allTitle={allTitle} typeFilter={typeFilter} />
@@ -92,7 +86,7 @@ export function HubPage({
             {children}
 
             <section className="mt-20">
-              {!lede && copy.intro !== firstSentence(copy.intro) && (
+              {!lede && (
                 <p className="text-foreground/80 mb-10 max-w-3xl text-[1.0625rem] leading-relaxed">{copy.intro}</p>
               )}
               <h2 className="font-display text-foreground text-2xl font-semibold tracking-tight sm:text-[1.75rem]">
