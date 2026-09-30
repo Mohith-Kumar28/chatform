@@ -1241,47 +1241,47 @@ export async function runEditAgent(opts: {
   };
 }
 
-export async function generateEdit(opts: { env: Bindings; prompt: string; system?: string; organizationId?: string | null; formId?: string | null; kind?: string; trace?: AiTrace }): Promise<{ draft: EditDraft; tokens: number; usage: TokenUsage; model: string }> {
-  // Which vendor actually answered — `MODELS.generation` unless the schema was
-  // refused and this fell back to `MODELS.generationFallback`. Reported back so
-  // the caller can log the model that was actually billed, not the one that
-  // was asked first; every fallback used to be logged (and priced) as Gemini.
+/**
+ * One structured draft from the generation tier, for a new form or an edit.
+ *
+ * Which vendor actually answered is reported back: `MODELS.generation`
+ * unless the schema was refused and this fell back to
+ * `MODELS.generationFallback`, so the caller logs the model that was billed.
+ * `system` is separate from `prompt` so the design doctrine, the larger half
+ * and byte-identical on every call, sits in front of the provider's cache.
+ */
+async function draftObject<T extends Record<string, unknown>>(opts: {
+  env: Bindings;
+  schema: z.ZodType<T>;
+  prompt: string;
+  system?: string;
+  kind: string;
+  organizationId?: string | null;
+  formId?: string | null;
+  trace?: AiTrace;
+}): Promise<{ draft: T; tokens: number; usage: TokenUsage; model: string }> {
   let usedModel: string = MODELS.generation;
-  const result = await withSchemaFallback("edit", (model) => {
+  const result = await withSchemaFallback(opts.kind === "generate" ? "generate" : "edit", (model) => {
     usedModel = model;
     return generateObject({
       model: chatModel(opts.env, model),
-      schema: EditDraft,
+      schema: opts.schema,
       system: opts.system,
       prompt: opts.prompt,
-      providerOptions: telemetry(opts.env, GENERATION_PROVIDER_OPTIONS, { kind: opts.kind ?? "edit", organizationId: opts.organizationId, formId: opts.formId, ...opts.trace, model }),
+      providerOptions: telemetry(opts.env, GENERATION_PROVIDER_OPTIONS, { kind: opts.kind, organizationId: opts.organizationId, formId: opts.formId, ...opts.trace, model }),
     });
   });
   const usage = reportedUsage(result);
-  return { draft: clampDraft(result.object as EditDraft), tokens: usage.input + usage.output, usage, model: usedModel };
+  return { draft: clampDraft(result.object as T), tokens: usage.input + usage.output, usage, model: usedModel };
 }
 
-/**
- * AI flow generator: prompt → loose draft (normalized to FormDoc by the caller).
- *
- * `system` is separate from `prompt` so the design doctrine — which is by far
- * the larger half and is byte-identical on every call — sits in front of the
- * provider's prompt cache instead of being billed as fresh input each time.
- */
-export async function generateFormDraft(opts: { env: Bindings; prompt: string; system?: string; organizationId?: string | null; trace?: AiTrace }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage; model: string }> {
-  let usedModel: string = MODELS.generation;
-  const result = await withSchemaFallback("generate", (model) => {
-    usedModel = model;
-    return generateObject({
-      model: chatModel(opts.env, model),
-      schema: GenerationDraft,
-      system: opts.system,
-      prompt: opts.prompt,
-      providerOptions: telemetry(opts.env, GENERATION_PROVIDER_OPTIONS, { kind: "generate", organizationId: opts.organizationId, ...opts.trace, model }),
-    });
-  });
-  const usage = reportedUsage(result);
-  return { draft: clampDraft(result.object as GenerationDraft), tokens: usage.input + usage.output, usage, model: usedModel };
+export function generateEdit(opts: { env: Bindings; prompt: string; system?: string; organizationId?: string | null; formId?: string | null; kind?: string; trace?: AiTrace }): Promise<{ draft: EditDraft; tokens: number; usage: TokenUsage; model: string }> {
+  return draftObject({ ...opts, schema: EditDraft as z.ZodType<EditDraft>, kind: opts.kind ?? "edit" });
+}
+
+/** AI flow generator: prompt → loose draft (normalized to FormDoc by the caller). */
+export function generateFormDraft(opts: { env: Bindings; prompt: string; system?: string; organizationId?: string | null; trace?: AiTrace }): Promise<{ draft: GenerationDraft; tokens: number; usage: TokenUsage; model: string }> {
+  return draftObject({ ...opts, schema: GenerationDraft as z.ZodType<GenerationDraft>, kind: "generate" });
 }
 
 /** A question as it appears mid-stream, before the draft is complete. */

@@ -7,7 +7,6 @@ import { FLOW_PROBLEM_CODES, FormDoc, buildFlowRules, lintFormDoc, hasErrors, mi
 import type { Bindings } from "../env.js";
 import { requireSession, requireOrg, assertFormAccess, keyOwnsForm, type GuardVars } from "../lib/guards.js";
 import { requirePermission, requireQuota, requireGauge, assertPermission, type AuthzVars } from "../lib/authorize.js";
-import { meter } from "../lib/entitlements.js";
 import { isInternalCall } from "../lib/internal-call.js";
 import {
   generateFormDraft,
@@ -15,7 +14,6 @@ import {
   runEditAgent,
   reviewEdit,
   streamFormDraft,
-  researchBrief,
   clarifyRequest,
   isSchemaRejection,
   clampDraft,
@@ -28,13 +26,17 @@ import {
   NO_USAGE,
 } from "../lib/ai.js";
 import { logAiGeneration } from "../lib/ai-usage.js";
-import { buildFlowGeneratorPrompt, buildEditPrompt, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL, CLARIFY_SYSTEM, withClarifications, type BuilderTurn } from "../lib/agent-prompts.js";
+import { buildFlowGeneratorPrompt, buildEditPrompt, requestContext, FORM_DESIGNER_SYSTEM, EDIT_TOOL_PROTOCOL, CLARIFY_SYSTEM, withClarifications, type BuilderTurn } from "../lib/agent-prompts.js";
 import { draftToDoc, pruneOrphanEndings } from "../lib/draft-normalize.js";
-import { applySourceForm, applySourceFormToDoc, linkedFormForEdit, mergeSourceForms, sourceFormPrompt, type SourceForm } from "../lib/form-import.js";
+import { applySourceFields, applySourceForm, applySourceFormToDoc, finishSourceForm, type SourceForm } from "../lib/form-import.js";
 import { withDefaultPaymentAccount } from "../lib/payments/default-account.js";
 import { applyEditDraft, dropEndings, introducedFlowProblems, describeEditChanges } from "../lib/edit-apply.js";
 import { buildEditContext, buildEditTools, type EditOutcome } from "../lib/edit-tools.js";
-import { extractUrls, readSites } from "../lib/research.js";
+import { extractUrls } from "../lib/research.js";
+import { eventStream } from "../lib/authoring/sse.js";
+import { Ledger } from "../lib/authoring/ledger.js";
+import { hostOf, readLinks } from "../lib/authoring/links.js";
+import { addPagesToKnowledge } from "../lib/authoring/knowledge.js";
 import { requireWorkspace, formSlug } from "../lib/workspace.js";
 import { enqueueMail } from "../lib/mail.js";
 import { appendAiTurns, proposalTurn, seedAiThread, turnId, type StoredTurn } from "../lib/ai-thread.js";
@@ -113,6 +115,12 @@ export const GenerateBody = z.object({
    * to be oldest, and the form appeared to vanish.
    */
   workspaceId: z.string().optional(),
+  /**
+   * Knowledge sources the dashboard adds by hand once the form exists. The
+   * linked pages the server adds leave room for them, so a page nobody
+   * uploaded never pushes the author's own file past the plan's limit.
+   */
+  reserveKnowledge: z.number().int().min(0).max(100).optional(),
 });
 
 /** A generation that produced a valid document, plus what it cost. */
@@ -153,8 +161,9 @@ async function generateWithRetry(opts: {
   prompt: string;
   /** Undefined means "you decide" — see `GenerateBody`. */
   questionCount?: number;
-  research: { brief: string; sources: string[] } | null;
-  /** A form read off a page the author linked, to be copied exactly. See `form-import.ts`. */
+  /** From `requestContext`: the request's links and media, as the model reads them. */
+  context: string;
+  /** A form read off a page the author linked, whose facts are copied by code. See `form-import.ts`. */
   sourceForm?: SourceForm | null;
   /** Called for each question as it is drafted; enables the streaming path. */
   onBlock?: (b: { index: number; title: string; type: string }) => void;
@@ -174,8 +183,7 @@ async function generateWithRetry(opts: {
   for (let attempt = 0; attempt < 2; attempt++) {
     const fixNote =
       attempt === 0 ? "" : `\n\nYour previous attempt had these problems — fix them:\n${lastError}`;
-    const source = opts.sourceForm ? sourceFormPrompt(opts.sourceForm) : "";
-    const prompt = buildFlowGeneratorPrompt(opts.prompt, opts.questionCount, opts.research) + source + fixNote;
+    const prompt = buildFlowGeneratorPrompt(opts.prompt, opts.questionCount, opts.context) + fixNote;
 
     let draft: GenerationDraft;
     try {
@@ -303,52 +311,28 @@ export const generateFormHandler = async (c: AiCtx) => {
 
     // One Langfuse trace for the whole generation: research, draft, any retry.
     const trace = newTrace("generate_form", c.get("userId"), callSource(c));
-    const research = await researchFor(c.env, prompt, c.get("orgId"), trace);
+    const orgId = c.get("orgId");
+    const started = Date.now();
+    const ledger = new Ledger();
+    const reading = await readLinks({ env: c.env, prompt, organizationId: orgId, trace, ledger });
     try {
-      const started = Date.now();
-      const { doc, issues, tokens, usage, model } = await generateWithRetry({
+      const { doc, issues, usage, model } = await generateWithRetry({
         env: c.env,
-        organizationId: c.get("orgId"),
+        organizationId: orgId,
         trace,
         prompt,
         questionCount,
-        research: research.brief,
-        sourceForm: research.sourceForm,
+        context: requestContext(prompt, reading, "create"),
+        sourceForm: reading.sourceForm,
       });
-      // Consumed only now that a valid document exists. A generation that failed
-      // upstream, or produced something unusable, must not spend the allowance.
-      const orgId = c.get("orgId");
-      if (orgId) {
-        await meter(c.env, orgId, "ai_generations");
-        const total = tokens + research.tokens;
-        if (total > 0) await meter(c.env, orgId, "ai_tokens", total);
-        // Metering spends the allowance; this records what it cost us. Research
-        // is logged separately because it runs on its own budget and a cost
-        // chart that cannot separate "reading their website" from "writing the
-        // form" cannot tell you which one to make cheaper.
-        //
-        // `model` is whichever vendor actually answered — every fallback to
-        // `MODELS.generationFallback` used to be logged here as Gemini.
-        await logAiGeneration(c.env, {
-          organizationId: orgId,
-          userId: c.get("userId"),
-          kind: "generate",
-          model,
-          usage,
-          latencyMs: Date.now() - started,
-        });
-        if (research.tokens > 0) {
-          await logAiGeneration(c.env, {
-            organizationId: orgId,
-            userId: c.get("userId"),
-            kind: "research",
-            model: MODELS.research,
-            usage: research.usage,
-          });
-        }
-      }
-      return c.json({ doc, issues, tokens });
+      ledger.add("generate", model, usage);
+      // Charged only now that a valid document exists: a generation that
+      // failed upstream, or produced something unusable, spends no allowance.
+      await ledger.meter(c.env, orgId, { generation: true });
+      await ledger.log(c.env, { organizationId: orgId, userId: c.get("userId"), latencyMs: Date.now() - started });
+      return c.json({ doc, issues, tokens: ledger.tokens });
     } catch (err) {
+      await ledger.log(c.env, { organizationId: orgId, userId: c.get("userId"), latencyMs: Date.now() - started });
       return c.json(
         { error: { code: "generation_failed", message: err instanceof Error ? err.message : "Generation failed" } },
         502,
@@ -462,52 +446,6 @@ export async function clarifyFormHandler(c: AiCtx) {
     return c.json({ questions });
 }
 
-/** Read whatever sites the prompt mentions. Never throws; never blocks for long. */
-async function researchFor(
-  env: Bindings,
-  prompt: string,
-  organizationId?: string | null,
-  trace?: AiTrace,
-): Promise<{
-  brief: { brief: string; sources: string[] } | null;
-  sourceForm: SourceForm | null;
-  urls: string[];
-  tokens: number;
-  usage: TokenUsage;
-}> {
-  const none = NO_USAGE;
-  const urls = extractUrls(prompt);
-  if (urls.length === 0) return { brief: null, sourceForm: null, urls, tokens: 0, usage: none };
-  const sites = await readSites(urls);
-  if (sites.length === 0) return { brief: null, sourceForm: null, urls, tokens: 0, usage: none };
-  // A linked form is copied, not researched. The other pages (the main site,
-  // say) are still read for context, and a prompt with only forms skips the brief.
-  const sourceForm = mergeSourceForms(sites.flatMap((s) => (s.form ? [s.form] : [])));
-  const context = sites.filter((s) => !s.form);
-  if (context.length === 0) return { brief: null, sourceForm, urls, tokens: 0, usage: none };
-  const brief = await researchBrief({ env, request: prompt, sites: context, organizationId, trace });
-  return {
-    brief: brief ? { brief: brief.brief, sources: brief.sources } : null,
-    sourceForm,
-    urls,
-    tokens: brief?.tokens ?? 0,
-    usage: brief?.usage ?? none,
-  };
-}
-
-/** What `researchFor` found behind a builder-chat request's links, worded for an edit. */
-function linkedForEdit(brief: { brief: string } | null, form: SourceForm | null): string {
-  const page = brief?.brief
-    ? `
-
-WHAT THE LINKED PAGES SAY (read just now, from the pages themselves and a web search):
-${brief.brief}
-
-Use it where the request needs it, in its own words. Never contradict it.`
-    : "";
-  return page + (form ? linkedFormForEdit(form) : "");
-}
-
 // ─── streaming generation ───
 
 /**
@@ -528,14 +466,6 @@ Use it where the request needs it, in its own words. Never contradict it.`
  * first. Streaming flushes headers immediately, so the connection is never idle,
  * and doing all three steps in one request removes two round trips as well.
  */
-const streamHeaders = {
-  "content-type": "text/event-stream; charset=utf-8",
-  // no-transform is what stops an intermediary from buffering the whole
-  // response and delivering it at the end, which would undo all of the above.
-  "cache-control": "no-cache, no-transform",
-  connection: "keep-alive",
-  "x-accel-buffering": "no",
-} as const;
 
 /** One stage of the pipeline, as the client renders it. */
 type StageId = "reading" | "researching" | "drafting" | "logic" | "saving";
@@ -557,7 +487,7 @@ aiRouter.post(
     if (!c.env.OPENROUTER_API_KEY) {
       return c.json({ error: { code: "ai_not_configured", message: "OPENROUTER_API_KEY is not set" } }, 503);
     }
-    const { prompt: rawPrompt, questionCount, workspaceId, clarifications } = c.req.valid("json");
+    const { prompt: rawPrompt, questionCount, workspaceId, clarifications, reserveKnowledge } = c.req.valid("json");
     const prompt = withClarifications(rawPrompt, clarifications ?? []);
     const ws = await requireWorkspace(c, workspaceId);
     if (ws === undefined) {
@@ -575,75 +505,34 @@ aiRouter.post(
     // One Langfuse trace for the whole generation: research, draft, any retry.
     const trace = newTrace("generate_form", userId, callSource(c));
 
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-    const writer = writable.getWriter();
-    const encoder = new TextEncoder();
-    let closed = false;
-
-    const send = async (event: string, data: unknown) => {
-      if (closed) return;
+    return eventStream(c.executionCtx, async (send) => {
+      const stage = (id: StageId, status: "start" | "done" | "skip", label?: string) => send("stage", { id, status, label });
+      const startedAt = Date.now();
+      const ledger = new Ledger();
       try {
-        await writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
-      } catch {
-        // The author navigated away or hit cancel. Stop writing; the pipeline
-        // below checks `closed` and unwinds.
-        closed = true;
-      }
-    };
-    const stage = (id: StageId, status: "start" | "done" | "skip", label?: string) =>
-      send("stage", { id, status, label });
-
-    const pipeline = async () => {
-      try {
-        const startedAt = Date.now();
-        const urls = extractUrls(prompt);
-        let research: { brief: string; sources: string[] } | null = null;
-        let sourceForm: SourceForm | null = null;
-        let researchTokens = 0;
-        let researchUsage: TokenUsage = NO_USAGE;
-
-        if (urls.length > 0) {
-          await stage("reading", "start", urls.length === 1 ? hostOf(urls[0]!) : `${urls.length} pages`);
-          const sites = await readSites(urls);
-          await stage("reading", sites.length > 0 ? "done" : "skip");
-
-          sourceForm = mergeSourceForms(sites.flatMap((s) => (s.form ? [s.form] : [])));
-          // Forms are copied, not researched; the other pages are context. See `researchFor`.
-          const context = sites.filter((s) => !s.form);
-          if (sites.length > 0) await send("sources", { pages: sites.map((s) => ({ url: s.url, title: s.title })) });
-          if (sourceForm && context.length === 0) {
-            await stage("researching", "skip");
-          } else if (context.length > 0) {
-            await stage("researching", "start");
-            const brief = await researchBrief({ env: c.env, request: prompt, sites: context, organizationId: orgId, trace });
-            if (brief) {
-              research = { brief: brief.brief, sources: brief.sources };
-              researchTokens = brief.tokens;
-              researchUsage = brief.usage;
-              if (brief.sources.length > 0) {
-                await send("sources", { searched: brief.sources.map((u) => ({ url: u, title: hostOf(u) })) });
-              }
-            }
-            await stage("researching", brief ? "done" : "skip");
-          } else {
-            // The site could not be read — client-rendered, bot-walled, down.
-            // Say so rather than implying the questions know about it.
-            await stage("researching", "skip");
-          }
-        } else {
-          await stage("reading", "skip");
-          await stage("researching", "skip");
-        }
+        const reading = await readLinks({
+          env: c.env,
+          prompt,
+          organizationId: orgId,
+          trace,
+          ledger,
+          onProgress: async (p) => {
+            if (p.step === "reading") await stage("reading", p.status, p.status === "start" ? p.label : undefined);
+            else if (p.step === "researching") await stage("researching", p.status);
+            else if (p.step === "pages") await send("sources", { pages: p.pages });
+            else await send("sources", { searched: p.sources.map((u) => ({ url: u, title: hostOf(u) })) });
+          },
+        });
 
         await stage("drafting", "start");
-        const { doc, issues, tokens, usage: genUsage, model: genModel } = await generateWithRetry({
+        const { doc, issues, usage: genUsage, model: genModel } = await generateWithRetry({
           env: c.env,
           organizationId: orgId,
           trace,
           prompt,
           questionCount,
-          research,
-          sourceForm,
+          context: requestContext(prompt, reading, "create"),
+          sourceForm: reading.sourceForm,
           onBlock: (b) => {
             // Fire-and-forget: the model is not waiting on the socket, and an
             // author who closed the tab must not stall the generation.
@@ -651,6 +540,7 @@ aiRouter.post(
           },
           onRetry: (reason) => void send("retry", { reason }),
         });
+        ledger.add("generate_stream", genModel, genUsage);
         await stage("drafting", "done");
 
         const questions = doc.blocks.filter((b) => b.type !== "welcome" && b.type !== "statement").length;
@@ -671,34 +561,16 @@ aiRouter.post(
         await enqueueMail(c.env, { kind: "admin_new_form", formId: id, source: "ai" });
         // The brief opens the builder's AI thread, so follow-ups amend it.
         await seedAiThread(c.env.DB, id, rawPrompt, { title, questions, rules });
+        // The pages it was written from, so the agent can already answer
+        // questions about them by the time the author opens the builder.
+        // Room is left for what the dashboard adds by hand right after.
+        await addPagesToKnowledge(c.env, { organizationId: orgId, formId: id, urls: reading.knowledgeUrls, reserve: reserveKnowledge });
         await stage("saving", "done");
 
-        // Metered after the form exists, for the same reason as the JSON route:
-        // an allowance should only be spent on something the author can open.
-        if (orgId) {
-          await meter(c.env, orgId, "ai_generations");
-          const total = tokens + researchTokens;
-          if (total > 0) await meter(c.env, orgId, "ai_tokens", total);
-          await logAiGeneration(c.env, {
-            organizationId: orgId,
-            userId,
-            formId: id,
-            kind: "generate_stream",
-            model: genModel,
-            usage: genUsage,
-            latencyMs: Date.now() - startedAt,
-          });
-          if (researchTokens > 0) {
-            await logAiGeneration(c.env, {
-              organizationId: orgId,
-              userId,
-              formId: id,
-              kind: "research",
-              model: MODELS.research,
-              usage: researchUsage,
-            });
-          }
-        }
+        // Charged after the form exists: an allowance is only spent on
+        // something the author can open.
+        await ledger.meter(c.env, orgId, { generation: true });
+        await ledger.log(c.env, { organizationId: orgId, userId, formId: id, latencyMs: Date.now() - startedAt });
 
         await send("done", {
           formId: id,
@@ -706,42 +578,16 @@ aiRouter.post(
           questions,
           rules,
           issues: issues.filter((i) => i.level === "error").length,
-          // The pages named in the brief, so the dialog can add them to the new
-          // form's knowledge base. Extracted here rather than re-parsed in the
-          // browser, so both sides agree on what counted as a link.
-          urls,
         });
       } catch (err) {
-        console.error("generate_form_stream_failed", err);
-        await send("error", {
-          message: err instanceof Error ? err.message : "Generation failed",
-        });
-      } finally {
-        closed = true;
-        try {
-          await writer.close();
-        } catch {
-          // Already closed by the client disconnecting.
-        }
+        console.error("generate_form_stream_failed", { message: err instanceof Error ? err.message : String(err) });
+        await ledger.log(c.env, { organizationId: orgId, userId, latencyMs: Date.now() - startedAt });
+        await send("error", { message: err instanceof Error ? err.message : "Generation failed" });
       }
-    };
-
-    // Held open explicitly. The response returns immediately so headers reach
-    // the edge inside its window; without waitUntil the runtime is free to
-    // consider the request finished and cancel the work still writing to it.
-    c.executionCtx.waitUntil(pipeline());
-
-    return new Response(readable, { headers: streamHeaders });
+    });
   },
 );
 
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
 
 // ─── extending an existing form ───
 
@@ -854,26 +700,31 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
     const base = FormDoc.parse(migrateFormDoc(JSON.parse(row.working_schema)));
 
     /**
-     * Any link in the request, read the way the AI box reads one when a form
-     * is created (`researchFor`): a form on it is copied out by code, any
-     * other page is summarised. What to do with it is the request's to say,
-     * so it goes to the model as context, not as an instruction.
+     * The request's links, read by the same step a new form uses
+     * (`readLinks`): a form on a page is copied out by code, any other page is
+     * summarised and kept in this form's knowledge base. What to do with any of
+     * it is the request's to say, so it reaches the model as context.
      */
-    let linked = "";
-    let linkedTokens = 0;
-    let linkedUsage: TokenUsage = NO_USAGE;
-    if (extractUrls(prompt).length > 0) {
-      onStage("links");
-      try {
-        const read = await researchFor(c.env, prompt, c.get("orgId"), trace);
-        linked = linkedForEdit(read.brief, read.sourceForm);
-        linkedTokens = read.tokens;
-        linkedUsage = read.usage;
-      } catch (err) {
-        // A page that will not load costs the edit its context, never the edit.
-        console.error("edit_links_failed", { formId, message: err instanceof Error ? err.message : String(err) });
-      }
+    const editStarted = Date.now();
+    const ledger = new Ledger();
+    const reading = await readLinks({
+      env: c.env,
+      prompt,
+      organizationId: c.get("orgId"),
+      formId,
+      trace,
+      ledger,
+      onProgress: (p) => {
+        if (p.step === "reading" && p.status === "start") onStage("links");
+      },
+    });
+    const context = requestContext(prompt, reading, "edit");
+    const sourceForm = reading.sourceForm;
+    if (reading.knowledgeUrls.length > 0) {
+      c.executionCtx.waitUntil(addPagesToKnowledge(c.env, { organizationId: c.get("orgId"), formId, urls: reading.knowledgeUrls }));
     }
+    /** A linked form's facts on every added question that names one of its fields: the same rule a new form follows. */
+    const exact = (d: EditDraftOut): EditDraftOut => (sourceForm ? { ...d, addBlocks: applySourceFields(d.addBlocks, sourceForm) } : d);
     onStage("editing");
 
     // The model call is a network call to a third party, and it fails: two 504s
@@ -881,51 +732,11 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
     // it reached the app's error handler and the builder's chat printed
     // "Internal server error" into the thread — which reads as a bug in
     // chatform and tells the author nothing about what to do next.
-    const editStarted = Date.now();
     const mode = c.env.AI_EDIT_MODE === "tools" ? "tools" : "object";
     let draft: EditDraftOut;
-    let tokens: number;
-    let usage: TokenUsage = NO_USAGE;
     let usedModel: string = MODELS.generation;
-    /**
-     * One entry per model call, because one edit is rarely one call.
-     *
-     * A single edit can run the drafting attempt, a reviewer, a review-driven
-     * retry and a flow repair — up to four calls, on two different tiers. All
-     * four used to be summed into ONE row under ONE model, so the reviewer's
-     * tokens (which run on the extraction tier) were attributed to the
-     * generation tier, and "Model calls" counted edits rather than calls.
-     *
-     * `usage` above still accumulates the total, because the meter charges the
-     * author once for the whole edit. This is only about what gets written down.
-     */
-    const billed: { kind: string; model: string; usage: TokenUsage }[] = [];
-    // Reading the links: its own row, on the research tier, like generation's.
-    if (linkedTokens > 0) billed.push({ kind: "research", model: MODELS.research, usage: linkedUsage });
-    /**
-     * Write everything collected so far, once.
-     *
-     * Called at each of the three ways out — the clarifying question, the
-     * no-change rejection and the ordinary success. The no-change path in
-     * particular used to return before any logging at all, so an edit the model
-     * was paid for left no trace whatsoever.
-     */
-    const flushBilled = async (latencyMs: number) => {
-      const orgId = c.get("orgId");
-      if (!orgId) return;
-      const rows = billed.splice(0);
-      for (const row of rows) {
-        await logAiGeneration(c.env, {
-          organizationId: orgId,
-          userId: c.get("userId"),
-          formId: c.get("form")?.id ?? null,
-          kind: row.kind,
-          model: row.model,
-          usage: row.usage,
-          latencyMs,
-        });
-      }
-    };
+    /** Every cost row this edit has written, on each way out. See `Ledger`. */
+    const logCalls = () => ledger.log(c.env, { organizationId: c.get("orgId"), userId: c.get("userId"), formId, latencyMs: Date.now() - editStarted });
     /** Loop shape, for the log line. Zero on the single-call path. */
     let loop = { steps: 0, toolCalls: 0, rejections: 0 };
     /** Set on the tools path only; the reviewer runs behind it. */
@@ -941,14 +752,14 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
          * sentences back while its work is still in context.
          */
         const ctx = buildEditContext(base, (d) => ({
-          introduced: introducedFlowProblems(base, applyEditDraft(base, d).doc),
+          introduced: introducedFlowProblems(base, applyEditDraft(base, exact(d)).doc),
         }));
         toolsCtx = ctx;
         const outcomes: EditOutcome[] = [];
         const result = await runEditAgent({
           env: c.env,
           system: `${FORM_DESIGNER_SYSTEM}\n\n${EDIT_TOOL_PROTOCOL}`,
-          prompt: buildEditPrompt(base, prompt, history as BuilderTurn[], "tools", linked),
+          prompt: buildEditPrompt(base, prompt, history as BuilderTurn[], "tools", context),
           tools: buildEditTools(ctx, (o) => outcomes.push(o)),
           organizationId: c.get("orgId"),
           formId,
@@ -963,10 +774,8 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
         // because the model forgot to call finish_edit would be the worst
         // possible failure.
         draft = clampDraft(ctx.best?.draft ?? ctx.draft);
-        tokens = result.tokens;
-        usage = result.usage;
         usedModel = result.model;
-        billed.push({ kind: "edit", model: result.model, usage: result.usage });
+        ledger.add("edit", result.model, result.usage);
         loop = { steps: result.steps, toolCalls: result.toolCalls, rejections: result.rejections };
         /**
          * The model stopped to ask rather than to propose.
@@ -979,11 +788,10 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
          * history.
          */
         if (result.question) {
-          const orgId = c.get("orgId");
-          if (orgId && tokens + linkedTokens > 0) await meter(c.env, orgId, "ai_tokens", tokens + linkedTokens);
           // The call happened and was billed; only its purpose differs.
-          for (const row of billed) row.kind = "edit_question";
-          await flushBilled(Date.now() - editStarted);
+          ledger.relabel("edit", "edit_question");
+          await ledger.meter(c.env, c.get("orgId"), { generation: false });
+          await logCalls();
           console.log("edit_form_question", { formId, ms: Date.now() - editStarted, steps: result.steps });
           return { status: 200, body: { question: result.question, summary: result.question } };
         }
@@ -991,16 +799,14 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
         const result = await generateEdit({
           env: c.env,
           system: FORM_DESIGNER_SYSTEM,
-          prompt: buildEditPrompt(base, prompt, history as BuilderTurn[], "object", linked),
+          prompt: buildEditPrompt(base, prompt, history as BuilderTurn[], "object", context),
           organizationId: c.get("orgId"),
           formId,
           trace,
         });
         draft = result.draft;
-        tokens = result.tokens;
-        usage = result.usage;
         usedModel = result.model;
-        billed.push({ kind: "edit", model: result.model, usage: result.usage });
+        ledger.add("edit", result.model, result.usage);
       }
     } catch (err) {
       // Flattened, and not `err` on its own: Workers Logs serialise an Error
@@ -1018,6 +824,8 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
         message,
         body: APICallError.isInstance(err) ? String(err.responseBody ?? "").slice(0, 800) : undefined,
       });
+      // Not charged, since nothing came of it, but what was spent is still recorded.
+      await logCalls();
       return { status: 502, body: { error: { code: "generation_failed", message: upstreamMessage(message) } } };
     }
 
@@ -1036,7 +844,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
      * is swallowed: the first proposal is still a proposal, and the builder
      * still sees the warning on it before applying.
      */
-    const applyDraft = (d: EditDraftOut) => applyEditDraft(base, d);
+    const applyDraft = (d: EditDraftOut) => applyEditDraft(base, exact(d));
     const introduced = (d: typeof base) => introducedFlowProblems(base, d);
 
     onStage("checking");
@@ -1076,7 +884,7 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
      */
     let reviewNote: string | null = null;
     if (c.env.AI_EDIT_REVIEW === "on" && mode === "tools" && problems.length === 0 && toolsCtx) {
-      const { review, tokens: reviewTokens, usage: reviewUsage } = await reviewEdit({
+      const { review, usage: reviewUsage } = await reviewEdit({
         env: c.env,
         request: prompt,
         diff: describeEditChanges(base, attempt),
@@ -1084,20 +892,18 @@ async function runEdit(c: AiCtx, onStage: (stage: EditStage, detail?: string) =>
         formId,
         trace,
       });
-      tokens += reviewTokens;
-      usage = addUsage(usage, reviewUsage);
-      billed.push({ kind: "edit_review", model: MODELS.extraction, usage: reviewUsage });
+      ledger.add("edit_review", MODELS.extraction, reviewUsage);
 
       if (review && !review.ok && review.problem.trim()) {
         console.log("edit_review_objected", { formId, problem: review.problem.slice(0, 200) });
         try {
           const retryCtx = buildEditContext(base, (d) => ({
-            introduced: introducedFlowProblems(base, applyEditDraft(base, d).doc),
+            introduced: introducedFlowProblems(base, applyEditDraft(base, exact(d)).doc),
           }));
           const retry = await runEditAgent({
             env: c.env,
             system: `${FORM_DESIGNER_SYSTEM}\n\n${EDIT_TOOL_PROTOCOL}`,
-            prompt: `${buildEditPrompt(base, prompt, history as BuilderTurn[], "tools", linked)}
+            prompt: `${buildEditPrompt(base, prompt, history as BuilderTurn[], "tools", context)}
 
 YOUR PREVIOUS ANSWER TO THIS REQUEST WAS REVIEWED AND SENT BACK:
   ${review.problem.trim()}
@@ -1112,9 +918,7 @@ Answer the same request again, addressing that.`,
             kind: "edit_retry",
             trace,
           });
-          tokens += retry.tokens;
-          usage = addUsage(usage, retry.usage);
-          billed.push({ kind: "edit_retry", model: retry.model, usage: retry.usage });
+          ledger.add("edit_retry", retry.model, retry.usage);
           const second = applyDraft(clampDraft(retryCtx.best?.draft ?? retryCtx.draft));
           // Kept only if it is still structurally sound AND actually did
           // something — the same "strictly better" rule the flow retry uses.
@@ -1152,15 +956,13 @@ Answer the same request again, addressing that.`,
         const retry = await generateEdit({
           env: c.env,
           system: FORM_DESIGNER_SYSTEM,
-          prompt: buildEditPrompt(base, feedback, history as BuilderTurn[], "object", linked),
+          prompt: buildEditPrompt(base, feedback, history as BuilderTurn[], "object", context),
           organizationId: c.get("orgId"),
           formId,
           kind: "edit_retry",
           trace,
         });
-        tokens += retry.tokens;
-        usage = addUsage(usage, retry.usage);
-        billed.push({ kind: "edit_retry", model: retry.model, usage: retry.usage });
+        ledger.add("edit_retry", retry.model, retry.usage);
         const second = applyDraft(retry.draft);
         const secondProblems = introduced(second.doc);
         if (secondProblems.length < problems.length) {
@@ -1189,6 +991,11 @@ Answer the same request again, addressing that.`,
       attempt = { ...attempt, doc: pruned, endingChanges: attempt.endingChanges.filter((r) => !dropped.has(r)) };
       problems = problems.filter((i) => !(i.code === "ending_unreachable" && i.refs?.every((r) => dropped.has(r))));
     }
+    // A linked form's questions take readable refs, as they do on a new form.
+    if (sourceForm) {
+      const finished = finishSourceForm(attempt.doc, sourceForm);
+      attempt = { ...attempt, doc: finished.doc, added: attempt.added.map((b) => ({ ...b, ref: finished.rename.get(b.ref) ?? b.ref }) as typeof b) };
+    }
     const { doc, added, removed, updated, newRules, rewired, endingChanges } = attempt;
 
     // An edit has to change something. This replaces the old "no new blocks"
@@ -1202,14 +1009,14 @@ Answer the same request again, addressing that.`,
       newRules.length === 0 &&
       endingChanges.length === 0
     ) {
-      await flushBilled(Date.now() - editStarted);
+      await logCalls();
       return {
         status: 422,
         body: {
           error: {
             code: "no_change",
             message: draft.summary?.trim()
-              ? `Nothing to change — ${draft.summary.trim()}`
+              ? `Nothing to change: ${draft.summary.trim()}`
               : "That already looks the way you described. Try describing the change differently.",
           },
         },
@@ -1242,17 +1049,11 @@ Answer the same request again, addressing that.`,
       rules: newRules.length,
       unresolvedFlowProblems: problems.length,
     });
-    const orgId = c.get("orgId");
-    if (orgId) {
-      // One edit, one generation against the allowance, however many model
-      // calls it took to answer — the author asked once.
-      await meter(c.env, orgId, "ai_generations");
-      if (tokens + linkedTokens > 0) await meter(c.env, orgId, "ai_tokens", tokens + linkedTokens);
-    }
-    // The cost record is per call, and each carries the model that actually
-    // answered it — a kept fallback is logged as the fallback, and the reviewer
-    // is logged on its own tier rather than as whichever vendor drafted.
-    await flushBilled(Date.now() - editStarted);
+    // One edit, one generation against the allowance, however many model
+    // calls it took to answer: the author asked once. The cost rows are per
+    // call, each with the model that actually answered it.
+    await ledger.meter(c.env, c.get("orgId"), { generation: true });
+    await logCalls();
     return { status: 200, base, body: {
       doc: finalDoc,
       added: added.length,
@@ -1274,7 +1075,7 @@ Answer the same request again, addressing that.`,
        * Null in the ordinary case, which is nearly all of them.
        */
       reviewNote,
-      tokens,
+      tokens: ledger.tokens,
       issues,
     } };
 }
@@ -1317,23 +1118,8 @@ aiRouter.post(
       "Nothing is saved — the proposal is returned for the builder to apply, exactly as the JSON route does.",
     responses: { 200: { description: "An event stream" }, 503: { description: "AI not configured" } },
   }),
-  async (c) => {
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-    const writer = writable.getWriter();
-    const encoder = new TextEncoder();
-    let closed = false;
-
-    const send = async (event: string, data: unknown) => {
-      if (closed) return;
-      try {
-        await writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
-      } catch {
-        // The author navigated away or hit cancel.
-        closed = true;
-      }
-    };
-
-    const run = async () => {
+  (c) =>
+    eventStream(c.executionCtx, async (send) => {
       try {
         // Stages are fired and not awaited: the edit is the thing being waited
         // on, and a slow socket must not pace the model.
@@ -1362,19 +1148,8 @@ aiRouter.post(
       } catch (err) {
         console.error("edit_stream_failed", { message: err instanceof Error ? err.message : String(err) });
         await send("error", { message: "That edit didn't work. Try describing it differently." });
-      } finally {
-        closed = true;
-        try {
-          await writer.close();
-        } catch {
-          /* already gone */
-        }
       }
-    };
-
-    c.executionCtx.waitUntil(run());
-    return new Response(readable, { headers: streamHeaders });
-  },
+    }),
 );
 
 for (const path of ["/ai/edit-form", "/ai/add-blocks"] as const) {

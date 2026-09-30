@@ -1,5 +1,6 @@
 import { FENCE_RULE, fence, fenceNonce } from "@repo/guard";
 import { mediaUrls } from "./research.js";
+import { linkedFormSection, type SourceForm } from "./form-import.js";
 import { ADDABLE_BLOCK_TYPES, andList, enforcesUnique, OTHER_ANSWER, renderBlockCatalog, type Block, type FormDoc } from "@repo/form-schema";
 
 /**
@@ -468,6 +469,36 @@ WRITING THE QUESTIONS
 - Punctuate like a person, not like a language model. NEVER use an em dash (—) or an en dash (–) in a title, a description, an option, an ending or a summary: use a full stop, a comma, a colon, brackets, or two shorter sentences. Authors notice, and a form full of em dashes reads as AI-written before anybody has answered a question. Avoid the rest of the house style too: no "it's not just a form, it's a conversation", no "unlock", no "seamless", no "dive in", no rule of three for its own sake.`;
 
 /**
+ * What a request's links and media turned out to be, for the model: the same
+ * sections for a new form and for an edit (`readLinks` reads both). A page
+ * about the product becomes a brief, a linked form its fields, and a media
+ * URL a note on where it goes. The model decides what the request wants done
+ * with them.
+ */
+export function requestContext(
+  prompt: string,
+  reading: { brief: { brief: string } | null; sourceForm: SourceForm | null },
+  purpose: "create" | "edit",
+): string {
+  const brief = reading.brief?.brief
+    ? `
+
+WHAT WE FOUND OUT ABOUT THEIR PRODUCT (from their own site and a web search):
+${reading.brief.brief}
+
+Use this. Ask about the platforms, plans and concepts this product actually has, in its own words, not generic equivalents. Never contradict it, and never ask a question that only makes sense for a product this is not.`
+    : "";
+  const media = mediaUrls(prompt);
+  const mediaNote = media.length
+    ? `
+
+MEDIA THE AUTHOR GAVE YOU. Place each one in the description of the question (or the welcome) it belongs to, as the URL alone on its own line:
+${media.map((u) => `- ${u}`).join("\n")}`
+    : "";
+  return brief + (reading.sourceForm ? linkedFormSection(reading.sourceForm, purpose) : "") + mediaNote;
+}
+
+/**
  * The generator's request.
  *
  * The type list and the research brief are both load-bearing, and both were
@@ -495,33 +526,18 @@ WRITING THE QUESTIONS
 export function buildFlowGeneratorPrompt(
   prompt: string,
   questionCount: number | undefined,
-  research?: { brief: string; sources: string[] } | null,
+  /** From `requestContext`: what the request's links and media turned out to be. */
+  context?: string | null,
 ): string {
-  const context = research?.brief
-    ? `
-
-WHAT WE FOUND OUT ABOUT THEIR PRODUCT (from their own site and a web search):
-${research.brief}
-
-Use this. Ask about the platforms, plans and concepts this product actually has, in its own words, not generic equivalents. Never contradict it, and never ask a question that only makes sense for a product this is not.`
-    : "";
 
   const sizing =
     questionCount === undefined
       ? `- Decide how many questions this form needs, using the sizing guidance. Between 3 and 50; err towards covering the request rather than towards brevity, and give every segment the request names its own arm.`
       : `- Exactly ${questionCount} answerable questions. The author asked for this number, so hit it exactly.`;
 
-  const media = mediaUrls(prompt);
-  const mediaNote = media.length
-    ? `
-
-MEDIA THE AUTHOR GAVE YOU. Place each one in the description of the question (or the welcome) it belongs to, as the URL alone on its own line:
-${media.map((u) => `- ${u}`).join("\n")}`
-    : "";
-
   return `Design a conversational form as a JSON document.
 
-Request: ${prompt}${context}${mediaNote}
+Request: ${prompt}${context ?? ""}
 
 Shape of the document:
 ${sizing}
@@ -707,6 +723,13 @@ THEY ALSO TOLD YOU:
 ${given.map((a) => `- ${a.question} → ${a.answer.trim()}`).join("\n")}`;
 }
 
+/** How a consent question is made refusable, in whichever vocabulary the edit writes in (tool calls or JSON). */
+const consentNote = (configure: string, route: string) =>
+  `A \`legal_consent\` question only accepts "yes" unless it carries \`decline=true\`. So "what if they don't agree?" is two changes together: ${configure} with "decline=true" on that question, and ${route} from it, with value "declined", pointing at a screen_out ending. Without the flag the question is a turnstile and no route off it can ever fire.`;
+
+const ALREADY_TRUE =
+  'The manifest above marks a question "unique" when it already refuses answers another respondent gave. If the request asks for something that is already true, change nothing and say so in your summary.';
+
 export const EDIT_TOOL_PROTOCOL = `You are editing a form that already exists, using tools.
 
 Make every change by calling a tool. A sentence describing a change does not make it. You may call several tools in one turn.
@@ -738,12 +761,8 @@ export function buildEditPrompt(
    * state, and no tool description can carry it.
    */
   mode: "object" | "tools" = "object",
-  /**
-   * What the links in the request turned out to be, read before the edit:
-   * a form to copy from, and what any other page says. See `linkedForEdit`
-   * in routes/ai.ts. Empty when the request has no links.
-   */
-  linked = "",
+  /** From `requestContext`, as a new form gets it. Empty when the request has no links or media. */
+  context = "",
 ): string {
   const gotos = doc.logic.filter((r) => r.action_kind === "goto");
 
@@ -844,7 +863,7 @@ ${rules}
 ${conversation}
 WHAT THE BUILDER ASKED FOR:
 ${request}
-${linked}
+${context}
 ${mode === "tools" ? `
 WORK OUT WHAT KIND OF EDIT THIS IS FIRST. Most requests about a working form change the ROUTING, not the questions: who gets asked what, in which order. Those need NO new questions, and adding one to have something to show is the commonest way an edit goes wrong.
 
@@ -855,9 +874,9 @@ Make every change by calling a tool. Describing a change in prose does not make 
 - Add a question only when the request needs one that does not exist. If a new question is only for SOME answers, it must sit immediately below the question that decides it: say so with insertAfter.
 - If the request states a condition on who may SUBMIT (must, mandatory, requirement, eligible, only open to, minimum), there is a screen_out in this form, and a branch aimed at it.
 
-A \`legal_consent\` question only accepts "yes" unless it carries \`decline=true\`. So "what if they don't agree?" is two calls together: configure_question with "decline=true" on that question, and set_branch from it, with value "declined", pointing at a screen_out ending. Without the flag the question is a turnstile and no route off it can ever fire.
+${consentNote("configure_question", "set_branch")}
 
-The manifest above marks a question "unique" when it already refuses answers another respondent gave. If the request asks for something that is already true, change nothing and say so in your summary.
+${ALREADY_TRUE}
 
 When the edit is complete, call finish_edit once. It checks the flow and will tell you if something needs fixing.` : `
 WORK OUT WHAT KIND OF EDIT THIS IS FIRST. Most requests about a working form change the ROUTING, not the questions: who gets asked what, in which order. Those need NO new questions.
@@ -876,9 +895,9 @@ Rules for "branches": [{ "whenRef": "<question ref>", "op": "<eq|neq|gt|gte|lt|l
 
 Where a branch can point: a question BELOW the deciding one, or an ending. A branch pointing at a question above it would loop, and is dropped. So if the request needs a question asked only for some answers, that question has to sit below the one that decides it. Say so by adding it with "insertAfter", or by rewiring around where it already is.
 
-A \`legal_consent\` question only accepts "yes" unless it carries \`decline=true\`. So "what if they don't agree?" is two changes together: \`updateBlocks\` with "decline=true" on that question, and a branch from it, with value "declined", pointing at a screen_out ending. Without the flag the question is a turnstile and no route off it can ever fire.
+${consentNote("updateBlocks", "a branch")}
 
-The manifest above marks a question "unique" when it already refuses answers another respondent gave. If the request asks for something that is already true, change nothing and say so in the summary.
+${ALREADY_TRUE}
 
 If a new question is needed, "type" MUST be one of exactly these:
 ${renderBlockCatalog(ADDABLE_BLOCK_TYPES)}

@@ -37,7 +37,6 @@ import {
   flushStagedKnowledge,
   type StagedItem,
 } from "@/components/knowledge/staged-knowledge";
-import { useEntitlements } from "@/hooks/use-entitlements";
 import { ImportPanel } from "@/components/import/import-panel";
 import { detectImportSource, handOffReport, SOURCE_NAME } from "@/components/import/import-client";
 
@@ -60,25 +59,6 @@ import { detectImportSource, handOffReport, SOURCE_NAME } from "@/components/imp
 /** The endpoint caps the prompt at 2000 characters; so does this. */
 const PROMPT_MAX = 2000;
 
-/**
- * Staged knowledge plus the links the brief mentioned, minus any the author
- * already added by hand. Compared without the trailing slash, which is the
- * difference between "acme.com" in the brief and "https://acme.com/" typed
- * into the link field.
- */
-function withBriefLinks(staged: StagedItem[], urls: string[], cap: number | null): StagedItem[] {
-  const key = (u: string) => u.trim().replace(/\/+$/, "").toLowerCase();
-  const have = new Set(staged.flatMap((i) => (i.kind === "link" ? [key(i.url)] : [])));
-  // Links nobody asked for must never be the thing that opens a paywall, so
-  // they only fill the room the plan has left after what the author staged.
-  const room = cap === null ? Infinity : Math.max(0, cap - staged.length);
-  const added = urls
-    .filter((u) => !have.has(key(u)))
-    .slice(0, room)
-    .map((url) => ({ kind: "link" as const, id: crypto.randomUUID().slice(0, 8), url }));
-  return [...staged, ...added];
-}
-
 export function CreateFormDialog({
   open,
   onOpenChange,
@@ -90,7 +70,6 @@ export function CreateFormDialog({
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const generation = useFormGeneration();
-  const { limit } = useEntitlements();
 
   const [prompt, setPrompt] = useState("");
   /**
@@ -196,7 +175,12 @@ export function CreateFormDialog({
     lastAnswers.current = clarifications;
     setClarify(null);
     void generation.start(
-      { prompt: brief, workspaceId: ws, clarifications: clarifications.filter((a) => a.answer.trim()) },
+      {
+        prompt: brief,
+        workspaceId: ws,
+        clarifications: clarifications.filter((a) => a.answer.trim()),
+        reserveKnowledge: staged.length,
+      },
       (result) => {
         void invalidateForms(queryClient);
         // The builder's AI thread already opens with this brief: the server
@@ -204,12 +188,10 @@ export function CreateFormDialog({
         // Fire-and-forget: ingestion is asynchronous anyway, and the Knowledge
         // tab is where its progress and any failure belong. Blocking the route
         // change on an upload would make creating a form feel slower than it is.
-        //
-        // Any site named in the brief goes in too, so the agent can already
-        // answer questions about it by the time the author opens the builder.
-        const knowledge = withBriefLinks(staged, result.urls ?? [], limit("knowledge_sources_count"));
-        if (knowledge.length > 0) {
-          void flushStagedKnowledge(result.formId, knowledge);
+        // The pages named in the brief are already in: the server adds them
+        // when it saves the form, the same as for a link in the builder's chat.
+        if (staged.length > 0) {
+          void flushStagedKnowledge(result.formId, staged);
           setStaged([]);
         }
         setPrompt("");

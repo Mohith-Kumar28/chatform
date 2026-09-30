@@ -1,6 +1,5 @@
 import type { Block, FormDoc } from "@repo/form-schema";
 import type { GenerationDraft } from "./ai.js";
-import { decodeEntities } from "./research.js";
 import { inferTextType } from "./import/text.js";
 import type { ImportedForm, ImportProvider } from "./import/types.js";
 
@@ -180,40 +179,26 @@ ${form.description ? `Description: ${JSON.stringify(form.description)}\n` : ""}$
 }
 
 /**
- * A form linked in the builder's chat, for an edit.
- *
- * What to do with it is the author's call, made in their own words: copy it
- * in, add a few of its questions, swap the form for it, or only use it as a
- * reference. So this states what the form is and how to copy from it, and
- * leaves the what to the request.
+ * A linked form, for the model: what it is, and only the choices that are the
+ * model's to make. Shared by the AI box (`create`) and the builder chat
+ * (`edit`). Options, required settings and descriptions are not asked for:
+ * `applySourceFields` copies them from the source whatever the model writes.
  */
-export function linkedFormForEdit(form: SourceForm): string {
+export function linkedFormSection(form: SourceForm, purpose: "create" | "edit"): string {
+  const what =
+    purpose === "create"
+      ? "The author wants this form: include every field as its own question, in this order. Add anything else only if the request asks for it."
+      : "Do with it what the request asks: add all or some of its questions, replace this form's questions with them, or only use it as a reference. When the request only pastes the link, a form with no real questions yet takes it whole, and one that has questions gets its questions added after its own.";
   return `
 
 THE AUTHOR LINKED A FORM. ${sourceFormListing(form)}
 
-Do with it what the request asks: add all or some of its questions, replace this form's questions with them, or only use it as a reference. When the request only pastes the link, judge from the form above: one with no real questions yet takes the linked form whole, and one that has questions gets the linked form's questions added after its own.
-For anything you take from it:
+${what}
+- Give every field you take the ref shown (src_1, src_2, ...). Its options, required setting and description are copied from the source for you.
 - ${QUESTION_WORDING}
-- Copy options, descriptions and placeholders letter for letter, and keep its required settings where it states them.
-- A type with no "?" is what the page uses. One ending in "?" is our guess: pick the best question type yourself.`;
-}
-
-export function sourceFormPrompt(form: SourceForm): string {
-  return `
-
-${sourceFormListing(form)}
-
-The author wants THIS form. Rules for it, which override the sizing guidance:
-- Include every field above as its own question, in this order, with ref exactly as given (src_1, src_2, ...).
-- ${QUESTION_WORDING}
-- Copy each description, placeholder and option letter for letter, including capitals, punctuation and typos. Do not reword, shorten, merge, split or translate them.
-- A type with no "?" is what the page uses: keep it. A type ending in "?" is only our guess, because the page used a plain text box or its own buttons: choose the best block for the question (email, url, phone, number, date, single_select or multi_select with sensible options, and so on), keeping the words.
-- "required" and "optional" are the page's own; keep them. "required?" means the page does not say: decide as you would for any form.
-- Where several forms are listed, each is its own path: follow the author's request for how respondents reach each one.
-- The words are fixed; conversational tone belongs in the welcome and the endings, not in these questions.
-- Where options list jumps, build those as branches: a "question: X" jump goes to that question, "submit" goes to an ending.
-- Add questions, branches or endings only if the author's request asks for something the form does not have, and give those your own refs.`;
+- A type ending in "?" is our guess from a plain box: choose the type that collects that answer. Any other type is the source's. "required?" means the source does not say: decide.
+- Jumps on an option are the source's branches: build them. "question: X" goes to that question, "submit" to an ending.
+- Several forms are several paths: follow the request for how respondents reach each one.`;
 }
 
 /**
@@ -227,10 +212,7 @@ The author wants THIS form. Rules for it, which override the sizing guidance:
  */
 export function applySourceForm(draft: GenerationDraft, form: SourceForm): GenerationDraft {
   const byRef = new Map(form.fields.map((f, i) => [srcRef(i), f]));
-  const blocks = draft.blocks.map((b) => {
-    const f = byRef.get(b.ref.trim().toLowerCase());
-    return f ? { ...b, ref: b.ref.trim().toLowerCase(), ...mergeField(b, f) } : b;
-  });
+  const blocks = applySourceFields(draft.blocks, form);
 
   const present = new Set(blocks.map((b) => b.ref));
   form.fields.forEach((f, i) => {
@@ -265,13 +247,28 @@ export function applySourceForm(draft: GenerationDraft, form: SourceForm): Gener
   return { ...draft, blocks };
 }
 
+/**
+ * The source's facts on every drafted block that names a source field by its
+ * `src_N` ref: type where the page stated one, options, required, description.
+ * The words are the model's. Shared by a new form (`applySourceForm`) and an
+ * edit's added questions, so a linked form is copied the same way in both.
+ */
+export function applySourceFields<B extends GenerationDraft["blocks"][number]>(blocks: B[], form: SourceForm): B[] {
+  const byRef = new Map(form.fields.map((f, i) => [srcRef(i), f]));
+  return blocks.map((b) => {
+    const ref = b.ref.trim().toLowerCase();
+    const f = byRef.get(ref);
+    return f ? { ...b, ref, ...mergeField(b, f) } : b;
+  });
+}
+
 const CHOICE_TYPES = new Set(["single_select", "multi_select", "dropdown", "poll", "ranking", "picture_choice"]);
 
 /**
  * What the source fixes and what the generator keeps.
  *
- * The words are always the source's. The type is the source's only when the
- * page stated one; otherwise the generator's pick stands (an email block for
+ * The words are the model's (the source's when it wrote none). The type is
+ * the source's only when the page stated one; otherwise the generator's pick stands (an email block for
  * "Email", a choice for "Where did you hear about us?"), except that options
  * the page did list are kept, so a guessed choice type still gets them. The
  * required flag is the source's only when the page marked any.
@@ -332,6 +329,11 @@ function draftFields(f: SourceField): Omit<GenerationDraft["blocks"][number], "r
  * the results and a variable in the flow and nobody wants either called src_3.
  */
 export function applySourceFormToDoc(doc: FormDoc, form: SourceForm): FormDoc {
+  return finishSourceForm(doc, form).doc;
+}
+
+/** `applySourceFormToDoc`, plus which `src_N` ref became which readable one, for an edit's change list. */
+export function finishSourceForm(doc: FormDoc, form: SourceForm): { doc: FormDoc; rename: Map<string, string> } {
   const byRef = new Map(form.fields.map((f, i) => [srcRef(i), f]));
   const taken = new Set(doc.blocks.map((b) => b.ref));
   const rename = new Map<string, string>();
@@ -372,11 +374,14 @@ export function applySourceFormToDoc(doc: FormDoc, form: SourceForm): FormDoc {
   };
   const layout = Object.fromEntries(Object.entries(doc.layout ?? {}).map(([k, v]) => [rename.get(k) ?? k, v]));
   return {
-    ...doc,
-    blocks: swap(blocks) as Block[],
-    logic: swap(doc.logic) as FormDoc["logic"],
-    endingRules: swap(doc.endingRules) as FormDoc["endingRules"],
-    layout,
+    doc: {
+      ...doc,
+      blocks: swap(blocks) as Block[],
+      logic: swap(doc.logic) as FormDoc["logic"],
+      endingRules: swap(doc.endingRules) as FormDoc["endingRules"],
+      layout,
+    },
+    rename,
   };
 }
 

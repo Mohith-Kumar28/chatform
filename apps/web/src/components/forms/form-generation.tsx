@@ -48,8 +48,6 @@ export interface GenerationResult {
   title: string;
   questions: number;
   rules: number;
-  /** URLs found in the brief. Missing from servers deployed before this field. */
-  urls?: string[];
 }
 
 const STAGE_ORDER: StageId[] = ["reading", "researching", "drafting", "logic", "saving"];
@@ -111,6 +109,8 @@ export function useFormGeneration() {
         workspaceId?: string;
         /** What the author answered when asked first — see `ClarifyPanel`. */
         clarifications?: { question: string; answer: string }[];
+        /** Knowledge sources this dialog adds by hand after; the server's linked pages leave room for them. */
+        reserveKnowledge?: number;
       },
       onDone: (result: GenerationResult) => void,
     ) => {

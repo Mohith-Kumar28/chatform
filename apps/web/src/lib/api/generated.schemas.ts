@@ -3692,6 +3692,11 @@ export type PostApiAiGenerateFormBody = {
   /** @maxItems 3 */
   clarifications?: PostApiAiGenerateFormBodyClarificationsItem[];
   workspaceId?: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  reserveKnowledge?: number;
 };
 
 export type PostApiAiGenerateForm200 = {
@@ -3749,6 +3754,11 @@ export type PostApiAiGenerateFormStreamBody = {
   /** @maxItems 3 */
   clarifications?: PostApiAiGenerateFormStreamBodyClarificationsItem[];
   workspaceId?: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  reserveKnowledge?: number;
 };
 
 export type PostApiAiEditFormStreamBodyHistoryItemRole = typeof PostApiAiEditFormStreamBodyHistoryItemRole[keyof typeof PostApiAiEditFormStreamBodyHistoryItemRole];
@@ -6096,6 +6106,11 @@ export type PostV1AiGenerateFormBody = {
   /** @maxItems 3 */
   clarifications?: PostV1AiGenerateFormBodyClarificationsItem[];
   workspaceId?: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  reserveKnowledge?: number;
 };
 
 export type PostV1AiGenerateForm200 = {

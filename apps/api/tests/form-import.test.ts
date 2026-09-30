@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { lintFormDoc } from "@repo/form-schema";
-import { applySourceForm, applySourceFormToDoc, mergeSourceForms, sourceFormOf, sourceFormPrompt } from "../src/lib/form-import.js";
+import { applySourceForm, applySourceFormToDoc, linkedFormSection, mergeSourceForms, sourceFormOf } from "../src/lib/form-import.js";
 import { parseGoogleData, readGoogleForm } from "../src/lib/import/google.js";
 import { readHtmlForm } from "../src/lib/import/html-form.js";
 
@@ -71,7 +71,7 @@ describe("extractSourceForm: Google Forms", () => {
   });
 
   it("puts every field in the prompt under its src ref, as JSON strings", () => {
-    const prompt = sourceFormPrompt(form);
+    const prompt = linkedFormSection(form, "create");
     expect(prompt).toContain(`- src_1 | short_text? | required | title="FULL NAME"`);
     expect(prompt).toContain(`options=["India","Nepal"]`);
     expect(prompt).toContain(`- src_7 | statement | optional | title="Other roles"`);
@@ -186,7 +186,7 @@ describe("mergeSourceForms", () => {
     const b = extractSourceForm(`<form><label>B1<input name="b1"></label><label>B2<input name="b2"></label></form>`, "https://x.test/b")!;
     const merged = mergeSourceForms([a, b])!;
     expect(merged.fields.map((f) => f.title)).toEqual(["A1", "A2", "B1", "B2"]);
-    expect(sourceFormPrompt(merged)).toContain("== form");
+    expect(linkedFormSection(merged, "create")).toContain("== form");
   });
 });
 
