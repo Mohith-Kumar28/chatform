@@ -19,9 +19,10 @@ import {
 const base = () => FormDoc.parse(structuredClone(leadFormFixture));
 
 describe("form themes (tweakcn)", () => {
-  it("are tweakcn's 43, Default first, each named and described", () => {
+  it("are tweakcn's 43, its Default (as Neutral) first, each named and described", () => {
     expect(FORM_THEMES).toHaveLength(43);
-    expect(FORM_THEMES[0]!.id).toBe("default");
+    expect(FORM_THEMES[0]!.id).toBe("neutral");
+    expect(FORM_THEMES.some((t) => t.name === "Default")).toBe(false);
     expect(new Set(FORM_THEMES.map((t) => t.id)).size).toBe(43);
     for (const t of FORM_THEMES) {
       expect(t.name.length).toBeGreaterThan(1);

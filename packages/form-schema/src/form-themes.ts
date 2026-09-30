@@ -122,7 +122,8 @@ export function applyFormTheme(theme: ThemeDoc, id: string): ThemeDoc {
 
 /** The theme a form is on, or undefined for hand-picked colours. */
 export function matchFormTheme(theme: ThemeDoc): string | undefined {
-  if (theme.styles && theme.themeId && formTheme(theme.themeId)) return theme.themeId;
+  const stored = theme.styles && theme.themeId ? formTheme(theme.themeId) : undefined;
+  if (stored) return stored.id;
   return isChatform(theme) ? CHATFORM_THEME_ID : undefined;
 }
 

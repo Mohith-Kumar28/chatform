@@ -33,7 +33,7 @@ function mergePresetWithDefaults(presetStyles: ThemePreset["styles"]): ThemeStyl
  * words; there is no topic-to-theme table.
  */
 const DESCRIPTIONS: Record<string, string> = {
-  default: "neutral black and white, the plain shadcn look; fits anything",
+  neutral: "neutral black and white, the plain shadcn look; fits anything",
   "modern-minimal": "clean white with a calm blue, for product, SaaS and support",
   "violet-bloom": "bright violet with very round corners, friendly and modern",
   "t3-chat": "soft pink-mauve, gentle and conversational",
@@ -113,12 +113,13 @@ export interface FormTheme {
   styles: ThemeStyles;
 }
 
-/** The themes, tweakcn's "Default" first and the rest in tweakcn's own order. */
+/** The themes, tweakcn's "Default" (here "Neutral") first and the rest in tweakcn's own order. */
 export const FORM_THEMES: readonly FormTheme[] = [
   {
-    id: "default",
-    name: "Default",
-    description: `${DESCRIPTIONS.default!}; ${traits({ light: defaultLightThemeStyles, dark: defaultDarkThemeStyles })}`,
+    // tweakcn's "Default". Renamed: in a form builder the default is chatform's own theme.
+    id: "neutral",
+    name: "Neutral",
+    description: `${DESCRIPTIONS.neutral!}; ${traits({ light: defaultLightThemeStyles, dark: defaultDarkThemeStyles })}`,
     styles: { light: defaultLightThemeStyles, dark: defaultDarkThemeStyles },
   },
   ...Object.entries(defaultPresets).map(([id, preset]) => {
@@ -128,7 +129,9 @@ export const FORM_THEMES: readonly FormTheme[] = [
 ];
 
 export function formTheme(id: string | null | undefined): FormTheme | undefined {
-  return id ? FORM_THEMES.find((t) => t.id === id) : undefined;
+  // "default" was Neutral's id for its first day in production.
+  const key = id === "default" ? "neutral" : id;
+  return key ? FORM_THEMES.find((t) => t.id === key) : undefined;
 }
 
 const COMMON = new Set<string>(COMMON_STYLES);
