@@ -30,7 +30,10 @@ export { inferTextType };
  */
 
 export interface SourceField {
+  /** How to ask it: worded for a chat (`wordQuestions`), or the source's own words. */
   title: string;
+  /** The source's own words, when `title` was reworded. Refs are made from it. */
+  label?: string;
   description: string;
   /** A generation draft block type. */
   type: string;
@@ -358,7 +361,7 @@ export function finishSourceForm(doc: FormDoc, form: SourceForm): { doc: FormDoc
         ...(f.scaleLabels.high ? { labelHigh: f.scaleLabels.high.slice(0, 100) } : {}),
       } as Block;
     }
-    const readable = uniqueRef(f.title, taken);
+    const readable = uniqueRef(f.label ?? f.title, taken);
     rename.set(block.ref, readable);
     return { ...next, ref: readable } as Block;
   });

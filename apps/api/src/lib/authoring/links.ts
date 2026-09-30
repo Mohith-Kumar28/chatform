@@ -3,6 +3,7 @@ import { researchBrief, MODELS, NO_USAGE, type AiTrace, type TokenUsage } from "
 import { mergeSourceForms, type SourceForm } from "../form-import.js";
 import { extractUrls, readSites, type SiteReading } from "../research.js";
 import type { Ledger } from "./ledger.js";
+import { wordQuestions } from "./wording.js";
 
 /**
  * The links in an author's request, read before the model writes anything.
@@ -11,7 +12,9 @@ import type { Ledger } from "./ledger.js";
  * box, the builder's chat, `/v1`, MCP), so a link means the same thing
  * wherever it is pasted:
  * - a form on the page (a Google Form, a Typeform, a contact page) is read
- *   out by code, exactly (`formInPage`, shared with the importer);
+ *   out by code, exactly (`formInPage`, shared with the importer), and its
+ *   questions are worded for a chat by one small call (`wordQuestions`, the
+ *   importer's too), so the drafting model only has to place them;
  * - any other page is read and summarised against the request, with a web
  *   search around it (`researchBrief`), which is the product context the
  *   questions are written from;
@@ -71,7 +74,8 @@ export async function readLinks(opts: {
   if (sites.length > 0) await progress({ step: "pages", pages: sites.map((s) => ({ url: s.url, title: s.title })) });
 
   // A linked form is copied, not researched; the other pages are context.
-  const sourceForm = mergeSourceForms(sites.flatMap((s) => (s.form ? [s.form] : [])));
+  const merged = mergeSourceForms(sites.flatMap((s) => (s.form ? [s.form] : [])));
+  const sourceForm = merged ? await worded(merged, opts) : null;
   const context = sites.filter((s) => !s.form);
   const formUrls = new Set(sites.filter((s) => s.form).map((s) => s.url));
   const knowledgeUrls = urls.filter((u) => !formUrls.has(u));
@@ -106,6 +110,18 @@ export async function readLinks(opts: {
   if (usage.input + usage.output > 0) opts.ledger.add("research", MODELS.research, usage);
   await progress({ step: "researching", status: brief ? "done" : "skip" });
   return { urls, sites, sourceForm, brief, knowledgeUrls };
+}
+
+/** The form with its questions worded for a chat; its own words stand if that fails. */
+async function worded(
+  form: SourceForm,
+  opts: { env: Bindings; organizationId?: string | null; ledger: Ledger },
+): Promise<SourceForm> {
+  const asked = form.fields.filter((f) => f.type !== "statement" && f.title.trim());
+  const words = await wordQuestions(opts.env, asked, { formTitle: form.title, organizationId: opts.organizationId, ledger: opts.ledger, kind: "question_wording" });
+  if (!words) return form;
+  const byField = new Map(asked.map((f, i) => [f, words[i]!]));
+  return { ...form, fields: form.fields.map((f) => (byField.has(f) ? { ...f, title: byField.get(f)!, label: f.title } : f)) };
 }
 
 export function hostOf(url: string): string {
