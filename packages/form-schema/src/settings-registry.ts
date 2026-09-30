@@ -1,6 +1,8 @@
 import type { FormDoc } from "./form-doc";
 import { CLOSED_MESSAGE_DEFAULT, DEFAULT_CONFIRMATION_BODY, DEFAULT_CONFIRMATION_SUBJECT, THEME_COLOR_PATTERN } from "./settings";
 import { GOOGLE_FONTS } from "./google-fonts.generated";
+import { isDarkTheme, themeFromAccent, withAppearance } from "./palette";
+import type { ThemeDoc } from "./settings";
 
 const GOOGLE_FONT_FAMILIES = GOOGLE_FONTS.map(([family]) => family);
 
@@ -840,7 +842,12 @@ const same = (a: SettingValue, b: SettingValue) => JSON.stringify(a ?? null) ===
 export function applySettingOps(
   base: FormDoc,
   ops: readonly SettingOp[],
-  opts: { allowed?: (feature: string) => boolean; parse?: ParseContext } = {},
+  opts: {
+    allowed?: (feature: string) => boolean;
+    parse?: ParseContext;
+    /** Recompute the colours that follow a changed one, as the Design panel does. On unless a caller will do it itself. */
+    derive?: boolean;
+  } = {},
 ): AppliedSettings {
   const doc = structuredClone(base);
   const rejected: string[] = [];
@@ -872,8 +879,41 @@ export function applySettingOps(
     changes.push({ key: d.key, section: d.section, label: d.label, where: d.where, format: d.format, before, after, locked });
   }
   for (const c of changes) if (c.locked) settingDef(c.key)!.set(doc, c.before);
+  if (opts.derive !== false) deriveTheme(doc, new Set(changes.filter((c) => !c.locked).map((c) => c.key)));
 
   return { doc, changes, rejected };
+}
+
+/** Every colour a theme stores, the ones `themeFromAccent` works out together. */
+export const PALETTE_KEYS = [
+  "background",
+  "surface",
+  "text",
+  "accent",
+  "accentText",
+  "botBubble",
+  "userBubble",
+  "userBubbleText",
+] as const satisfies readonly (keyof ThemeDoc)[];
+
+/**
+ * The colours that follow from the ones just changed, worked out the way the
+ * Design panel does it, in place.
+ *
+ * Light or dark flips the palette with it (`withAppearance`), and a new
+ * primary colour or background recomputes the rest from the primary, light or
+ * dark as the background now is. A colour set in the same change is kept as
+ * set: the author named it. Shared by the builder's Apply, a new form's
+ * settings and `/v1`, so none of them can leave white bubbles on a navy page.
+ */
+export function deriveTheme(doc: FormDoc, changed: ReadonlySet<string>): void {
+  if (changed.has("theme.colorScheme")) doc.theme = withAppearance(doc.theme, doc.theme.colorScheme);
+  if (![...changed].some((k) => settingDef(k)?.derives === "palette")) return;
+  const palette = themeFromAccent(doc.theme.accent, { dark: isDarkTheme(doc.theme) });
+  if (!palette) return;
+  for (const key of PALETTE_KEYS) {
+    if (!changed.has(`theme.${key}`)) doc.theme[key] = palette[key];
+  }
 }
 
 /**

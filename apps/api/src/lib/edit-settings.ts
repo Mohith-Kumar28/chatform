@@ -294,10 +294,11 @@ const BLANK = FormDocSchema.parse({
  */
 export function createSettingsPrompt(ent: Entitlements): { text: string; keys: string[] } {
   const allowed = allowedBy(ent);
-  const keys = settingKeysFor(SETTING_SECTION_IDS, () => true);
+  // The draft names the form itself, in "title"; offering it here too gave it two answers.
+  const keys = settingKeysFor(SETTING_SECTION_IDS, () => true).filter((k) => k !== "title");
   const text = `
 
-FORM SETTINGS. Besides its questions, the request may say how the form should look or behave: its colours or fonts, the interviewer's tone, when it closes, who can respond. Set exactly those in "settings", each { "key", "value" } with the value as text, and leave everything the request does not mention at its default. A setting or value marked LOCKED or [needs <plan>] is not on this plan: still include it when asked for, and the author will be told. Today is ${new Date().toISOString().slice(0, 10)}.
+FORM SETTINGS. Besides its questions, the request may say how the form should look or behave: its colours or fonts, the interviewer's tone, when it closes, who can respond. Set exactly what it says in "settings", each { "key", "value" } with the value as text. Everything it does not state stays at its default, including colours and fonts: do not design a look for the form, because the author picks one in the builder and a colour they did not ask for is one they have to undo. A setting or value marked LOCKED or [needs <plan>] is not on this plan: still include it when asked for, and the author will be told. Today is ${new Date().toISOString().slice(0, 10)}.
 ${renderSettingsForPrompt(BLANK, SETTING_SECTION_IDS, allowed, planNeeded)}`;
   return { text, keys };
 }

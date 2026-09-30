@@ -1,31 +1,16 @@
-import { settingDef, type FormDoc, type SettingChange, type ThemeDoc } from "@repo/form-schema";
-import { isDarkTheme, themeFromAccent } from "@/lib/brand-palette";
-import { withAppearance } from "@/lib/form-scheme";
+import { deriveTheme, settingDef, type FormDoc, type SettingChange, PALETTE_KEYS } from "@repo/form-schema";
 
 /**
  * Settings an AI proposal changes, applied the way the builder's own controls
  * would apply them.
  *
- * The server checked every value and every plan gate before this sees them;
- * what it cannot do is the colour maths, which lives here. Changing the primary
- * colour or the background in the Design sheet recomputes the rest of the
- * palette, so an AI edit that did less would leave white bubbles on a navy page.
+ * The server checked every value and every plan gate before this sees them.
+ * The colours that follow a changed one are worked out by `deriveTheme`, the
+ * same code a new form and `/v1` use, so the builder cannot disagree with them.
  *
  * Applied to the document as it is now, not copied from the proposal's, so a
  * setting the author changed while the AI was thinking survives.
  */
-
-/** A palette colour the AI set, or that follows from one it set. */
-const PALETTE_KEYS = [
-  "background",
-  "surface",
-  "text",
-  "accent",
-  "accentText",
-  "botBubble",
-  "userBubble",
-  "userBubbleText",
-] as const satisfies readonly (keyof ThemeDoc)[];
 
 type PaletteKey = (typeof PALETTE_KEYS)[number];
 
@@ -44,19 +29,7 @@ export const PALETTE_LABELS: Record<PaletteKey, string> = {
 export function applySettingChanges(doc: FormDoc, changes: readonly SettingChange[]): void {
   const live = changes.filter((c) => !c.locked);
   for (const c of live) settingDef(c.key)?.set(doc, c.after);
-
-  // Light or dark: the same switch the Design panel makes, colours and all.
-  if (live.some((c) => c.key === "theme.colorScheme")) {
-    doc.theme = withAppearance(doc.theme, doc.theme.colorScheme);
-  }
-
-  if (!live.some((c) => settingDef(c.key)?.derives === "palette")) return;
-  const palette = themeFromAccent(doc.theme.accent, { dark: isDarkTheme(doc.theme) });
-  if (!palette) return;
-  const explicit = new Set(live.map((c) => c.key));
-  for (const key of PALETTE_KEYS) {
-    if (!explicit.has(`theme.${key}`)) doc.theme[key] = palette[key];
-  }
+  deriveTheme(doc, new Set(live.map((c) => c.key)));
 }
 
 /** The colours that move with the ones the AI named, for the card to show. */

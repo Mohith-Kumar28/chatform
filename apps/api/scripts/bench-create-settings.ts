@@ -48,7 +48,7 @@ const CASES: { prompt: string; settings: string[]; allowed?: string[] }[] = [
   { prompt: "customer onboarding form for a SaaS product", settings: [] },
   { prompt: "a playful signup form for a pottery workshop in forest green that closes on november 20", settings: ["settings.agent.tone", "theme.accent", "settings.closeRules.closeAt"], allowed: ["theme.background", "theme.text", "theme.botBubble", "theme.userBubble", "theme.accentText"] },
   { prompt: "a professional job application form for a law firm, only one response per person", settings: ["settings.agent.tone", "settings.allowResubmissions"] },
-  { prompt: "an event RSVP that stops after 50 people and emails me at ana@acme.com for each one", settings: ["settings.closeRules.maxSubmissions", "settings.onComplete.notificationEmails"] },
+  { prompt: "an event RSVP that stops after 50 people and emails me at ana@acme.com for each one", settings: ["settings.closeRules.maxSubmissions", "settings.onComplete.notificationEmails"], allowed: ["settings.closeRules.showRemaining", "settings.closeRules.closedMessageMd"] },
 ];
 
 const { text, keys } = createSettingsPrompt(free);

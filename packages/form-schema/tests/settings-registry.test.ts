@@ -162,3 +162,32 @@ describe("settings whose price depends on the value", () => {
     expect(text).not.toContain("google [needs");
   });
 });
+
+describe("colours that follow", () => {
+  it("recomputes the palette around a new primary colour", () => {
+    const before = base();
+    const { doc } = applySettingOps(before, [{ key: "theme.accent", value: "#228B22" }]);
+    expect(doc.theme.accent).toBe("#228B22");
+    expect(doc.theme.userBubble).not.toBe(before.theme.userBubble);
+    expect(doc.theme.background).not.toBe(before.theme.background);
+  });
+
+  it("keeps a colour named in the same change", () => {
+    const { doc } = applySettingOps(base(), [
+      { key: "theme.accent", value: "#228B22" },
+      { key: "theme.userBubble", value: "#FFEEAA" },
+    ]);
+    expect(doc.theme.userBubble).toBe("#FFEEAA");
+  });
+
+  it("makes a form dark, colours and all", () => {
+    const { doc } = applySettingOps(base(), [{ key: "theme.colorScheme", value: "dark" }]);
+    expect(doc.theme.colorScheme).toBe("dark");
+    expect(doc.theme.background).not.toBe(base().theme.background);
+  });
+
+  it("leaves the palette alone when asked to", () => {
+    const { doc } = applySettingOps(base(), [{ key: "theme.accent", value: "#228B22" }], { derive: false });
+    expect(doc.theme.userBubble).toBe(base().theme.userBubble);
+  });
+});
