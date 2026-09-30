@@ -3483,6 +3483,27 @@ export type PostApiInvitations409 = {
   error: PostApiInvitations409Error;
 };
 
+export type GetApiMeInvitations200InvitationsItemWorkspacesItem = {
+  name: string;
+  slug: string;
+  role: string;
+};
+
+export type GetApiMeInvitations200InvitationsItem = {
+  id: string;
+  organizationId: string;
+  organizationName: string;
+  role: string;
+  inviterName: string | null;
+  inviterEmail: string | null;
+  expiresAt: number;
+  workspaces: GetApiMeInvitations200InvitationsItemWorkspacesItem[];
+};
+
+export type GetApiMeInvitations200 = {
+  invitations: GetApiMeInvitations200InvitationsItem[];
+};
+
 export type PostApiFeedback200 = {
   ok: boolean;
   id: string;

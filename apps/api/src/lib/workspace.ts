@@ -6,6 +6,21 @@ export function newWorkspaceId(): string {
   return `ws_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 }
 
+/** "Priya's Workspace", or plain "My Workspace" when there is no name to use. */
+export function defaultWorkspaceName(name: string | null | undefined): string {
+  const first = name?.trim().split(/\s+/)[0];
+  return first ? `${first}'s Workspace`.slice(0, 60) : "My Workspace";
+}
+
+/**
+ * "Priya's Org", the account made at sign-up. A bare "Priya Sharma" in the
+ * switcher read as the person, not the thing they had just been given.
+ */
+export function defaultOrgName(name: string | null | undefined): string {
+  const first = name?.trim().split(/\s+/)[0];
+  return first ? `${first}'s Org`.slice(0, 60) : "My Org";
+}
+
 /**
  * A slug that reads, and is unique within its organization.
  *

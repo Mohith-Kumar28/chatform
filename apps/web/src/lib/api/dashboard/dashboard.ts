@@ -55,6 +55,7 @@ import type {
   GetApiFormsParams,
   GetApiInvitationPreview200,
   GetApiKeys200Item,
+  GetApiMeInvitations200,
   GetApiPaymentAccounts200,
   GetApiTemplates200Item,
   GetApiTemplatesBySlug200,
@@ -2974,7 +2975,95 @@ export const usePostApiInvitations = <TError = PostApiInvitations402 | PostApiIn
       > => {
       return useMutation(getPostApiInvitationsMutationOptions(options));
     }
-    export type postApiFeedbackResponse200 = {
+    export type getApiMeInvitationsResponse200 = {
+  data: GetApiMeInvitations200
+  status: 200
+}
+
+export type getApiMeInvitationsResponseSuccess = (getApiMeInvitationsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiMeInvitationsResponse = (getApiMeInvitationsResponseSuccess)
+
+export const getGetApiMeInvitationsUrl = () => {
+
+
+
+
+  return `/api/me/invitations`
+}
+
+/**
+ * @summary Pending invitations for the signed-in person
+ */
+export const getApiMeInvitations = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiMeInvitationsResponse> => {
+
+  return customFetch<getApiMeInvitationsResponse>(getGetApiMeInvitationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiMeInvitationsQueryKey = () => {
+    return [
+    `/api/me/invitations`
+    ] as const;
+    }
+
+
+export const getGetApiMeInvitationsQueryOptions = <TData = Awaited<ReturnType<typeof getApiMeInvitations>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiMeInvitations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiMeInvitationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiMeInvitations>>> = ({ signal }) => getApiMeInvitations({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiMeInvitations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiMeInvitationsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiMeInvitations>>>
+export type GetApiMeInvitationsQueryError = unknown
+
+
+/**
+ * @summary Pending invitations for the signed-in person
+ */
+
+export function useGetApiMeInvitations<TData = Awaited<ReturnType<typeof getApiMeInvitations>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiMeInvitations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiMeInvitationsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postApiFeedbackResponse200 = {
   data: PostApiFeedback200
   status: 200
 }

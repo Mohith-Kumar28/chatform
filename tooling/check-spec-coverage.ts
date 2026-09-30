@@ -191,6 +191,7 @@ const DASHBOARD_ONLY: Record<string, string> = {
   "/api/auth/ok": "session probe",
   "/api/auth-providers": "which sign-in buttons to render",
   "/api/invitation-preview": "unauthenticated invite landing page",
+  "/api/me/invitations": "the signed-in person's own invitations; a key belongs to an organization and has no inbox",
   "/api/ai/generate-form/stream": "server-sent events for the builder's progress UI; /v1/ai/generate-form is the API form",
   "/api/ai/edit-form/stream": "server-sent events for the AI bar's progress line; /v1/ai/edit-form is the API form and returns the same proposal",
   "/api/ai/add-blocks": "deprecated alias of /api/ai/edit-form",

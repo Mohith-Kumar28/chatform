@@ -133,7 +133,7 @@ export function OrganizationSwitcher() {
             )}
           >
             <Building2 className="size-3.5" strokeWidth={1.75} />
-            <span className="max-w-32 truncate">
+            <span className="max-w-32 truncate sm:max-w-48">
               {current?.name ?? "Organization"}
             </span>
             <ChevronsUpDown className="size-3 opacity-50" />

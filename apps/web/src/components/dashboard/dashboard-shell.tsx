@@ -12,6 +12,7 @@ import { UserMenu } from "./user-menu";
 import { UsagePill } from "./usage-pill";
 import { OrganizationSwitcher } from "./organization-switcher";
 import { InviteTeamButton } from "./invite-team-button";
+import { PendingInvitations } from "./pending-invitations";
 import { CommandPalette, openCommandPalette } from "./command-palette";
 import { ImpersonationBanner } from "@/components/admin/impersonation-banner";
 import { useAppShortcuts } from "./use-app-shortcuts";
@@ -131,6 +132,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               >
                 <Search className="size-4" />
               </Button>
+              {/* An invitation waiting for this person. Opens itself once,
+                  then stays here until it is answered. */}
+              <PendingInvitations />
               <UsagePill />
               <PlanBadge />
               {/* Theme moved into the account menu: it is a setting you change

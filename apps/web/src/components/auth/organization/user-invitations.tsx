@@ -2,12 +2,12 @@
 
 import type { OrganizationAuthClient } from "@better-auth-ui/core/plugins/organization"
 import { useAuth, useAuthPlugin, useSession } from "@better-auth-ui/react"
-import { useListUserInvitations } from "@better-auth-ui/react/plugins/organization"
 import { Fragment } from "react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { ItemGroup, ItemSeparator } from "@/components/ui/item"
 import { organizationPlugin } from "@/lib/auth/organization-plugin"
+import { usePendingInvitations } from "@/components/dashboard/pending-invitations"
 import { UserInvitationRow } from "./user-invitation-row"
 import { UserInvitationRowSkeleton } from "./user-invitation-row-skeleton"
 import { UserInvitationsEmpty } from "./user-invitations-empty"
@@ -27,9 +27,9 @@ export function UserInvitations({ className }: UserInvitationsProps) {
   const session = useSession(authClient)
   const emailVerified = session.data?.user.emailVerified === true
 
-  const { data: invitations, isPending } = useListUserInvitations(authClient, {
-    enabled: emailVerified
-  })
+  // Ours rather than Better Auth's list: that one kept expired invitations,
+  // whose Accept could only fail, and could not name the workspaces.
+  const { invitations, isPending } = usePendingInvitations()
 
   return (
     <div className={className}>

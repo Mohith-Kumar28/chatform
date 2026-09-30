@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { roleWithArticle } from "@/lib/roles";
-import { switchOrganization } from "@/lib/api/persist";
+import { acceptAndEnter } from "@/lib/accept-invitation";
 
 /**
  * Where an invitation email lands.
@@ -60,7 +60,7 @@ interface InvitationPreview {
 const DEAD_END: Record<Exclude<InvitationState, "pending">, { title: string; description: string }> = {
   expired: {
     title: "This invitation has expired",
-    description: "Invitations are only good for a few days. Ask whoever invited you to send a new one.",
+    description: "Invitations last a week. Ask whoever invited you to send a new one.",
   },
   accepted: {
     title: "This invitation was already used",
@@ -134,19 +134,7 @@ function AcceptInvitation() {
     setAccepting(true);
     setAcceptError(null);
     try {
-      const res = await authClient.organization.acceptInvitation({ invitationId: id });
-      if (res.error) throw new Error(res.error.message ?? "Could not accept this invitation.");
-      // Straight into the first workspace the invitation opens, rather than
-      // whichever one this browser last viewed in another organization.
-      const ws = preview?.workspaces?.[0]?.slug;
-      const href = ws ? `/dashboard?ws=${encodeURIComponent(ws)}` : "/dashboard";
-      // Accepting writes the new active organization to the session row but
-      // leaves the 5-minute session cookie cache alone, so the header kept
-      // naming the old organization. `setActive` re-issues that cookie, and the
-      // switch is a full navigation for the same reason.
-      const organizationId = res.data?.member?.organizationId;
-      if (organizationId) await switchOrganization(authClient.organization.setActive, organizationId, href);
-      else window.location.assign(href);
+      await acceptAndEnter(id, preview?.workspaces?.[0]?.slug);
     } catch (err) {
       setAcceptError(err instanceof Error ? err.message : "Could not accept this invitation.");
       setAccepting(false);
@@ -193,8 +181,14 @@ function AcceptInvitation() {
 
   if (preview.state !== "pending") {
     const { title, description } = DEAD_END[preview.state];
+    // An expired invite has one way forward, and it runs through a named person.
+    const inviter = preview.inviterName?.trim() || preview.inviterEmail?.trim();
+    const why =
+      preview.state === "expired" && inviter
+        ? `Invitations last a week. Ask ${inviter} to resend it from their team settings.`
+        : description;
     return (
-      <Shell title={title} description={description}>
+      <Shell title={title} description={why}>
         <Button asChild variant="outline" className="w-full rounded-full">
           <Link href={session ? "/dashboard" : signInHref(preview.email)}>
             {session ? "Go to dashboard" : "Sign in"}

@@ -293,7 +293,7 @@ export function WorkspaceSwitcher({
           )}
         >
           <Folder className="size-3.5 opacity-60" strokeWidth={1.75} />
-          <span className="max-w-32 truncate font-medium">
+          <span className="max-w-44 truncate font-medium sm:max-w-60">
             {showingAll ? "All workspaces" : (current?.name ?? "Workspace")}
           </span>
           <ChevronsUpDown className="size-3 opacity-50" />

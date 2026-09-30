@@ -14163,6 +14163,113 @@
         ]
       }
     },
+    "/api/me/invitations": {
+      "get": {
+        "operationId": "getApiMeInvitations",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Pending invitations for the signed-in person",
+        "responses": {
+          "200": {
+            "description": "Invitations, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "invitations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "organizationId": {
+                            "type": "string"
+                          },
+                          "organizationName": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "inviterName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "inviterEmail": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "expiresAt": {
+                            "type": "number"
+                          },
+                          "workspaces": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "slug": {
+                                  "type": "string"
+                                },
+                                "role": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "slug",
+                                "role"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "organizationId",
+                          "organizationName",
+                          "role",
+                          "inviterName",
+                          "inviterEmail",
+                          "expiresAt",
+                          "workspaces"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "invitations"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/feedback": {
       "post": {
         "operationId": "postApiFeedback",

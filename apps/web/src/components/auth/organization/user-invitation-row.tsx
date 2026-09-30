@@ -2,13 +2,11 @@
 
 import type { OrganizationAuthClient } from "@better-auth-ui/core/plugins/organization"
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react"
-import {
-  useAcceptInvitation,
-  useRejectInvitation
-} from "@better-auth-ui/react/plugins/organization"
-import type { Invitation } from "better-auth/client"
+import { useQueryClient } from "@tanstack/react-query"
 import { Check, Clock, X } from "lucide-react"
+import { useState } from "react"
 
+import type { PendingInvitation } from "@/components/dashboard/pending-invitations"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -20,26 +18,43 @@ import {
   ItemTitle
 } from "@/components/ui/item"
 import { Spinner } from "@/components/ui/spinner"
+import { acceptAndEnter } from "@/lib/accept-invitation"
+import { getGetApiMeInvitationsQueryKey } from "@/lib/api/dashboard/dashboard"
 import { organizationPlugin } from "@/lib/auth/organization-plugin"
-import { switchOrganization } from "@/lib/api/persist"
+import { roleTitle } from "@/lib/roles"
 
 export type UserInvitationRowProps = {
-  invitation: Invitation & { organizationName?: string }
+  invitation: PendingInvitation
 }
 
 /**
  * Single invitation row with accept/reject actions for the current user.
+ * Accepting lands on the first workspace the invitation opens.
  */
 export function UserInvitationRow({ invitation }: UserInvitationRowProps) {
   const { authClient } = useAuth<OrganizationAuthClient>()
-  const { localization: organizationLocalization, roles } =
+  const { localization: organizationLocalization } =
     useAuthPlugin(organizationPlugin)
+  const queryClient = useQueryClient()
+  const [busy, setBusy] = useState<"accept" | "reject" | null>(null)
 
-  const { mutate: acceptInvitation, isPending: isAccepting } =
-    useAcceptInvitation(authClient)
+  const accept = async () => {
+    setBusy("accept")
+    try {
+      await acceptAndEnter(invitation.id, invitation.workspaces[0]?.slug)
+    } catch {
+      setBusy(null)
+    }
+  }
 
-  const { mutate: rejectInvitation, isPending: isRejecting } =
-    useRejectInvitation(authClient)
+  const reject = async () => {
+    setBusy("reject")
+    await authClient.organization.rejectInvitation({ invitationId: invitation.id })
+    await queryClient.invalidateQueries({ queryKey: getGetApiMeInvitationsQueryKey() })
+    setBusy(null)
+  }
+
+  const spaces = invitation.workspaces.map((w) => w.name).join(", ")
 
   return (
     <Item>
@@ -49,14 +64,12 @@ export function UserInvitationRow({ invitation }: UserInvitationRowProps) {
       <ItemContent>
         <ItemTitle>
           {invitation.organizationName}
-          <Badge variant="secondary">
-            {roles?.[invitation.role] ?? invitation.role}
-          </Badge>
+          <Badge variant="secondary">{roleTitle(invitation.role)}</Badge>
         </ItemTitle>
         <ItemDescription>
-          {new Date(invitation.createdAt).toLocaleString(undefined, {
-            dateStyle: "medium",
-            timeStyle: "short"
+          {spaces ? `${spaces} · ` : ""}Expires{" "}
+          {new Date(invitation.expiresAt).toLocaleDateString(undefined, {
+            dateStyle: "medium"
           })}
         </ItemDescription>
       </ItemContent>
@@ -64,24 +77,10 @@ export function UserInvitationRow({ invitation }: UserInvitationRowProps) {
         <Button
           variant="outline"
           size="sm"
-          disabled={isAccepting || isRejecting}
-          onClick={() =>
-            acceptInvitation(
-              { invitationId: invitation.id },
-              {
-                // Accepting leaves the cached session cookie on the old
-                // organization; `setActive` re-issues it, and the reload lands
-                // the dashboard in the organization just joined.
-                onSuccess: () =>
-                  switchOrganization(
-                    authClient.organization.setActive,
-                    invitation.organizationId
-                  )
-              }
-            )
-          }
+          disabled={busy !== null}
+          onClick={() => void accept()}
         >
-          {isAccepting ? <Spinner /> : <Check />}
+          {busy === "accept" ? <Spinner /> : <Check />}
 
           {organizationLocalization.accept}
         </Button>
@@ -90,11 +89,11 @@ export function UserInvitationRow({ invitation }: UserInvitationRowProps) {
           variant="outline"
           size="icon"
           className="size-8 text-destructive"
-          disabled={isAccepting || isRejecting}
-          onClick={() => rejectInvitation({ invitationId: invitation.id })}
+          disabled={busy !== null}
+          onClick={() => void reject()}
           aria-label={organizationLocalization.rejectInvitation}
         >
-          {isRejecting ? <Spinner /> : <X />}
+          {busy === "reject" ? <Spinner /> : <X />}
         </Button>
       </ItemActions>
     </Item>

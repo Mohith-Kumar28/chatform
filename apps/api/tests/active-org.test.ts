@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
-import { applySchema, fetchApi } from "./helpers.js";
+import { applySchema, fetchApi, seedTenant } from "./helpers.js";
 
 /**
  * A session has to know which organization it is in.
@@ -58,5 +58,41 @@ describe("session active organization", () => {
       .first<{ active: string | null }>();
 
     expect(session?.active).toBe(member!.org);
+  });
+
+  it("opens a new account in its own named org and workspace", async () => {
+    const email = "firstworkspace@example.com";
+    const res = await fetchApi("/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password: "supersecret123", name: "Priya Sharma" }),
+    });
+    expect(res.ok).toBe(true);
+
+    const row = await env.DB.prepare(
+      `SELECT o.name AS org, w.name AS ws, w.slug AS slug
+         FROM users u JOIN members m ON m.user_id = u.id
+         JOIN organizations o ON o.id = m.organization_id
+         JOIN workspaces w ON w.organization_id = o.id
+        WHERE u.email = ?`,
+    )
+      .bind(email)
+      .all<{ org: string; ws: string; slug: string }>();
+    // Exactly one workspace: the "Name your workspace" screen is not a new
+    // account's first stop any more.
+    expect(row.results).toEqual([{ org: "Priya's Org", ws: "Priya's Workspace", slug: "priya-s-workspace" }]);
+  });
+
+  it("gives an organization made from the switcher a workspace too", async () => {
+    const t = await seedTenant("neworgws");
+    const res = await fetchApi("/api/auth/organization/create", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: t.cookie, origin: "http://localhost" },
+      body: JSON.stringify({ name: "Acme", slug: "acme-neworgws" }),
+    });
+    expect(res.status, await res.clone().text()).toBe(200);
+    const { id } = (await res.json()) as { id: string };
+    const ws = await env.DB.prepare(`SELECT name FROM workspaces WHERE organization_id = ?`).bind(id).all<{ name: string }>();
+    expect(ws.results).toEqual([{ name: "neworgws's Workspace" }]);
   });
 });

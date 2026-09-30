@@ -395,3 +395,87 @@ workspaceAccessRouter.post(
     return c.json({ id: invitation.id });
   },
 );
+
+// ─────────────────────────── my invitations ───────────────────────────
+
+workspaceAccessRouter.use("/me/invitations", requireSession);
+
+const MyInvitation = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  organizationName: z.string(),
+  role: z.string(),
+  inviterName: z.string().nullable(),
+  inviterEmail: z.string().nullable(),
+  expiresAt: z.number(),
+  workspaces: z.array(z.object({ name: z.string(), slug: z.string(), role: z.string() })),
+});
+
+/**
+ * The invitations waiting for the signed-in person, as the dashboard shows them.
+ *
+ * Better Auth's `list-user-invitations` filters on `status` alone, so a lapsed
+ * invite came back with an Accept button that could only fail, and it cannot
+ * say which workspaces an invite opens. This reads the same rows, drops the
+ * expired ones and the organizations the person is already in, and names the
+ * workspaces so the prompt can say where accepting takes them.
+ *
+ * Only a verified address is matched: Better Auth refuses to accept for an
+ * unverified one, so listing it would offer a button that cannot work. An
+ * impersonating admin sees nothing, since accepting would act as the customer.
+ */
+workspaceAccessRouter.get(
+  "/me/invitations",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Pending invitations for the signed-in person",
+    responses: {
+      200: {
+        description: "Invitations, newest first",
+        content: { "application/json": { schema: resolver(z.object({ invitations: z.array(MyInvitation) })) } },
+      },
+    },
+  }),
+  async (c) => {
+    if (c.get("impersonatorId")) return c.json({ invitations: [] });
+    const userId = c.get("userId")!;
+    const rows =
+      (
+        await c.env.DB.prepare(
+          `SELECT i.id, i.organization_id AS organizationId, o.name AS organizationName, coalesce(i.role, 'member') AS role,
+                  u.name AS inviterName, u.email AS inviterEmail, i.expires_at AS expiresAt
+             FROM users me
+             JOIN invitations i ON lower(i.email) = lower(me.email)
+             JOIN organizations o ON o.id = i.organization_id
+             LEFT JOIN users u ON u.id = i.inviter_id
+            WHERE me.id = ?1 AND me.email_verified = 1
+              AND i.status = 'pending' AND i.expires_at > ?2
+              AND NOT EXISTS (SELECT 1 FROM members m WHERE m.organization_id = i.organization_id AND m.user_id = me.id)
+            ORDER BY i.created_at DESC
+            LIMIT 20`,
+        )
+          .bind(userId, Date.now())
+          .all<Omit<z.infer<typeof MyInvitation>, "workspaces">>()
+      ).results ?? [];
+    if (rows.length === 0) return c.json({ invitations: [] });
+
+    const grants =
+      (
+        await c.env.DB.prepare(
+          `SELECT iw.invitation_id AS invitationId, w.name, w.slug, iw.role
+             FROM invitation_workspaces iw JOIN workspaces w ON w.id = iw.workspace_id
+            WHERE iw.invitation_id IN (${rows.map(() => "?").join(",")})
+            ORDER BY w.created_at ASC`,
+        )
+          .bind(...rows.map((r) => r.id))
+          .all<{ invitationId: string; name: string; slug: string; role: string }>()
+      ).results ?? [];
+
+    return c.json({
+      invitations: rows.map((r) => ({
+        ...r,
+        workspaces: grants.filter((g) => g.invitationId === r.id).map(({ name, slug, role }) => ({ name, slug, role })),
+      })),
+    });
+  },
+);

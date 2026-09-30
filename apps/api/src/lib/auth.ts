@@ -15,6 +15,7 @@ import { createDb, schema } from "@repo/db";
 import type { Bindings } from "../env.js";
 import { ac, roles } from "./permissions.js";
 import { applyInvitationGrants } from "./workspace-access.js";
+import { defaultOrgName, defaultWorkspaceName, newWorkspaceId, workspaceSlug } from "./workspace.js";
 import { apiKeyPlugin } from "./apikey-config.js";
 import { getEntitlements, countSeats } from "./entitlements.js";
 import { seatLimit } from "@repo/entitlements";
@@ -66,17 +67,24 @@ async function createDefaultOrg(env: Bindings, user: { id: string; name?: string
   // which is a broken dashboard, and the INSERT is the only place the race is visible.
   for (let attempt = 0; attempt < 3; attempt++) {
     const orgId = `org_${rand(8)}`;
+    // The first workspace comes with the account. Asking a brand-new person
+    // to name a folder before they have seen the product was a screen with
+    // one obvious answer, and an invitee met it before their invite.
+    const wsName = defaultWorkspaceName(user.name);
     try {
       await env.DB.batch([
         env.DB.prepare(`INSERT INTO organizations (id, name, slug, created_at) VALUES (?, ?, ?, ?)`).bind(
           orgId,
-          user.name?.trim() || "My Organization",
+          defaultOrgName(user.name),
           `${base}-${rand(6)}`,
           now,
         ),
         env.DB.prepare(
           `INSERT INTO members (id, organization_id, user_id, role, created_at) VALUES (?, ?, ?, 'owner', ?)`,
         ).bind(`mem_${rand(12)}`, orgId, user.id, now),
+        env.DB.prepare(
+          `INSERT INTO workspaces (id, organization_id, name, slug, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+        ).bind(newWorkspaceId(), orgId, wsName, workspaceSlug(wsName), user.id, now),
       ]);
       await adoptOrg(env, user.id, orgId);
       return;
@@ -441,7 +449,24 @@ export function createAuth(env: Bindings) {
             expiresAt: data.invitation.expiresAt ? new Date(data.invitation.expiresAt).getTime() : null,
           }, { delaySeconds: 5 });
         },
+        // A week, not Better Auth's two days: an invite sent on a Friday was
+        // dead before anyone read it on Monday.
+        invitationExpiresIn: 7 * 24 * 3600,
         organizationHooks: {
+          /**
+           * An organization made from "New organization" opens with a
+           * workspace in it, the same as the one made at sign-up. Without one
+           * the invite step that follows had nowhere to put a member.
+           */
+          afterCreateOrganization: async ({ organization, user }) => {
+            const name = defaultWorkspaceName(user.name);
+            await env.DB.prepare(
+              `INSERT INTO workspaces (id, organization_id, name, slug, created_by, created_at)
+               SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM workspaces WHERE organization_id = ?)`,
+            )
+              .bind(newWorkspaceId(), organization.id, name, workspaceSlug(name), user.id, Date.now(), organization.id)
+              .run();
+          },
           /**
            * The workspaces an invitation named become real grants the moment
            * it is accepted. Without this, a member invited to "Marketing" would
