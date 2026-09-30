@@ -1,7 +1,7 @@
 import type { Bindings } from "../../env.js";
 import { researchBrief, MODELS, NO_USAGE, type AiTrace, type TokenUsage } from "../ai.js";
 import { mergeSourceForms, type SourceForm } from "../form-import.js";
-import { extractUrls, readSites, type SiteReading } from "../research.js";
+import { extractUrls, isOnlyAForm, readSites, type SiteReading } from "../research.js";
 import type { Ledger } from "./ledger.js";
 import { wordQuestions } from "./wording.js";
 
@@ -73,11 +73,12 @@ export async function readLinks(opts: {
   await progress({ step: "reading", status: sites.length > 0 ? "done" : "skip" });
   if (sites.length > 0) await progress({ step: "pages", pages: sites.map((s) => ({ url: s.url, title: s.title })) });
 
-  // A linked form is copied, not researched; the other pages are context.
+  // A linked form is copied, not researched; the other pages are context,
+  // including a site that has a form on it as well as something to read.
   const merged = mergeSourceForms(sites.flatMap((s) => (s.form ? [s.form] : [])));
   const sourceForm = merged ? await worded(merged, opts) : null;
-  const context = sites.filter((s) => !s.form);
-  const formUrls = new Set(sites.filter((s) => s.form).map((s) => s.url));
+  const context = sites.filter((s) => !isOnlyAForm(s));
+  const formUrls = new Set(sites.filter(isOnlyAForm).map((s) => s.url));
   const knowledgeUrls = urls.filter((u) => !formUrls.has(u));
 
   if (context.length === 0) {

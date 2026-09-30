@@ -31,6 +31,10 @@ export interface KnowledgeSourceRow {
   chunkCount: number;
   createdAt: number;
   indexedAt: number | null;
+  /** The uploaded file's type, for a file, image or recording. */
+  mime: string | null;
+  /** The start of what was read out of it, once indexed. */
+  excerpt: string | null;
 }
 
 /** How many pages one crawl request may ingest. */
@@ -42,8 +46,11 @@ export function newSourceId(): string {
 
 export async function listSources(env: Bindings, formId: string): Promise<KnowledgeSourceRow[]> {
   const { results } = await env.DB.prepare(
-    `SELECT id, form_id, kind, title, origin, status, error, bytes, chunk_count, created_at, indexed_at
-       FROM knowledge_sources WHERE form_id = ? ORDER BY created_at DESC`,
+    `SELECT s.id, s.form_id, s.kind, s.title, s.origin, s.status, s.error, s.bytes, s.chunk_count, s.created_at, s.indexed_at,
+            f.mime,
+            (SELECT substr(c.text, 1, ${EXCERPT_CHARS}) FROM knowledge_chunks c WHERE c.source_id = s.id ORDER BY c.ordinal LIMIT 1) AS excerpt
+       FROM knowledge_sources s LEFT JOIN files f ON f.id = s.file_id
+      WHERE s.form_id = ? ORDER BY s.created_at DESC`,
   )
     .bind(formId)
     .all<Record<string, unknown>>();
@@ -60,8 +67,13 @@ export async function listSources(env: Bindings, formId: string): Promise<Knowle
     chunkCount: Number(r.chunk_count ?? 0),
     createdAt: Number(r.created_at ?? 0),
     indexedAt: r.indexed_at == null ? null : Number(r.indexed_at),
+    mime: (r.mime as string | null) ?? null,
+    excerpt: (r.excerpt as string | null) ?? null,
   }));
 }
+
+/** Enough of a source's text to recognise it by, not to read it. */
+const EXCERPT_CHARS = 600;
 
 /** Total indexed size for a form — what the plan cap meters. */
 export async function knowledgeBytes(env: Bindings, formId: string): Promise<number> {

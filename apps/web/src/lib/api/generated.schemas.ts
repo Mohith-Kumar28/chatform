@@ -3202,6 +3202,8 @@ export type GetApiFormsByIdKnowledge200SourcesItem = {
   chunkCount: number;
   createdAt: number;
   indexedAt: number | null;
+  mime: string | null;
+  excerpt: string | null;
 };
 
 export type GetApiFormsByIdKnowledge200Usage = {
@@ -3361,6 +3363,26 @@ export type PostApiFormsByIdKnowledgeUpload415Error = {
 
 export type PostApiFormsByIdKnowledgeUpload415 = {
   error: PostApiFormsByIdKnowledgeUpload415Error;
+};
+
+export type GetApiFormsByIdKnowledgeBySourceIdFile404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type GetApiFormsByIdKnowledgeBySourceIdFile404Error = {
+  code: string;
+  message: string;
+  issues?: GetApiFormsByIdKnowledgeBySourceIdFile404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type GetApiFormsByIdKnowledgeBySourceIdFile404 = {
+  error: GetApiFormsByIdKnowledgeBySourceIdFile404Error;
 };
 
 export type DeleteApiFormsByIdKnowledgeBySourceId200 = {
@@ -7698,6 +7720,8 @@ export type GetV1FormsByIdKnowledge200SourcesItem = {
   chunkCount: number;
   createdAt: number;
   indexedAt: number | null;
+  mime: string | null;
+  excerpt: string | null;
 };
 
 export type GetV1FormsByIdKnowledge200Usage = {
@@ -7857,6 +7881,26 @@ export type PostV1FormsByIdKnowledgeUpload415Error = {
 
 export type PostV1FormsByIdKnowledgeUpload415 = {
   error: PostV1FormsByIdKnowledgeUpload415Error;
+};
+
+export type GetV1FormsByIdKnowledgeBySourceIdFile404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type GetV1FormsByIdKnowledgeBySourceIdFile404Error = {
+  code: string;
+  message: string;
+  issues?: GetV1FormsByIdKnowledgeBySourceIdFile404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type GetV1FormsByIdKnowledgeBySourceIdFile404 = {
+  error: GetV1FormsByIdKnowledgeBySourceIdFile404Error;
 };
 
 export type DeleteV1FormsByIdKnowledgeBySourceId200 = {

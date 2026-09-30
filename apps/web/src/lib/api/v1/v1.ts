@@ -44,6 +44,7 @@ import type {
   GetV1FormsByIdIntegrations200,
   GetV1FormsByIdIntegrations404,
   GetV1FormsByIdKnowledge200,
+  GetV1FormsByIdKnowledgeBySourceIdFile404,
   GetV1FormsByIdParams,
   GetV1FormsByIdPayments200,
   GetV1FormsByIdPayments400,
@@ -6881,7 +6882,108 @@ export const usePostV1FormsByIdKnowledgeUpload = <TError = PostV1FormsByIdKnowle
       > => {
       return useMutation(getPostV1FormsByIdKnowledgeUploadMutationOptions(options));
     }
-    export type deleteV1FormsByIdKnowledgeBySourceIdResponse200 = {
+    export type getV1FormsByIdKnowledgeBySourceIdFileResponse200 = {
+  data: Blob
+  status: 200
+}
+
+export type getV1FormsByIdKnowledgeBySourceIdFileResponse404 = {
+  data: GetV1FormsByIdKnowledgeBySourceIdFile404
+  status: 404
+}
+
+export type getV1FormsByIdKnowledgeBySourceIdFileResponseSuccess = (getV1FormsByIdKnowledgeBySourceIdFileResponse200) & {
+  headers: Headers;
+};
+export type getV1FormsByIdKnowledgeBySourceIdFileResponseError = (getV1FormsByIdKnowledgeBySourceIdFileResponse404) & {
+  headers: Headers;
+};
+
+export type getV1FormsByIdKnowledgeBySourceIdFileResponse = (getV1FormsByIdKnowledgeBySourceIdFileResponseSuccess | getV1FormsByIdKnowledgeBySourceIdFileResponseError)
+
+export const getGetV1FormsByIdKnowledgeBySourceIdFileUrl = (id: string,
+    sourceId: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/knowledge/${sourceId}/file`
+}
+
+/**
+ * The file as it was uploaded. Images, PDFs and recordings are served inline so they can be previewed; anything else downloads.
+ * @summary Download an uploaded knowledge file
+ */
+export const getV1FormsByIdKnowledgeBySourceIdFile = async (id: string,
+    sourceId: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1FormsByIdKnowledgeBySourceIdFileResponse> => {
+
+  return customFetch<getV1FormsByIdKnowledgeBySourceIdFileResponse>(getGetV1FormsByIdKnowledgeBySourceIdFileUrl(id,sourceId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1FormsByIdKnowledgeBySourceIdFileQueryKey = (id: string,
+    sourceId: string,) => {
+    return [
+    `/v1/forms/${id}/knowledge/${sourceId}/file`
+    ] as const;
+    }
+
+
+export const getGetV1FormsByIdKnowledgeBySourceIdFileQueryOptions = <TData = Awaited<ReturnType<typeof getV1FormsByIdKnowledgeBySourceIdFile>>, TError = GetV1FormsByIdKnowledgeBySourceIdFile404>(id: string,
+    sourceId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdKnowledgeBySourceIdFile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1FormsByIdKnowledgeBySourceIdFileQueryKey(id,sourceId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1FormsByIdKnowledgeBySourceIdFile>>> = ({ signal }) => getV1FormsByIdKnowledgeBySourceIdFile(id,sourceId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && sourceId !== null && sourceId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdKnowledgeBySourceIdFile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1FormsByIdKnowledgeBySourceIdFileQueryResult = NonNullable<Awaited<ReturnType<typeof getV1FormsByIdKnowledgeBySourceIdFile>>>
+export type GetV1FormsByIdKnowledgeBySourceIdFileQueryError = GetV1FormsByIdKnowledgeBySourceIdFile404
+
+
+/**
+ * @summary Download an uploaded knowledge file
+ */
+
+export function useGetV1FormsByIdKnowledgeBySourceIdFile<TData = Awaited<ReturnType<typeof getV1FormsByIdKnowledgeBySourceIdFile>>, TError = GetV1FormsByIdKnowledgeBySourceIdFile404>(
+ id: string,
+    sourceId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdKnowledgeBySourceIdFile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1FormsByIdKnowledgeBySourceIdFileQueryOptions(id,sourceId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type deleteV1FormsByIdKnowledgeBySourceIdResponse200 = {
   data: DeleteV1FormsByIdKnowledgeBySourceId200
   status: 200
 }

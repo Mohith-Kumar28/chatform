@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { BookOpen, FileText, Link2, Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { BookOpen, Link2, Loader2, Plus, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,7 @@ import {
 import { uploadKnowledgeFile } from "./upload-knowledge";
 import { postApiFormsByIdKnowledgeText, postApiFormsByIdKnowledgeLink } from "@/lib/api/dashboard/dashboard";
 import { cn } from "@/lib/utils";
+import { SourceThumb, displayUrl, typeLabel, viewable, type PreviewKind } from "./source-preview";
 
 /**
  * Knowledge collected before the form exists.
@@ -29,7 +30,7 @@ import { cn } from "@/lib/utils";
  */
 
 export type StagedItem =
-  | { kind: "file"; id: string; file: File }
+  | { kind: "file"; id: string; file: File; /** An image's own object URL, for its thumbnail. */ preview?: string }
   | { kind: "text"; id: string; title: string; body: string }
   | { kind: "link"; id: string; url: string };
 
@@ -77,7 +78,15 @@ export function StagedKnowledgeDialog({
 
   const addFiles = (files: FileList | null) => {
     if (!files?.length) return;
-    onChange([...items, ...Array.from(files).map((file) => ({ kind: "file" as const, id: uid(), file }))]);
+    onChange([
+      ...items,
+      ...Array.from(files).map((file) => ({
+        kind: "file" as const,
+        id: uid(),
+        file,
+        preview: viewable(file.type) === "image" ? URL.createObjectURL(file) : undefined,
+      })),
+    ]);
   };
 
   return (
@@ -188,27 +197,14 @@ export function StagedKnowledgeDialog({
           {items.length > 0 && (
             <ul className="space-y-2">
               {items.map((item) => (
-                <li key={item.id} className="border-border bg-card flex items-center gap-3 rounded-xl border p-2.5">
-                  {item.kind === "link" ? (
-                    <Link2 className="text-muted-foreground size-4 shrink-0" strokeWidth={1.75} />
-                  ) : item.kind === "text" ? (
-                    <BookOpen className="text-muted-foreground size-4 shrink-0" strokeWidth={1.75} />
-                  ) : (
-                    <FileText className="text-muted-foreground size-4 shrink-0" strokeWidth={1.75} />
-                  )}
-                  <span className="text-body min-w-0 flex-1 truncate">
-                    {item.kind === "file" ? item.file.name : item.kind === "text" ? item.title : item.url}
-                  </span>
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label="Remove"
-                    className="text-muted-foreground hover:text-destructive shrink-0"
-                    onClick={() => onChange(items.filter((i) => i.id !== item.id))}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </li>
+                <StagedRow
+                  key={item.id}
+                  item={item}
+                  onRemove={() => {
+                    if (item.kind === "file" && item.preview) URL.revokeObjectURL(item.preview);
+                    onChange(items.filter((i) => i.id !== item.id));
+                  }}
+                />
               ))}
             </ul>
           )}
@@ -221,6 +217,40 @@ export function StagedKnowledgeDialog({
         </DialogBody>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function StagedRow({ item, onRemove }: { item: StagedItem; onRemove: () => void }) {
+  const file = item.kind === "file" ? item.file : null;
+  const image = item.kind === "file" ? (item.preview ?? null) : null;
+  const kind: PreviewKind = item.kind === "file" ? (file!.type.startsWith("audio/") ? "audio" : "file") : item.kind;
+  const title = item.kind === "file" ? item.file.name : item.kind === "text" ? item.title : displayUrl(item.url);
+  const detail =
+    item.kind === "file" ? typeLabel(item.file.type, item.file.name) : item.kind === "text" ? "Pasted text" : null;
+
+  return (
+    <li className="border-border bg-card flex items-center gap-3 rounded-xl border p-2.5">
+      <SourceThumb
+        kind={image ? "image" : kind}
+        mime={file?.type ?? null}
+        imageSrc={image}
+        url={item.kind === "link" ? item.url : null}
+        label={detail}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-body truncate">{title}</p>
+        {detail && <p className="text-muted-foreground text-caption truncate">{detail}</p>}
+      </div>
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        aria-label={`Remove ${title}`}
+        className="text-muted-foreground hover:text-destructive shrink-0"
+        onClick={onRemove}
+      >
+        <Trash2 className="size-3.5" />
+      </Button>
+    </li>
   );
 }
 

@@ -92,6 +92,15 @@ describe("readLinks", () => {
     expect(seen).toEqual(["reading:start", "reading:done", "pages:", "researching:start", "researching:skip"]);
   }, 60_000);
 
+  it("keeps a site that also has a form on it, and every page linked", async () => {
+    const homeWithForm = PRODUCT_PAGE.replace("</body>", `${CONTACT_PAGE.replace(/<\/?(html|head|body)>|<title>.*<\/title>/g, "")}</body>`);
+    stubPages({ "https://acme.example.com/": homeWithForm, "https://blog.example.org/": PRODUCT_PAGE });
+    const out = await readLinks({ env: E(), prompt: "a work with us form for https://acme.example.com/ and https://blog.example.org/", ledger: new Ledger() });
+    // Its form is still offered to copy; the site is still what the agent should know.
+    expect(out.sourceForm?.fields.map((f) => f.title)).toEqual(["Full name", "Work email", "Team size"]);
+    expect(out.knowledgeUrls).toEqual(["https://acme.example.com/", "https://blog.example.org/"]);
+  }, 60_000);
+
   it("never throws for a page that will not load", async () => {
     stubPages({});
     const out = await readLinks({ env: E(), prompt: "see https://down.example.com/", ledger: new Ledger() });

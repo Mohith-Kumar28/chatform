@@ -27,6 +27,8 @@ const MAX_BYTES = 1024 * 1024;
 const MAX_TEXT_CHARS = 6000;
 /** Pages read per generation: a form or two, the booking link and the main site, as authors paste them. */
 const MAX_URLS = 4;
+/** Page text below this is a nav bar or a bare form, not something to read about. */
+const MIN_PAGE_TEXT = 200;
 
 export interface SiteReading {
   url: string;
@@ -180,11 +182,20 @@ export async function fetchSiteText(url: string): Promise<SiteReading | null> {
     const form = found ? sourceFormOf(found) : null;
     // A client-rendered shell yields a nav bar and nothing else. Below this it
     // is noise that would only mislead the generator, unless there is a form.
-    if (text.length < 200 && !form) return null;
+    if (text.length < MIN_PAGE_TEXT && !form) return null;
     return { url, title: extractTitle(html), text, form };
   } catch {
     return null;
   }
+}
+
+/**
+ * A page that is a form and nothing else: a form builder's link, or a site's
+ * bare contact page. A site that also has a form on it (a homepage with a
+ * "work with us" section) is still a page about the product.
+ */
+export function isOnlyAForm(site: SiteReading): boolean {
+  return site.form !== null && site.text.length < MIN_PAGE_TEXT;
 }
 
 /**

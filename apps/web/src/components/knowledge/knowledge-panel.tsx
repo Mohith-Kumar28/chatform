@@ -7,12 +7,8 @@ import {
   BookOpen,
   ChevronDown,
   ExternalLink,
-  FileText,
-  Globe,
-  ImageIcon,
   Link2,
   Loader2,
-  Mic,
   Plus,
   Trash2,
   Upload,
@@ -36,6 +32,16 @@ import { isPlanDenial } from "@/lib/api/mutator";
 import { uploadKnowledgeFile } from "./upload-knowledge";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/format";
+import {
+  SourceBody,
+  SourceThumb,
+  displayUrl,
+  readExcerpt,
+  typeLabel,
+  useKnowledgeFile,
+  viewable,
+  type PreviewKind,
+} from "./source-preview";
 
 /**
  * The knowledge base, as one component.
@@ -60,14 +66,8 @@ type Mode = "idle" | "text" | "link";
 /** The list endpoint's body. `customFetch` resolves to it directly. */
 type KnowledgeList = GetApiFormsByIdKnowledge200;
 
-const KIND_ICON: Record<string, typeof FileText> = {
-  file: FileText,
-  text: BookOpen,
-  link: Link2,
-  crawl: Globe,
-  image: ImageIcon,
-  audio: Mic,
-};
+/** How much text the list endpoint sends per source (`listSources`). */
+const EXCERPT_CHARS = 600;
 
 /** Statuses that are still moving, and therefore worth polling for. */
 const PENDING_STATUSES = new Set(["pending", "extracting", "indexing"]);
@@ -269,6 +269,7 @@ export function KnowledgePanel({ formId, className }: { formId: string; classNam
           {sources.map((source) => (
             <SourceRow
               key={source.id}
+              formId={formId}
               source={source}
               onDelete={() => remove.mutate({ id: formId, sourceId: source.id })}
             />
@@ -446,66 +447,84 @@ function LinkForm({
 }
 
 function SourceRow({
+  formId,
   source,
   onDelete,
 }: {
-  source: {
-    id: string;
-    kind: string;
-    title: string;
-    origin: string | null;
-    status: string;
-    error: string | null;
-    bytes: number;
-    chunkCount: number;
-    createdAt: number;
-    indexedAt: number | null;
-  };
+  formId: string;
+  source: KnowledgeList["sources"][number];
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const detailsId = useId();
-  const Icon = KIND_ICON[source.kind] ?? FileText;
   const pending = PENDING_STATUSES.has(source.status);
   const failed = source.status === "failed";
-  const isWeb = source.kind === "link" || source.kind === "crawl";
+  const kind = source.kind as PreviewKind;
+  const isWeb = kind === "link" || kind === "crawl";
   /*
     The whole address, not the hostname the title defaults to. Three rows all
     reading "tgmlabs.co" told the author nothing about which page each one was,
     or which of them had failed.
   */
   const url = isWeb && source.origin ? source.origin : null;
-  // A file's origin is its filename; only worth a line when the title hides it.
-  const filename = !isWeb && source.origin && source.origin !== source.title ? source.origin : null;
+  const { heading, snippet } = readExcerpt(source.excerpt);
+  // A page added from a link is titled by its hostname until it is read;
+  // after that it has its own name.
+  const title = isWeb && heading ? heading : source.title;
+  const view = viewable(source.mime);
+  // Images load with the list, as their own thumbnail; a PDF or a recording
+  // only once opened.
+  const fileSrc = useKnowledgeFile(formId, source.id, view === "image" || (open && view !== null));
+  const type = typeLabel(source.mime, source.origin);
+  // The list carries only the start of the text; say so when there is more.
+  const more = source.chunkCount > 1 || (source.excerpt?.length ?? 0) >= EXCERPT_CHARS;
+  const meta = [
+    isWeb ? null : kind === "text" ? "Pasted text" : type,
+    source.status === "ready" && source.bytes > 0 ? formatBytes(source.bytes) : null,
+  ].filter(Boolean);
 
   return (
     <li className="border-border bg-card rounded-xl border">
       <div className="flex items-start gap-3 p-3">
-        <Icon className={cn("mt-0.5 size-4 shrink-0", failed ? "text-destructive" : "text-muted-foreground")} strokeWidth={1.75} />
+        <SourceThumb
+          kind={kind}
+          mime={source.mime}
+          imageSrc={view === "image" ? fileSrc : null}
+          url={url}
+          label={type}
+          failed={failed}
+        />
         <div className="min-w-0 flex-1">
-          <p className="text-body truncate font-medium">{source.title}</p>
-          {url && (
+          <p className="text-body truncate font-medium" title={title}>
+            {title}
+          </p>
+          {url ? (
             <a
               href={url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground text-caption mt-0.5 flex min-w-0 items-center gap-1 underline-offset-2 hover:underline"
+              className="text-muted-foreground hover:text-foreground text-caption flex min-w-0 items-center gap-1 underline-offset-2 hover:underline"
               title={url}
             >
-              <span className="truncate">{url}</span>
+              <span className="truncate">{displayUrl(url)}</span>
               <ExternalLink className="size-3 shrink-0" />
             </a>
+          ) : (
+            meta.length > 0 && <p className="text-muted-foreground text-caption truncate">{meta.join(" · ")}</p>
           )}
-          {filename && <p className="text-muted-foreground text-caption mt-0.5 truncate">{filename}</p>}
+          {!open && source.status === "ready" && snippet && (
+            <p className="text-muted-foreground text-caption mt-1.5 line-clamp-2">{snippet}</p>
+          )}
           {/*
-            One line of status. A failure shows its reason here instead of the
-            bare label, so the row doesn't say "Couldn't read" twice in red.
+            Status only while it says something: a source still being read, or
+            one that could not be, with its reason in place of the bare label.
           */}
-          <p className={cn("text-caption mt-1 flex items-center gap-1.5", failed ? "text-destructive" : "text-muted-foreground")}>
-            {pending && <Loader2 className="size-3 animate-spin" />}
-            <span>{failed && source.error ? source.error : (STATUS_LABEL[source.status] ?? source.status)}</span>
-            {source.status === "ready" && source.bytes > 0 && <span>· {formatBytes(source.bytes)}</span>}
-          </p>
+          {source.status !== "ready" && (
+            <p className={`text-caption ${cn("mt-1 flex items-center gap-1.5", failed ? "text-destructive" : "text-muted-foreground")}`}>
+              {pending && <Loader2 className="size-3 animate-spin" />}
+              <span>{failed && source.error ? source.error : (STATUS_LABEL[source.status] ?? source.status)}</span>
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           <Button
@@ -514,7 +533,7 @@ function SourceRow({
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
             aria-controls={detailsId}
-            aria-label={open ? "Hide details" : "Show details"}
+            aria-label={open ? "Hide preview" : "Show preview"}
             className="text-muted-foreground"
           >
             <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
@@ -523,7 +542,7 @@ function SourceRow({
             size="icon-sm"
             variant="ghost"
             onClick={onDelete}
-            aria-label={`Remove ${source.title}`}
+            aria-label={`Remove ${title}`}
             className="text-muted-foreground hover:text-destructive"
           >
             <Trash2 className="size-3.5" />
@@ -531,30 +550,22 @@ function SourceRow({
         </div>
       </div>
       {open && (
-        <dl id={detailsId} className="border-border text-caption grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 border-t px-3 py-3 pl-10">
-          <DetailRow label="Type">{KIND_LABEL[source.kind] ?? source.kind}</DetailRow>
-          {source.origin && (
-            <DetailRow label={isWeb ? "URL" : "File"}>
-              <span className="break-all">{source.origin}</span>
+        <div id={detailsId} className="border-border space-y-3 border-t p-3">
+          <SourceBody mime={source.mime} src={fileSrc} text={snippet && (more ? `${snippet.replace(/[\s.…]+$/, "")}…` : snippet)} title={title} />
+          <dl className="text-caption grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+            <DetailRow label="Type">{KIND_LABEL[source.kind] ?? source.kind}</DetailRow>
+            {source.origin && (
+              <DetailRow label={isWeb ? "URL" : "File"}>
+                <span className="break-all">{source.origin}</span>
+              </DetailRow>
+            )}
+            <DetailRow label="Status">
+              <span className={cn(failed && "text-destructive")}>{STATUS_LABEL[source.status] ?? source.status}</span>
             </DetailRow>
-          )}
-          <DetailRow label="Status">
-            <span className={cn(failed && "text-destructive")}>{STATUS_LABEL[source.status] ?? source.status}</span>
-          </DetailRow>
-          {failed && source.error && (
-            <DetailRow label="Reason">
-              <span className="text-destructive">{source.error}</span>
-            </DetailRow>
-          )}
-          <DetailRow label="Added">{formatDateTime(source.createdAt)}</DetailRow>
-          {source.indexedAt != null && <DetailRow label="Indexed">{formatDateTime(source.indexedAt)}</DetailRow>}
-          {source.status === "ready" && (
-            <>
-              <DetailRow label="Size">{formatBytes(source.bytes)}</DetailRow>
-              <DetailRow label="Sections">{source.chunkCount}</DetailRow>
-            </>
-          )}
-        </dl>
+            <DetailRow label="Added">{formatDateTime(source.createdAt)}</DetailRow>
+            {source.status === "ready" && <DetailRow label="Sections">{source.chunkCount}</DetailRow>}
+          </dl>
+        </div>
       )}
     </li>
   );

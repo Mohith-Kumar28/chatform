@@ -44,6 +44,7 @@ import type {
   GetApiFormsByIdHistoryParams,
   GetApiFormsByIdIntegrations200Item,
   GetApiFormsByIdKnowledge200,
+  GetApiFormsByIdKnowledgeBySourceIdFile404,
   GetApiFormsByIdPayments200,
   GetApiFormsByIdPaymentsParams,
   GetApiFormsByIdSubmissions200,
@@ -2277,7 +2278,108 @@ export const usePostApiFormsByIdKnowledgeUpload = <TError = PostApiFormsByIdKnow
       > => {
       return useMutation(getPostApiFormsByIdKnowledgeUploadMutationOptions(options));
     }
-    export type deleteApiFormsByIdKnowledgeBySourceIdResponse200 = {
+    export type getApiFormsByIdKnowledgeBySourceIdFileResponse200 = {
+  data: Blob
+  status: 200
+}
+
+export type getApiFormsByIdKnowledgeBySourceIdFileResponse404 = {
+  data: GetApiFormsByIdKnowledgeBySourceIdFile404
+  status: 404
+}
+
+export type getApiFormsByIdKnowledgeBySourceIdFileResponseSuccess = (getApiFormsByIdKnowledgeBySourceIdFileResponse200) & {
+  headers: Headers;
+};
+export type getApiFormsByIdKnowledgeBySourceIdFileResponseError = (getApiFormsByIdKnowledgeBySourceIdFileResponse404) & {
+  headers: Headers;
+};
+
+export type getApiFormsByIdKnowledgeBySourceIdFileResponse = (getApiFormsByIdKnowledgeBySourceIdFileResponseSuccess | getApiFormsByIdKnowledgeBySourceIdFileResponseError)
+
+export const getGetApiFormsByIdKnowledgeBySourceIdFileUrl = (id: string,
+    sourceId: string,) => {
+
+
+
+
+  return `/api/forms/${id}/knowledge/${sourceId}/file`
+}
+
+/**
+ * The file as it was uploaded. Images, PDFs and recordings are served inline so they can be previewed; anything else downloads.
+ * @summary Download an uploaded knowledge file
+ */
+export const getApiFormsByIdKnowledgeBySourceIdFile = async (id: string,
+    sourceId: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdKnowledgeBySourceIdFileResponse> => {
+
+  return customFetch<getApiFormsByIdKnowledgeBySourceIdFileResponse>(getGetApiFormsByIdKnowledgeBySourceIdFileUrl(id,sourceId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiFormsByIdKnowledgeBySourceIdFileQueryKey = (id: string,
+    sourceId: string,) => {
+    return [
+    `/api/forms/${id}/knowledge/${sourceId}/file`
+    ] as const;
+    }
+
+
+export const getGetApiFormsByIdKnowledgeBySourceIdFileQueryOptions = <TData = Awaited<ReturnType<typeof getApiFormsByIdKnowledgeBySourceIdFile>>, TError = GetApiFormsByIdKnowledgeBySourceIdFile404>(id: string,
+    sourceId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdKnowledgeBySourceIdFile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsByIdKnowledgeBySourceIdFileQueryKey(id,sourceId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFormsByIdKnowledgeBySourceIdFile>>> = ({ signal }) => getApiFormsByIdKnowledgeBySourceIdFile(id,sourceId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && sourceId !== null && sourceId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdKnowledgeBySourceIdFile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiFormsByIdKnowledgeBySourceIdFileQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFormsByIdKnowledgeBySourceIdFile>>>
+export type GetApiFormsByIdKnowledgeBySourceIdFileQueryError = GetApiFormsByIdKnowledgeBySourceIdFile404
+
+
+/**
+ * @summary Download an uploaded knowledge file
+ */
+
+export function useGetApiFormsByIdKnowledgeBySourceIdFile<TData = Awaited<ReturnType<typeof getApiFormsByIdKnowledgeBySourceIdFile>>, TError = GetApiFormsByIdKnowledgeBySourceIdFile404>(
+ id: string,
+    sourceId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdKnowledgeBySourceIdFile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiFormsByIdKnowledgeBySourceIdFileQueryOptions(id,sourceId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type deleteApiFormsByIdKnowledgeBySourceIdResponse200 = {
   data: DeleteApiFormsByIdKnowledgeBySourceId200
   status: 200
 }

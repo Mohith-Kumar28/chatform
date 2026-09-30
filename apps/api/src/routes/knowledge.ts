@@ -70,6 +70,7 @@ export function createKnowledgeRouter(mode: KnowledgeMode) {
      * an ingest failure diagnosable from outside the dashboard.
      */
     knowledgeRouter.use("/forms/:id/knowledge", requireScope("form", "read"));
+    knowledgeRouter.get("/forms/:id/knowledge/*", requireScope("form", "read"));
     knowledgeRouter.post("/forms/:id/knowledge/*", requireScope("form", "write"));
     knowledgeRouter.delete("/forms/:id/knowledge/*", requireScope("form", "write"));
   }
@@ -132,6 +133,10 @@ const SourceOut = z.object({
   chunkCount: z.number(),
   createdAt: z.number(),
   indexedAt: z.number().nullable(),
+  /** The uploaded file's type; null for pasted text and web pages. */
+  mime: z.string().nullable(),
+  /** The start of the text read out of the source, once it is indexed. */
+  excerpt: z.string().nullable(),
 });
 
 const ListOut = z.object({
@@ -216,6 +221,8 @@ knowledgeRouter.get(
         chunkCount: s.chunkCount,
         createdAt: s.createdAt,
         indexedAt: s.indexedAt,
+        mime: s.mime,
+        excerpt: s.excerpt,
       })),
       usage: {
         bytes: sources.filter((s) => s.status !== "failed").reduce((n, s) => n + s.bytes, 0),
@@ -453,6 +460,45 @@ knowledgeRouter.post(
       fileId,
     });
     return c.json({ id });
+  },
+);
+
+knowledgeRouter.get(
+  "/forms/:id/knowledge/:sourceId/file",
+  describeRoute({
+    tags: [tag],
+    summary: "Download an uploaded knowledge file",
+    description: "The file as it was uploaded. Images, PDFs and recordings are served inline so they can be previewed; anything else downloads.",
+    responses: {
+      200: { description: "The file's bytes", content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } },
+      404: { description: "No such file", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
+    },
+  }),
+  async (c) => {
+    const formId = c.req.param("id");
+    if (!owns(c, formId)) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    const row = await c.env.DB.prepare(
+      `SELECT f.r2_key, f.mime, f.filename FROM knowledge_sources s JOIN files f ON f.id = s.file_id
+        WHERE s.id = ? AND s.form_id = ?`,
+    )
+      .bind(c.req.param("sourceId"), formId)
+      .first<{ r2_key: string; mime: string; filename: string }>();
+    if (!row) return c.json({ error: { code: "not_found", message: "File not found" } }, 404);
+    const obj = await c.env.R2.get(row.r2_key);
+    if (!obj) return c.json({ error: { code: "not_found", message: "File not found" } }, 404);
+
+    // The author's own upload, type-checked by its bytes on the way in. SVG is
+    // never on the list: it renders script.
+    const inline = /^(image\/(png|jpeg|gif|webp|avif)|application\/pdf|audio\/[\w.+-]+)$/.test(row.mime);
+    return new Response(obj.body, {
+      headers: {
+        "content-type": inline ? row.mime : "application/octet-stream",
+        "content-disposition": `${inline ? "inline" : "attachment"}; filename="${row.filename.replace(/["\r\n]/g, "")}"`,
+        "x-content-type-options": "nosniff",
+        "cache-control": "private, max-age=3600",
+        "content-security-policy": "sandbox; default-src 'none'",
+      },
+    });
   },
 );
 
