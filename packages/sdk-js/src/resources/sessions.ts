@@ -6,7 +6,7 @@ export interface CreateSessionOptions {
   hiddenFields?: Record<string, string>;
   externalId?: string;
   expiresIn?: number;
-  respondent?: { ipHash?: string; country?: string; userAgent?: string };
+  respondent?: { country?: string; userAgent?: string };
 }
 
 export type SessionAction =

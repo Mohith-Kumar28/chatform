@@ -184,12 +184,20 @@ export function createAuth(env: Bindings) {
      * Applied only when it is actually needed: a plain-http localhost API cannot set a
      * `Secure` cookie at all, so forcing these there would break local dev instead.
      */
-    advanced: needsCrossSiteCookies(env)
-      ? {
-          defaultCookieAttributes: { sameSite: "none", secure: true, httpOnly: true },
-          useSecureCookies: true,
-        }
-      : { useSecureCookies: isSecureOrigin(env) },
+    advanced: {
+      /**
+       * No IP address is read or stored for anyone: not on the session row,
+       * not as a rate-limit key. Brute force is capped per account instead, in
+       * front of this handler (`authAttemptLimited` in `lib/ratelimit.ts`).
+       */
+      ipAddress: { disableIpTracking: true },
+      ...(needsCrossSiteCookies(env)
+        ? {
+            defaultCookieAttributes: { sameSite: "none" as const, secure: true, httpOnly: true },
+            useSecureCookies: true,
+          }
+        : { useSecureCookies: isSecureOrigin(env) }),
+    },
     emailAndPassword: {
       enabled: true,
       /**

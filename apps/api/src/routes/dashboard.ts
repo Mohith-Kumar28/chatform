@@ -1,3 +1,4 @@
+import { authAttemptLimited, authAttemptRefused } from "../lib/ratelimit.js";
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { z } from "zod";
@@ -202,6 +203,8 @@ dashboardRouter.all("/auth/api-key/*", (c) =>
  * would sign the console tab in as the customer. See `lib/impersonation.ts`.
  */
 dashboardRouter.on(["POST", "GET"], "/auth/*", async (c) => {
+  // Sign-in attempts are capped per account, never per address. See `authAttemptLimited`.
+  if (await authAttemptLimited(c, c.env)) return authAttemptRefused(c);
   const res = await getAuth(c.env).handler(c.req.raw);
   if (!c.req.header(IMPERSONATION_HEADER)) return res;
   const out = new Response(res.body, res);

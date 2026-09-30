@@ -10,8 +10,9 @@ import { applySchema, seedTenant, fetchApi, type Tenant } from "./helpers.js";
  * that turned real people away. What is limited now is one conversation, not
  * one address. See `publicSessionLimit`.
  *
- * Every request sets `cf-connecting-ip`, because the limiter is inert without
- * one; a test that left it off would pass whatever the limiter did.
+ * Every request sets `cf-ray`, the request id Cloudflare's edge stamps on
+ * everything, because the limiter is inert off the edge; a test that left it
+ * off would pass whatever the limiter did. No request carries an address.
  */
 
 let t: Tenant;
@@ -33,19 +34,18 @@ const DOC = {
   theme: {},
 };
 
-const open = (ip?: string) =>
+const open = (ray?: string) =>
   fetchApi(`/p/forms/${SLUG}/sessions`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(ip ? { "cf-connecting-ip": ip } : {}),
+      ...(ray ? { "cf-ray": ray } : {}),
     },
     body: "{}",
   });
 
-/** A fresh address per test, so one test's spent window is not another's. */
 let n = 0;
-const nextIp = () => `203.0.113.${(n += 1)}`;
+const nextRay = () => `ray${(n += 1)}`;
 
 beforeAll(async () => {
   await applySchema();
@@ -64,9 +64,8 @@ beforeAll(async () => {
 
 describe("opening a session", () => {
   it("lets a whole room behind one address in", async () => {
-    // Far past the old eight a minute, all from one address, as at an event.
-    const ip = nextIp();
-    const codes = await Promise.all(Array.from({ length: 40 }, () => open(ip).then((r) => r.status)));
+    // Far past the old eight a minute, as at an event where everyone shares one network.
+    const codes = await Promise.all(Array.from({ length: 40 }, () => open(nextRay()).then((r) => r.status)));
     expect(codes.every((s) => s === 200)).toBe(true);
   });
 });
@@ -76,8 +75,30 @@ describe("the blanket window", () => {
     // `tooMany` used to write `ratelimit-policy: ""` for every scope that was
     // not the burst limiter — a header present and blank, which a client
     // parsing it has to read as a policy of nothing rather than as no policy.
-    const res = await open(nextIp());
+    const res = await open(nextRay());
     const policy = res.headers.get("ratelimit-policy");
     expect(policy === null || policy.length > 0).toBe(true);
+  });
+});
+
+describe("sign-in attempts", () => {
+  /**
+   * Better Auth's own limiter counted by address and is switched off; sign-in
+   * is capped per account instead. Twelve tries a minute on one email, from
+   * anywhere, then 429. A different account on the same network is untouched.
+   */
+  it("caps attempts per account, never per network", async () => {
+    const attempt = (email: string) =>
+      fetchApi("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json", "cf-ray": nextRay() },
+        body: JSON.stringify({ email, password: "wrong-password-123" }),
+      }).then((r) => r.status);
+    const target = `target-${n}@example.com`;
+    const codes: number[] = [];
+    for (let i = 0; i < 13; i++) codes.push(await attempt(target));
+    expect(codes.slice(0, 12).every((s) => s !== 429)).toBe(true);
+    expect(codes[12]).toBe(429);
+    expect(await attempt(`someone-else-${n}@example.com`)).not.toBe(429);
   });
 });

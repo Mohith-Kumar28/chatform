@@ -87,15 +87,10 @@ async function seedAbandoned(id: string, status = "abandoned", signal = LINK_SIG
   }
 }
 
-const open = (body: Record<string, unknown>, ip?: string) =>
+const open = (body: Record<string, unknown>) =>
   fetchApi(`/p/forms/${SLUG}/sessions`, {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      // The resubmission rule hashes this header; without it the rule is inert
-      // and the test that depends on it would pass for the wrong reason.
-      ...(ip ? { "cf-connecting-ip": ip } : {}),
-    },
+    headers: { "content-type": "application/json" },
     // A link is opened from the browser that started the response unless the
     // test says otherwise.
     body: JSON.stringify(body.resumeToken && !("deviceSignal" in body) ? { ...body, deviceSignal: LINK_SIGNAL } : body),
@@ -533,18 +528,17 @@ describe("the gates a resume may and may not walk through", () => {
      * address, because an address is a network and the first person behind an
      * office NAT would close the form for the rest of it.
      */
-    const IP = "203.0.113.7";
     const SIGNAL = "resumedevice1";
     // `fresh`, so these two are new visits and not the device match handing
     // back the draft this same browser started.
-    await open({ deviceSignal: SIGNAL, fresh: true }, IP);
-    await env.DB.prepare(`UPDATE chat_sessions SET status = 'completed' WHERE ip_hash = ?1`)
-      .bind(sha256Hex(IP))
+    await open({ deviceSignal: SIGNAL, fresh: true });
+    await env.DB.prepare(`UPDATE chat_sessions SET status = 'completed' WHERE form_id = (SELECT id FROM forms WHERE slug = ?1)`)
+      .bind(SLUG)
       .run();
-    const blocked = await open({ deviceSignal: SIGNAL, fresh: true }, IP);
+    const blocked = await open({ deviceSignal: SIGNAL, fresh: true });
     expect(blocked.status).toBe(409);
 
-    const resumed = await open({ resumeToken: await token("sbm_resume09"), deviceSignal: SIGNAL }, IP);
+    const resumed = await open({ resumeToken: await token("sbm_resume09"), deviceSignal: SIGNAL });
     expect(resumed.status).toBe(200);
     await publish();
   });
@@ -651,7 +645,7 @@ describe("one response in progress per person", () => {
     });
 
   const openWith = async (body: Record<string, unknown>) => {
-    const res = await open(body, "198.51.100.9");
+    const res = await open(body);
     expect(res.status).toBe(200);
     return (await res.json()) as { sessionId: string; respondentToken: string };
   };

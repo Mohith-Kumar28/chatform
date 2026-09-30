@@ -233,7 +233,7 @@ const CreateResponseBody = z
     /** Seconds until an unfinished response is swept to abandoned. */
     expiresIn: z.number().int().min(300).max(2_592_000).default(86_400),
     respondent: z
-      .object({ ipHash: z.string().max(128).optional(), country: z.string().max(8).optional(), userAgent: z.string().max(300).optional() })
+      .object({ country: z.string().max(8).optional(), userAgent: z.string().max(300).optional() })
       .optional(),
   })
   .prefault({});

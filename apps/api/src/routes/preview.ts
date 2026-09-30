@@ -57,7 +57,6 @@ previewRouter.post(
       docJson: readFormDoc(JSON.parse(row.working_schema)),
       respondentToken,
       hiddenFields: {},
-      ipHash: null,
       country: null,
       userAgent: "preview",
     });

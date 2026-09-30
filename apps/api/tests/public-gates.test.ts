@@ -364,33 +364,35 @@ describe("branding", () => {
 });
 
 describe("duplicate responses", () => {
-  const withIp = (slug: string, ip: string, deviceSignal?: string) =>
+  // Every visitor here shares one network, and no address is ever sent or read:
+  // the device signal is the only thing that tells two people apart.
+  const openAs = (slug: string, deviceSignal?: string) =>
     fetchApi(`/p/forms/${slug}/sessions`, {
       method: "POST",
-      headers: { "content-type": "application/json", "cf-connecting-ip": ip },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(deviceSignal ? { deviceSignal } : {}),
     });
 
-  /** Mark every session opened from an address as finished, as completing the form would. */
-  const finishFrom = (ip: string) =>
-    env.DB.prepare(`UPDATE chat_sessions SET status = 'completed' WHERE ip_hash = ?1`)
-      .bind(sha256Hex(ip))
+  /** Mark every session on this form as finished, as completing it would. */
+  const finishAll = (slug: string) =>
+    env.DB.prepare(`UPDATE chat_sessions SET status = 'completed' WHERE form_id = (SELECT id FROM forms WHERE slug = ?1)`)
+      .bind(slug)
       .run();
 
   it("turns a finished respondent away on a repeat, and lets a different device through", async () => {
     const slug = await publish("dup", { allowResubmissions: false });
-    expect((await withIp(slug, "203.0.113.9", "devicealpha01")).status).toBe(200);
-    await finishFrom("203.0.113.9");
-    expect((await withIp(slug, "203.0.113.9", "devicealpha01")).status).toBe(409);
+    expect((await openAs(slug, "devicealpha01")).status).toBe(200);
+    await finishAll(slug);
+    expect((await openAs(slug, "devicealpha01")).status).toBe(409);
     // Same network, different machine: the key is the device, not the address.
-    expect((await withIp(slug, "203.0.113.9", "devicebeta002")).status).toBe(200);
+    expect((await openAs(slug, "devicebeta002")).status).toBe(200);
   });
 
   /**
    * The rule that used to close a form for a whole office.
    *
-   * `respondentKey` falls back to the hashed IP when the browser sends no
-   * device signal, and the gate matched on `ip_hash` besides — so the first
+   * `respondentKey` used to fall back to the hashed IP when the browser sent no
+   * device signal, and the gate matched on `ip_hash` besides, so the first
    * person behind a campus NAT to finish the form locked out everybody else
    * on it, and the author's only clue was responses that never arrived.
    *
@@ -401,10 +403,10 @@ describe("duplicate responses", () => {
    */
   it("does not enforce on an address, so a shared network is not one person", async () => {
     const slug = await publish("dupnat", { allowResubmissions: false });
-    expect((await withIp(slug, "203.0.113.20")).status).toBe(200);
-    await finishFrom("203.0.113.20");
+    expect((await openAs(slug)).status).toBe(200);
+    await finishAll(slug);
     // A colleague on the same office wifi, with no device signal to tell them apart.
-    expect((await withIp(slug, "203.0.113.20")).status).toBe(200);
+    expect((await openAs(slug)).status).toBe(200);
   });
 
   /**
@@ -417,8 +419,8 @@ describe("duplicate responses", () => {
    */
   it("does not count a session that was opened and abandoned", async () => {
     const slug = await publish("dupopen", { allowResubmissions: false });
-    expect((await withIp(slug, "203.0.113.12", "devicegamma01")).status).toBe(200);
-    expect((await withIp(slug, "203.0.113.12", "devicegamma01")).status).toBe(200);
+    expect((await openAs(slug, "devicegamma01")).status).toBe(200);
+    expect((await openAs(slug, "devicegamma01")).status).toBe(200);
   });
 
   /**
@@ -434,16 +436,16 @@ describe("duplicate responses", () => {
       allowResubmissions: false,
       requireAuth: { enabled: true, method: "google" },
     });
-    expect((await withIp(slug, "203.0.113.30", "deviceepsil01")).status).toBe(200);
-    await finishFrom("203.0.113.30");
-    expect((await withIp(slug, "203.0.113.30", "deviceepsil01")).status).toBe(409);
+    expect((await openAs(slug, "deviceepsil01")).status).toBe(200);
+    await finishAll(slug);
+    expect((await openAs(slug, "deviceepsil01")).status).toBe(409);
   });
 
   it("lets everyone through when resubmissions are allowed", async () => {
     const slug = await publish("nodup", { allowResubmissions: true });
-    expect((await withIp(slug, "203.0.113.11", "devicedelta01")).status).toBe(200);
-    await finishFrom("203.0.113.11");
-    expect((await withIp(slug, "203.0.113.11", "devicedelta01")).status).toBe(200);
+    expect((await openAs(slug, "devicedelta01")).status).toBe(200);
+    await finishAll(slug);
+    expect((await openAs(slug, "devicedelta01")).status).toBe(200);
   });
 });
 

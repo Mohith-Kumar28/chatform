@@ -87,7 +87,7 @@ function newToken(): string {
  */
 export async function startImpersonation(
   env: Bindings,
-  params: { adminId: string; userId: string; orgId?: string; ipAddress?: string; userAgent?: string },
+  params: { adminId: string; userId: string; orgId?: string; userAgent?: string },
 ): Promise<{ token: string; expiresAt: number }> {
   let orgId: string | null = null;
   if (params.orgId) {
@@ -129,7 +129,8 @@ export async function startImpersonation(
       token,
       params.userId,
       expiresAt,
-      params.ipAddress ?? "",
+      // No IP address is recorded, for the admin or anyone else.
+      "",
       params.userAgent ?? "",
       orgId,
       params.adminId,

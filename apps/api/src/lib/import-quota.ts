@@ -9,34 +9,22 @@ import type { Bindings } from "../env.js";
  * own form and a couple of others, and not enough to use the trial account as
  * a free plan.
  *
- * Two keys, both hashed with the signing salt so nothing stored can be traced
- * back to a browser or an address:
- * - the device, from the same FingerprintJS signal the chat already computes
- *   (`apps/web/src/lib/respondent-signal.ts`). Sent by the browser, so it can
- *   be changed by anyone determined to;
- * - the IP, as a backstop against exactly that, with a higher cap because a
- *   whole office or campus can share one address.
+ * Counted by the device alone: the FingerprintJS signal the chat already
+ * computes (`apps/web/src/lib/respondent-signal.ts`), hashed with the signing
+ * salt so nothing stored can be traced back to a browser.
  *
- * A browser that sends no signal (blocked by an extension) is counted by its
- * address under the device cap, so blocking the script buys nothing.
+ * Never by IP address, not as a backstop and not as a fallback. A campus or a
+ * mobile carrier puts thousands of real people behind one address, and
+ * counting them together turned all of them away. A browser that sends no
+ * signal has no key, and a signed-out visitor without one is asked to sign in
+ * rather than counted by where they are sitting.
  */
 export const DEVICE_DAILY_LIMIT = 3;
-export const IP_DAILY_LIMIT = 10;
 
-export interface QuotaKeys {
-  device: string;
-  ip: string | null;
-}
-
-export async function quotaKeys(env: Bindings, deviceSignal: string | undefined, ip: string | undefined): Promise<QuotaKeys> {
-  const salt = env.SIGNING_SALT ?? "";
-  const ipHash = ip ? await sha256Hex(`import-ip:${salt}:${ip}`) : null;
-  const device = deviceSignal && deviceSignal.length >= 8
-    ? await sha256Hex(`import-device:${salt}:${deviceSignal}`)
-    : ipHash
-      ? `ip:${ipHash}`
-      : await sha256Hex(`import-anon:${salt}`);
-  return { device, ip: ipHash };
+/** The salted key a signed-out visitor is counted under, or null when their browser sent no usable signal. */
+export async function quotaKey(env: Bindings, deviceSignal: string | null | undefined): Promise<string | null> {
+  if (!deviceSignal || deviceSignal.length < 8) return null;
+  return sha256Hex(`import-device:${env.SIGNING_SALT ?? ""}:${deviceSignal}`);
 }
 
 /** Today in UTC, the unit the cap resets on. */
@@ -44,27 +32,32 @@ export function quotaDay(now = Date.now()): string {
   return new Date(now).toISOString().slice(0, 10);
 }
 
-export async function remainingImports(env: Bindings, keys: QuotaKeys, day = quotaDay()): Promise<number> {
+/** Today's counts for one key, or two (the second defaults to the first). */
+async function used(env: Bindings, keys: [string] | [string, string], day: string): Promise<Map<string, number>> {
   const rows = await env.DB.prepare(`SELECT key_hash, count FROM import_quota WHERE day = ? AND key_hash IN (?, ?)`)
-    .bind(day, keys.device, keys.ip ?? keys.device)
+    .bind(day, keys[0], keys[1] ?? keys[0])
     .all<{ key_hash: string; count: number }>();
-  const used = new Map((rows.results ?? []).map((r) => [r.key_hash, r.count]));
-  const byDevice = DEVICE_DAILY_LIMIT - (used.get(keys.device) ?? 0);
-  const byIp = keys.ip ? IP_DAILY_LIMIT - (used.get(keys.ip) ?? 0) : byDevice;
-  return Math.max(0, Math.min(byDevice, byIp));
+  return new Map((rows.results ?? []).map((r) => [r.key_hash, r.count]));
+}
+
+async function spend(env: Bindings, keys: string[], day: string): Promise<void> {
+  const upsert = `INSERT INTO import_quota (key_hash, day, count) VALUES (?, ?, 1)
+                  ON CONFLICT (key_hash, day) DO UPDATE SET count = count + 1`;
+  await env.DB.batch(keys.map((key) => env.DB.prepare(upsert).bind(key, day)));
+}
+
+export async function remainingImports(env: Bindings, key: string, day = quotaDay()): Promise<number> {
+  const counts = await used(env, [key], day);
+  return Math.max(0, DEVICE_DAILY_LIMIT - (counts.get(key) ?? 0));
 }
 
 /** Spend one. Called only after a conversion succeeded, so a private or broken link costs nothing. */
-export async function spendImport(env: Bindings, keys: QuotaKeys, day = quotaDay()): Promise<void> {
-  const upsert = `INSERT INTO import_quota (key_hash, day, count) VALUES (?, ?, 1)
-                  ON CONFLICT (key_hash, day) DO UPDATE SET count = count + 1`;
-  const statements = [env.DB.prepare(upsert).bind(keys.device, day)];
-  if (keys.ip) statements.push(env.DB.prepare(upsert).bind(keys.ip, day));
-  await env.DB.batch(statements);
+export async function spendImport(env: Bindings, key: string, day = quotaDay()): Promise<void> {
+  await spend(env, [key], day);
 }
 
 /**
- * Conversations with imported trial forms, per signed-out visitor per day.
+ * Conversations with imported trial forms, per signed-out device per day.
  *
  * Converting is free; talking to the result is what spends model calls, and
  * the trial account has no plan limit of its own (migration 0052 lifts Free's
@@ -72,33 +65,28 @@ export async function spendImport(env: Bindings, keys: QuotaKeys, day = quotaDay
  * lives here: a handful of different forms a day, and a handful of starts on
  * each. Counted per form rather than per open because reopening the page
  * resumes the same response, and a refresh must not use up the allowance.
+ *
+ * A browser with no device signal cannot be counted, so it cannot start a
+ * trial chat either. That is the price of never counting by address.
  */
 export const TRIAL_FORMS_PER_DEVICE = 5;
 export const TRIAL_STARTS_PER_FORM = 6;
-export const TRIAL_FORMS_PER_IP = 15;
 
 export async function claimTrialChat(
   env: Bindings,
   formId: string,
   deviceSignal: string | null | undefined,
-  ip: string | undefined,
 ): Promise<boolean> {
-  const keys = await quotaKeys(env, deviceSignal ?? undefined, ip);
-  const forms = { device: `chat:${keys.device}`, ip: keys.ip ? `chat:${keys.ip}` : null };
-  const starts = `chat:${keys.device}:${formId}`;
+  const device = await quotaKey(env, deviceSignal);
+  if (!device) return false;
+  const forms = `chat:${device}`;
+  const starts = `chat:${device}:${formId}`;
   const day = quotaDay();
-  const rows = await env.DB.prepare(`SELECT key_hash, count FROM import_quota WHERE day = ? AND key_hash IN (?, ?, ?)`)
-    .bind(day, forms.device, forms.ip ?? forms.device, starts)
-    .all<{ key_hash: string; count: number }>();
-  const used = new Map((rows.results ?? []).map((r) => [r.key_hash, r.count]));
-  const startsSoFar = used.get(starts) ?? 0;
+  const counts = await used(env, [forms, starts], day);
+  const startsSoFar = counts.get(starts) ?? 0;
   if (startsSoFar >= TRIAL_STARTS_PER_FORM) return false;
-  if (startsSoFar === 0) {
-    // A form this visitor has not opened today: it counts against the daily forms.
-    if ((used.get(forms.device) ?? 0) >= TRIAL_FORMS_PER_DEVICE) return false;
-    if (forms.ip && (used.get(forms.ip) ?? 0) >= TRIAL_FORMS_PER_IP) return false;
-    await spendImport(env, forms, day);
-  }
-  await spendImport(env, { device: starts, ip: null }, day);
+  // A form this visitor has not opened today counts against the daily forms.
+  if (startsSoFar === 0 && (counts.get(forms) ?? 0) >= TRIAL_FORMS_PER_DEVICE) return false;
+  await spend(env, startsSoFar === 0 ? [forms, starts] : [starts], day);
   return true;
 }

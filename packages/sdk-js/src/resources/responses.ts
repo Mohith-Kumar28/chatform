@@ -10,7 +10,7 @@ export interface CreateResponseOptions {
   mode?: "flow" | "free";
   /** Seconds before an unfinished response is abandoned. Default 24 hours. */
   expiresIn?: number;
-  respondent?: { ipHash?: string; country?: string; userAgent?: string };
+  respondent?: { country?: string; userAgent?: string };
 }
 
 export interface ListResponsesOptions {

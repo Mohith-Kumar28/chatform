@@ -31,7 +31,7 @@ async function bucketFor(presented: string): Promise<string> {
 
 function tooMany(
   c: Parameters<MiddlewareHandler>[0],
-  { seconds, scope, policy }: { seconds: number; scope: "burst" | "ip" | "user"; policy?: string },
+  { seconds, scope, policy }: { seconds: number; scope: "burst" | "user"; policy?: string },
 ) {
   c.header("retry-after", String(seconds));
   // Only when there is one to state. This used to be set unconditionally, with
@@ -68,18 +68,19 @@ export const burstLimit: MiddlewareHandler<{
 };
 
 /**
- * The respondent surface has no key to key on, so it is keyed by address.
+ * Count a request against each key, on Cloudflare's edge only.
  *
- * Three rules here, and each one is load-bearing rather than defensive:
+ * Every key is a conversation, a respondent token or a user. Never an IP
+ * address: an address is a campus, an office or a mobile carrier, and counting
+ * it counts a crowd. Nothing here reads the address at all.
  *
- * 1. **No address, no limit.** Off the Cloudflare edge — Miniflare, the test
- *    suite, a direct request to `wrangler dev` — there is no `cf-connecting-ip`
- *    at all. Bucketing those under a constant like "unknown" would put every
- *    caller in one window, and since `vitest.config.ts` points Miniflare at this
- *    same `wrangler.jsonc`, the first test to open a ninth session would start
- *    failing the suite. In production behind Cloudflare the header is always
- *    there. This is the rule that lets the bindings exist without the tests
- *    knowing.
+ * Three rules, and each one is load-bearing rather than defensive:
+ *
+ * 1. **Off the edge, no limit.** Miniflare, the test suite and a direct request
+ *    to `wrangler dev` carry no `cf-ray`, the request id Cloudflare stamps on
+ *    everything it forwards. `vitest.config.ts` points Miniflare at this same
+ *    `wrangler.jsonc`, so without this rule the suite's own fixtures would
+ *    start meeting 429s. In production the header is always there.
  * 2. **No binding, no limit** — as `burstLimit` already does.
  * 3. **A throwing limiter is not an outage.** `burstLimit` does not catch, and
  *    on `/v1` that is arguable. Here it is not: a limiter exception would turn a
@@ -92,8 +93,7 @@ async function limited(
   keys: string[],
 ): Promise<boolean> {
   if (!binding) return false;
-  const ip = c.req.header("cf-connecting-ip");
-  if (!ip) return false;
+  if (!c.req.header("cf-ray")) return false;
   try {
     for (const key of keys) {
       const { success } = await binding.limit({ key });
@@ -171,7 +171,7 @@ export const respondentAuthLimit: MiddlewareHandler<{ Bindings: Bindings }> = as
 export const respondentPaymentLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
   const token = respondentToken(c);
   if (token && (await limited(c, c.env.RATE_LIMIT_P_AUTH, [`pay:t:${await bucketFor(token)}`]))) {
-    return tooMany(c, { seconds: 60, scope: "ip", policy: "12;w=60" });
+    return tooMany(c, { seconds: 60, scope: "user", policy: "12;w=60" });
   }
   await next();
 };
@@ -193,7 +193,7 @@ export const respondentPaymentLimit: MiddlewareHandler<{ Bindings: Bindings }> =
  *
  * Keyed through `limited`, which is what keeps it inert off the Cloudflare edge:
  * `vitest.config.ts` points Miniflare at this same `wrangler.jsonc`, so a
- * limiter that counted without a `cf-connecting-ip` would start failing the test
+ * limiter that counted off the edge (no `cf-ray`) would start failing the test
  * suite on its own fixtures.
  */
 export const saveLimit: MiddlewareHandler<{
@@ -228,20 +228,29 @@ export const assetLimit: MiddlewareHandler<{
 };
 
 /**
- * Blunt key guessing.
+ * Password and one-time-code attempts, per account being signed into.
  *
- * Called from the 401 path rather than up front, so a caller with a valid key is
- * never counted against their own address — offices and CI runners share one.
+ * Better Auth's own limiter keys on the caller's IP address, so it is switched
+ * off (`advanced.ipAddress.disableIpTracking` in `lib/auth.ts`) and this takes
+ * its place. The email address being attacked is the unit that matters: a
+ * guesser hammering one account is capped wherever they send from, and a hall
+ * of real people signing in behind one network never share a bucket.
  */
-export async function countFailedKeyAttempt(c: {
-  env: Bindings;
-  req: { header(name: string): string | undefined };
-}): Promise<void> {
-  const ip = c.req.header("cf-connecting-ip");
-  if (!ip || !c.env.RATE_LIMIT) return;
+const AUTH_ATTEMPT_PATHS = /\/auth\/(sign-in\/email|sign-up\/email|email-otp\/[^/]+|sign-in\/email-otp|forget-password|request-password-reset)$/;
+
+export async function authAttemptLimited(c: Parameters<MiddlewareHandler>[0], env: Bindings): Promise<boolean> {
+  if (c.req.method !== "POST" || !AUTH_ATTEMPT_PATHS.test(c.req.path)) return false;
+  let email: unknown;
   try {
-    await c.env.RATE_LIMIT.limit({ key: `bad:${ip}` });
+    email = ((await c.req.raw.clone().json()) as { email?: unknown }).email;
   } catch {
-    // Telemetry for abuse, not a gate. Never fail a request over it.
+    return false;
   }
+  if (typeof email !== "string" || !email.includes("@")) return false;
+  const bucket = (await hashApiKey(`auth:${email.trim().toLowerCase()}`)).slice(0, 24);
+  return limited(c, env.RATE_LIMIT_P_AUTH, [`au:${bucket}`]);
+}
+
+export function authAttemptRefused(c: Parameters<MiddlewareHandler>[0]) {
+  return tooMany(c, { seconds: 60, scope: "user", policy: "12;w=60" });
 }

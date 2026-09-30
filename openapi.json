@@ -9732,6 +9732,271 @@
         ]
       }
     },
+    "/api/templates/{slug}/demo-sessions": {
+      "post": {
+        "operationId": "postApiTemplatesBySlugDemoSessions",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "deviceSignal": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "turnstileToken": {
+                    "type": "string",
+                    "maxLength": 4000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Try an official template live",
+        "description": "Public. Starts a preview conversation with an official template, for the try-it panel on its public page. Nothing is stored as a response. Limited to 10 a day for a signed-out device and 20 a day for a signed-in user.",
+        "responses": {
+          "200": {
+            "description": "The session to connect the chat to",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "sseUrl": {
+                      "type": "string"
+                    },
+                    "respondentToken": {
+                      "type": "string"
+                    },
+                    "remaining": {
+                      "type": "number"
+                    },
+                    "limit": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "sessionId",
+                    "sseUrl",
+                    "respondentToken",
+                    "remaining",
+                    "limit"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No device id was sent by a signed-out visitor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No official template has this slug",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Today's live tries are used up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "slug",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "getHealth",
@@ -17381,10 +17646,6 @@
                   "respondent": {
                     "type": "object",
                     "properties": {
-                      "ipHash": {
-                        "type": "string",
-                        "maxLength": 128
-                      },
                       "country": {
                         "type": "string",
                         "maxLength": 8
@@ -30913,10 +31174,6 @@
                   "respondent": {
                     "type": "object",
                     "properties": {
-                      "ipHash": {
-                        "type": "string",
-                        "maxLength": 128
-                      },
                       "country": {
                         "type": "string",
                         "maxLength": 8
@@ -31052,10 +31309,6 @@
                   "respondent": {
                     "type": "object",
                     "properties": {
-                      "ipHash": {
-                        "type": "string",
-                        "maxLength": 128
-                      },
                       "country": {
                         "type": "string",
                         "maxLength": 8

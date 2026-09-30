@@ -168,7 +168,6 @@ interface DoSessionMeta {
   currentRef: string | null;
   startedAt: number;
   hiddenFields: Record<string, string>;
-  ipHash: string | null;
   /**
    * Most messages this conversation may take, when lower than the platform's
    * ceiling. Set for a template try on the public gallery, which we pay for and
@@ -710,7 +709,6 @@ export class SessionDO extends DurableObject<Bindings> {
     docJson: unknown;
     respondentToken: string;
     hiddenFields: Record<string, string>;
-    ipHash: string | null;
     fingerprint?: string | null;
     fingerprintSource?: RespondentKeySource | null;
     respondentId?: string | null;
@@ -766,7 +764,6 @@ export class SessionDO extends DurableObject<Bindings> {
       currentRef: null,
       startedAt: Date.now(),
       hiddenFields: params.hiddenFields,
-      ipHash: params.ipHash,
       fingerprint: params.fingerprint ?? null,
       fingerprintSource: params.fingerprintSource ?? null,
       respondentId: params.respondentId ?? null,

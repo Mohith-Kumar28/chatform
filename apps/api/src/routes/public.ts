@@ -455,7 +455,6 @@ sessionsRouter.post(
       // widget sends one, is what distinguishes it.
       source: body.embed?.origin ? "embed" : "chat",
       hiddenFields: body.hiddenFields ?? {},
-      ip: c.req.header("cf-connecting-ip") ?? "",
       country: c.req.header("cf-ipcountry") ?? null,
       userAgent: c.req.header("user-agent") ?? null,
       password: body.password,
@@ -562,7 +561,6 @@ sessionsRouter.post(
       docJson: opened.runtimeDoc,
       respondentToken: opened.respondentToken,
       hiddenFields: body.hiddenFields ?? {},
-      ipHash: opened.ipHash,
       fingerprint: opened.device.value || null,
       respondentId,
       respondentDeviceKey: opened.respondentDeviceKey,

@@ -41,7 +41,6 @@ export interface OpenSessionInput {
   form: FormRow;
   source: ResponseSource;
   hiddenFields: Record<string, string>;
-  ip: string;
   country: string | null;
   userAgent: string | null;
   /** Seconds the respondent token stays valid. */
@@ -61,12 +60,6 @@ export interface OpenSessionInput {
    * open, and a headless caller does not get to ignore them.
    */
   trustedCaller?: boolean;
-  /**
-   * The respondent's address, when the caller knows it. The API caller's own IP
-   * is not the respondent's, so the duplicate rule stays inert unless this is
-   * supplied deliberately.
-   */
-  respondentIpHash?: string;
   /**
    * The device signal the browser computed, when there is a browser.
    *
@@ -177,7 +170,6 @@ export type OpenSessionResult =
       runtimeDoc: FormDoc;
       brandingHidden: boolean;
       aiDegraded: boolean;
-      ipHash: string;
       /** The salted device key, and how much of it is a real device signal. */
       device: RespondentKey;
       /**
@@ -311,7 +303,7 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
   // A form imported by a visitor who has not signed up yet: capped per visitor
   // per day, since the trial account itself has no plan limit. See `claimTrialChat`.
   if (form.organization_id === IMPORT_TRIAL_ORG && !input.resumeSubmissionId && !input.trustedCaller) {
-    if (!(await claimTrialChat(env, form.id, input.deviceSignal, input.ip))) {
+    if (!(await claimTrialChat(env, form.id, input.deviceSignal))) {
       return {
         ok: false,
         status: 403,
@@ -370,8 +362,6 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
     botCheck = verdict;
   }
 
-  const ipHash = input.respondentIpHash ?? (input.ip ? sha256Hex(input.ip) : "");
-
   /**
    * The respondent key: the browser fingerprint, and nothing else.
    *
@@ -380,10 +370,8 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
    * in for it when it is absent. No signal, no key, and every rule that keys on
    * a respondent simply does not apply to that visit.
    *
-   * `ipHash` is still computed and written to the column it has always had, and
-   * nothing reads it: the rate limiters work off the live request header, and
-   * the one gate that once joined on it was retired above. Left in place rather
-   * than dropped in the same change as the key it used to stand beside.
+   * No IP address is read, hashed or stored for a respondent, anywhere. The
+   * `ip_hash` column stays for old rows and is written as null.
    */
   const device = respondentKey({ signal: input.deviceSignal, salt: form.fingerprint_salt });
 
@@ -493,7 +481,7 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
       form.organization_id,
       sha256Hex(respondentToken),
       JSON.stringify(input.hiddenFields),
-      ipHash,
+      null,
       // Empty string rather than null would make every signal-less session
       // match every other one on the resubmission gate.
       device.value || null,
@@ -557,7 +545,6 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
     runtimeDoc,
     brandingHidden: brandingHiddenFor(doc, ent),
     aiDegraded,
-    ipHash,
     device,
     respondentDeviceKey: deviceKeyFor(env, input.deviceSignal),
     resumeHeld,

@@ -75,7 +75,7 @@ const CreateSessionBody = z
     /** Seconds the returned respondent token stays usable. */
     expiresIn: z.number().int().min(300).max(2_592_000).optional(),
     respondent: z
-      .object({ ipHash: z.string().max(128).optional(), country: z.string().max(8).optional(), userAgent: z.string().max(300).optional() })
+      .object({ country: z.string().max(8).optional(), userAgent: z.string().max(300).optional() })
       .optional(),
   })
   .prefault({});
@@ -144,11 +144,9 @@ const createSessionRoute = (path: string) =>
       form: formRow,
       source: "api",
       hiddenFields: body.hiddenFields ?? {},
-      ip: "",
       country: body.respondent?.country ?? null,
       userAgent: body.respondent?.userAgent ?? "api",
       trustedCaller: true,
-      respondentIpHash: body.respondent?.ipHash,
       ttlSeconds: body.expiresIn,
       isTest: c.get("environment") === "test",
       apiKeyId: c.get("keyId") ?? null,
@@ -166,7 +164,6 @@ const createSessionRoute = (path: string) =>
       docJson: opened.runtimeDoc,
       respondentToken: opened.respondentToken,
       hiddenFields: body.hiddenFields ?? {},
-      ipHash: opened.ipHash || null,
       fingerprint: opened.device.value || null,
       /*
         Who this is, platform-wide, resolved once as the session opens and

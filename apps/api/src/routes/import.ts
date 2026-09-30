@@ -14,7 +14,7 @@ import { withOwnerNotification } from "../lib/owner-notification.js";
 import { formSlug, requireWorkspace } from "../lib/workspace.js";
 import { convertImport } from "../lib/import/phrase.js";
 import { IMPORT_TRIAL_ORG, IMPORT_TRIAL_WORKSPACE, ImportError, type ImportReport } from "../lib/import/types.js";
-import { quotaKeys, remainingImports, spendImport } from "../lib/import-quota.js";
+import { quotaKey, remainingImports, spendImport } from "../lib/import-quota.js";
 
 /**
  * Bringing a form over from Typeform, Google Forms or Tally.
@@ -130,9 +130,23 @@ importRouter.post(
     const session = await getAuth(c.env)
       .api.getSession({ headers: c.req.raw.headers })
       .catch(() => null);
-    const keys = session ? null : await quotaKeys(c.env, deviceSignal, c.req.header("cf-connecting-ip"));
-    if (keys) {
-      const left = await remainingImports(c.env, keys);
+    // Counted by the device alone, never by address. A signed-out browser that
+    // sent no device id cannot be counted, so it is asked to sign in instead.
+    const key = session ? null : await quotaKey(c.env, deviceSignal);
+    if (!session && !key) {
+      return c.json(
+        {
+          error: {
+            code: "device_required",
+            message: "We couldn't start a free conversion in this browser. Sign up free to import your form straight into the builder.",
+            remaining: 0,
+          },
+        },
+        429,
+      );
+    }
+    if (key) {
+      const left = await remainingImports(c.env, key);
       if (left <= 0) {
         return c.json(
           {
@@ -179,12 +193,12 @@ importRouter.post(
       `INSERT INTO import_trials (token, form_id, provider, source_url, report_json, device_hash, ip_hash, created_at, expires_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-      .bind(token, formId, converted.report.provider, converted.report.sourceUrl.slice(0, 2000), JSON.stringify(converted.report), keys?.device ?? null, keys?.ip ?? null, now, now + TRIAL_TTL_MS)
+      .bind(token, formId, converted.report.provider, converted.report.sourceUrl.slice(0, 2000), JSON.stringify(converted.report), key, null, now, now + TRIAL_TTL_MS)
       .run();
-    if (keys) await spendImport(c.env, keys);
+    if (key) await spendImport(c.env, key);
 
     const slug = await c.env.DB.prepare(`SELECT slug FROM forms WHERE id = ?`).bind(formId).first<{ slug: string }>();
-    const remaining = keys ? await remainingImports(c.env, keys) : null;
+    const remaining = key ? await remainingImports(c.env, key) : null;
     console.log("import_preview", { provider: converted.report.provider, questions: converted.report.questions, signedIn: !!session });
     return c.json({ token, slug: slug!.slug, report: converted.report, remaining });
   },

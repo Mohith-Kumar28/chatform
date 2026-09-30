@@ -158,7 +158,6 @@ templateDemoRouter.post(
       docJson: doc,
       respondentToken,
       hiddenFields: {},
-      ipHash: null,
       country: null,
       userAgent: "template-demo",
       turnLimit: DEMO_TURN_LIMIT,

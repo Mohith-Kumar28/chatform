@@ -2404,6 +2404,81 @@ export type PostApiImportForms422 = {
   error: PostApiImportForms422Error;
 };
 
+export type PostApiTemplatesBySlugDemoSessionsBody = {
+  /** @maxLength 200 */
+  deviceSignal?: string;
+  /** @maxLength 4000 */
+  turnstileToken?: string;
+};
+
+export type PostApiTemplatesBySlugDemoSessions200 = {
+  sessionId: string;
+  sseUrl: string;
+  respondentToken: string;
+  remaining: number;
+  limit: number;
+};
+
+export type PostApiTemplatesBySlugDemoSessions400ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiTemplatesBySlugDemoSessions400Error = {
+  code: string;
+  message: string;
+  issues?: PostApiTemplatesBySlugDemoSessions400ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiTemplatesBySlugDemoSessions400 = {
+  error: PostApiTemplatesBySlugDemoSessions400Error;
+};
+
+export type PostApiTemplatesBySlugDemoSessions404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiTemplatesBySlugDemoSessions404Error = {
+  code: string;
+  message: string;
+  issues?: PostApiTemplatesBySlugDemoSessions404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiTemplatesBySlugDemoSessions404 = {
+  error: PostApiTemplatesBySlugDemoSessions404Error;
+};
+
+export type PostApiTemplatesBySlugDemoSessions429ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiTemplatesBySlugDemoSessions429Error = {
+  code: string;
+  message: string;
+  issues?: PostApiTemplatesBySlugDemoSessions429ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiTemplatesBySlugDemoSessions429 = {
+  error: PostApiTemplatesBySlugDemoSessions429Error;
+};
+
 export type GetHealth200 = {
   ok: boolean;
   env: string;
@@ -3697,6 +3772,11 @@ export type PostApiAiGenerateFormBody = {
      * @maximum 100
      */
   reserveKnowledge?: number;
+  /**
+     * @minimum -900
+     * @maximum 900
+     */
+  utcOffsetMinutes?: number;
 };
 
 export type PostApiAiGenerateForm200 = {
@@ -3776,6 +3856,11 @@ export type PostApiAiGenerateFormStreamBody = {
      * @maximum 100
      */
   reserveKnowledge?: number;
+  /**
+     * @minimum -900
+     * @maximum 900
+     */
+  utcOffsetMinutes?: number;
 };
 
 export type PostApiAiEditFormStreamBodyHistoryItemRole = typeof PostApiAiEditFormStreamBodyHistoryItemRole[keyof typeof PostApiAiEditFormStreamBodyHistoryItemRole];
@@ -4344,8 +4429,6 @@ export const PostV1FormsByIdResponsesBodyMode = {
 } as const;
 
 export type PostV1FormsByIdResponsesBodyRespondent = {
-  /** @maxLength 128 */
-  ipHash?: string;
   /** @maxLength 8 */
   country?: string;
   /** @maxLength 300 */
@@ -5949,6 +6032,141 @@ export type GetV1FormsByIdFollowupAnalytics200 = {
   [key: string]: unknown;
 };
 
+export type GetV1FormsByIdSettings200SettingsItemOptionsItem = {
+  value: string;
+  label: string;
+};
+
+export type GetV1FormsByIdSettings200SettingsItemLocked = {
+  feature: string;
+  plan: string;
+};
+
+export type GetV1FormsByIdSettings200SettingsItem = {
+  key: string;
+  section: string;
+  sectionLabel: string;
+  label: string;
+  where: string;
+  format: string;
+  options?: GetV1FormsByIdSettings200SettingsItemOptionsItem[];
+  min?: number;
+  max?: number;
+  maxLength?: number;
+  maxItems?: number;
+  clearable?: boolean;
+  hint?: string;
+  value: unknown;
+  locked?: GetV1FormsByIdSettings200SettingsItemLocked;
+  [key: string]: unknown;
+};
+
+export type GetV1FormsByIdSettings200 = {
+  settings: GetV1FormsByIdSettings200SettingsItem[];
+};
+
+export type GetV1FormsByIdSettings404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type GetV1FormsByIdSettings404Error = {
+  code: string;
+  message: string;
+  issues?: GetV1FormsByIdSettings404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type GetV1FormsByIdSettings404 = {
+  error: GetV1FormsByIdSettings404Error;
+};
+
+export type PatchV1FormsByIdSettingsBodyChangesItem = {
+  key: string;
+  /** @maxLength 10000 */
+  value: string;
+};
+
+export type PatchV1FormsByIdSettingsBody = {
+  /**
+     * Each setting by its key from GET /v1/forms/{id}/settings, with the new value as text. Empty text clears a clearable setting.
+     * @minItems 1
+     * @maxItems 40
+     */
+  changes: PatchV1FormsByIdSettingsBodyChangesItem[];
+  /**
+     * For a date written without a zone: minutes behind UTC, as JavaScript's Date#getTimezoneOffset() reports it.
+     * @minimum -900
+     * @maximum 900
+     */
+  utcOffsetMinutes?: number;
+};
+
+export type PatchV1FormsByIdSettings200ChangesItemLocked = {
+  feature: string;
+};
+
+export type PatchV1FormsByIdSettings200ChangesItem = {
+  key: string;
+  section: string;
+  label: string;
+  where: string;
+  format: string;
+  before: unknown;
+  after: unknown;
+  locked?: PatchV1FormsByIdSettings200ChangesItemLocked;
+  [key: string]: unknown;
+};
+
+export type PatchV1FormsByIdSettings200 = {
+  changes: PatchV1FormsByIdSettings200ChangesItem[];
+  rejected: string[];
+};
+
+export type PatchV1FormsByIdSettings404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PatchV1FormsByIdSettings404Error = {
+  code: string;
+  message: string;
+  issues?: PatchV1FormsByIdSettings404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PatchV1FormsByIdSettings404 = {
+  error: PatchV1FormsByIdSettings404Error;
+};
+
+export type PatchV1FormsByIdSettings422ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PatchV1FormsByIdSettings422Error = {
+  code: string;
+  message: string;
+  issues?: PatchV1FormsByIdSettings422ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PatchV1FormsByIdSettings422 = {
+  error: PatchV1FormsByIdSettings422Error;
+};
+
 export type GetV1Templates200DataItem = {
   slug: string;
   title: string;
@@ -6170,12 +6388,18 @@ export type PostV1AiGenerateFormBody = {
      * @maximum 100
      */
   reserveKnowledge?: number;
+  /**
+     * @minimum -900
+     * @maximum 900
+     */
+  utcOffsetMinutes?: number;
 };
 
 export type PostV1AiGenerateForm200 = {
   doc: unknown;
   issues: unknown[];
   tokens: number;
+  settings?: unknown[];
 };
 
 export type PostV1AiGenerateForm402ErrorIssuesItem = {
@@ -7642,8 +7866,6 @@ export type DeleteV1FormsByIdKnowledgeBySourceId200 = {
 export type PostV1FormsByIdSessionsBodyHiddenFields = {[key: string]: string};
 
 export type PostV1FormsByIdSessionsBodyRespondent = {
-  /** @maxLength 128 */
-  ipHash?: string;
   /** @maxLength 8 */
   country?: string;
   /** @maxLength 300 */
@@ -7674,8 +7896,6 @@ export type PostV1FormsByIdSessions200 = {
 export type PostV1FormsByIdChatSessionsBodyHiddenFields = {[key: string]: string};
 
 export type PostV1FormsByIdChatSessionsBodyRespondent = {
-  /** @maxLength 128 */
-  ipHash?: string;
   /** @maxLength 8 */
   country?: string;
   /** @maxLength 300 */

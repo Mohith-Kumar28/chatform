@@ -493,7 +493,6 @@ opsRouter.post(
       adminId,
       userId: user.id,
       orgId,
-      ipAddress: c.req.header("cf-connecting-ip"),
       userAgent: c.req.header("user-agent"),
     });
 

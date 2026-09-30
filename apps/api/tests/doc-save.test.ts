@@ -139,7 +139,7 @@ describe("the save limiter", () => {
 
     `vitest.config.ts` points Miniflare at the same `wrangler.jsonc` the worker
     deploys with, so the binding exists here. `limited` declines to count a
-    request with no `cf-connecting-ip`, and that is the only thing standing
+    request with no `cf-ray` (off the edge), and that is the only thing standing
     between this suite and 429s on its own fixtures.
   */
   it("does not fire on a burst without a client address", async () => {

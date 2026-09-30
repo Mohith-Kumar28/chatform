@@ -51,6 +51,8 @@ import type {
   GetV1FormsByIdPaymentsParams,
   GetV1FormsByIdResponses200,
   GetV1FormsByIdResponsesParams,
+  GetV1FormsByIdSettings200,
+  GetV1FormsByIdSettings404,
   GetV1FormsByIdVersions200,
   GetV1FormsByIdVersions404,
   GetV1FormsByIdVersionsByVersion200,
@@ -70,6 +72,10 @@ import type {
   GetV1Webhooks200,
   GetV1WebhooksByIdDeliveries200,
   GetV1WebhooksStats200,
+  PatchV1FormsByIdSettings200,
+  PatchV1FormsByIdSettings404,
+  PatchV1FormsByIdSettings422,
+  PatchV1FormsByIdSettingsBody,
   PatchV1PaymentAccountsById200,
   PatchV1PaymentAccountsById404,
   PatchV1PaymentAccountsByIdBody,
@@ -2728,7 +2734,206 @@ export function useGetV1FormsByIdFollowupAnalytics<TData = Awaited<ReturnType<ty
 
 
 
-export type getV1TemplatesResponse200 = {
+export type getV1FormsByIdSettingsResponse200 = {
+  data: GetV1FormsByIdSettings200
+  status: 200
+}
+
+export type getV1FormsByIdSettingsResponse404 = {
+  data: GetV1FormsByIdSettings404
+  status: 404
+}
+
+export type getV1FormsByIdSettingsResponseSuccess = (getV1FormsByIdSettingsResponse200) & {
+  headers: Headers;
+};
+export type getV1FormsByIdSettingsResponseError = (getV1FormsByIdSettingsResponse404) & {
+  headers: Headers;
+};
+
+export type getV1FormsByIdSettingsResponse = (getV1FormsByIdSettingsResponseSuccess | getV1FormsByIdSettingsResponseError)
+
+export const getGetV1FormsByIdSettingsUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/settings`
+}
+
+/**
+ * The settings you can change with `PATCH /v1/forms/{id}/settings`: colours and fonts, the interviewer's tone and goal, who can respond, when the form closes, emails, sharing and embedding. Each carries the builder's label, where it lives in the builder, the values it takes, and `locked` when your plan does not include it.
+ * @summary Every setting a form has, by key, with its current value
+ */
+export const getV1FormsByIdSettings = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1FormsByIdSettingsResponse> => {
+
+  return customFetch<getV1FormsByIdSettingsResponse>(getGetV1FormsByIdSettingsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1FormsByIdSettingsQueryKey = (id: string,) => {
+    return [
+    `/v1/forms/${id}/settings`
+    ] as const;
+    }
+
+
+export const getGetV1FormsByIdSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getV1FormsByIdSettings>>, TError = GetV1FormsByIdSettings404>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1FormsByIdSettingsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1FormsByIdSettings>>> = ({ signal }) => getV1FormsByIdSettings(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdSettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1FormsByIdSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getV1FormsByIdSettings>>>
+export type GetV1FormsByIdSettingsQueryError = GetV1FormsByIdSettings404
+
+
+/**
+ * @summary Every setting a form has, by key, with its current value
+ */
+
+export function useGetV1FormsByIdSettings<TData = Awaited<ReturnType<typeof getV1FormsByIdSettings>>, TError = GetV1FormsByIdSettings404>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FormsByIdSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1FormsByIdSettingsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type patchV1FormsByIdSettingsResponse200 = {
+  data: PatchV1FormsByIdSettings200
+  status: 200
+}
+
+export type patchV1FormsByIdSettingsResponse404 = {
+  data: PatchV1FormsByIdSettings404
+  status: 404
+}
+
+export type patchV1FormsByIdSettingsResponse422 = {
+  data: PatchV1FormsByIdSettings422
+  status: 422
+}
+
+export type patchV1FormsByIdSettingsResponseSuccess = (patchV1FormsByIdSettingsResponse200) & {
+  headers: Headers;
+};
+export type patchV1FormsByIdSettingsResponseError = (patchV1FormsByIdSettingsResponse404 | patchV1FormsByIdSettingsResponse422) & {
+  headers: Headers;
+};
+
+export type patchV1FormsByIdSettingsResponse = (patchV1FormsByIdSettingsResponseSuccess | patchV1FormsByIdSettingsResponseError)
+
+export const getPatchV1FormsByIdSettingsUrl = (id: string,) => {
+
+
+
+
+  return `/v1/forms/${id}/settings`
+}
+
+/**
+ * Changes the working document; nothing is live until `POST /v1/forms/{id}/publish`. Every value is checked: one that does not parse is listed in `rejected` with the reason and nothing else in the call is held back. A setting your plan does not include comes back in `changes` with `locked` and is not applied. 422 when nothing in the call could be applied.
+ * @summary Change a form's settings by key
+ */
+export const patchV1FormsByIdSettings = async (id: string,
+    patchV1FormsByIdSettingsBody: PatchV1FormsByIdSettingsBody, options?: Parameters<typeof customFetch>[1]): Promise<patchV1FormsByIdSettingsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<patchV1FormsByIdSettingsResponse>(getPatchV1FormsByIdSettingsUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(patchV1FormsByIdSettingsBody)
+  }
+);}
+
+
+
+
+
+export const getPatchV1FormsByIdSettingsMutationOptions = <TError = PatchV1FormsByIdSettings404 | PatchV1FormsByIdSettings422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchV1FormsByIdSettings>>, TError,PatchV1FormsByIdSettingsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchV1FormsByIdSettings>>, TError,PatchV1FormsByIdSettingsMutationVariables, TContext> => {
+
+const mutationKey = ['patchV1FormsByIdSettings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchV1FormsByIdSettings>>, PatchV1FormsByIdSettingsMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  patchV1FormsByIdSettings(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchV1FormsByIdSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof patchV1FormsByIdSettings>>>
+    export type PatchV1FormsByIdSettingsMutationBody = PatchV1FormsByIdSettingsBody
+    export type PatchV1FormsByIdSettingsMutationError = PatchV1FormsByIdSettings404 | PatchV1FormsByIdSettings422
+    export type PatchV1FormsByIdSettingsMutationVariables = {id: string;data: PatchV1FormsByIdSettingsBody}
+
+    /**
+ * @summary Change a form's settings by key
+ */
+export const usePatchV1FormsByIdSettings = <TError = PatchV1FormsByIdSettings404 | PatchV1FormsByIdSettings422,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchV1FormsByIdSettings>>, TError,PatchV1FormsByIdSettingsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchV1FormsByIdSettings>>,
+        TError,
+        PatchV1FormsByIdSettingsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchV1FormsByIdSettingsMutationOptions(options));
+    }
+    export type getV1TemplatesResponse200 = {
   data: GetV1Templates200
   status: 200
 }
@@ -3367,7 +3572,7 @@ export const getPostV1AiGenerateFormUrl = () => {
 }
 
 /**
- * Returns a document and its lint issues **without saving anything**. Pass the result to `POST /v1/forms` to keep it. Consumes one `ai_generations` unit and the tokens it costs, charged only when a usable document comes back. If you are already driving this from a model of your own, writing the document yourself and posting it to `/v1/forms` costs you nothing here.
+ * Returns a document and its lint issues **without saving anything**. Pass the result to `POST /v1/forms` to keep it. Consumes one `ai_generations` unit and the tokens it costs, charged only when a usable document comes back. If you are already driving this from a model of your own, writing the document yourself and posting it to `/v1/forms` costs you nothing here. Settings the prompt asks for ("a dark, playful form that closes on the 30th") are set on `doc` and listed in `settings`, one entry per setting with its value before and after; one marked `locked` is not on your plan and was left at its default.
  * @summary Generate a form document from a natural-language prompt
  */
 export const postV1AiGenerateForm = async (postV1AiGenerateFormBody: PostV1AiGenerateFormBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1AiGenerateFormResponse> => {

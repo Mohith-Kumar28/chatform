@@ -145,6 +145,11 @@ import type {
   PostApiPaymentAccountsStripe409,
   PostApiPaymentAccountsStripe422,
   PostApiPaymentAccountsStripeBody,
+  PostApiTemplatesBySlugDemoSessions200,
+  PostApiTemplatesBySlugDemoSessions400,
+  PostApiTemplatesBySlugDemoSessions404,
+  PostApiTemplatesBySlugDemoSessions429,
+  PostApiTemplatesBySlugDemoSessionsBody,
   PostApiTemplatesBySlugUse403,
   PostApiTemplatesBySlugUse404,
   PostApiTemplatesBySlugUseParams,
@@ -579,6 +584,114 @@ export const usePostApiImportForms = <TError = PostApiImportForms422,
         TContext
       > => {
       return useMutation(getPostApiImportFormsMutationOptions(options));
+    }
+    export type postApiTemplatesBySlugDemoSessionsResponse200 = {
+  data: PostApiTemplatesBySlugDemoSessions200
+  status: 200
+}
+
+export type postApiTemplatesBySlugDemoSessionsResponse400 = {
+  data: PostApiTemplatesBySlugDemoSessions400
+  status: 400
+}
+
+export type postApiTemplatesBySlugDemoSessionsResponse404 = {
+  data: PostApiTemplatesBySlugDemoSessions404
+  status: 404
+}
+
+export type postApiTemplatesBySlugDemoSessionsResponse429 = {
+  data: PostApiTemplatesBySlugDemoSessions429
+  status: 429
+}
+
+export type postApiTemplatesBySlugDemoSessionsResponseSuccess = (postApiTemplatesBySlugDemoSessionsResponse200) & {
+  headers: Headers;
+};
+export type postApiTemplatesBySlugDemoSessionsResponseError = (postApiTemplatesBySlugDemoSessionsResponse400 | postApiTemplatesBySlugDemoSessionsResponse404 | postApiTemplatesBySlugDemoSessionsResponse429) & {
+  headers: Headers;
+};
+
+export type postApiTemplatesBySlugDemoSessionsResponse = (postApiTemplatesBySlugDemoSessionsResponseSuccess | postApiTemplatesBySlugDemoSessionsResponseError)
+
+export const getPostApiTemplatesBySlugDemoSessionsUrl = (slug: string,) => {
+
+
+
+
+  return `/api/templates/${slug}/demo-sessions`
+}
+
+/**
+ * Public. Starts a preview conversation with an official template, for the try-it panel on its public page. Nothing is stored as a response. Limited to 10 a day for a signed-out device and 20 a day for a signed-in user.
+ * @summary Try an official template live
+ */
+export const postApiTemplatesBySlugDemoSessions = async (slug: string,
+    postApiTemplatesBySlugDemoSessionsBody: PostApiTemplatesBySlugDemoSessionsBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiTemplatesBySlugDemoSessionsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiTemplatesBySlugDemoSessionsResponse>(getPostApiTemplatesBySlugDemoSessionsUrl(slug),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiTemplatesBySlugDemoSessionsBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiTemplatesBySlugDemoSessionsMutationOptions = <TError = PostApiTemplatesBySlugDemoSessions400 | PostApiTemplatesBySlugDemoSessions404 | PostApiTemplatesBySlugDemoSessions429,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTemplatesBySlugDemoSessions>>, TError,PostApiTemplatesBySlugDemoSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiTemplatesBySlugDemoSessions>>, TError,PostApiTemplatesBySlugDemoSessionsMutationVariables, TContext> => {
+
+const mutationKey = ['postApiTemplatesBySlugDemoSessions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiTemplatesBySlugDemoSessions>>, PostApiTemplatesBySlugDemoSessionsMutationVariables> = (props) => {
+          const {slug,data} = props ?? {};
+
+          return  postApiTemplatesBySlugDemoSessions(slug,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiTemplatesBySlugDemoSessionsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiTemplatesBySlugDemoSessions>>>
+    export type PostApiTemplatesBySlugDemoSessionsMutationBody = PostApiTemplatesBySlugDemoSessionsBody
+    export type PostApiTemplatesBySlugDemoSessionsMutationError = PostApiTemplatesBySlugDemoSessions400 | PostApiTemplatesBySlugDemoSessions404 | PostApiTemplatesBySlugDemoSessions429
+    export type PostApiTemplatesBySlugDemoSessionsMutationVariables = {slug: string;data: PostApiTemplatesBySlugDemoSessionsBody}
+
+    /**
+ * @summary Try an official template live
+ */
+export const usePostApiTemplatesBySlugDemoSessions = <TError = PostApiTemplatesBySlugDemoSessions400 | PostApiTemplatesBySlugDemoSessions404 | PostApiTemplatesBySlugDemoSessions429,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTemplatesBySlugDemoSessions>>, TError,PostApiTemplatesBySlugDemoSessionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiTemplatesBySlugDemoSessions>>,
+        TError,
+        PostApiTemplatesBySlugDemoSessionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiTemplatesBySlugDemoSessionsMutationOptions(options));
     }
     export type getApiAuthProvidersResponse200 = {
   data: GetApiAuthProviders200
