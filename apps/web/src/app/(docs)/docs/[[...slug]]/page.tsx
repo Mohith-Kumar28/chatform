@@ -36,9 +36,9 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
   const page = source.getPage((await params).slug);
   if (!page) notFound();
 
-  const MDX = page.data.body;
+  const { body: MDX, toc } = await page.data.load();
   return (
-    <DocsPage toc={page.data.toc} full={page.data.full} tableOfContent={{ style: "clerk" }}>
+    <DocsPage toc={toc} full={page.data.full} tableOfContent={{ style: "clerk" }}>
       <div className="flex items-start justify-between gap-4">
         <DocsTitle>{page.data.title}</DocsTitle>
         {/* Developers feed docs to their own assistants; making that one click

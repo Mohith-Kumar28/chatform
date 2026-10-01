@@ -42,7 +42,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
   const post = getPost((await params).slug);
   if (!post) notFound();
 
-  const MDX = post.entry.body;
+  const { body: MDX } = await post.entry.load();
 
   return (
     <>

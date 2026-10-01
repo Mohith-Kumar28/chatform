@@ -13,6 +13,15 @@ import { z } from "zod";
 export const docs = defineDocs({
   dir: "content/docs",
   docs: {
+    /**
+     * Each page's compiled body loads only when that page renders.
+     *
+     * Eagerly, every route that touched this collection (the docs page, the
+     * search index, llms.txt, the markdown mirror, the sitemap) bundled every
+     * page's highlighted MDX: about 3MB each, five copies, in a worker whose
+     * size is its cold start. The metadata above stays synchronous.
+     */
+    async: true,
     schema: frontmatterSchema.extend({
       generated: z.boolean().default(false),
       /** Block reference pages only: drives the family pill. */
@@ -41,6 +50,8 @@ export const docs = defineDocs({
 export const blog = defineCollections({
   type: "doc",
   dir: "content/blog",
+  /** Lazily, for the same reason as the docs: the index and sitemap only need the frontmatter. */
+  async: true,
   schema: frontmatterSchema.extend({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use an ISO date: YYYY-MM-DD"),
     author: z.string().default("chatform"),

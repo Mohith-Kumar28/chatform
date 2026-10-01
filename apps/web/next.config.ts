@@ -7,7 +7,19 @@ const monorepoRoot = path.resolve(import.meta.dirname, "../..");
 const nextConfig: NextConfig = {
   turbopack: {
     root: monorepoRoot,
+    resolveAlias: {
+      // Every shiki grammar, 10MB of the worker, for a docs highlighter that
+      // prints nine languages. See the file for the list.
+      "fumadocs-core/highlight/shiki/full": "./src/lib/openapi/shiki-factory.ts",
+    },
   },
+  /**
+   * Bundled by Turbopack rather than left external, which Next does for shiki
+   * by default. As an external, OpenNext writes an `import("shiki")` for the
+   * package root into the worker, and that root pulls in all ~200 grammars even
+   * though nothing calls it. Bundled, only what `shiki-factory.ts` imports ships.
+   */
+  transpilePackages: ["shiki"],
   experimental: {
     /**
      * Keep visited route segments in the client cache.

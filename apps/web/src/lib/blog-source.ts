@@ -20,7 +20,7 @@ export interface BlogPost {
   authorTitle?: string;
   faq: readonly { question: string; answer: string }[];
   tags: readonly string[];
-  /** The compiled MDX body, and the raw source for the markdown mirror. */
+  /** The collection entry: `load()` gives the compiled MDX body. */
   entry: (typeof blog)[number];
 }
 
