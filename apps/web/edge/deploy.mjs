@@ -23,11 +23,24 @@ wrangler(["deploy", "-c", "edge/wrangler.jsonc", "--var", `WEB_VERSION:${version
  * warms the one nearest whoever deploys, which is where our visitors are.
  */
 const sitemap = await (await fetch("https://chatform.in/sitemap.xml")).text();
-const urls = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]).filter((u) => u.startsWith("https://chatform.in"));
-const jobs = urls.flatMap((u) => [
-  () => fetch(u),
-  () => fetch(u, { headers: { rsc: "1" } }),
-]);
+const pages = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]).filter((u) => u.startsWith("https://chatform.in"));
+/**
+ * The signed-in app's prerendered shells, which the sitemap leaves out. Each is
+ * also warmed as the `/_tree` prefetch the dashboard fires for every link it
+ * shows. The builder's pages are per form and are cached on first use instead.
+ */
+const APP_SHELLS = [
+  "/dashboard", "/templates", "/signin", "/forgot-password",
+  "/settings/general", "/settings/profile", "/settings/security", "/settings/team",
+  "/settings/workspaces", "/settings/organizations", "/settings/api-keys", "/settings/usage",
+];
+const shells = APP_SHELLS.map((p) => `https://chatform.in${p}`);
+// fetch follows Next's 307 to the `_rsc` URL it insists on, headers included.
+const jobs = [
+  ...[...pages, ...shells].flatMap((u) => [() => fetch(u), () => fetch(u, { headers: { rsc: "1" } })]),
+  ...shells.map((u) => () => fetch(u, { headers: { rsc: "1", "next-router-prefetch": "1", "next-router-segment-prefetch": "/_tree" } })),
+];
+const urls = [...pages, ...shells];
 let done = 0;
 const worker = async () => {
   while (jobs.length) {
