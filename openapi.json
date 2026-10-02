@@ -11723,6 +11723,12 @@
                       "partials": {
                         "type": "number"
                       },
+                      "completedToday": {
+                        "type": "number"
+                      },
+                      "partialToday": {
+                        "type": "number"
+                      },
                       "hasUnpublishedChanges": {
                         "type": "boolean"
                       },
@@ -11821,6 +11827,8 @@
                       "questionCount",
                       "preview",
                       "partials",
+                      "completedToday",
+                      "partialToday",
                       "hasUnpublishedChanges",
                       "theme"
                     ]
@@ -11836,6 +11844,15 @@
             "name": "ws",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tz",
+            "schema": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
             }
           }
         ],
@@ -25896,7 +25913,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "Headline numbers across every form: the last 30 days against the 30 before",
+        "summary": "Headline numbers across every form: the last 7 days against the 7 before",
         "responses": {
           "200": {
             "description": "Overview",

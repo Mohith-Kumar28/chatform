@@ -2907,6 +2907,11 @@ export type GetApiAuthOk200 = {
 
 export type GetApiFormsParams = {
 ws?: string;
+/**
+ * @minimum -9007199254740991
+ * @maximum 9007199254740991
+ */
+tz?: number;
 };
 
 export type GetApiForms200ItemThemeRadius = typeof GetApiForms200ItemThemeRadius[keyof typeof GetApiForms200ItemThemeRadius];
@@ -2950,6 +2955,8 @@ export type GetApiForms200Item = {
   questionCount: number;
   preview: string[];
   partials: number;
+  completedToday: number;
+  partialToday: number;
   hasUnpublishedChanges: boolean;
   theme: GetApiForms200ItemTheme;
 };

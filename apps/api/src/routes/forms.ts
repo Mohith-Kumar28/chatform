@@ -22,6 +22,7 @@ import { apiError, describeSchemaError } from "../lib/api-error.js";
 import { saveLimit } from "../lib/ratelimit.js";
 import { limitReached } from "@repo/entitlements";
 import { requireWorkspace, formSlug, ALL_WORKSPACES } from "../lib/workspace.js";
+import { localMidnight } from "../lib/org-analytics.js";
 import { enqueueMail } from "../lib/mail.js";
 import { canOpenWorkspace } from "../lib/workspace-access.js";
 import { ARCHIVED_FORM_SELECT, archiveForm, purgeFormNow, restoreForm, type ArchivedFormRow } from "../lib/form-archive.js";
@@ -146,6 +147,13 @@ const FormListItem = FormSummary.extend({
    * count on the card and the count behind the filter cannot disagree.
    */
   partials: z.number(),
+  /**
+   * Responses that finished today, and unfinished ones somebody worked on
+   * today, on the caller's clock (`?tz=`). The card shows their sum only when
+   * it is above zero, so a quiet form stays quiet.
+   */
+  completedToday: z.number(),
+  partialToday: z.number(),
   /**
    * True when the draft has moved on from what respondents are answering.
    *
@@ -326,7 +334,7 @@ function defaultDoc(title: string): string {
 formsRouter.get(
   "/forms",
   describeRoute({ tags: ["dashboard"], summary: "List forms in a workspace", responses: { 200: { description: "Forms", content: { "application/json": { schema: resolver(z.array(FormListItem)) } } } } }),
-  validator("query", z.object({ ws: z.string().optional() })),
+  validator("query", z.object({ ws: z.string().optional(), tz: z.coerce.number().int().optional() })),
   async (c) => {
     // `?ws=` names the workspace being viewed — a slug from the switcher, or an
     // id. Absent, `requireWorkspace` falls back to the organization's oldest,
@@ -345,6 +353,7 @@ formsRouter.get(
       if (!ws) return c.json([]);
       scope = { sql: "f.workspace_id = ?", binds: [ws.wsId] };
     }
+    const midnight = localMidnight(Date.now(), c.req.valid("query").tz ?? 0);
     // `working_schema` joins the select so the card can describe the form.
     // It is the one wide column here; a workspace holds tens of forms, not
     // thousands, and the alternative is a denormalised summary column that
@@ -352,12 +361,14 @@ formsRouter.get(
     const rows = await c.env.DB.prepare(
       `SELECT f.id, f.title, f.slug, f.status, f.updated_at, f.workspace_id, f.working_schema, fv.checksum AS active_checksum,
               (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id AND s.status = 'completed') AS responses,
-              (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id AND s.status IN ('abandoned','in_progress','disqualified')) AS partials
+              (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id AND s.status IN ('abandoned','in_progress','disqualified')) AS partials,
+              (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id AND s.is_test = 0 AND s.status = 'completed' AND s.completed_at >= ?) AS completed_today,
+              (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id AND s.is_test = 0 AND s.status IN ('abandoned','in_progress','disqualified') AND s.updated_at >= ?) AS partial_today
        FROM forms f LEFT JOIN form_versions fv ON fv.id = f.active_version_id
        WHERE ${scope.sql} AND f.deleted_at IS NULL ORDER BY f.updated_at DESC`,
     )
-      .bind(...scope.binds)
-      .all<{ id: string; title: string; slug: string; status: string; updated_at: number; workspace_id: string; responses: number; partials: number; working_schema: string | null; active_checksum: string | null }>();
+      .bind(midnight, midnight, ...scope.binds)
+      .all<{ id: string; title: string; slug: string; status: string; updated_at: number; workspace_id: string; responses: number; partials: number; completed_today: number; partial_today: number; working_schema: string | null; active_checksum: string | null }>();
     /*
       One entitlements lookup for the whole list, not one per card.
 
@@ -376,6 +387,8 @@ formsRouter.get(
         status: r.status,
         responses: r.responses,
         partials: r.partials,
+        completedToday: r.completed_today,
+        partialToday: r.partial_today,
         updatedAt: r.updated_at,
         workspaceId: r.workspace_id,
         // A form with no document cannot have drifted from anything, and the

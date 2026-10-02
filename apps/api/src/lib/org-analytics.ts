@@ -8,7 +8,7 @@ import type { Bindings } from "../env.js";
  * forms grid and for `GET /v1/analytics/overview`, so the two surfaces show the
  * same numbers.
  *
- * Two windows of `DAYS` each, the current one and the one before it, so every
+ * Two windows of `OVERVIEW_DAYS` each, the current one and the one before it, so every
  * tile can say which way it moved. Days are the caller's local days (`tzMinutes`
  * east of UTC), because "today" on a dashboard opened in India means the
  * Indian today. View counts are the exception: the beacon rolls them up by UTC
@@ -19,7 +19,7 @@ import type { Bindings } from "../env.js";
  * form is a draft that still collected real answers.
  */
 
-export const OVERVIEW_DAYS = 30;
+export const OVERVIEW_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PARTIAL = "('abandoned','in_progress','disqualified')";
 
@@ -57,22 +57,33 @@ export interface OrgOverview {
   };
 }
 
+/** Minutes east of UTC, clamped to the offsets that exist, as milliseconds. */
+function shiftOf(tzMinutes: number): number {
+  return Math.max(-840, Math.min(840, Math.round(tzMinutes))) * 60_000;
+}
+
+/** Epoch ms of the most recent midnight on a clock `tzMinutes` east of UTC. */
+export function localMidnight(now: number, tzMinutes: number): number {
+  const shiftMs = shiftOf(tzMinutes);
+  return Date.parse(`${dayOf(now, shiftMs)}T00:00:00Z`) - shiftMs;
+}
+
 /** `YYYY-MM-DD` for the day `at` falls on, `shiftMs` east of UTC. */
 function dayOf(at: number, shiftMs: number): string {
   return new Date(at + shiftMs).toISOString().slice(0, 10);
 }
 
 export async function computeOrgOverview(env: Bindings, scope: FormScope, tzMinutes = 0): Promise<OrgOverview> {
-  const shiftMs = Math.max(-840, Math.min(840, Math.round(tzMinutes))) * 60_000;
+  const shiftMs = shiftOf(tzMinutes);
   const shiftSec = shiftMs / 1000;
   const now = Date.now();
 
-  // Sixty local days, oldest first: the previous window then the current one.
+  // Two windows of local days, oldest first: the previous window then the current one.
   const keys: string[] = [];
   for (let i = OVERVIEW_DAYS * 2 - 1; i >= 0; i--) keys.push(dayOf(now - i * DAY_MS, shiftMs));
   const prevKeys = keys.slice(0, OVERVIEW_DAYS);
   const curKeys = keys.slice(OVERVIEW_DAYS);
-  // Midnight local time at the start of the sixty days, as epoch ms.
+  // Midnight local time at the start of both windows, as epoch ms.
   const since = Date.parse(`${keys[0]}T00:00:00Z`) - shiftMs;
   const split = Date.parse(`${curKeys[0]}T00:00:00Z`) - shiftMs;
 

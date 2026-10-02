@@ -3066,7 +3066,7 @@ export const getGetV1AnalyticsOverviewUrl = (params?: GetV1AnalyticsOverviewPara
 }
 
 /**
- * @summary Headline numbers across every form: the last 30 days against the 30 before
+ * @summary Headline numbers across every form: the last 7 days against the 7 before
  */
 export const getV1AnalyticsOverview = async (params?: GetV1AnalyticsOverviewParams, options?: Parameters<typeof customFetch>[1]): Promise<getV1AnalyticsOverviewResponse> => {
 
@@ -3113,7 +3113,7 @@ export type GetV1AnalyticsOverviewQueryError = unknown
 
 
 /**
- * @summary Headline numbers across every form: the last 30 days against the 30 before
+ * @summary Headline numbers across every form: the last 7 days against the 7 before
  */
 
 export function useGetV1AnalyticsOverview<TData = Awaited<ReturnType<typeof getV1AnalyticsOverview>>, TError = unknown>(

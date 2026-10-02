@@ -633,7 +633,7 @@ formsV1Router.get(
   validator("query", z.object({ tz: z.coerce.number().int().optional() })),
   describeRoute({
     tags: ["v1"],
-    summary: "Headline numbers across every form: the last 30 days against the 30 before",
+    summary: "Headline numbers across every form: the last 7 days against the 7 before",
     parameters: [
       {
         name: "tz",

@@ -130,7 +130,9 @@ export function DashboardContent() {
   // viewed here; then every workspace.
   const urlWs = searchParams.get("ws");
   const ws = urlWs ?? stored.ws ?? ALL_WORKSPACES;
-  const formsParams = useMemo(() => ({ ws }), [ws]);
+  // The browser's offset from UTC, so "today" on the cards and the tiles is the reader's today.
+  const [tz] = useState(() => -new Date().getTimezoneOffset());
+  const formsParams = useMemo(() => ({ ws, tz }), [ws, tz]);
 
   /**
    * The workspaces this form could be moved to, for the card menu.
@@ -580,7 +582,7 @@ export function DashboardContent() {
           would be zero, and not over the Archive, which it does not count. */}
       {allForms.length > 0 && !showArchive && (
         <div className="mt-6">
-          <OverviewTiles ws={ws} />
+          <OverviewTiles ws={ws} tz={tz} />
         </div>
       )}
 

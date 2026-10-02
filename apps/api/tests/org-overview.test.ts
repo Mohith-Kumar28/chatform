@@ -7,7 +7,7 @@ import { PLANS } from "@repo/entitlements";
 
 /**
  * The tiles above the forms grid: every form in a workspace, added up, the last
- * thirty days against the thirty before. Test responses and archived forms do
+ * seven days against the seven before. Test responses and archived forms do
  * not count, and a member sees only the workspaces they were added to.
  */
 
@@ -86,7 +86,7 @@ beforeAll(async () => {
     submission("sub_orgov_3", owner.formId, "in_progress", 60_000, 0),
     submission("sub_orgov_t", owner.formId, "completed", 60_000, 1000, 1),
     // Workspace A, the window before.
-    submission("sub_orgov_old", owner.formId, "completed", DAY * 40, 9000),
+    submission("sub_orgov_old", owner.formId, "completed", DAY * 10, 9000),
     // Workspace B, this window.
     submission("sub_orgov_b", formB, "completed", 60_000, 5000),
     // An archived form's response is not counted anywhere.
@@ -106,7 +106,7 @@ describe("GET /api/analytics/overview", () => {
     expect(o.kpis.completionRate.value).toBeCloseTo(2 / 3);
     expect(o.kpis.completionRate.previous).toBe(1);
     expect(o.today).toBe(2);
-    expect(o.series.responses).toHaveLength(30);
+    expect(o.series.responses).toHaveLength(7);
     expect(o.series.responses.at(-1)).toBe(2);
   });
 
@@ -149,5 +149,15 @@ describe("GET /api/analytics/overview", () => {
     expect(res.status).toBe(200);
     const v1 = (await res.json()) as Overview;
     expect(v1.kpis).toEqual(o.kpis);
+  });
+});
+
+describe("GET /api/forms today counts", () => {
+  it("counts finished and worked-on responses since local midnight, test runs excluded", async () => {
+    const res = await fetchApi(`/api/forms?ws=${owner.workspaceId}`, { headers: { cookie: owner.cookie } });
+    const rows = (await res.json()) as { id: string; completedToday: number; partialToday: number }[];
+    const row = rows.find((r) => r.id === owner.formId)!;
+    expect(row.completedToday).toBe(2);
+    expect(row.partialToday).toBe(1);
   });
 });

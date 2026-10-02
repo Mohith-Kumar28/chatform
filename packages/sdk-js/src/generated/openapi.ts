@@ -78,7 +78,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Headline numbers across every form: the last 30 days against the 30 before */
+        /** Headline numbers across every form: the last 7 days against the 7 before */
         get: operations["getV1AnalyticsOverview"];
         put?: never;
         post?: never;

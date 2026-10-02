@@ -116,7 +116,7 @@ export class Forms {
 
   /**
    * Every form the key can see, added up: responses, views, completion rate,
-   * partials and median time, the last 30 days against the 30 before.
+   * partials and median time, the last 7 days against the 7 before.
    *
    * `tz` is minutes east of UTC that a day starts in (`330` for India), so
    * `today` and the daily series line up with the caller's calendar.

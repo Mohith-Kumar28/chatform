@@ -6,6 +6,7 @@ import { ChatBubble } from "@/components/chat/chat-bubble";
 import { useThemeFonts } from "@/lib/theme-fonts";
 import Link from "next/link";
 import {
+  Activity,
   BarChart3,
   Check as CheckIcon,
   Copy,
@@ -44,6 +45,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { chatThemeVars, contrast, isDarkColor, patternAlpha, patternOpacity, plainChatform } from "@/lib/chat-theme";
 import { resolveScheme } from "@/lib/form-scheme";
@@ -108,6 +110,9 @@ export interface FormRow {
    * "+0 partial" about a number it was never told.
    */
   partials?: number;
+  /** Finished today, and unfinished but worked on today, on the reader's clock. */
+  completedToday?: number;
+  partialToday?: number;
   updatedAt: number;
   /** True when the draft has moved on from what respondents are answering. */
   hasUnpublishedChanges?: boolean;
@@ -256,6 +261,15 @@ export function FormCard({
    * cards that least need it.
    */
   const partials = form.partials ?? 0;
+  const completedToday = form.completedToday ?? 0;
+  const partialToday = form.partialToday ?? 0;
+  const todayTotal = completedToday + partialToday;
+  const todaySplit = [
+    completedToday > 0 && `${completedToday} response${completedToday === 1 ? "" : "s"}`,
+    partialToday > 0 && `${partialToday} partial`,
+  ]
+    .filter(Boolean)
+    .join(", ") + " today";
   const meta = (
     <>
       <span className="text-muted-foreground tabular text-xs">
@@ -273,6 +287,21 @@ export function FormCard({
       <span className="text-muted-foreground text-xs">
         {relativeTime(form.updatedAt)}
       </span>
+      {/* Only on a form something happened to today, so a busy card stands
+          out from a quiet grid. The split is one hover away. */}
+      {todayTotal > 0 && (
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="tabular ml-auto inline-flex items-center gap-1 text-xs text-[var(--success)]">
+                <Activity className="size-3" aria-hidden />
+                {todayTotal} today
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top">{todaySplit}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </>
   );
 
