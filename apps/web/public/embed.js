@@ -801,14 +801,17 @@
    *
    * Delegated from the document, so it covers buttons rendered after this
    * script ran (a React page, a menu opened later). A bare attribute belongs to
-   * the first form on the page; one with a slug belongs to that form.
+   * the first form on the page; one with a slug belongs to that form. React
+   * writes a bare `data-chatform-open` in JSX as "true", so that reads as bare.
    */
+  function claims(el) {
+    var which = el.getAttribute("data-chatform-open");
+    return which && which !== "true" ? which === slug : window.Chatform === api;
+  }
   function onPageClick(event) {
     if (destroyed || !mounted || !event.target || !event.target.closest) return;
     var el = event.target.closest("[data-chatform-open]");
-    if (!el) return;
-    var which = el.getAttribute("data-chatform-open");
-    if (which ? which !== slug : window.Chatform !== api) return;
+    if (!el || !claims(el)) return;
     event.preventDefault();
     // Inline is already open, so the most a button can do is bring it into view.
     if (mode === "inline" && panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -820,9 +823,7 @@
   function onPageWarm(event) {
     if (frame || destroyed || !mounted || mode === "inline" || !panel || !event.target || !event.target.closest) return;
     var el = event.target.closest("[data-chatform-open]");
-    if (!el) return;
-    var which = el.getAttribute("data-chatform-open");
-    if (which ? which !== slug : window.Chatform !== api) return;
+    if (!el || !claims(el)) return;
     panel.appendChild(buildFrame());
   }
   document.addEventListener("pointerover", onPageWarm);
