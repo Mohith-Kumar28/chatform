@@ -438,6 +438,7 @@ function AffordanceControls({
           timeStepMinutes={block.timeStepMinutes}
           timeMin={block.timeMin}
           timeMax={block.timeMax}
+          timeZone={block.timeZone}
           onPick={onStructured}
         />
       );

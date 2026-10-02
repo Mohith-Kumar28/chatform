@@ -172,6 +172,78 @@ export function formatAppointment(value: string, zone?: string | null): string |
   );
 }
 
+/** A date block's time window: the times offered, on the author's clock when it names one. */
+export interface SlotWindow {
+  timeMin: string;
+  timeMax: string;
+  timeStepMinutes: number;
+  /** The author's zone. Absent: the window is on each respondent's own clock. */
+  timeZone?: string | null;
+}
+
+/** Every time the window offers, as `HH:mm` on its own clock. */
+export function windowTimes(w: SlotWindow): string[] {
+  const toMin = (hhmm: string) => {
+    const [h = "0", m = "0"] = hhmm.split(":");
+    return Number(h) * 60 + Number(m);
+  };
+  const step = Math.max(5, w.timeStepMinutes);
+  const out: string[] = [];
+  for (let t = toMin(w.timeMin); t <= toMin(w.timeMax) && out.length < 288; t += step) {
+    out.push(`${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`);
+  }
+  return out;
+}
+
+/** `YYYY-MM-DD` moved by whole days. */
+function shiftDate(date: string, days: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
+}
+
+/**
+ * The slots that fall on `date` on the viewer's clock, as moments in order.
+ *
+ * The author's 10:00 to 18:00 in India is 00:30 to 08:30 for someone in New
+ * York, and for someone in Sydney it straddles midnight, so a viewer's day can
+ * hold the end of one of the author's days and the start of the next. All
+ * three of the author's days around it are walked, and only what lands on the
+ * viewer's `date` is kept.
+ */
+export function slotsOnDay(date: string, w: SlotWindow, viewerZone: string): number[] {
+  const host = usableZone(w.timeZone) ?? viewerZone;
+  const times = windowTimes(w);
+  const out = new Set<number>();
+  for (const days of [-1, 0, 1]) {
+    const hostDate = shiftDate(date, days);
+    for (const time of times) {
+      const ms = zonedToUtc({ date: hostDate, time }, host);
+      if (wallTimeIn(ms, viewerZone).date === date) out.add(ms);
+    }
+  }
+  return [...out].sort((a, z) => a - z);
+}
+
+/** "5:00 pm" on the clock in `zone`. */
+export function clockTimeIn(ms: number, zone: string): string {
+  const { time } = wallTimeIn(ms, zone);
+  const [h = "0", m = "00"] = time.split(":");
+  const hour = Number(h);
+  return `${hour % 12 === 0 ? 12 : hour % 12}:${m} ${hour < 12 ? "am" : "pm"}`;
+}
+
+/** The short name of `zone` at `ms`: "GMT+5:30", "EDT", "UTC". */
+export function zoneName(ms: number, zone: string): string {
+  try {
+    return (
+      new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "short" })
+        .formatToParts(new Date(ms))
+        .find((p) => p.type === "timeZoneName")?.value ?? zone
+    );
+  } catch {
+    return zone;
+  }
+}
+
 /** The zone this browser or runtime is on, or null. */
 export function localZone(): string | null {
   try {

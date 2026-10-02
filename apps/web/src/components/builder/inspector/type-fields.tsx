@@ -10,6 +10,8 @@ import {
   acceptedKinds,
   isPriceSource,
   isValidUpiId,
+  localZone,
+  zoneName,
   priceChoices,
   parseEmailDomains,
   PAYMENT_PROVIDER_LABELS,
@@ -41,6 +43,32 @@ import {
   SwitchField,
   TextField,
 } from "./fields";
+
+/** The time zone choice that leaves the window on each respondent's own clock. */
+const RESPONDENT_CLOCK = "respondent";
+
+let zoneList: { value: string; label: string }[] | null = null;
+
+/**
+ * Every zone this browser knows, labelled with its current offset, after the
+ * respondent's-own-clock choice. Built once: it is a few hundred entries.
+ */
+function timeZoneOptions(current?: string): { value: string; label: string }[] {
+  if (!zoneList) {
+    const now = Date.now();
+    let zones: string[] = [];
+    try {
+      zones = Intl.supportedValuesOf("timeZone");
+    } catch {
+      zones = [];
+    }
+    zoneList = zones.map((z) => ({ value: z, label: `${z.replace(/_/g, " ")} (${zoneName(now, z)})` }));
+  }
+  const list = [{ value: RESPONDENT_CLOCK, label: "Each respondent's own" }, ...zoneList];
+  // A zone this browser does not list (another runtime's spelling) stays selectable.
+  if (current && !zoneList.some((z) => z.value === current)) list.splice(1, 0, { value: current, label: current });
+  return list;
+}
 
 const uid = (p: string) => `${p}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
 
@@ -247,7 +275,11 @@ export function TypeFields({
           <SwitchField
             label="Also ask for a time"
             checked={block.includeTime}
-            onChange={(v) => patch({ includeTime: v } as Partial<Block>)}
+            onChange={(v) =>
+              // The hours typed next are the author's own working hours, so
+              // they are pinned to the author's clock from the start.
+              patch({ includeTime: v, ...(v && !block.timeZone ? { timeZone: localZone() ?? undefined } : {}) } as Partial<Block>)
+            }
           />
           {block.includeTime && (
             <div className="grid grid-cols-3 gap-3">
@@ -274,6 +306,14 @@ export function TypeFields({
                 ]}
               />
             </div>
+          )}
+          {block.includeTime && (
+            <SelectField
+              label="Time zone"
+              value={block.timeZone ?? RESPONDENT_CLOCK}
+              onChange={(v) => patch({ timeZone: v === RESPONDENT_CLOCK ? undefined : v } as Partial<Block>)}
+              options={timeZoneOptions(block.timeZone)}
+            />
           )}
         </>
       );

@@ -73,7 +73,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 23;
+export const DEMO_REVISION = 24;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -291,6 +291,9 @@ export const DEMO_FORM = buildAuthoredDoc({
       timeStepMinutes: 30,
       timeMin: "10:00",
       timeMax: "18:00",
+      // Our working day, in India. A visitor anywhere else is offered these
+      // hours on their own clock.
+      timeZone: "Asia/Kolkata",
     },
   ],
 

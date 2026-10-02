@@ -3,7 +3,7 @@ import { cleanLine, cleanText, safeHref } from "@repo/guard";
 import type { AnswerValue } from "../answers";
 import { fromMinorUnits, type PaymentProviderName } from "../payment-link";
 import { normalizeLocation } from "../location";
-import { appointmentIso, parseAppointment } from "../datetime";
+import { appointmentIso, clockTimeIn, parseAppointment, usableZone, wallTimeIn, zoneName, zonedToUtc } from "../datetime";
 
 /**
  * Every reason an answer can be refused.
@@ -193,6 +193,27 @@ const FREEMAIL = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "iclou
 const URL_RE = /^https?:\/\/[^\s]+\.[^\s]+$/i;
 const E164_RE = /^\+[1-9]\d{6,14}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * "Please pick a time between …", on the respondent's clock.
+ *
+ * With an author's zone, their window is converted for the day asked about, so
+ * someone in New York is told "12:30 am and 8:30 am EDT", not India's hours.
+ * When the respondent's zone is unknown, the author's hours are given with the
+ * author's zone named.
+ */
+function windowHint(
+  block: { timeMin: string; timeMax: string },
+  host: string | null,
+  hostDate: string,
+  respondentZone: string | null | undefined,
+): string {
+  if (!host) return `Please pick a time between ${clock(block.timeMin)} and ${clock(block.timeMax)}.`;
+  const reader = usableZone(respondentZone) ?? host;
+  const start = zonedToUtc({ date: hostDate, time: block.timeMin }, host);
+  const end = zonedToUtc({ date: hostDate, time: block.timeMax }, host);
+  return `Please pick a time between ${clockTimeIn(start, reader)} and ${clockTimeIn(end, reader)} ${zoneName(start, reader)}.`;
+}
 
 /** "14:30" as "2:30 pm", for telling a respondent the window they can pick from. */
 function clock(hhmm: string): string {
@@ -414,9 +435,12 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
             ? fail("invalid_time", "That time doesn't look right. Please give a date and a time.")
             : fail("invalid_date", "Please give a date and a time.");
         }
-        const { date, time } = appt.wall;
+        // With an author's zone the window and the date bounds are theirs:
+        // "10:00 to 18:00" is their working day, whoever is booking into it.
+        const host = usableZone(block.timeZone);
+        const { date, time } = host ? wallTimeIn(appt.ms, host) : appt.wall;
         if (time < block.timeMin || time > block.timeMax) {
-          return fail("time_out_of_range", `Please pick a time between ${clock(block.timeMin)} and ${clock(block.timeMax)}.`);
+          return fail("time_out_of_range", windowHint(block, host, date, opts.timeZone));
         }
         // A few minutes' grace: a slot picked as it began is not in the past.
         if (block.disablePast && appt.ms < Date.now() - 5 * 60000) {

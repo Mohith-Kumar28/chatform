@@ -447,6 +447,16 @@ export const Block = z.discriminatedUnion("type", [
     /** Earliest and latest time offered, as `HH:mm`. */
     timeMin: z.string().regex(/^\d{2}:\d{2}$/).default("09:00"),
     timeMax: z.string().regex(/^\d{2}:\d{2}$/).default("18:00"),
+    /**
+     * The clock `timeMin` and `timeMax` are on: the author's IANA zone, so
+     * "10:00 to 18:00" means their working hours and each respondent is offered
+     * those hours converted to their own clock. Written by the builder from the
+     * author's browser when they switch the time on.
+     *
+     * Absent on blocks from before it existed, and then the window is on each
+     * respondent's own clock, as it always was. An unknown zone reads the same.
+     */
+    timeZone: boundedString(64).optional(),
   }),
   z.object({
     ...BlockBase,

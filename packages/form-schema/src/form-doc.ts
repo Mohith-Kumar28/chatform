@@ -141,6 +141,8 @@ export interface PublicBlock {
   timeStepMinutes?: number;
   timeMin?: string;
   timeMax?: string;
+  /** date: the author's zone that `timeMin`/`timeMax` are on; absent means the respondent's own. */
+  timeZone?: string;
   /** scheduling: the external booking link. payment (method "link"): the checkout page. */
   url?: string;
   /** payment: how the respondent is asked to pay. `gateway` is verified checkout on the admin's own account. */
@@ -275,6 +277,7 @@ export function toPublicBlock(b: Block): PublicBlock {
       pub.timeStepMinutes = b.timeStepMinutes;
       pub.timeMin = b.timeMin;
       pub.timeMax = b.timeMax;
+      if (b.timeZone) pub.timeZone = b.timeZone;
       break;
     case "scheduling":
       pub.url = b.url;

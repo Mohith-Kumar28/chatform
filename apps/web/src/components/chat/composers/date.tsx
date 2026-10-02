@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { DayPicker, type ClassNames } from "react-day-picker";
-import { addDays, addYears, format, isAfter, isBefore, isToday, isValid, parseISO, startOfDay, startOfMonth } from "date-fns";
+import { addDays, addYears, format, isAfter, isBefore, isValid, parseISO, startOfDay, startOfMonth } from "date-fns";
+import { localZone, slotsOnDay } from "@repo/form-schema";
 import { cn } from "@/lib/utils";
 
 /**
@@ -26,6 +27,7 @@ export function DateComposer({
   timeStepMinutes = 30,
   timeMin = "09:00",
   timeMax = "18:00",
+  timeZone,
   onPick,
 }: {
   min?: string;
@@ -36,6 +38,8 @@ export function DateComposer({
   timeStepMinutes?: number;
   timeMin?: string;
   timeMax?: string;
+  /** The author's zone the window is on; absent means the respondent's own clock. */
+  timeZone?: string;
   onPick: (iso: string, display: string) => void;
 }) {
   const today = startOfDay(new Date());
@@ -48,6 +52,8 @@ export function DateComposer({
    * booking flow people already know works.
    */
   const [chosenDay, setChosenDay] = useState<Date | null>(null);
+  /** When that day was tapped: slots before it are gone. Read in the handler, never during render. */
+  const [chosenAt, setChosenAt] = useState(0);
 
   const lowerBound = useMemo(() => {
     const fromMin = parseBound(min);
@@ -84,35 +90,27 @@ export function DateComposer({
     if (disabled(day)) return;
     if (includeTime) {
       setChosenDay(day);
+      setChosenAt(Date.now());
       return;
     }
     onPick(format(day, "yyyy-MM-dd"), format(day, "EEE d MMM yyyy"));
   }
 
-  /** Every slot between the block's opening and closing time, on the step. */
+  /**
+   * The slots on the chosen day, as moments, on this browser's clock.
+   *
+   * With an author's zone the window is their working hours, converted: an
+   * author's 10:00 to 18:00 in India is offered to New York as 12:30 am to
+   * 8:30 am. Without one it is the window as written, on the respondent's
+   * clock. A slot already gone by is not offered.
+   */
   const slots = useMemo(() => {
-    if (!includeTime) return [];
-    const toMin = (hhmm: string) => {
-      const [h = "0", m = "0"] = hhmm.split(":");
-      return Number(h) * 60 + Number(m);
-    };
-    const start = toMin(timeMin);
-    const end = toMin(timeMax);
-    const step = Math.max(5, timeStepMinutes);
-    const out: string[] = [];
-    for (let t = start; t <= end && out.length < 96; t += step) {
-      out.push(`${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`);
-    }
-    return out;
-  }, [includeTime, timeMin, timeMax, timeStepMinutes]);
-
-  /** A slot already gone by is not a slot — only ever hidden for *today*. */
-  function slotPassed(day: Date, hhmm: string): boolean {
-    if (!isToday(day)) return false;
-    const now = new Date();
-    const [h = "0", m = "0"] = hhmm.split(":");
-    return Number(h) * 60 + Number(m) <= now.getHours() * 60 + now.getMinutes();
-  }
+    if (!includeTime || !chosenDay) return [];
+    const viewer = localZone() ?? "UTC";
+    return slotsOnDay(format(chosenDay, "yyyy-MM-dd"), { timeMin, timeMax, timeStepMinutes, timeZone }, viewer).filter(
+      (ms) => ms > chosenAt,
+    );
+  }, [includeTime, chosenDay, chosenAt, timeMin, timeMax, timeStepMinutes, timeZone]);
 
   // Shortcuts for the common near dates, only the ones the bounds allow. A
   // block capped in the past (a birthday) simply gets none.
@@ -123,7 +121,6 @@ export function DateComposer({
   ].filter((q) => !disabled(q.date));
 
   if (includeTime && chosenDay) {
-    const open = slots.filter((t) => !slotPassed(chosenDay, t));
     return (
       <div className="w-full max-w-[19rem] rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] p-3">
         <div className="mb-2 flex items-center justify-between">
@@ -141,22 +138,20 @@ export function DateComposer({
           </span>
         </div>
 
-        {open.length === 0 ? (
+        {slots.length === 0 ? (
           <p className="px-1 py-4 text-center text-xs opacity-60">
             No times left on that day. Pick another one.
           </p>
         ) : (
           <div className="grid max-h-56 grid-cols-3 gap-1.5 overflow-y-auto">
-            {open.map((t) => (
+            {slots.map((ms) => (
               <button
-                key={t}
+                key={ms}
                 type="button"
-                onClick={() =>
-                  onPick(slotMoment(chosenDay, t), `${format(chosenDay, "EEE d MMM yyyy")} at ${formatSlot(t)}`)
-                }
+                onClick={() => onPick(slotMoment(ms), `${format(chosenDay, "EEE d MMM yyyy")} at ${formatSlot(ms)}`)}
                 className="rounded-lg border border-[var(--cf-chip-border)] px-2 py-2 text-xs transition-colors hover:border-transparent hover:bg-[var(--cf-accent)] hover:text-[var(--cf-accent-text)]"
               >
-                {formatSlot(t)}
+                {formatSlot(ms)}
               </button>
             ))}
           </div>
@@ -263,14 +258,11 @@ function parseBound(value?: string): Date | null {
 }
 
 /**
- * A slot as the moment it names: the time on this browser's clock, with that
- * clock's offset on the day (`2026-10-03T17:00+05:30`). The server stores it in
- * UTC and checks the form's time window against the time they actually saw.
+ * A slot as the moment it names, written on this browser's clock with that
+ * clock's offset (`2026-10-03T17:00+05:30`). The server stores it in UTC.
  */
-function slotMoment(day: Date, hhmm: string): string {
-  const [h = "0", m = "0"] = hhmm.split(":");
-  const at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), Number(h), Number(m));
-  return format(at, "yyyy-MM-dd'T'HH:mmxxx");
+function slotMoment(ms: number): string {
+  return format(new Date(ms), "yyyy-MM-dd'T'HH:mmxxx");
 }
 
 /** "Times in GMT+5:30": the times on the pad are theirs, and this says so. */
@@ -285,11 +277,7 @@ function zoneLabel(day: Date): string | null {
   }
 }
 
-/** 24h in, human out — "14:30" reads as "2:30 pm" to most respondents. */
-function formatSlot(hhmm: string): string {
-  const [h = "0", m = "00"] = hhmm.split(":");
-  const hour = Number(h);
-  const suffix = hour < 12 ? "am" : "pm";
-  const twelve = hour % 12 === 0 ? 12 : hour % 12;
-  return `${twelve}:${m} ${suffix}`;
+/** A slot as most respondents read a time: "2:30 pm". */
+function formatSlot(ms: number): string {
+  return format(new Date(ms), "h:mm a").toLowerCase();
 }
