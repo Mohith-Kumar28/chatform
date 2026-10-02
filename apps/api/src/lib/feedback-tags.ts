@@ -3,6 +3,7 @@ import { z } from "zod";
 import { FEEDBACK_NOTE_MAX, FEEDBACK_TOPICS, FEEDBACK_TOPIC_KEYS, feedbackLabel } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { MODELS, chatModel, reportedUsage, telemetry } from "./ai.js";
+import { classifyAiError } from "./ai-failure.js";
 import { logAiGeneration } from "./ai-usage.js";
 
 /**
@@ -154,6 +155,7 @@ export async function tagFeedback(
       usage: { input: 0, output: 0, costUsd: null, generationId: null },
       latencyMs: Date.now() - started,
       status: "error",
+      error: classifyAiError(err),
     });
     return null;
   }

@@ -186,8 +186,8 @@ export function registerWriteTools(server: McpServer, ctx: () => McpCtx): void {
       });
       if (res.status >= 400) {
         const hint =
-          res.status === 404
-            ? " A form must be published before responses can be submitted to it — call publish_form."
+          res.status === 409 && (res.body as { error?: { code?: string } } | null)?.error?.code === "not_published"
+            ? " A form must be published before responses can be submitted to it: call publish_form."
             : "";
         return errorResult(describeFailure(res) + hint);
       }
@@ -201,7 +201,7 @@ export function registerWriteTools(server: McpServer, ctx: () => McpCtx): void {
       title: "Export responses",
       description:
         "Start an export of a form's responses as CSV or JSON. Returns immediately with a queued export — " +
-        "poll it with check_export until the status is 'ready', then use the download_url. Exports expire " +
+        "poll it with check_export until the status is 'ready', which then returns the contents inline. Exports expire " +
         "after about a day. The API writes csv and json; the typed .xlsx workbook is dashboard-only.",
       inputSchema: {
         form_id: z.string().describe("The form id."),
@@ -223,7 +223,7 @@ export function registerWriteTools(server: McpServer, ctx: () => McpCtx): void {
       if (res.status >= 400) return errorResult(describeFailure(res));
       return jsonResult({
         ...(res.body as Record<string, unknown>),
-        next_step: "Poll check_export with this id until status is 'ready', then follow download_url.",
+        next_step: "Poll check_export with this id until status is 'ready'; it then returns the rows inline.",
       });
     },
   );
@@ -233,20 +233,40 @@ export function registerWriteTools(server: McpServer, ctx: () => McpCtx): void {
     {
       title: "Check an export",
       description:
-        "Check a queued export and get its download link once ready, or list recent exports. The link is " +
-        "short-lived and re-minted on each read, so read this again rather than reusing an old link.",
+        "Check a queued export, or list recent exports. Once an export is ready this returns its contents inline " +
+        "(CSV or JSON Lines) in slices: pass next_offset back as offset until it is null. No need to fetch " +
+        "download_url, which many sandboxes cannot reach; it is there for a browser, short-lived and re-minted on each read.",
       inputSchema: {
         export_id: z.string().optional().describe("The export id. Omit to list recent exports."),
         form_id: z.string().optional().describe("When listing, only exports of this form."),
+        offset: z.number().int().min(0).optional().describe("Byte offset to read the contents from. Defaults to 0."),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ export_id, form_id }) => {
-      const res = export_id
-        ? await callApi(ctx(), "GET", `/v1/exports/${encodeURIComponent(export_id)}`)
-        : await callApi(ctx(), "GET", "/v1/exports", { query: { form_id } });
+    async ({ export_id, form_id, offset }) => {
+      if (!export_id) {
+        const res = await callApi(ctx(), "GET", "/v1/exports", { query: { form_id } });
+        if (res.status >= 400) return errorResult(describeFailure(res));
+        return jsonResult(res.body);
+      }
+      const id = encodeURIComponent(export_id);
+      const res = await callApi(ctx(), "GET", `/v1/exports/${id}`);
       if (res.status >= 400) return errorResult(describeFailure(res));
-      return jsonResult(res.body);
+      const body = res.body as Record<string, unknown>;
+      if (body.status !== "ready") {
+        return jsonResult({ ...body, next_step: "Not ready yet. Call check_export again in a few seconds." });
+      }
+      const content = await callApi(ctx(), "GET", `/v1/exports/${id}/content`, { query: { offset } });
+      if (content.status >= 400) return errorResult(describeFailure(content));
+      const slice = content.body as Record<string, unknown>;
+      return jsonResult({
+        ...body,
+        offset: slice.offset,
+        next_offset: slice.next_offset,
+        total_bytes: slice.total_bytes,
+        content: slice.content,
+        ...(slice.next_offset !== null ? { next_step: "More rows remain. Call check_export with offset = next_offset." } : {}),
+      });
     },
   );
 

@@ -57,8 +57,8 @@ async function subscribePro(orgId: string): Promise<void> {
 async function seedResponse(id: string, over: Record<string, unknown> = {}) {
   const now = Date.now();
   await env.DB.prepare(
-    `INSERT INTO submissions (id, form_id, form_version_id, organization_id, status, source, is_test, started_at, updated_at, duration_ms)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO submissions (id, form_id, form_version_id, organization_id, status, source, is_test, started_at, updated_at, duration_ms, meta)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       id, t.formId, VERSION_ID, t.orgId,
@@ -66,6 +66,7 @@ async function seedResponse(id: string, over: Record<string, unknown> = {}) {
       (over.source as string) ?? "chat",
       (over.is_test as number) ?? 0,
       now, now, 1000,
+      (over.meta as string) ?? null,
     )
     .run();
 }
@@ -108,7 +109,19 @@ beforeAll(async () => {
 
   await seedResponse("sbm_an4", { is_test: 1 });
   await seedAnswer("sbm_an4", "q_email", "test@x.co");
+
+  // Still open, and from before `meta.context`: only the user agent was recorded.
+  await seedResponse("sbm_an5", { status: "in_progress", meta: JSON.stringify({ userAgent: IPHONE_UA, country: "IN" }) });
+  await seedResponse("sbm_an6", {
+    meta: JSON.stringify({
+      userAgent: IPHONE_UA,
+      context: { channel: "popup", device: { type: "mobile", browser: "Safari", os: "iOS" } },
+    }),
+  });
 });
+
+const IPHONE_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Mobile/15E148 Safari/604.1";
 
 describe("the aggregate", () => {
   it("counts the published questions, not the draft's", async () => {
@@ -132,6 +145,22 @@ describe("the aggregate", () => {
     expect(chat.starts).toBeLessThan(all.starts);
     // One API response was seeded; the chat view must not count it.
     expect(all.starts - chat.starts).toBe(1);
+  });
+
+  it("adds up: completed, abandoned and in progress make the starts", async () => {
+    const result = await computeAnalytics(env as never, t.formId, { source: "all" });
+    expect(result.inProgress).toBe(1);
+    expect(result.completed + result.abandoned + result.inProgress).toBe(result.starts);
+  });
+
+  it("reads browser, OS, device and channel off responses that predate meta.context", async () => {
+    const result = await computeAnalytics(env as never, t.formId, { source: "all" });
+    // One from the stored context, one parsed from the older row's user agent.
+    expect(result.byBrowser).toEqual([{ label: "Safari", count: 2, completed: 1 }]);
+    expect(result.byOs).toEqual([{ label: "iOS", count: 2, completed: 1 }]);
+    expect(result.byDeviceType).toEqual([{ label: "mobile", count: 2, completed: 1 }]);
+    expect(result.byChannel.map((s) => s.label).sort()).toEqual(["link", "popup"]);
+    expect(result.startsWithContext).toBe(1);
   });
 
   it("summarises a numeric question", async () => {

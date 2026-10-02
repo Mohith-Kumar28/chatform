@@ -92,6 +92,14 @@ export class Files {
   }
 
   /**
+   * The file inside the JSON body, read with the API key rather than via
+   * `downloadUrl`: UTF-8 text for text types, base64 otherwise. Up to 4 MB.
+   */
+  async content(fileId: string, request?: RequestOptions): Promise<Res<"/v1/files/{id}/content", "get">> {
+    return this.http.get<Res<"/v1/files/{id}/content", "get">>(`/v1/files/${fileId}/content`, undefined, request);
+  }
+
+  /**
    * The bytes themselves.
    *
    * The signed URL is its own credential, so this follows it without the API

@@ -178,6 +178,91 @@ exportsV1Router.get(
   },
 );
 
+const ExportContentView = z.object({
+  id: z.string(),
+  object: z.literal("export_content"),
+  format: z.enum(["csv", "json"]),
+  /** Byte offset this slice starts at. */
+  offset: z.number(),
+  /** Pass as `offset` to read on; null at the end. */
+  next_offset: z.number().nullable(),
+  total_bytes: z.number(),
+  /** UTF-8 text, ending on a line break wherever the slice allowed one. */
+  content: z.string(),
+});
+
+/** Largest slice one read returns: big enough for a few hundred rows, small enough for a model's context. */
+const CONTENT_MAX_BYTES = 200_000;
+
+/**
+ * The step back from `end` that lands on a line break, or failing that on a
+ * UTF-8 character boundary, so a slice never splits a character and usually
+ * ends on a whole row.
+ */
+function sliceEnd(bytes: Uint8Array, atEnd: boolean): number {
+  if (atEnd) return bytes.length;
+  const newline = bytes.lastIndexOf(0x0a);
+  if (newline >= 0) return newline + 1;
+  let end = bytes.length;
+  while (end > 0 && (bytes[end - 1]! & 0xc0) === 0x80) end--;
+  return end > 0 && bytes[end - 1]! >= 0xc0 ? end - 1 : end;
+}
+
+exportsV1Router.get(
+  "/exports/:id/content",
+  requireScope("response", "export"),
+  validator(
+    "query",
+    z.object({
+      offset: z.coerce.number().int().min(0).default(0),
+      max_bytes: z.coerce.number().int().min(1_000).max(CONTENT_MAX_BYTES).default(CONTENT_MAX_BYTES),
+    }),
+  ),
+  describeRoute({
+    tags: ["v1"],
+    summary: "Read a ready export's contents",
+    description:
+      "The export's text, a slice at a time, under the same API key, for a caller that cannot fetch `download_url` (an agent sandbox that only reaches allow-listed hosts, say). Read from `offset` 0 and pass `next_offset` back until it is null; the slices join into the exact file.",
+    responses: {
+      200: { description: "A slice of the export", content: { "application/json": { schema: resolver(ExportContentView) } } },
+      404: { description: "Export not found" },
+      409: { description: "The export is not ready yet" },
+    },
+  }),
+  async (c) => {
+    const orgId = c.get("orgId")!;
+    const q = c.req.valid("query");
+    const row = await c.env.DB.prepare(`SELECT * FROM exports WHERE id = ? AND organization_id = ?`)
+      .bind(c.req.param("id"), orgId)
+      .first<ExportRow>();
+    if (!row || !keyOwnsForm(c, row.form_id)) {
+      return c.json({ error: { code: "not_found", message: "Export not found" } }, 404);
+    }
+    if (row.status !== "ready" || !row.r2_key) {
+      return c.json({ error: { code: "export_not_ready", message: `This export is ${row.status}` } }, 409);
+    }
+    const head = await c.env.R2.head(row.r2_key);
+    if (!head) return c.json({ error: { code: "not_found", message: "Export not found" } }, 404);
+    const total = head.size;
+    const offset = Math.min(q.offset, total);
+    const length = Math.min(q.max_bytes, total - offset);
+    const obj = length > 0 ? await c.env.R2.get(row.r2_key, { range: { offset, length } }) : null;
+    const bytes = obj ? new Uint8Array(await obj.arrayBuffer()) : new Uint8Array();
+    const atEnd = offset + bytes.length >= total;
+    const end = sliceEnd(bytes, atEnd);
+    const next = offset + end;
+    return c.json({
+      id: row.id,
+      object: "export_content" as const,
+      format: row.format as "csv" | "json",
+      offset,
+      next_offset: next >= total ? null : next,
+      total_bytes: total,
+      content: new TextDecoder().decode(bytes.subarray(0, end)),
+    });
+  },
+);
+
 exportsV1Router.get(
   "/exports",
   requireScope("response", "export"),
@@ -270,6 +355,76 @@ exportsV1Router.get(
       created_at: row.created_at,
       download_url: signed.url,
       download_expires_at: signed.expiresAt,
+    });
+  },
+);
+
+const FileContentView = z.object({
+  id: z.string(),
+  object: z.literal("file_content"),
+  filename: z.string(),
+  mime: z.string(),
+  size_bytes: z.number(),
+  encoding: z.enum(["utf8", "base64"]),
+  data: z.string(),
+});
+
+/** The most one read carries. Uploads can be far larger; those stay on `download_url`. */
+const FILE_CONTENT_MAX_BYTES = 4_000_000;
+
+/** Types whose bytes are text a reader can take as-is rather than as base64. */
+function isTextMime(mime: string): boolean {
+  return mime.startsWith("text/") || /^application\/(json|xml|csv|x-ndjson)\b/.test(mime);
+}
+
+exportsV1Router.get(
+  "/files/:id/content",
+  requireScope("file", "read"),
+  describeRoute({
+    tags: ["v1"],
+    summary: "A respondent's uploaded file, inline",
+    description:
+      "The file's bytes in the JSON body under the same API key: UTF-8 text for text types, base64 otherwise. For a caller that cannot fetch `download_url`. Files over 4 MB answer 413; use `download_url` for those.",
+    responses: {
+      200: { description: "The file's bytes", content: { "application/json": { schema: resolver(FileContentView) } } },
+      404: { description: "File not found" },
+      413: { description: "Too large to return inline" },
+    },
+  }),
+  async (c) => {
+    const orgId = c.get("orgId")!;
+    const row = await c.env.DB.prepare(
+      `SELECT id, form_id, filename, mime, size_bytes, r2_key FROM files
+        WHERE id = ? AND organization_id = ? AND status = 'confirmed'`,
+    )
+      .bind(c.req.param("id"), orgId)
+      .first<{ id: string; form_id: string | null; filename: string; mime: string; size_bytes: number; r2_key: string }>();
+    if (!row || (row.form_id && !keyOwnsForm(c, row.form_id))) {
+      return c.json({ error: { code: "not_found", message: "File not found" } }, 404);
+    }
+    if (row.size_bytes > FILE_CONTENT_MAX_BYTES) {
+      return c.json({ error: { code: "file_too_large", message: "Too large to return inline; use download_url from GET /v1/files/{id}" } }, 413);
+    }
+    const obj = await c.env.R2.get(row.r2_key);
+    if (!obj) return c.json({ error: { code: "not_found", message: "File not found" } }, 404);
+    const bytes = new Uint8Array(await obj.arrayBuffer());
+    const text = isTextMime(row.mime);
+    let data: string;
+    if (text) {
+      data = new TextDecoder().decode(bytes);
+    } else {
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      data = btoa(binary);
+    }
+    return c.json({
+      id: row.id,
+      object: "file_content" as const,
+      filename: row.filename,
+      mime: row.mime,
+      size_bytes: row.size_bytes,
+      encoding: text ? ("utf8" as const) : ("base64" as const),
+      data,
     });
   },
 );

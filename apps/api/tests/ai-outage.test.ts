@@ -134,6 +134,19 @@ describe("classifyAiError", () => {
     expect(classifyAiError(Object.assign(new Error("t"), { name: "TimeoutError" })).code).toBe("timeout");
     expect(classifyAiError("weird").code).toBe("unknown");
   });
+
+  it("reads an error OpenRouter sends mid-stream, which is a plain object", () => {
+    // The stream's `error` part: no `Error`, no `status`, the code in `code`.
+    expect(classifyAiError({ code: 402, message: "Insufficient credits" })).toEqual({
+      code: "credits_exhausted",
+      message: "Insufficient credits",
+    });
+    expect(classifyAiError({ error: { code: 429, message: "Rate limited" } })).toEqual({
+      code: "rate_limited",
+      message: "Rate limited",
+    });
+    expect(classifyAiError({ reason: "x" }).message).toBe('{"reason":"x"}');
+  });
 });
 
 describe("Agentic form, AI out of credits", () => {

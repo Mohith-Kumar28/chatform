@@ -1,5 +1,6 @@
 import { displayAnswer, type Block } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
+import { parseUserAgent } from "./respondent-context.js";
 
 /**
  * The per-form aggregate, shared by the dashboard and the developer API.
@@ -70,6 +71,19 @@ export interface AnalyticsAggregate {
   starts: number;
   completed: number;
   abandoned: number;
+  /**
+   * Started and neither finished nor abandoned yet: a conversation still open,
+   * or one the abandon sweep has not reached. With `completed` and `abandoned`
+   * it adds up to `starts`.
+   */
+  inProgress: number;
+  /**
+   * Of `starts`, how many recorded where and on what they were filled in
+   * (`meta.context`, from 2026-09-26). Referrer, campaign, language and
+   * `byWeekHour` only count these, so a form whose traffic is older shows them
+   * empty: not tracked then, rather than nobody.
+   */
+  startsWithContext: number;
   avgDurationMs: number;
   medianDurationMs: number;
   /** 0–100. */
@@ -155,6 +169,33 @@ function segments(res: D1Result<SegmentRow>): Segment[] {
   return (res.results ?? []).map((r) => ({ label: String(r.label), count: r.n, completed: r.done ?? 0 }));
 }
 
+type LegacyRow = { ua: string; source: string; n: number; done: number | null };
+
+/**
+ * A breakdown with the responses that predate `meta.context` folded in.
+ *
+ * `label` reads the one field this breakdown is about off a legacy row, the
+ * same way `readRespondentContext` does for a single response; null leaves the
+ * row out, as the SQL leaves out a context that lacks the field. Re-ranked and
+ * capped at eight afterwards, like the query it extends.
+ */
+function withLegacy<R extends { n: number; done: number | null }>(
+  base: Segment[],
+  legacy: R[],
+  label: (row: R) => string | null,
+): Segment[] {
+  const merged = new Map(base.map((s) => [s.label, { ...s }]));
+  for (const row of legacy) {
+    const key = label(row);
+    if (!key) continue;
+    const cur = merged.get(key) ?? { label: key, count: 0, completed: 0 };
+    cur.count += row.n;
+    cur.completed += row.done ?? 0;
+    merged.set(key, cur);
+  }
+  return [...merged.values()].sort((a, z) => z.count - a.count).slice(0, 8);
+}
+
 /** UTC weekday × hour per zone, folded onto each zone's local clock. Monday is row 0. */
 function weekHour(rows: { tz: string; dow: number; hour: number; n: number }[]): number[][] {
   const grid = Array.from({ length: 7 }, () => Array<number>(24).fill(0));
@@ -232,7 +273,7 @@ export async function computeAnalytics(
   const nonTextTypes = [...groupedTypes, ...NUMERIC_TYPES, ...PASSIVE_TYPES];
   const holes = (n: number) => Array.from({ length: n }, () => "?").join(",");
 
-  const [formRes, countsRes, answeredRes, groupedRes, numericRes, textsRes, dailyRes, viewRes, sourceRes, countryRes, deviceRes, bucketRes, medianRes, viewsRes, placesRes, browserRes, osRes, channelRes, referrerRes, campaignRes, deviceTypeRes, languageRes, weekHourRes, aiReasonRes, aiSessionsRes] =
+  const [formRes, countsRes, answeredRes, groupedRes, numericRes, textsRes, dailyRes, viewRes, sourceRes, countryRes, deviceRes, bucketRes, medianRes, viewsRes, placesRes, browserRes, osRes, channelRes, referrerRes, campaignRes, deviceTypeRes, languageRes, weekHourRes, aiReasonRes, aiSessionsRes, legacyRes] =
     (await env.DB.batch([
       /**
        * The published document, falling back to the draft only when nothing has
@@ -248,6 +289,8 @@ export async function computeAnalytics(
         `SELECT COUNT(*) AS starts,
                 SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
                 SUM(CASE WHEN status = 'abandoned' THEN 1 ELSE 0 END) AS abandoned,
+                SUM(CASE WHEN status NOT IN ('completed', 'abandoned') THEN 1 ELSE 0 END) AS in_progress,
+                SUM(CASE WHEN json_extract(meta, '$.context') IS NOT NULL THEN 1 ELSE 0 END) AS with_context,
                 AVG(duration_ms) AS avg_duration
            FROM submissions WHERE ${where}`,
       ).bind(...binds),
@@ -399,11 +442,25 @@ export async function computeAnalytics(
            FROM ai_generations
           WHERE form_id = ? AND status = 'error' AND created_at >= ?`,
       ).bind(formId, since),
+      /*
+        Responses from before `meta.context` was recorded (2026-09-26) carry
+        only the raw user agent and the source column. That is still enough for
+        browser, OS, device type and channel, so those four breakdowns are not
+        empty for every form whose traffic predates it. One row per distinct
+        user agent and source, parsed in JS: SQLite cannot read a user agent.
+      */
+      env.DB.prepare(
+        `SELECT json_extract(meta, '$.userAgent') AS ua, source, COUNT(*) AS n,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS done
+           FROM submissions
+          WHERE ${where} AND json_extract(meta, '$.context') IS NULL AND json_extract(meta, '$.userAgent') IS NOT NULL
+          GROUP BY ua, source`,
+      ).bind(...binds),
       // Typed as a tuple because `batch()` returns a positional array: the names
       // above are the only thing keeping a statement matched to its shape.
     ])) as [
       D1Result<{ schema_json: string }>,
-      D1Result<{ starts: number; completed: number | null; abandoned: number | null; avg_duration: number | null }>,
+      D1Result<{ starts: number; completed: number | null; abandoned: number | null; in_progress: number | null; with_context: number | null; avg_duration: number | null }>,
       D1Result<{ block_ref: string; answered: number }>,
       D1Result<{ block_ref: string; value_json: string; n: number }>,
       D1Result<{ block_ref: string; v: number; n: number }>,
@@ -427,6 +484,7 @@ export async function computeAnalytics(
       D1Result<{ tz: string; dow: number; hour: number; n: number }>,
       D1Result<{ code: string; n: number }>,
       D1Result<{ n: number }>,
+      D1Result<LegacyRow>,
     ];
 
   const form = (formRes.results ?? [])[0];
@@ -674,12 +732,15 @@ export async function computeAnalytics(
   const bucketRow = (bucketRes.results ?? [])[0];
   const medianRow = (medianRes.results ?? [])[0];
   const views = (viewsRes.results ?? [])[0];
+  const legacy = (legacyRes.results ?? []).map((r) => ({ ...r, device: parseUserAgent(r.ua) }));
 
   return {
     views: views?.v ?? starts,
     starts,
     completed,
     abandoned: counts?.abandoned ?? 0,
+    inProgress: counts?.in_progress ?? 0,
+    startsWithContext: counts?.with_context ?? 0,
     avgDurationMs: Math.round(counts?.avg_duration ?? 0),
     medianDurationMs: medianRow?.duration_ms ?? 0,
     completionRate: starts > 0 ? Math.round((completed / starts) * 100) : 0,
@@ -701,12 +762,13 @@ export async function computeAnalytics(
       count: r.n,
       completed: r.done ?? 0,
     })),
-    byBrowser: segments(browserRes),
-    byOs: segments(osRes),
-    byChannel: segments(channelRes),
+    byBrowser: withLegacy(segments(browserRes), legacy, (r) => r.device.browser),
+    byOs: withLegacy(segments(osRes), legacy, (r) => r.device.os),
+    // What `readRespondentContext` infers for an older response: its source column is all there is.
+    byChannel: withLegacy(segments(channelRes), legacy, (r) => (r.source === "api" ? "api" : r.source === "embed" ? "embed" : "link")),
     byReferrer: segments(referrerRes),
     byCampaign: segments(campaignRes),
-    byDeviceType: segments(deviceTypeRes),
+    byDeviceType: withLegacy(segments(deviceTypeRes), legacy, (r) => r.device.type),
     byLanguage: segments(languageRes),
     byWeekHour: weekHour(weekHourRes.results ?? []),
     aiFallbacks: {

@@ -303,3 +303,70 @@ describe("formula injection", () => {
     expect(csv).not.toContain("\"=IMPORTXML(");
   });
 });
+
+describe("reading an export without its download link", () => {
+  it("returns the file in slices that join back into the exact bytes", async () => {
+    const created = await (await post(`/v1/forms/${t.formId}/exports`, { format: "json" })).json() as { id: string };
+    await runExport(env as never, created.id);
+    const view = await (await fetchApi(`/v1/exports/${created.id}`, { headers: { "x-api-key": key } })).json() as { download_url: string };
+    const u = new URL(view.download_url);
+    const whole = await (await fetchApi(u.pathname + u.search)).text();
+
+    // The smallest slice the route allows, so a two-row export needs several reads.
+    let joined = "";
+    let offset: number | null = 0;
+    let reads = 0;
+    while (offset !== null && reads < 50) {
+      const res = await fetchApi(`/v1/exports/${created.id}/content?offset=${offset}&max_bytes=1000`, { headers: { "x-api-key": key } });
+      expect(res.status).toBe(200);
+      const slice = await res.json() as { content: string; next_offset: number | null; total_bytes: number };
+      expect(slice.total_bytes).toBe(new TextEncoder().encode(whole).byteLength);
+      joined += slice.content;
+      offset = slice.next_offset;
+      reads++;
+    }
+    expect(joined).toBe(whole);
+  });
+
+  it("409s an export that is still queued", async () => {
+    const created = await (await post(`/v1/forms/${t.formId}/exports`)).json() as { id: string };
+    const res = await fetchApi(`/v1/exports/${created.id}/content`, { headers: { "x-api-key": key } });
+    expect(res.status).toBe(409);
+  });
+
+  it("refuses a key without response:export", async () => {
+    const created = await (await post(`/v1/forms/${t.formId}/exports`)).json() as { id: string };
+    const res = await fetchApi(`/v1/exports/${created.id}/content`, { headers: { "x-api-key": noScopeKey } });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("reading a file without its download link", () => {
+  it("returns text inline and anything else as base64", async () => {
+    const now = Date.now();
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    await env.R2.put(`uploads/${t.orgId}/inline/a.txt`, "plain words");
+    await env.R2.put(`uploads/${t.orgId}/inline/b.png`, png);
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO files (id, organization_id, form_id, uploaded_by, r2_key, filename, mime, size_bytes, status, created_at, confirmed_at)
+         VALUES ('file_xpin_txt', ?1, ?2, 'respondent', ?3, 'a.txt', 'text/plain', 11, 'confirmed', ?4, ?4)`,
+      ).bind(t.orgId, t.formId, `uploads/${t.orgId}/inline/a.txt`, now),
+      env.DB.prepare(
+        `INSERT INTO files (id, organization_id, form_id, uploaded_by, r2_key, filename, mime, size_bytes, status, created_at, confirmed_at)
+         VALUES ('file_xpin_png', ?1, ?2, 'respondent', ?3, 'b.png', 'image/png', 8, 'confirmed', ?4, ?4)`,
+      ).bind(t.orgId, t.formId, `uploads/${t.orgId}/inline/b.png`, now),
+    ]);
+
+    const text = await (await fetchApi(`/v1/files/file_xpin_txt/content`, { headers: { "x-api-key": key } })).json() as { encoding: string; data: string };
+    expect(text).toMatchObject({ encoding: "utf8", data: "plain words" });
+
+    const image = await (await fetchApi(`/v1/files/file_xpin_png/content`, { headers: { "x-api-key": key } })).json() as { encoding: string; data: string };
+    expect(image.encoding).toBe("base64");
+    expect(Uint8Array.from(atob(image.data), (ch) => ch.charCodeAt(0))).toEqual(png);
+  });
+
+  it("404s a file belonging to another organization", async () => {
+    expect((await fetchApi(`/v1/files/file_xpother/content`, { headers: { "x-api-key": key } })).status).toBe(404);
+  });
+});

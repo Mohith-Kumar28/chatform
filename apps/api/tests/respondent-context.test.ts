@@ -173,9 +173,17 @@ describe("the dashboard sees it", () => {
     expect(body.places).toEqual([
       { country: "GB", region: "England", city: "London", lat: 51.5, lon: -0.1, count: 2, completed: 2 },
     ]);
-    expect(body.byChannel).toEqual([{ label: "popup", count: 2, completed: 2 }]);
+    // The response with no context still counts where its user agent and source can say:
+    // a chat response is a direct link, and the agent names an iPhone's Safari.
+    expect(body.byChannel).toEqual([
+      { label: "popup", count: 2, completed: 2 },
+      { label: "link", count: 1, completed: 1 },
+    ]);
     expect(body.byReferrer).toEqual([{ label: "linkedin.com", count: 2, completed: 2 }]);
-    expect(body.byBrowser).toEqual([{ label: "Chrome", count: 2, completed: 2 }]);
+    expect(body.byBrowser).toEqual([
+      { label: "Chrome", count: 2, completed: 2 },
+      { label: "Safari", count: 1, completed: 1 },
+    ]);
   });
 
   it("breaks responses down by device, language and the hour they started", async () => {
@@ -185,7 +193,10 @@ describe("the dashboard sees it", () => {
       byLanguage: Array<{ label: string; count: number; completed: number }>;
       byWeekHour: number[][];
     }>();
-    expect(body.byDeviceType).toEqual([{ label: "desktop", count: 2, completed: 2 }]);
+    expect(body.byDeviceType).toEqual([
+      { label: "desktop", count: 2, completed: 2 },
+      { label: "mobile", count: 1, completed: 1 },
+    ]);
     // en-GB folds into en: one language to translate into, not two.
     expect(body.byLanguage).toEqual([{ label: "en", count: 2, completed: 2 }]);
     expect(body.byWeekHour).toHaveLength(7);

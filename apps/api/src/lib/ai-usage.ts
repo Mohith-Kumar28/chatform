@@ -102,6 +102,7 @@ export async function logAiGeneration(
       )
       .run();
   } catch (err) {
-    console.error("ai_generation_log_failed", row.kind, err);
+    // Flattened: Workers Logs serialise an Error object to `{}`.
+    console.error("ai_generation_log_failed", { kind: row.kind, err: String(err) });
   }
 }

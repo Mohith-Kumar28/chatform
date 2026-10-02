@@ -85,7 +85,7 @@ them as-is.
 | --- | --- |
 | `invalid_request` | The body or query did not match the schema; `issues` names each field |
 | `malformed_json` | A JSON content type with a body that is not JSON, including an empty one |
-| `not_published` | The form exists but has no published version; read the draft with `?view=document` |
+| `not_published` | The form exists but is not live: it takes no responses until published, and its draft reads with `?view=document` |
 
 ## Flow errors
 
@@ -96,6 +96,8 @@ them as-is.
 | `unknown_block` | No question with that `ref` |
 | `incomplete` | Required questions are unanswered; `issues` names them |
 | `response_not_open` | Already completed or abandoned |
+| `export_not_ready` | The export is still queued or running; read it again shortly |
+| `file_too_large` | Over 4 MB, too large to return inline; use `download_url` |
 
 ## Key errors
 

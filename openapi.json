@@ -18928,6 +18928,16 @@
               }
             }
           },
+          "409": {
+            "description": "The form is not live",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
           "422": {
             "description": "An answer was rejected, or required questions are unanswered",
             "content": {
@@ -24019,7 +24029,8 @@
                             "type": "string"
                           },
                           "published": {
-                            "type": "boolean"
+                            "type": "boolean",
+                            "description": "Whether the form is live and taking responses"
                           },
                           "created_at": {
                             "type": "number"
@@ -24134,7 +24145,8 @@
                       "type": "string"
                     },
                     "published": {
-                      "type": "boolean"
+                      "type": "boolean",
+                      "description": "Whether the form is live and taking responses"
                     },
                     "created_at": {
                       "type": "number"
@@ -25025,6 +25037,12 @@
                     "abandoned": {
                       "type": "number"
                     },
+                    "inProgress": {
+                      "type": "number"
+                    },
+                    "startsWithContext": {
+                      "type": "number"
+                    },
                     "avgDurationMs": {
                       "type": "number"
                     },
@@ -25592,6 +25610,7 @@
                     "starts",
                     "completed",
                     "abandoned",
+                    "inProgress",
                     "avgDurationMs",
                     "medianDurationMs",
                     "completionRate",
@@ -26669,7 +26688,8 @@
                       "type": "string"
                     },
                     "published": {
-                      "type": "boolean"
+                      "type": "boolean",
+                      "description": "Whether the form is live and taking responses"
                     },
                     "created_at": {
                       "type": "number"
@@ -32336,6 +32356,131 @@
         ]
       }
     },
+    "/v1/exports/{id}/content": {
+      "get": {
+        "operationId": "getV1ExportsByIdContent",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_bytes",
+            "schema": {
+              "default": 200000,
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 200000
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "tags": [
+          "v1"
+        ],
+        "summary": "Read a ready export's contents",
+        "description": "The export's text, a slice at a time, under the same API key, for a caller that cannot fetch `download_url` (an agent sandbox that only reaches allow-listed hosts, say). Read from `offset` 0 and pass `next_offset` back until it is null; the slices join into the exact file.",
+        "responses": {
+          "200": {
+            "description": "A slice of the export",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "const": "export_content"
+                    },
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "csv",
+                        "json"
+                      ]
+                    },
+                    "offset": {
+                      "type": "number"
+                    },
+                    "next_offset": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "total_bytes": {
+                      "type": "number"
+                    },
+                    "content": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "object",
+                    "format",
+                    "offset",
+                    "next_offset",
+                    "total_bytes",
+                    "content"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Export not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The export is not ready yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "response:export",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
     "/v1/exports": {
       "get": {
         "operationId": "getV1Exports",
@@ -32608,6 +32753,104 @@
           },
           "404": {
             "description": "File not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-required-scope": "file:read",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/files/{id}/content": {
+      "get": {
+        "operationId": "getV1FilesByIdContent",
+        "tags": [
+          "v1"
+        ],
+        "summary": "A respondent's uploaded file, inline",
+        "description": "The file's bytes in the JSON body under the same API key: UTF-8 text for text types, base64 otherwise. For a caller that cannot fetch `download_url`. Files over 4 MB answer 413; use `download_url` for those.",
+        "responses": {
+          "200": {
+            "description": "The file's bytes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "const": "file_content"
+                    },
+                    "filename": {
+                      "type": "string"
+                    },
+                    "mime": {
+                      "type": "string"
+                    },
+                    "size_bytes": {
+                      "type": "number"
+                    },
+                    "encoding": {
+                      "type": "string",
+                      "enum": [
+                        "utf8",
+                        "base64"
+                      ]
+                    },
+                    "data": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "object",
+                    "filename",
+                    "mime",
+                    "size_bytes",
+                    "encoding",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "File not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Too large to return inline",
             "content": {
               "application/json": {
                 "schema": {

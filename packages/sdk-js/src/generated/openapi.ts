@@ -219,6 +219,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/exports/{id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a ready export's contents
+         * @description The export's text, a slice at a time, under the same API key, for a caller that cannot fetch `download_url` (an agent sandbox that only reaches allow-listed hosts, say). Read from `offset` 0 and pass `next_offset` back until it is null; the slices join into the exact file.
+         */
+        get: operations["getV1ExportsByIdContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/files/{id}": {
         parameters: {
             query?: never;
@@ -231,6 +251,26 @@ export interface paths {
          * @description File-upload answers carry a `fileId`. This resolves one to its metadata and a signed URL that needs no API key, so it is safe to hand to a browser and it expires within minutes.
          */
         get: operations["getV1FilesById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/files/{id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A respondent's uploaded file, inline
+         * @description The file's bytes in the JSON body under the same API key: UTF-8 text for text types, base64 otherwise. For a caller that cannot fetch `download_url`. Files over 4 MB answer 413; use `download_url` for those.
+         */
+        get: operations["getV1FilesByIdContent"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2084,6 +2124,59 @@ export interface operations {
             };
         };
     };
+    getV1ExportsByIdContent: {
+        parameters: {
+            query?: {
+                max_bytes?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A slice of the export */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        content: string;
+                        /** @enum {string} */
+                        format: "csv" | "json";
+                        id: string;
+                        next_offset: number | null;
+                        /** @constant */
+                        object: "export_content";
+                        offset: number;
+                        total_bytes: number;
+                    };
+                };
+            };
+            /** @description Export not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The export is not ready yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     getV1FilesById: {
         parameters: {
             query?: never;
@@ -2127,6 +2220,56 @@ export interface operations {
             };
         };
     };
+    getV1FilesByIdContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file's bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: string;
+                        /** @enum {string} */
+                        encoding: "utf8" | "base64";
+                        filename: string;
+                        id: string;
+                        mime: string;
+                        /** @constant */
+                        object: "file_content";
+                        size_bytes: number;
+                    };
+                };
+            };
+            /** @description File not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Too large to return inline */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     getV1Forms: {
         parameters: {
             query?: {
@@ -2150,6 +2293,7 @@ export interface operations {
                         data: {
                             created_at: number;
                             id: string;
+                            /** @description Whether the form is live and taking responses */
                             published: boolean;
                             slug: string;
                             status: string;
@@ -2197,6 +2341,7 @@ export interface operations {
                     "application/json": {
                         created_at: number;
                         id: string;
+                        /** @description Whether the form is live and taking responses */
                         published: boolean;
                         slug: string;
                         status: string;
@@ -2460,6 +2605,7 @@ export interface operations {
                             count: number;
                             label: string;
                         }[];
+                        inProgress: number;
                         locked?: string[];
                         medianDurationMs: number;
                         perBlock: {
@@ -2480,6 +2626,7 @@ export interface operations {
                             region: string | null;
                         }[];
                         starts: number;
+                        startsWithContext?: number;
                         views: number;
                     } & {
                         [key: string]: unknown;
@@ -3733,6 +3880,15 @@ export interface operations {
             };
             /** @description Form not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description The form is not live */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7101,6 +7257,7 @@ export interface operations {
                     "application/json": {
                         created_at: number;
                         id: string;
+                        /** @description Whether the form is live and taking responses */
                         published: boolean;
                         slug: string;
                         status: string;

@@ -326,17 +326,30 @@ export function registerReadTools(server: McpServer, ctx: () => McpCtx): void {
   server.registerTool(
     "get_file",
     {
-      title: "Resolve an uploaded file",
+      title: "Read an uploaded file",
       description:
-        "Resolve the fileId from a file-upload answer to its filename, type, size and a short-lived download " +
-        "URL. The URL needs no API key and expires within minutes, so read this again rather than reusing one.",
+        "Resolve the fileId from a file-upload answer to its filename, type and size, and read it: images come " +
+        "back as images, text files (CSV, JSON, plain text) as text. Other types and files over 4 MB return a " +
+        "short-lived download_url instead, which needs no API key but expires within minutes.",
       inputSchema: { file_id: z.string().describe("The fileId from a file-upload answer.") },
       annotations: READ_ONLY,
     },
     async ({ file_id }) => {
-      const res = await callApi(ctx(), "GET", `/v1/files/${encodeURIComponent(file_id)}`);
+      const id = encodeURIComponent(file_id);
+      const res = await callApi(ctx(), "GET", `/v1/files/${id}`);
       if (res.status !== 200) return errorResult(describeFailure(res));
-      return jsonResult(res.body);
+      const meta = res.body as { mime?: string; size_bytes?: number };
+      const mime = meta.mime ?? "";
+      const readable = mime.startsWith("image/") || mime.startsWith("text/") || /^application\/(json|xml|csv|x-ndjson)\b/.test(mime);
+      if (!readable || (meta.size_bytes ?? 0) > 4_000_000) return jsonResult(res.body);
+      const content = await callApi(ctx(), "GET", `/v1/files/${id}/content`);
+      if (content.status !== 200) return jsonResult(res.body);
+      const file = content.body as { encoding: string; data: string };
+      const described = jsonResult(res.body).content;
+      if (file.encoding === "base64" && mime.startsWith("image/")) {
+        return { content: [...described, { type: "image" as const, data: file.data, mimeType: mime }] };
+      }
+      return { content: [...described, { type: "text" as const, text: file.data }] };
     },
   );
 

@@ -31,6 +31,7 @@ export interface Export {
 
 /** What the API sends. `Export` is the same object in camelCase. */
 type ExportWire = Res<"/v1/exports/{id}", "get">;
+type ExportContentWire = Res<"/v1/exports/{id}/content", "get">;
 
 function toExport(w: ExportWire): Export {
   return {
@@ -79,6 +80,26 @@ export class Exports {
 
   async get(exportId: string, request?: RequestOptions): Promise<Export> {
     return toExport(await this.http.get<ExportWire>(`/v1/exports/${exportId}`, undefined, request));
+  }
+
+  /**
+   * A ready export's text, read through the API with the key rather than via
+   * `downloadUrl`. Pages through the slices and joins them, so the result is
+   * the exact file.
+   */
+  async content(exportId: string, request?: RequestOptions): Promise<string> {
+    let text = "";
+    let offset: number | null = 0;
+    while (offset !== null) {
+      const slice: ExportContentWire = await this.http.get<ExportContentWire>(
+        `/v1/exports/${exportId}/content`,
+        { offset },
+        request,
+      );
+      text += slice.content;
+      offset = slice.next_offset;
+    }
+    return text;
   }
 
   async list(options: { formId?: string; limit?: number } = {}, request?: RequestOptions): Promise<Export[]> {

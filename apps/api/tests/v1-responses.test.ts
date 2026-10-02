@@ -410,3 +410,36 @@ describe("tenancy", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("a form that is no longer live", () => {
+  it("still lists and reads what it collected, and says why it takes no more", async () => {
+    const { id } = (await (
+      await api(`/v1/forms/${t.formId}/responses`, { method: "POST", body: "{}" })
+    ).json()) as { id: string };
+
+    // What restoring from the Archive leaves behind: a draft whose version is still attached.
+    await env.DB.prepare(`UPDATE forms SET status = 'draft' WHERE id = ?`).bind(t.formId).run();
+    try {
+      const list = await api(`/v1/forms/${t.formId}/responses?status=all`);
+      expect(list.status).toBe(200);
+      const page = (await list.json()) as { data: { id: string }[] };
+      expect(page.data.map((r) => r.id)).toContain(id);
+
+      expect((await api(`/v1/responses/${id}`)).status).toBe(200);
+
+      const forms = (await (await api(`/v1/forms`)).json()) as { data: { id: string; status: string; published: boolean }[] };
+      expect(forms.data.find((f) => f.id === t.formId)).toMatchObject({ status: "draft", published: false });
+
+      const create = await api(`/v1/forms/${t.formId}/responses`, { method: "POST", body: "{}" });
+      expect(create.status).toBe(409);
+      expect(((await create.json()) as { error: { code: string } }).error.code).toBe("not_published");
+    } finally {
+      await env.DB.prepare(`UPDATE forms SET status = 'published' WHERE id = ?`).bind(t.formId).run();
+    }
+  });
+
+  it("still 404s a form id that does not exist", async () => {
+    expect((await api(`/v1/forms/frm_nosuchform/responses`)).status).toBe(404);
+    expect((await api(`/v1/forms/frm_nosuchform/responses`, { method: "POST", body: "{}" })).status).toBe(404);
+  });
+});

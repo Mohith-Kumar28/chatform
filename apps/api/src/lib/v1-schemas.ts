@@ -318,7 +318,7 @@ export const FormSummaryView = z.object({
   title: z.string(),
   slug: z.string(),
   status: z.string(),
-  published: z.boolean(),
+  published: z.boolean().describe("Whether the form is live and taking responses"),
   created_at: z.number(),
   updated_at: z.number(),
 });
@@ -429,6 +429,10 @@ export const AnalyticsView = z
     starts: z.number(),
     completed: z.number(),
     abandoned: z.number(),
+    /** Started and not yet completed or abandoned; with the two above it adds up to `starts`. */
+    inProgress: z.number(),
+    /** Of `starts`, how many recorded referrer, campaign, language and timezone (tracked from 2026-09-26). */
+    startsWithContext: z.number().optional(),
     avgDurationMs: z.number(),
     medianDurationMs: z.number(),
     completionRate: z.number(),

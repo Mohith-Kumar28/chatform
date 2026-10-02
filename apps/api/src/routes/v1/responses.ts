@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { NextQuestionView, Paged, ResponseView } from "../../lib/v1-schemas.js";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../../lib/validator.js";
@@ -90,6 +90,49 @@ async function loadPublishedForm(
     // one surface serving un-migrated shapes.
     doc: readFormDoc(JSON.parse(row.schema_json)),
   };
+}
+
+/**
+ * The form behind responses that already exist, live or not.
+ *
+ * Collecting needs a published form; reading what was collected does not. A
+ * form restored from the Archive comes back as a draft with its version still
+ * attached, and an owner who takes a form down still owns every answer it got,
+ * so gating reads on `status = 'published'` turned both into "Form not found".
+ */
+async function loadReadableForm(
+  env: Bindings,
+  formId: string,
+  orgId: string,
+): Promise<FormContext | null> {
+  const row = await env.DB.prepare(
+    `SELECT f.id, f.organization_id, f.working_schema, fv.id AS version_id, fv.schema_json
+       FROM forms f LEFT JOIN form_versions fv ON fv.id = f.active_version_id
+      WHERE f.id = ? AND f.organization_id = ? AND f.deleted_at IS NULL`,
+  )
+    .bind(formId, orgId)
+    .first<{ id: string; organization_id: string; working_schema: string; version_id: string | null; schema_json: string | null }>();
+  if (!row) return null;
+  return {
+    formId: row.id,
+    versionId: row.version_id ?? "",
+    organizationId: row.organization_id,
+    doc: readFormDoc(JSON.parse(row.schema_json ?? row.working_schema)),
+  };
+}
+
+/**
+ * Why a published-only lookup came back empty: no such form (404), or a form
+ * that exists but is not taking responses (409). Collapsing both into "Form not
+ * found" sent callers holding a valid id off looking for a typo.
+ */
+async function formUnavailable(c: Context<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>, formId: string, orgId: string) {
+  const exists = await loadReadableForm(c.env, formId, orgId);
+  if (!exists) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+  return c.json(
+    { error: { code: "not_published", message: "This form is not live, so it is not taking responses. Publish it first." } },
+    409,
+  );
 }
 
 interface ResponseRow {
@@ -351,6 +394,7 @@ responsesRouter.post(
     responses: {
       201: { description: "Response", content: { "application/json": { schema: resolver(ResponseView) } } },
       404: { description: "Form not found" },
+      409: { description: "The form is not live" },
       422: { description: "An answer was rejected, or required questions are unanswered" },
     },
   }),
@@ -358,7 +402,7 @@ responsesRouter.post(
     const orgId = c.get("orgId")!;
     const body = c.req.valid("json");
     const form = await loadPublishedForm(c.env, c.req.param("id"), orgId);
-    if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    if (!form) return formUnavailable(c, c.req.param("id"), orgId);
 
     const isTest = c.get("environment") === "test";
     const startedAt = Date.now();
@@ -480,7 +524,7 @@ responsesRouter.post(
     }
 
     const form = await loadPublishedForm(c.env, row.form_id, orgId);
-    if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    if (!form) return formUnavailable(c, row.form_id, orgId);
 
     const hidden = jsonOr<Record<string, string>>(row.hidden_fields, {});
     const existing = await loadAnswers(c.env, row.id);
@@ -550,7 +594,7 @@ responsesRouter.delete(
       return c.json({ error: { code: "response_not_open", message: `This response is ${row.status}` } }, 409);
     }
     const form = await loadPublishedForm(c.env, row.form_id, orgId);
-    if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    if (!form) return formUnavailable(c, row.form_id, orgId);
 
     // Later answers are kept, matching the conversation's `edit` action: one of
     // them may still be valid, and re-asking everything is a worse experience
@@ -586,7 +630,7 @@ responsesRouter.post(
       return c.json({ error: { code: "response_not_open", message: `This response is ${row.status}` } }, 409);
     }
     const form = await loadPublishedForm(c.env, row.form_id, orgId);
-    if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    if (!form) return formUnavailable(c, row.form_id, orgId);
 
     const hidden = jsonOr<Record<string, string>>(row.hidden_fields, {});
     const answers = await loadAnswers(c.env, row.id);
@@ -672,7 +716,7 @@ responsesRouter.post(
     if (row.status !== "in_progress") {
       return c.json({ error: { code: "response_not_open", message: `This response is ${row.status}` } }, 409);
     }
-    const form = await loadPublishedForm(c.env, row.form_id, orgId);
+    const form = await loadReadableForm(c.env, row.form_id, orgId);
     if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
 
     const hidden = jsonOr<Record<string, string>>(row.hidden_fields, {});
@@ -723,7 +767,7 @@ responsesRouter.get(
     const orgId = c.get("orgId")!;
     const row = await loadResponse(c.env, c.req.param("id"), orgId);
     if (!row) return c.json({ error: { code: "not_found", message: "Response not found" } }, 404);
-    const form = await loadPublishedForm(c.env, row.form_id, orgId);
+    const form = await loadReadableForm(c.env, row.form_id, orgId);
     if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
 
     const answers = await loadAnswers(c.env, row.id);
@@ -748,7 +792,7 @@ responsesRouter.get(
     const orgId = c.get("orgId")!;
     const row = await loadResponse(c.env, c.req.param("id"), orgId);
     if (!row) return c.json({ error: { code: "not_found", message: "Response not found" } }, 404);
-    const form = await loadPublishedForm(c.env, row.form_id, orgId);
+    const form = await loadReadableForm(c.env, row.form_id, orgId);
     if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
 
     const hidden = jsonOr<Record<string, string>>(row.hidden_fields, {});
@@ -800,7 +844,7 @@ responsesRouter.get(
   async (c) => {
     const orgId = c.get("orgId")!;
     const q = c.req.valid("query");
-    const form = await loadPublishedForm(c.env, c.req.param("id"), orgId);
+    const form = await loadReadableForm(c.env, c.req.param("id"), orgId);
     if (!form) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
 
     /**

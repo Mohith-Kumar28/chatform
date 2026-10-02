@@ -108,7 +108,10 @@ formsV1Router.get(
         title: f.title,
         slug: f.slug,
         status: f.status,
-        published: f.active_version_id !== null,
+        // Live right now, so it never disagrees with `status`. A form restored
+        // from the Archive keeps its version but comes back a draft, and
+        // "draft" beside `published: true` read as a contradiction to callers.
+        published: f.status === "published" && f.active_version_id !== null,
         created_at: f.created_at,
         updated_at: f.updated_at,
       })),
@@ -596,12 +599,13 @@ formsV1Router.get(
      */
     const ent = await entitlementsFor(c as never);
     if (!ent.features.advanced_analytics) {
-      const { views, starts, completed, abandoned, avgDurationMs, completionRate, aiFallbacks } = aggregate;
+      const { views, starts, completed, abandoned, inProgress, avgDurationMs, completionRate, aiFallbacks } = aggregate;
       return c.json({
         views,
         starts,
         completed,
         abandoned,
+        inProgress,
         avgDurationMs,
         completionRate,
         aiFallbacks,

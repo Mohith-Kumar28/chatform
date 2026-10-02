@@ -243,8 +243,8 @@ server you have connected.
 | `submit_response` | `response:write` | Record a response — for imports, or answering on someone's behalf |
 | `get_form_analytics` | `analytics:read` | Views, completion rate, per-question funnel, distributions |
 | `export_responses` | `response:export` | Start a CSV or JSON export |
-| `check_export` | `response:export` | Poll an export and get its download link |
-| `get_file` | `file:read` | Resolve a file-upload answer's `fileId` to a name and a download link |
+| `check_export` | `response:export` | Poll an export; once ready it returns the rows inline, a slice at a time |
+| `get_file` | `file:read` | Read a file-upload answer: images and text files come back inline, others as a download link |
 | `create_spreadsheet_feed` | `response:export` | A live CSV URL Sheets or Excel can re-read on a schedule |
 
 ### Webhooks
@@ -341,8 +341,10 @@ withheld, so an assistant will not report an empty funnel as "no data".
   through `list_responses` with answers included and read them.
 - **Results are paginated small** — ten rows by default — and long answers are
   truncated with a `truncated` flag rather than silently cut.
-- **Exports are never inlined.** `export_responses` returns an id; `check_export`
-  returns a short-lived signed link, re-minted on each read.
+- **Exports come back inline.** `export_responses` returns an id; once it is ready,
+  `check_export` returns the CSV or JSON Lines itself, up to 200 KB per call, with a
+  `next_offset` to read on. An assistant whose sandbox blocks `api.chatform.in`
+  never needs the download link.
 - **Keys pinned to specific forms** still are. A restricted key sees 404 for
   anything outside its list, through MCP as over HTTP.
 

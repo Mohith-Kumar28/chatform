@@ -676,3 +676,45 @@ describe("form settings", () => {
     expect(after.doc.blocks).toEqual(before.doc.blocks);
   });
 });
+
+describe("reading data a sandbox cannot download", () => {
+  it("check_export hands back the export's rows inline once it is ready", async () => {
+    const now = Date.now();
+    const body = '{"id":"sbm_a","answers":{"q":"one"}}\n{"id":"sbm_b","answers":{"q":"two"}}';
+    const r2Key = `exports/${t.orgId}/${t.formId}/exp_mcpinline.jsonl`;
+    await env.R2.put(r2Key, body);
+    await env.DB.prepare(
+      `INSERT INTO exports (id, organization_id, form_id, requested_by, actor_type, format, filters_json, status, created_at, expires_at, r2_key, row_count, bytes, completed_at)
+       VALUES ('exp_mcpinline', ?1, ?2, NULL, 'api_key', 'json', '{}', 'ready', ?3, ?4, ?5, 2, ?6, ?3)`,
+    )
+      .bind(t.orgId, t.formId, now, now + 86_400_000, r2Key, body.length)
+      .run();
+
+    const out = await callTool("check_export", { export_id: "exp_mcpinline" });
+    expect(out.isError).toBe(false);
+    const parsed = JSON.parse(out.text) as { status: string; content: string; next_offset: number | null };
+    expect(parsed.status).toBe("ready");
+    expect(parsed.content).toBe(body);
+    expect(parsed.next_offset).toBeNull();
+  });
+
+  it("get_file returns an uploaded image as an image", async () => {
+    const now = Date.now();
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const r2Key = `uploads/${t.orgId}/${t.formId}/mcp/pic.png`;
+    await env.R2.put(r2Key, png);
+    await env.DB.prepare(
+      `INSERT INTO files (id, organization_id, form_id, uploaded_by, r2_key, filename, mime, size_bytes, status, created_at, confirmed_at)
+       VALUES ('file_mcppic', ?1, ?2, 'respondent', ?3, 'pic.png', 'image/png', 8, 'confirmed', ?4, ?4)`,
+    )
+      .bind(t.orgId, t.formId, r2Key, now)
+      .run();
+
+    const res = await rpc("tools/call", { name: "get_file", arguments: { file_id: "file_mcppic" } });
+    const content = res.body?.result?.content as { type: string; mimeType?: string; data?: string }[];
+    expect(res.body?.result?.isError).not.toBe(true);
+    const image = content.find((c) => c.type === "image");
+    expect(image?.mimeType).toBe("image/png");
+    expect(image?.data).toBe(btoa(String.fromCharCode(...png)));
+  });
+});
