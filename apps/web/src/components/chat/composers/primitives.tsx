@@ -118,7 +118,7 @@ export function Chip({
       disabled={disabled}
       aria-pressed={selected}
       className={cn(
-        "group inline-flex items-center gap-1.5 rounded-[var(--cf-radius-control)] border px-3.5 py-2 text-sm",
+        "group inline-flex items-center gap-1.5 rounded-[var(--cf-radius-control)] border px-3.5 py-2 text-left text-sm",
         "transition-[background-color,border-color,transform] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
         "active:scale-[0.97] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-50",
         // Minimum 44px touch target on coarse pointers.
