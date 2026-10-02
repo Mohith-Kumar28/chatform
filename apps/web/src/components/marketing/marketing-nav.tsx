@@ -148,20 +148,10 @@ export function MarketingNav() {
         </ul>
 
         <div className="ml-auto flex items-center gap-1.5 lg:ml-0">
-          {/* One button, not two.
-
-              It was "Sign in" beside "Start free", which is a choice offered
-              to somebody who has not been given anything to choose between:
-              both links went to `/signin`, the same page, which signs you in
-              or creates the account depending on the address you type. Two
-              controls with one destination cost the visitor a decision and the
-              bar its emphasis — the primary action was sitting next to a
-              same-sized sibling arguing with it.
-
-              "Start free" is the one that survives, because it is the one that
-              says what happens next. A returning user is not stranded by it:
-              this bar shows "Dashboard" once the session resolves, and the
-              page it lands on signs them in either way.
+          {/* "Log in" as quiet text, "Sign up free" as the button. They go
+              to the two modes of `/signin`, so they are different
+              destinations now, and the button stays the one loud thing in the
+              bar.
 
               `on-brand` while the bar is transparent over the hero wash: the
               orange fill would be an orange pill on an orange ground. */}
@@ -175,9 +165,17 @@ export function MarketingNav() {
               <MarketingAccountButton />
             </>
           ) : (
-            <Button asChild size="sm" shape="pill" variant={ctaVariant} className="hidden sm:inline-flex">
-              <Link href="/signin">Start free</Link>
-            </Button>
+            <>
+              <Link
+                href="/signin"
+                className="hidden rounded-full px-3 py-1.5 text-sm font-medium transition-opacity hover:opacity-70 sm:inline-flex"
+              >
+                Log in
+              </Link>
+              <Button asChild size="sm" shape="pill" variant={ctaVariant} className="hidden sm:inline-flex">
+                <Link href="/signin?mode=signup">Sign up free</Link>
+              </Button>
+            </>
           )}
 
           <Sheet>
@@ -221,11 +219,18 @@ export function MarketingNav() {
                     </Button>
                   </SheetClose>
                 ) : (
-                  <SheetClose asChild>
-                    <Button asChild shape="pill">
-                      <Link href="/signin">Start free</Link>
-                    </Button>
-                  </SheetClose>
+                  <>
+                    <SheetClose asChild>
+                      <Button asChild shape="pill">
+                        <Link href="/signin?mode=signup">Sign up free</Link>
+                      </Button>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <Button asChild shape="pill" variant="ghost">
+                        <Link href="/signin">Log in</Link>
+                      </Button>
+                    </SheetClose>
+                  </>
                 )}
               </div>
             </SheetContent>

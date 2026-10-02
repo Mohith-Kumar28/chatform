@@ -91,7 +91,7 @@ export function CtaBand() {
             where a pattern starts drifting. */}
         <div className="mt-9 flex flex-wrap items-center gap-3">
           <Button asChild size="lg" shape="pill" variant="on-brand" className="h-12 px-8">
-            <Link href="/signin">Start free</Link>
+            <Link href="/signin?mode=signup">Start free</Link>
           </Button>
           {/* Solid near-black rather than the translucent outline: on this
               sweep a see-through button read as disabled. */}

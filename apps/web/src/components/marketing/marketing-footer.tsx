@@ -88,7 +88,7 @@ const COLUMNS = [
     title: "Account",
     links: [
       { href: "/signin", label: "Sign in" },
-      { href: "/signin", label: "Create an account" },
+      { href: "/signin?mode=signup", label: "Create an account" },
       { href: "/dashboard", label: "Dashboard" },
       { href: "/contact", label: "Contact us" },
     ],

@@ -87,7 +87,7 @@ export function PlanCard({
   plan,
   annual,
   featured,
-  ctaHref = "/signin",
+  ctaHref = "/signin?mode=signup",
   ctaLabel,
   onCta,
   ctaDisabled,

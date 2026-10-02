@@ -218,7 +218,7 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
                 annual={annual}
                 featured={plan.id === "pro"}
                 plan={plan}
-                ctaHref={plan.id === "free" ? "/signin" : `/usage?plan=${plan.id}&cycle=${cycle}`}
+                ctaHref={plan.id === "free" ? "/signin?mode=signup" : `/usage?plan=${plan.id}&cycle=${cycle}`}
                 ctaLabel={plan.id === "free" ? "Start free" : `Choose ${plan.name}`}
                 note={plan.checkoutReady === false ? "Contact us to set this up" : undefined}
                 soonLabels={plan.features

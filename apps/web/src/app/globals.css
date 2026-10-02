@@ -1055,6 +1055,25 @@
   animation: cf-word-rise 1s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
+/* Below 1280px the sticky bar is wide enough to reach the contact launcher, so
+   while it is up it carries Contact itself and the launcher steps aside. See
+   sticky-cta.tsx. */
+@media (max-width: 1279px) {
+  html[data-cta-bar] .cf-launcher {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(12px);
+  }
+}
+
+/* A menu or dialog of ours is open (Radix locks scroll and marks the body):
+   the contact launcher sits above every z-index we have, so it steps aside
+   rather than covering the sheet's own buttons. */
+body[data-scroll-locked] .cf-launcher {
+  opacity: 0;
+  pointer-events: none;
+}
+
 @utility animate-message-in {
   animation: cf-message-in var(--duration-enter) var(--ease-out) both;
 }

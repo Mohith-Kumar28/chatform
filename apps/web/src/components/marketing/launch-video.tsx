@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState, type AnchorHTMLAttributes, type MouseEvent } from "react";
 import { Volume2 } from "lucide-react";
-import { HandNote } from "./annotate";
 
 /**
  * The launch video, in its own band directly under the hero.
@@ -230,75 +229,25 @@ export function LaunchVideo() {
   );
 }
 
-/**
- * The hero's margin note: handwriting and a dashed arrow that loops once and
- * heads down the page. Clicking it scrolls to the band and starts the video
- * with sound, since the click is the permission browsers ask for.
- *
- * The dashed stroke cannot draw itself on the usual way, because the draw
- * animation spends `stroke-dasharray` on the reveal. So the dashes sit under a
- * mask, and the mask is the solid stroke that draws.
- */
-export function WatchVideoCue({ className }: { className?: string }) {
-  const maskId = useId();
-  const d = "M6 10 C 52 2, 92 22, 80 52 C 72 72, 44 62, 54 44 C 64 26, 98 48, 88 104 S 86 132, 88 146";
+/** Scroll to the band and start the video with sound; the click is the permission. */
+function playFromCue(event: MouseEvent<HTMLAnchorElement>) {
+  event.preventDefault();
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document
+    .getElementById(LAUNCH_VIDEO_ID)
+    ?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+  window.dispatchEvent(new Event(PLAY_EVENT));
+}
+
+/** The same jump as the margin note, as a link a `Button asChild` can wrap. */
+export function WatchVideoButton({
+  children,
+  ...props
+}: AnchorHTMLAttributes<HTMLAnchorElement>) {
   return (
-    <a
-      href={`#${LAUNCH_VIDEO_ID}`}
-      onClick={(event) => {
-        event.preventDefault();
-        const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        document
-          .getElementById(LAUNCH_VIDEO_ID)
-          ?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
-        window.dispatchEvent(new Event(PLAY_EVENT));
-      }}
-      className={"group inline-flex items-start gap-1 " + (className ?? "")}
-    >
-      <HandNote tilt={-4} className="mt-1 text-[1.7rem] transition-transform group-hover:-translate-y-0.5">
-        watch the product tour
-      </HandNote>
-      {/* Armed by hand, like the hero's other marks: this is the top of the
-          document and on screen at load. */}
-      <span data-armed="" data-inview="" className="contents">
-        <svg
-          aria-hidden
-          viewBox="0 0 110 154"
-          fill="none"
-          className="-mb-[5rem] h-[8.4rem] w-24 shrink-0 translate-y-3"
-        >
-          <defs>
-            <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="110" height="154">
-              <path
-                d={d}
-                stroke="white"
-                strokeWidth="6"
-                strokeLinecap="round"
-                pathLength={1}
-                className="cf-a-draw"
-                style={{ animationDelay: "1500ms", animationDuration: "1100ms" }}
-              />
-            </mask>
-          </defs>
-          <path
-            d={d}
-            mask={`url(#${maskId})`}
-            stroke="currentColor"
-            strokeWidth="2.25"
-            strokeLinecap="round"
-            strokeDasharray="5 6"
-          />
-          <path
-            d="M78 136 L88 147 L98 134"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="cf-a-pop"
-            style={{ animationDelay: "2500ms", transformOrigin: "88px 146px" }}
-          />
-        </svg>
-      </span>
+    <a {...props} href={`#${LAUNCH_VIDEO_ID}`} onClick={playFromCue}>
+      {children}
     </a>
   );
 }
+

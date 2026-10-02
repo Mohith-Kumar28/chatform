@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Play } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ChatDemo } from "./chat-demo";
 import { HERO_SCRIPT } from "./chat-demo-scripts";
 import { GradientField } from "@/components/brand/gradient-field";
 import { CircleMark } from "./annotate";
-import { WatchVideoCue } from "./launch-video";
+import { WatchVideoButton } from "./launch-video";
+import { HeroDemo, HeroDemoButton } from "./hero-demo";
 
 /**
  * The published demo form, or nothing.
@@ -329,9 +331,9 @@ export function Hero() {
               size="lg"
               shape="pill"
               variant="on-brand"
-              className="h-12 bg-[var(--on-band-vivid)] px-8 text-white hover:bg-[color-mix(in_oklch,var(--on-band-vivid)_86%,white)]"
+              className="h-12 bg-[var(--on-band-vivid)] px-8 text-white max-sm:w-full hover:bg-[color-mix(in_oklch,var(--on-band-vivid)_86%,white)]"
             >
-              <Link href="/signin">Start free</Link>
+              <Link href="/signin?mode=signup">Create free account</Link>
             </Button>
             {/* And the white one, which was `on-brand-outline` — a fifth of the
                 band's own ink over the band, so it took the wash's colour and
@@ -350,39 +352,39 @@ export function Hero() {
                 it over the full-strength gradient, where the ink is
                 `--on-primary` and the calculus is different. */}
             {/*
-              The demo opens in its own tab, and only the demo does.
-
-              Sending someone to `/f/<slug>` is sending them out of the pitch
-              and into the product: they answer a few questions, and the page
-              that convinced them to is gone. A new tab keeps it behind them, so
-              coming back is a tab click rather than a back button and a
-              re-scroll to where they were.
-
-              `target` is conditional because the fallback is not a page at
-              all — `#how-it-works` is an anchor into this same document, and a
-              new tab for an anchor opens a second copy of the page you are
-              already on. `rel` is set with it: `noopener` for the usual reason,
-              and `noreferrer` alongside it because the two are only ever wanted
-              together here.
+              The second pill goes to the product tour on wider screens, where
+              the live demo is already beside it. On a phone the demo is a
+              screen further down, so there the pill starts it instead, full
+              screen.
             */}
+            {DEMO_SLUG ? (
+              <Button
+                asChild
+                size="lg"
+                shape="pill"
+                variant="on-brand"
+                className="h-12 bg-white px-7 text-[var(--on-band-vivid)] hover:bg-white/90 max-sm:w-full sm:hidden"
+              >
+                <HeroDemoButton>
+                  Try live demo
+                  <ArrowRight className="size-4" strokeWidth={2.25} />
+                </HeroDemoButton>
+              </Button>
+            ) : null}
             <Button
               asChild
               size="lg"
               shape="pill"
               variant="on-brand"
-              className="h-12 bg-white px-7 text-[var(--on-band-vivid)] hover:bg-white/90"
+              className={cn(
+                "h-12 bg-white px-7 text-[var(--on-band-vivid)] hover:bg-white/90",
+                DEMO_SLUG && "hidden sm:inline-flex",
+              )}
             >
-              <Link
-                href={DEMO_SLUG ? `/f/${DEMO_SLUG}` : "#how-it-works"}
-                {...(DEMO_SLUG ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-              >
-                {DEMO_SLUG ? "Try Demo Form" : "See how it works"}
-                <ArrowRight className="size-4" strokeWidth={2.25} />
-                {/* The one thing about this link a screen reader cannot see
-                    coming. Inside the label rather than an `aria-label`, which
-                    would replace the visible text instead of adding to it. */}
-                {DEMO_SLUG ? <span className="sr-only"> (opens in a new tab)</span> : null}
-              </Link>
+              <WatchVideoButton>
+                <Play className="size-4 fill-current" strokeWidth={2.25} />
+                Watch the tour
+              </WatchVideoButton>
             </Button>
 
             {/*
@@ -437,15 +439,9 @@ export function Hero() {
             Free forever · Unlimited submissions · No credit card required
           </p>
 
-          {/* The margin note, pointing down the page at the launch video.
-              It replaced "a real form, no signup" beside the pills, which
-              restated the button it pointed at. White in the dark theme, where
-              the wash has darkened by this height; the headline's ink in the
-              light one, where it fades to cream and white would vanish. */}
-          <WatchVideoCue className="mt-10 ml-1 text-[var(--on-band-vivid)] dark:text-white dark:[text-shadow:0_1px_10px_rgb(0_0_0/0.22)]" />
         </div>
 
-        <ChatDemo script={HERO_SCRIPT} variant="hero" />
+        {DEMO_SLUG ? <HeroDemo slug={DEMO_SLUG} /> : <ChatDemo script={HERO_SCRIPT} variant="hero" />}
       </div>
 
       {/* The way down to the launch video, centred under both columns. */}

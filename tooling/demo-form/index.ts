@@ -73,7 +73,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 22;
+export const DEMO_REVISION = 23;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -97,7 +97,7 @@ export const DEMO_OWNER_EMAIL = "mohithkumar808@gmail.com";
 
 export const DEMO_FORM = buildAuthoredDoc({
   slug: DEMO_SLUG,
-  title: "How you use forms",
+  title: "chatform live demo",
   description: "A short conversation about the form tools you already use, and where they get in your way.",
 
   greeting:
