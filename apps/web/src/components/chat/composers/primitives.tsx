@@ -184,10 +184,10 @@ export function SkipButton({ onSkip }: { onSkip: () => void }) {
       onClick={onSkip}
       onMouseDown={keepFocus}
       className={cn(
-        "inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-[var(--cf-radius-control)] border px-3 text-sm font-medium",
-        "border-[var(--cf-accent)] bg-[color-mix(in_oklch,var(--cf-accent)_8%,transparent)] text-[var(--cf-accent)]",
+        "inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-[var(--cf-radius-control)] border px-3.5 text-sm font-medium",
+        "border-[var(--cf-accent)] bg-[color-mix(in_oklch,var(--cf-accent)_8%,var(--cf-bg))] text-[var(--cf-accent)]",
         "transition-[background-color,transform] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
-        "hover:bg-[color-mix(in_oklch,var(--cf-accent)_16%,transparent)]",
+        "hover:bg-[color-mix(in_oklch,var(--cf-accent)_16%,var(--cf-bg))]",
         "active:scale-[0.97] motion-reduce:active:scale-100",
       )}
     >
@@ -220,35 +220,35 @@ export function SendRow({
   onSkip?: () => void;
 }) {
   return (
-    <div className="flex items-end">
+    <div className="relative flex items-end">
       <div className="min-w-0 flex-1">{children}</div>
       {/*
-        One row at every width. Skip has been tried stacked above Send on
-        phones, both inside Send's column (the column took Skip's width, so
-        the message box lost ~9rem and Send floated in a gap) and as its own
-        row (a 56px band of nothing that pushed the conversation up and
-        cropped whatever the question was showing). Beside Send it costs the
-        box only its own width, which on a touch screen is just icon and word:
-        `kbd-hint` drops the esc chip where there is no keyboard.
+        On a phone Skip floats above Send, over the conversation, instead of
+        taking space in the composer. Every in-flow placement cost something:
+        beside Send the two pills squeezed the message box to a sliver;
+        stacked in Send's column, the column took Skip's width and left a gap
+        beside the box; on its own row it added a band of height that cropped
+        whatever the question was showing. Floating, it costs neither, and
+        the messages scroll behind it, which is why its fill is opaque. From
+        `sm` up there is room for it in the row.
 
-        Always mounted, animated from nothing.
-
-        Skip appears and disappears question to question, and mounting it
-        would snap the message box to a new size mid-conversation, the one
-        element that has to hold still while somebody is typing into it.
-        Animating `max-width` on a wrapper that is always present means the
-        box eases into the space instead, and the gap lives inside the wrapper
-        so a collapsed Skip leaves none behind.
+        Always mounted, animated from nothing: Skip comes and goes question to
+        question, and mounting it would snap the message box to a new size
+        while somebody is typing into it. In the row, `max-width` eases the box
+        into the space and the gap lives inside the wrapper, so a collapsed
+        Skip leaves none behind.
       */}
       <div
         aria-hidden={!canSkip}
         className={cn(
-          "shrink-0 overflow-hidden",
-          "transition-[max-width,opacity] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none",
-          canSkip ? "max-w-[9rem] opacity-100" : "pointer-events-none max-w-0 opacity-0",
+          "absolute right-0 bottom-full z-10 pb-2 sm:static sm:z-auto sm:shrink-0 sm:overflow-hidden sm:pb-0",
+          "transition-[max-width,opacity,transform] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none",
+          canSkip
+            ? "opacity-100 sm:max-w-[9rem]"
+            : "pointer-events-none translate-y-1 opacity-0 sm:max-w-0 sm:translate-y-0",
         )}
       >
-        <div className="pl-2">{onSkip && <SkipButton onSkip={onSkip} />}</div>
+        <div className="sm:pl-2">{onSkip && <SkipButton onSkip={onSkip} />}</div>
       </div>
       {/*
         An icon, not a labelled pill. "Send" plus its Enter chip cost the
