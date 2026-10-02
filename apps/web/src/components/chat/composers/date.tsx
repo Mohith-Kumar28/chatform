@@ -137,7 +137,7 @@ export function DateComposer({
           </button>
           <span className="flex items-center gap-1 text-xs opacity-50">
             <Clock className="size-3" />
-            Pick a time
+            {zoneLabel(chosenDay) ?? "Pick a time"}
           </span>
         </div>
 
@@ -152,10 +152,7 @@ export function DateComposer({
                 key={t}
                 type="button"
                 onClick={() =>
-                  onPick(
-                    `${format(chosenDay, "yyyy-MM-dd")}T${t}`,
-                    `${format(chosenDay, "EEE d MMM yyyy")} at ${formatSlot(t)}`,
-                  )
+                  onPick(slotMoment(chosenDay, t), `${format(chosenDay, "EEE d MMM yyyy")} at ${formatSlot(t)}`)
                 }
                 className="rounded-lg border border-[var(--cf-chip-border)] px-2 py-2 text-xs transition-colors hover:border-transparent hover:bg-[var(--cf-accent)] hover:text-[var(--cf-accent-text)]"
               >
@@ -263,6 +260,29 @@ function parseBound(value?: string): Date | null {
   if (!value) return null;
   const day = parseISO(value);
   return isValid(day) ? startOfDay(day) : null;
+}
+
+/**
+ * A slot as the moment it names: the time on this browser's clock, with that
+ * clock's offset on the day (`2026-10-03T17:00+05:30`). The server stores it in
+ * UTC and checks the form's time window against the time they actually saw.
+ */
+function slotMoment(day: Date, hhmm: string): string {
+  const [h = "0", m = "0"] = hhmm.split(":");
+  const at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), Number(h), Number(m));
+  return format(at, "yyyy-MM-dd'T'HH:mmxxx");
+}
+
+/** "Times in GMT+5:30": the times on the pad are theirs, and this says so. */
+function zoneLabel(day: Date): string | null {
+  try {
+    const name = new Intl.DateTimeFormat("en-US", { timeZoneName: "short" })
+      .formatToParts(day)
+      .find((p) => p.type === "timeZoneName")?.value;
+    return name ? `Times in ${name}` : null;
+  } catch {
+    return null;
+  }
 }
 
 /** 24h in, human out — "14:30" reads as "2:30 pm" to most respondents. */

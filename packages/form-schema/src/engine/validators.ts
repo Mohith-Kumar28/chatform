@@ -3,6 +3,7 @@ import { cleanLine, cleanText, safeHref } from "@repo/guard";
 import type { AnswerValue } from "../answers";
 import { fromMinorUnits, type PaymentProviderName } from "../payment-link";
 import { normalizeLocation } from "../location";
+import { appointmentIso, parseAppointment } from "../datetime";
 
 /**
  * Every reason an answer can be refused.
@@ -149,6 +150,12 @@ export interface SettledPayment {
 
 export interface ValidateOptions {
   settledPayment?: SettledPayment;
+  /**
+   * The respondent's IANA zone. A date-and-time answer given without a zone
+   * ("2026-10-03T17:00", what the agent and a typed reply produce) is a time
+   * on this clock. Without it, such an answer is read as UTC.
+   */
+  timeZone?: string | null;
 }
 
 const ok = (value?: AnswerValue): ValidationResult => ({ ok: true, value });
@@ -186,7 +193,13 @@ const FREEMAIL = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "iclou
 const URL_RE = /^https?:\/\/[^\s]+\.[^\s]+$/i;
 const E164_RE = /^\+[1-9]\d{6,14}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** "14:30" as "2:30 pm", for telling a respondent the window they can pick from. */
+function clock(hhmm: string): string {
+  const [h = "0", m = "00"] = hhmm.split(":");
+  const hour = Number(h);
+  return `${hour % 12 === 0 ? 12 : hour % 12}:${m} ${hour < 12 ? "am" : "pm"}`;
+}
 
 function isFileDescriptorArray(v: unknown): v is { fileId: string; filename: string; mime: string; size: number; r2Key: string }[] {
   return (
@@ -389,29 +402,39 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
     case "date": {
       if (typeof raw !== "string") return fail("type", "Please provide a date.");
       const v = raw.trim();
-      // `includeTime` turns the answer into an appointment: `YYYY-MM-DDTHH:mm`.
-      // The date half is validated against the same bounds either way, so a
-      // block that gains a time keeps every rule it already had.
-      const [datePart = "", timePart] = v.split("T");
-      if (!DATE_RE.test(datePart) || Number.isNaN(Date.parse(datePart))) {
-        return fail("invalid_date", "Please provide a date in YYYY-MM-DD format.");
-      }
+      // `includeTime` turns the answer into an appointment, stored as the UTC
+      // moment it names (see `datetime.ts`). The date bounds and the time
+      // window are checked on the respondent's own clock, which is the clock
+      // they were offered, so a block that gains a time keeps every rule it had.
       if (block.includeTime) {
-        if (!timePart || !TIME_RE.test(timePart)) {
-          return fail("invalid_time", "Please include a time as well, like 2026-01-31T14:30.");
+        if (DATE_RE.test(v)) return fail("invalid_time", "Please include a time as well.");
+        const appt = parseAppointment(v, opts.timeZone);
+        if (!appt) {
+          return v.includes("T")
+            ? fail("invalid_time", "That time doesn't look right. Please give a date and a time.")
+            : fail("invalid_date", "Please give a date and a time.");
         }
-        if (timePart < block.timeMin || timePart > block.timeMax) {
-          return fail("time_out_of_range", `Please pick a time between ${block.timeMin} and ${block.timeMax}.`);
+        const { date, time } = appt.wall;
+        if (time < block.timeMin || time > block.timeMax) {
+          return fail("time_out_of_range", `Please pick a time between ${clock(block.timeMin)} and ${clock(block.timeMax)}.`);
         }
-      } else if (timePart) {
+        // A few minutes' grace: a slot picked as it began is not in the past.
+        if (block.disablePast && appt.ms < Date.now() - 5 * 60000) {
+          return fail("past_date", "That time has already passed. Please pick a later one.");
+        }
+        if (block.min && date < block.min) return fail("too_early", `Date must be on or after ${block.min}.`);
+        if (block.max && date > block.max) return fail("too_late", `Date must be on or before ${block.max}.`);
+        return ok(appointmentIso(appt.ms));
+      }
+      if (!DATE_RE.test(v) || Number.isNaN(Date.parse(v))) {
         return fail("invalid_date", "Please provide a date in YYYY-MM-DD format.");
       }
-      if (block.disablePast && Date.parse(datePart) < Date.now() - 86400000) {
+      if (block.disablePast && Date.parse(v) < Date.now() - 86400000) {
         return fail("past_date", "Please pick a future date.");
       }
-      if (block.min && datePart < block.min) return fail("too_early", `Date must be on or after ${block.min}.`);
-      if (block.max && datePart > block.max) return fail("too_late", `Date must be on or before ${block.max}.`);
-      return ok(block.includeTime ? `${datePart}T${timePart}` : datePart);
+      if (block.min && v < block.min) return fail("too_early", `Date must be on or after ${block.min}.`);
+      if (block.max && v > block.max) return fail("too_late", `Date must be on or before ${block.max}.`);
+      return ok(v);
     }
 
     case "yes_no": {

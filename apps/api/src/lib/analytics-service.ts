@@ -529,7 +529,9 @@ export async function computeAnalytics(
     // to pick, each with a count of one.
     const tally = tallies.get(row.block_ref) ?? new Map<string, number>();
     for (const part of Array.isArray(parsed) ? parsed : [parsed]) {
-      const label = displayAnswer(block, part);
+      // A date's timeline is by the day, and the stored ISO day sorts; an
+      // appointment's display label ("Sat 3 Oct 2026 at …") would not.
+      const label = block.type === "date" && typeof part === "string" ? part.slice(0, 10) : displayAnswer(block, part);
       if (!label) continue;
       tally.set(label, (tally.get(label) ?? 0) + row.n);
     }
@@ -542,8 +544,8 @@ export async function computeAnalytics(
     if (!dist || !block) continue;
     const entries = [...tally.entries()];
     if (block.type === "date") {
-      // By the day, in date order: "2026-01-31 at 14:30" and "2026-01-31 at
-      // 09:00" are the same point on a timeline.
+      // By the day, in date order: two times on 2026-01-31 are the same point
+      // on a timeline. Appointments are bucketed by their UTC day.
       const byDay = new Map<string, number>();
       for (const [label, count] of entries) {
         const day = label.split(" at ")[0] ?? label;

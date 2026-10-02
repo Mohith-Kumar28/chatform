@@ -174,7 +174,7 @@ async function assessIdentity(
 ): Promise<SignInVerdict> {
   const sess = await env.DB.prepare(
     `SELECT s.form_id AS form_id, s.organization_id AS organization_id, s.started_over AS started_over,
-            s.held_resume_id AS held_resume_id, fv.schema_json AS schema_json
+            s.held_resume_id AS held_resume_id, s.timezone AS timezone, fv.schema_json AS schema_json
        FROM chat_sessions s
        LEFT JOIN form_versions fv ON fv.id = s.form_version_id
       WHERE s.id = ?1`,
@@ -185,6 +185,7 @@ async function assessIdentity(
       organization_id: string;
       started_over: number | null;
       held_resume_id: string | null;
+      timezone: string | null;
       schema_json: string | null;
     }>();
   if (!sess?.schema_json) return NOTHING;
@@ -299,7 +300,7 @@ async function assessIdentity(
         answers: doc.blocks
           .filter((b) => !["welcome", "statement"].includes(b.type))
           .filter((b) => answers[b.ref] !== undefined)
-          .map((b) => ({ ref: b.ref, title: b.title, display: respondentAnswer(b, answers[b.ref]) })),
+          .map((b) => ({ ref: b.ref, title: b.title, display: respondentAnswer(b, answers[b.ref], { timeZone: sess.timezone }) })),
         canRepeat: !oncePerPerson,
       },
       resume: null,

@@ -253,7 +253,7 @@ In a generated draft these arrive as `config` pairs: `disablePast=true to refuse
 
 ## What you send
 
-A date as `YYYY-MM-DD`, or `YYYY-MM-DDTHH:mm` when the block includes a time.
+A date as `YYYY-MM-DD`. When the block includes a time, one moment in UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`; send it with a `Z` or an offset (`2026-06-01T17:00+05:30`), since a bare `YYYY-MM-DDTHH:mm` is read as UTC.
 
 ```ts
 type Answer = string;

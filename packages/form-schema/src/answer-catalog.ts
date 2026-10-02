@@ -176,7 +176,7 @@ export const ANSWER_CATALOG: Record<BlockType, AnswerCatalogEntry> = {
     codes: ["required", "type", "not_integer", "too_small", "too_large", "duplicate"],
   },
   date: {
-    shape: "A date as `YYYY-MM-DD`, or `YYYY-MM-DDTHH:mm` when the block includes a time.",
+    shape: "A date as `YYYY-MM-DD`. When the block includes a time, one moment in UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`; send it with a `Z` or an offset (`2026-06-01T17:00+05:30`), since a bare `YYYY-MM-DDTHH:mm` is read as UTC.",
     tsType: "string",
     block: {
       id: "blk_date0001", ref: "q_start", type: "date", title: "Start date?",

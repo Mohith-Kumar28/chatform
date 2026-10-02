@@ -17,6 +17,7 @@ export * from "./answer-catalog";
 export * from "./payment-link";
 export * from "./payment-columns";
 export * from "./respondent-columns";
+export * from "./datetime";
 export * from "./display";
 export * from "./location";
 export * from "./rich-text";

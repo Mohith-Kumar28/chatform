@@ -112,10 +112,15 @@ export function extractionSchema(block: Block): z.ZodTypeAny | null {
     }
 
     case "date":
-      // Always ISO `YYYY-MM-DD`, whatever the block's display format is; the
-      // model resolves relative expressions ("next Friday") against a date
-      // supplied in the prompt.
-      return envelope(z.string().regex(/^\d{4}-\d{2}-\d{2}$/));
+      // Always ISO, whatever the block's display format is; the model resolves
+      // relative expressions ("next Friday") against a date supplied in the
+      // prompt. With a time, it is the time on the respondent's own clock, no
+      // zone: `validateAnswer` turns that into a moment with the session's zone.
+      return envelope(
+        block.includeTime
+          ? z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)
+          : z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      );
 
     case "ranking":
       return envelope(
@@ -201,6 +206,9 @@ export function extractionSchema(block: Block): z.ZodTypeAny | null {
 export function extractionGuidance(block: Block, todayIso: string): string {
   switch (block.type) {
     case "date":
+      if (block.includeTime) {
+        return `Return the date and time as YYYY-MM-DDTHH:mm (24-hour), in the respondent's own local time; never convert it to another time zone. Today is ${todayIso} for them; resolve relative expressions like "next Friday" against it. A date without a year is the next one to come. If they gave no time of day, only a vague part of the day, or an ambiguous date (e.g. "3/4" without a locale), set confident=false.`;
+      }
       return `Return an ISO date (YYYY-MM-DD). Today is ${todayIso}; resolve relative expressions like "next Friday" or "in two weeks" against it. If the respondent gave an ambiguous date (e.g. "3/4" without a year or locale), set confident=false.`;
     case "number":
       // "about a dozen" is unambiguous and should extract to 12. Only a genuine

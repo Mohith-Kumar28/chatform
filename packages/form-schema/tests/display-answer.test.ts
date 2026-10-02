@@ -81,13 +81,24 @@ describe("displayAnswer", () => {
     expect(displayAnswer(block, value)).toBe("Paid $10 · unverified · ref CFTEST");
   });
 
-  it("splits a date that carries a time", () => {
+  it("splits a date that carries a time from before times had a zone", () => {
     const block = parse({
       id: "blk_00000009", ref: "q_when", type: "date", title: "When", includeTime: true,
     });
     expect(displayAnswer(block, "2026-10-01T14:30")).toBe("2026-10-01 at 14:30");
     expect(displayAnswer(parse({ id: "blk_00000010", ref: "q_d", type: "date", title: "When" }), "2026-10-01"))
       .toBe("2026-10-01");
+  });
+
+  it("reads one appointment on each reader's clock, naming the zone", () => {
+    const block = parse({
+      id: "blk_00000012", ref: "q_slot", type: "date", title: "When", includeTime: true,
+    });
+    const stored = "2026-10-03T11:30:00.000Z";
+    expect(displayAnswer(block, stored, { timeZone: "Asia/Kolkata" })).toBe("Sat 3 Oct 2026 at 5:00 pm GMT+5:30");
+    expect(displayAnswer(block, stored, { timeZone: "America/New_York" })).toBe("Sat 3 Oct 2026 at 7:30 am EDT");
+    // No reader's zone (an export, an email): UTC, and it says so.
+    expect(displayAnswer(block, stored)).toBe("Sat 3 Oct 2026 at 11:30 am UTC");
   });
 
   it("flattens a record answer into its values", () => {

@@ -1,5 +1,6 @@
 import type { Block } from "./blocks";
 import { formatAmount } from "./payment-link";
+import { formatAppointment } from "./datetime";
 
 /**
  * One answer, as a person reads it.
@@ -24,15 +25,24 @@ import { formatAmount } from "./payment-link";
  * export and a webhook want; in a chat bubble or the review card it is a long
  * string the respondent never typed.
  */
-export function respondentAnswer(block: Block, value: unknown): string {
+export function respondentAnswer(block: Block, value: unknown, opts: DisplayOptions = {}): string {
   if (block.type === "address" && typeof value === "object" && value !== null && !Array.isArray(value)) {
     const { location, ...lines } = value as Record<string, string>;
     if (location) return [...Object.values(lines), "Location shared"].filter(Boolean).join(", ");
   }
-  return displayAnswer(block, value);
+  return displayAnswer(block, value, opts);
 }
 
-export function displayAnswer(block: Block, value: unknown): string {
+export interface DisplayOptions {
+  /**
+   * The reader's IANA zone. A date-and-time answer is one moment, stored in
+   * UTC, and reads on the reader's clock: the respondent's in their thread, the
+   * admin's in Results. Left out, it reads in UTC and says so.
+   */
+  timeZone?: string | null;
+}
+
+export function displayAnswer(block: Block, value: unknown, opts: DisplayOptions = {}): string {
   if (value === undefined || value === null || value === "") return "(skipped)";
 
   const labelIn = (list: readonly { id: string; label: string }[] | undefined, v: unknown): string => {
@@ -163,7 +173,10 @@ export function displayAnswer(block: Block, value: unknown): string {
 
     case "date": {
       if (typeof value !== "string") break;
-      // `2026-01-31T14:30` reads better with the two halves separated.
+      const appointment = formatAppointment(value, opts.timeZone);
+      if (appointment) return appointment;
+      // An answer from before appointments carried a zone, `2026-01-31T14:30`:
+      // shown as written, since nothing can say whose clock it was on.
       const [day, time] = value.split("T");
       return time ? `${day} at ${time}` : (day ?? value);
     }

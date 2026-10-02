@@ -1,4 +1,4 @@
-import { displayAnswer, paymentCells, paymentColumnTitles, type Block } from "@repo/form-schema";
+import { displayAnswer, localZone, paymentCells, paymentColumnTitles, type Block } from "@repo/form-schema";
 
 /** A column in the results table: enough of a block to label and render a cell. */
 export type ResultColumn = Pick<Block, "ref" | "title" | "type"> & { retired?: boolean };
@@ -8,10 +8,13 @@ export type ResultColumn = Pick<Block, "ref" | "title" | "type"> & { retired?: b
  *
  * The empty string is load bearing: it is what "no answer" means everywhere
  * that reads a response, and `splitAnswers` is built on it.
+ *
+ * A date-and-time answer is stored in UTC and shown on the admin's own clock,
+ * with the zone named.
  */
 export function displayCell(block: ResultColumn, value: unknown): string {
   if (value === undefined || value === null || value === "") return "";
-  return displayAnswer(block as Block, value);
+  return displayAnswer(block as Block, value, { timeZone: localZone() });
 }
 
 /** The payment block's own currency, when the column is one — the fallback for an answer that carries none. */

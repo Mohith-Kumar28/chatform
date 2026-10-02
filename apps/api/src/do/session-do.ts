@@ -20,6 +20,8 @@ import {
   answerIsRecord,
   extractionSchema,
   extractionGuidance,
+  usableZone,
+  wallTimeIn,
   resolveEnding,
   answerability,
   respondentAnswer as summarizeAnswer,
@@ -3721,7 +3723,7 @@ export class SessionDO extends DurableObject<Bindings> {
         trace: { source: "chat" },
         schema: schema as never,
         question: block.title,
-        guidance: extractionGuidance(block, new Date().toISOString().slice(0, 10)),
+        guidance: extractionGuidance(block, this.respondentToday()),
         answer: text,
         transcript,
       });
@@ -4037,7 +4039,7 @@ export class SessionDO extends DurableObject<Bindings> {
        */
       await this.emit("user_message", {
         messageId: `msg_${crypto.randomUUID().slice(0, 12)}`,
-        text: summarizeAnswer(block, value),
+        text: summarizeAnswer(block, value, { timeZone: this.respondentZone() }),
         blockRef: block.ref,
       });
     }
@@ -4292,7 +4294,7 @@ export class SessionDO extends DurableObject<Bindings> {
       if (hasContent(extracted)) return this.record(block, extracted);
     }
 
-    const direct = validateAnswer(block, text);
+    const direct = validateAnswer(block, text, { timeZone: this.respondentZone() });
 
     // ── 2. Hybrid and Scripted: is this simply the answer?
     //
@@ -4325,8 +4327,11 @@ export class SessionDO extends DurableObject<Bindings> {
     // Exact-match types reach here only when matching failed, so the fast path
     // above is never given up.
     if (this.aiEnabled()) {
+      // The format is for the tool. A person was once asked to type
+      // "2026-10-03T17:00" because the agent read it out to them.
       const shape = needsExtraction(block)
-        ? extractionGuidance(block, new Date().toISOString().slice(0, 10))
+        ? ` ${extractionGuidance(block, this.respondentToday())} That format is only for record_answer: never show it ` +
+          `to them, and ask for anything missing in plain words.`
         : "";
       // The card could not be read from their reply (1b), and the agent has no
       // way to record one: it answers what they said and hands back the card.
@@ -4658,6 +4663,30 @@ export class SessionDO extends DurableObject<Bindings> {
   }
 
   /**
+   * The respondent's clock: the zone their browser reported at session open,
+   * else the one Cloudflare places their connection in. A date-and-time answer
+   * given without a zone is a time on this clock, and is stored as the UTC
+   * moment it names.
+   */
+  private respondentZone(): string | null {
+    const context = this.meta?.context;
+    return usableZone(context?.timezone) ?? usableZone(context?.geo?.timezone);
+  }
+
+  /**
+   * "Today" for the extractor, on the respondent's clock rather than the
+   * server's: past 18:30 UTC it is already tomorrow in India, and "tomorrow"
+   * read against the wrong day books the wrong day.
+   */
+  private respondentToday(): string {
+    const zone = this.respondentZone() ?? "UTC";
+    const now = Date.now();
+    const { date, time } = wallTimeIn(now, zone);
+    const weekday = new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "long" }).format(now);
+    return `${date} (${weekday}), and the time there is ${time}`;
+  }
+
+  /**
    * `opts.settledPayment` is the server's own payment record, and only
    * `settleFromRecord` passes one. Every other caller, whether the agent's tools,
    * a structured answer or free text, reaches a verified payment block without it
@@ -4668,7 +4697,7 @@ export class SessionDO extends DurableObject<Bindings> {
     raw: unknown,
     opts: ValidateOptions = {},
   ): Promise<{ accepted: boolean; error?: string }> {
-    let result = validateAnswer(block, raw, opts);
+    let result = validateAnswer(block, raw, { timeZone: this.respondentZone(), ...opts });
 
     if (result.ok && block.type === "file_upload") {
       const authentic = await this.authenticFiles(result.value);
@@ -4709,7 +4738,7 @@ export class SessionDO extends DurableObject<Bindings> {
        * attempt keeps the thread honest and gives that echo its twin.
        */
       if (!this.pendingUserTextPersisted) {
-        const attempt = summarizeAnswer(block, raw);
+        const attempt = summarizeAnswer(block, raw, { timeZone: this.respondentZone() });
         const echoId = await this.appendMessage("user", attempt, block.ref);
         await this.emit("user_message", { messageId: echoId, text: attempt, blockRef: block.ref });
       }
@@ -4744,7 +4773,7 @@ export class SessionDO extends DurableObject<Bindings> {
     if (channel) {
       let echoId = this.pendingUserMessageId;
       if (!this.pendingUserTextPersisted) {
-        const attempt = summarizeAnswer(block, result.value);
+        const attempt = summarizeAnswer(block, result.value, { timeZone: this.respondentZone() });
         echoId = await this.appendMessage("user", attempt, block.ref);
         await this.emit("user_message", { messageId: echoId, text: attempt, blockRef: block.ref });
       }
@@ -4770,7 +4799,7 @@ export class SessionDO extends DurableObject<Bindings> {
     // from the review step must start from the stored answer, not from a
     // half-filled card two questions ago.
     this.partials.delete(block.ref);
-    const echo = summarizeAnswer(block, result.value);
+    const echo = summarizeAnswer(block, result.value, { timeZone: this.respondentZone() });
     this.lastAnswerDisplay = echo;
     let answerMessageId = this.pendingUserMessageId;
     if (!this.pendingUserTextPersisted) {
@@ -5225,7 +5254,7 @@ export class SessionDO extends DurableObject<Bindings> {
       .map((b) => ({
         ref: b.ref,
         title: b.title,
-        display: summarizeAnswer(b, this.state.answers[b.ref]),
+        display: summarizeAnswer(b, this.state.answers[b.ref], { timeZone: this.respondentZone() }),
       }));
   }
 
@@ -5437,7 +5466,7 @@ export class SessionDO extends DurableObject<Bindings> {
     const vars = new Map<string, string>();
     for (const block of this.doc?.blocks ?? []) {
       const value = this.state.answers[block.ref];
-      if (value !== undefined) vars.set(block.ref, summarizeAnswer(block, value));
+      if (value !== undefined) vars.set(block.ref, summarizeAnswer(block, value, { timeZone: this.respondentZone() }));
     }
     return vars;
   }
