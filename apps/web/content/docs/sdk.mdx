@@ -29,11 +29,17 @@ const chatform = createClient({ apiKey: process.env.CHATFORM_SECRET_KEY! });
 ```
 
 `chatform.forms`, `.responses`, `.sessions`, `.webhooks`, `.blocks`, `.exports`,
-`.files`, `.templates`, `.ai`, and `chatform.me()`.
+`.files`, `.templates`, `.ai`, `.paymentAccounts`, `chatform.import()` and
+`chatform.me()`.
 
-Three more hang off `forms`, because a version, a knowledge source and an
-integration have no meaning apart from the form they belong to:
-`chatform.forms.versions`, `.knowledge` and `.integrations`.
+Five more hang off `forms`, because each has no meaning apart from the form it
+belongs to: `chatform.forms.versions`, `.knowledge`, `.integrations`,
+`.settings` and `.payments`.
+
+Every type the package exports is generated from the API's own
+[OpenAPI spec](https://api.chatform.in/openapi.json), so a field the reference
+documents is a field your editor knows about, with the same name and the same
+enum values.
 
 ```ts
 // a whole response in one call
@@ -113,6 +119,30 @@ agent preset and has to be asked for; a 402 means the month's generations are
 spent rather than that a payment failed. `clarifyForm` runs on the cheapest tier
 and is not charged as a generation, so asking first is free.
 
+### Settings, payments and imports
+
+```ts
+// settings by key, the same list the builder shows
+const { settings } = await chatform.forms.settings.get(formId);
+const { changes, rejected } = await chatform.forms.settings.update(formId, {
+  changes: [{ key: "settings.closeRules.maxSubmissions", value: "500" }],
+});
+
+// a form from Google Forms, Typeform, Tally, Jotform, Youform or any public page
+const { doc, report } = await chatform.import({ url });
+if (report.notCopied.length === 0) await chatform.forms.create({ title: "Imported form", doc });
+
+// payments the form's payment questions collected
+const payments = await chatform.forms.payments.list(formId, { status: "paid" });
+```
+
+`settings.update` applies what the plan allows and names the rest in
+`rejected`, so read the result rather than only the status. `import` saves
+nothing: check `report.notCopied` before you keep the document.
+`chatform.paymentAccounts` lists and connects the organization's own Stripe,
+Razorpay or Cashfree accounts; the gateway ones return a consent URL for a person
+to open.
+
 ### Paging
 
 `iterate()` handles cursors so you do not have to:
@@ -187,9 +217,11 @@ import { createBrowserClient } from "@chatformhq/js/browser";
 const chatform = createBrowserClient({ publishableKey: "pk_live_…" });
 ```
 
-It exposes `sessions`, `blocks`, `stream()` and `files.upload` — and nothing
+It exposes `sessions`, `blocks`, `stream()` and `files.upload`, and nothing
 that reads anyone's answers back, because a publishable key cannot do that
-anyway.
+anyway. `sessions.auth` signs a respondent in with Google, a Firebase phone
+token or an emailed code (`auth.email.start`, then `auth.email.verify`), and
+`sessions.startPayment` opens the form's checkout for a payment question.
 
 The safer pattern is usually to skip publishable keys entirely: open the session
 on your server and hand the page the session-scoped `respondentToken`. A leaked
@@ -248,6 +280,11 @@ function Interview() {
 
 The engine decides what to ask, what is valid and where a branch goes. You own
 every pixel and none of the flow logic.
+
+The hook also returns `pendingVerification` (a code the next message will be
+read as) and `pendingPayment` (an open checkout to hand to the gateway). A turn
+that runs past the API's deadline is followed up for you, so `status` goes from
+`thinking` to `ready` with the same result a fast turn would give.
 
 ## Or no SDK at all
 

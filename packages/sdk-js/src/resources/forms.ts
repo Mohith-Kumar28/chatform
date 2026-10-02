@@ -1,5 +1,22 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
-import type { BlockDefinition, FollowUpStats, FormDocument, FormSummary, Page } from "../types/index.js";
+import type { Body, Query, Res } from "../types/spec.js";
+import type {
+  Analytics,
+  BlockCatalogue,
+  BlockDefinition,
+  CreatedForm,
+  DocSaved,
+  FollowUpStats,
+  FormDocumentRead,
+  FormPayments,
+  FormRead,
+  FormSettings,
+  FormSummary,
+  Page,
+  Published,
+  SettingsPatch,
+  SettingsPatched,
+} from "../types/index.js";
 import { Versions } from "./versions.js";
 import { Knowledge } from "./knowledge.js";
 import { Integrations } from "./integrations.js";
@@ -11,68 +28,52 @@ export class Forms {
   readonly knowledge: Knowledge;
   /** Where the answers go besides a webhook. */
   readonly integrations: Integrations;
+  /** Every setting a form has, by key, with what the plan allows. */
+  readonly settings: FormSettingsResource;
+  /** Payments collected by a form's payment questions. */
+  readonly payments: FormPaymentsResource;
 
   constructor(private readonly http: HttpClient) {
     this.versions = new Versions(http);
     this.knowledge = new Knowledge(http);
     this.integrations = new Integrations(http);
+    this.settings = new FormSettingsResource(http);
+    this.payments = new FormPaymentsResource(http);
   }
 
-  list(
-    options: { status?: "draft" | "published" | "archived" | "all"; limit?: number; cursor?: string } = {},
-    request?: RequestOptions,
-  ) {
+  /** Every form, whatever its status, unless `status` narrows it. */
+  list(options: Query<"/v1/forms", "get"> = {}, request?: RequestOptions) {
     return this.http.get<Page<FormSummary>>("/v1/forms", options, request);
   }
 
   /**
-   * The public configuration a respondent would see, including every question.
+   * The form as a respondent receives it, including every question.
    *
-   * This is the *published* form, so a draft answers 404 here however plainly
-   * it exists. Use `getDocument()` for a form you have not published yet.
+   * A form that has never been published has only a draft, so for one of those
+   * this answers with the draft document instead, and `status` says which you
+   * got. Use `getDocument()` to read the draft of a form that is already live.
    */
   get(formId: string, request?: RequestOptions) {
-    return this.http.get<{ slug: string; blocks: unknown[]; [key: string]: unknown }>(
-      `/v1/forms/${formId}`,
-      undefined,
-      request,
-    );
+    return this.http.get<FormRead>(`/v1/forms/${formId}`, undefined, request);
   }
 
-  /**
-   * The editable document behind the form, rather than its public projection.
-   *
-   * The one that works on a draft. `list()` also hides drafts unless you ask
-   * for them: its `status` defaults to `published`.
-   */
+  /** The editable working document, rather than the public projection. */
   getDocument(formId: string, request?: RequestOptions) {
-    return this.http.get<{ id: string; slug: string; status: string; doc: FormDocument }>(
-      `/v1/forms/${formId}`,
-      { view: "document" },
-      request,
-    );
+    return this.http.get<FormDocumentRead>(`/v1/forms/${formId}`, { view: "document" }, request);
   }
 
-  create(input: { title: string; doc?: unknown }, request?: RequestOptions) {
-    return this.http.post<FormSummary>("/v1/forms", input, request);
+  create(input: Body<"/v1/forms", "post">, request?: RequestOptions) {
+    return this.http.post<CreatedForm>("/v1/forms", input, request);
   }
 
   /** Save the working document. Lint issues are returned, not enforced. */
   updateDocument(formId: string, doc: unknown, request?: RequestOptions) {
-    return this.http.put<{ ok: boolean; issues: { level: string; code: string; message: string }[] }>(
-      `/v1/forms/${formId}/doc`,
-      { doc },
-      request,
-    );
+    return this.http.put<DocSaved>(`/v1/forms/${formId}/doc`, { doc }, request);
   }
 
   /** Publish as an immutable version. Refuses on lint errors. */
   publish(formId: string, request?: RequestOptions) {
-    return this.http.post<{ ok: boolean; version: number; versionId: string; stripped: unknown[] }>(
-      `/v1/forms/${formId}/publish`,
-      undefined,
-      request,
-    );
+    return this.http.post<Published>(`/v1/forms/${formId}/publish`, undefined, request);
   }
 
   /**
@@ -82,18 +83,18 @@ export class Forms {
    * back, and the version history is untouched either way.
    */
   unpublish(formId: string, request?: RequestOptions) {
-    return this.http.post<{ ok: boolean }>(`/v1/forms/${formId}/unpublish`, undefined, request);
+    return this.http.post<Res<"/v1/forms/{id}/unpublish", "post">>(`/v1/forms/${formId}/unpublish`, undefined, request);
   }
 
-  /** Soft — the responses collected against it stay readable. */
+  /** Soft: the responses collected against it stay readable. */
   delete(formId: string, request?: RequestOptions) {
-    return this.http.delete<{ ok: boolean; deleted: boolean }>(`/v1/forms/${formId}`, request);
+    return this.http.delete<Res<"/v1/forms/{id}", "delete">>(`/v1/forms/${formId}`, request);
   }
 
   /**
    * Counts, the per-question funnel and answer distributions.
    *
-   * Defaults to every source. The per-question detail is the paid half — on a
+   * Defaults to every source. The per-question detail is the paid half: on a
    * plan without it the headline numbers still come back, with `locked` naming
    * what did not.
    */
@@ -102,17 +103,7 @@ export class Forms {
     options: { source?: "chat" | "embed" | "api" | "all"; includeTest?: boolean } = {},
     request?: RequestOptions,
   ) {
-    return this.http.get<{
-      views: number;
-      starts: number;
-      completed: number;
-      abandoned: number;
-      avgDurationMs: number;
-      completionRate: number;
-      perBlock: { blockRef: string; title: string; answered: number; answerRate: number }[];
-      distributions: unknown[];
-      locked?: string[];
-    }>(
+    return this.http.get<Analytics>(
       `/v1/forms/${formId}/analytics`,
       { source: options.source, includeTest: options.includeTest ? "1" : undefined },
       request,
@@ -129,6 +120,33 @@ export class Forms {
   }
 }
 
+/**
+ * Settings by key, the same list the builder shows.
+ *
+ * `update()` applies what the plan allows and names the rest in `rejected`
+ * rather than failing the whole call, so read the result, not just the status.
+ */
+export class FormSettingsResource {
+  constructor(private readonly http: HttpClient) {}
+
+  get(formId: string, request?: RequestOptions) {
+    return this.http.get<FormSettings>(`/v1/forms/${formId}/settings`, undefined, request);
+  }
+
+  update(formId: string, input: SettingsPatch, request?: RequestOptions) {
+    return this.http.patch<SettingsPatched>(`/v1/forms/${formId}/settings`, input, request);
+  }
+}
+
+/** Payments taken by a form's payment questions, newest first. */
+export class FormPaymentsResource {
+  constructor(private readonly http: HttpClient) {}
+
+  list(formId: string, options: Query<"/v1/forms/{id}/payments", "get"> = {}, request?: RequestOptions) {
+    return this.http.get<FormPayments>(`/v1/forms/${formId}/payments`, options, request);
+  }
+}
+
 export class Blocks {
   constructor(private readonly http: HttpClient) {}
 
@@ -139,11 +157,7 @@ export class Blocks {
    * question type will not surprise it.
    */
   list(request?: RequestOptions) {
-    return this.http.get<{ schema_version: number; blocks: BlockDefinition[] }>(
-      "/v1/blocks",
-      undefined,
-      request,
-    );
+    return this.http.get<BlockCatalogue>("/v1/blocks", undefined, request);
   }
 
   get(type: string, request?: RequestOptions) {

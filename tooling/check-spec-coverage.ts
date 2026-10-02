@@ -330,9 +330,101 @@ if (uncovered.length > 0) {
   process.exit(1);
 }
 
+/**
+ * Every public `/v1` operation has a method in `@chatformhq/js`.
+ *
+ * The SDK's types come from the spec, but its methods are written by hand, so
+ * an endpoint can ship and the SDK can simply never learn about it. That is how
+ * it reached fifteen endpoints behind. Each call site is read as a method and a
+ * path literal; an operation reached some other way goes in `SDK_SKIP` with why.
+ */
+const SDK_SRC = join(ROOT, "packages/sdk-js/src");
+const SDK_SKIP: Record<string, string> = {
+  "PUT /v1/sessions/{}/uploads/{}": "files.upload() follows the uploadUrl the intent returns",
+  "POST /v1/sessions/{}/uploads/{}/confirm": "files.upload() follows the uploadUrl the intent returns",
+};
+
+function* tsFiles(dir: string): Generator<string> {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      if (entry !== "generated") yield* tsFiles(full);
+    } else if (entry.endsWith(".ts")) yield full;
+  }
+}
+
+const HELPER_METHOD: Record<string, string> = {
+  get: "GET",
+  getFile: "GET",
+  post: "POST",
+  postForm: "POST",
+  put: "PUT",
+  putRaw: "PUT",
+  patch: "PATCH",
+  delete: "DELETE",
+};
+const HELPER_CALL = /\.(get|getFile|post|postForm|put|putRaw|patch|delete)(?:<[^(]*>)?\(\s*[`"](\/v1\/[^`"]*)[`"]/g;
+const REQUEST_CALL = /\.request(?:<[^(]*>)?\(\s*"(GET|POST|PUT|PATCH|DELETE)",\s*[`"](\/v1\/[^`"]*)[`"]/g;
+
+const called = new Set<string>();
+for (const file of tsFiles(SDK_SRC)) {
+  const text = readFileSync(file, "utf8");
+  for (const m of text.matchAll(HELPER_CALL)) called.add(`${HELPER_METHOD[m[1]!]} ${normalise(m[2]!)}`);
+  for (const m of text.matchAll(REQUEST_CALL)) called.add(`${m[1]} ${normalise(m[2]!)}`);
+}
+
+const sdkMissing = operations
+  .filter(({ path, op }) => path.startsWith("/v1/") && !op["x-internal"] && !(op as { deprecated?: boolean }).deprecated)
+  .map(({ path, method }) => `${method.toUpperCase()} ${normalise(path)}`)
+  .filter((key) => !called.has(key) && !(key in SDK_SKIP));
+
+if (sdkMissing.length > 0) {
+  console.error(`\n${sdkMissing.length} /v1 operation(s) have no method in @chatformhq/js:\n`);
+  for (const key of sdkMissing) console.error(`  ${key}`);
+  console.error(
+    "\nAdd a method to packages/sdk-js/src/resources, or add the operation to SDK_SKIP in\n" +
+      "tooling/check-spec-coverage.ts with the reason the SDK reaches it another way.\n",
+  );
+  process.exit(1);
+}
+
+/**
+ * The MCP server against the spec and against its own page.
+ *
+ * Every path a curated tool calls must be a real operation, and `mcp.mdx` must
+ * list exactly the tools the server registers. Both were hand-kept in step and
+ * neither was checked: the page could advertise a tool that was renamed, and a
+ * tool could call a route that moved.
+ */
+const MCP_TOOLS = join(ROOT, "apps/api/src/mcp/tools");
+const MCP_CALL = /callApi\(\s*ctx\(\),\s*"(GET|POST|PUT|PATCH|DELETE)",\s*[`"](\/v1\/[^`"]*)[`"]/g;
+const knownOps = new Set(operations.map(({ path, method }) => `${method.toUpperCase()} ${normalise(path)}`));
+const registered = new Set<string>();
+const mcpProblems: string[] = [];
+for (const file of tsFiles(MCP_TOOLS)) {
+  const text = readFileSync(file, "utf8");
+  for (const m of text.matchAll(/registerTool\(\s*"([a-z_]+)"/g)) registered.add(m[1]!);
+  for (const m of text.matchAll(MCP_CALL)) {
+    const key = `${m[1]} ${normalise(m[2]!.replace(/\$\{[^}]*\}/g, "{x}").split("?")[0]!)}`;
+    if (!knownOps.has(key)) mcpProblems.push(`${relative(ROOT, file)}: ${key} is not in the spec`);
+  }
+}
+// Only the "The tools" section: the page's other tables list scopes and error codes.
+const mcpPage = readFileSync(join(DOCS, "mcp.mdx"), "utf8");
+const toolsSection = mcpPage.slice(mcpPage.indexOf("\n## The tools"), mcpPage.indexOf("\n## ", mcpPage.indexOf("\n## The tools") + 1));
+const mcpDocumented = new Set([...toolsSection.matchAll(/^\| `([a-z_]+)` \|/gm)].map((m) => m[1]!));
+for (const tool of registered) if (!mcpDocumented.has(tool)) mcpProblems.push(`mcp.mdx does not list the ${tool} tool`);
+for (const tool of mcpDocumented) if (!registered.has(tool)) mcpProblems.push(`mcp.mdx lists ${tool}, which the server does not register`);
+
+if (mcpProblems.length > 0) {
+  console.error(`\n${mcpProblems.length} MCP problem(s):\n`);
+  for (const p of mcpProblems) console.error(`  ${p}`);
+  process.exit(1);
+}
+
 const internalCount = operations.filter(({ op }) => op["x-internal"]).length;
 console.log(
   `spec coverage ok — every /v1 path in the docs exists (${known.size} paths in the spec), ` +
     `${internalCount} internal operations withheld from the reference, ` +
-    `${enforced.size} scopes documented and enforced`,
+    `${enforced.size} scopes documented and enforced, every /v1 operation has an SDK method, ${registered.size} MCP tools documented and on real routes`,
 );

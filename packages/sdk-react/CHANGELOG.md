@@ -1,5 +1,23 @@
 # @chatformhq/react
 
+## 0.3.0
+
+### Changed
+
+- `useChatformSession` follows a slow turn through to its result. The API
+  answers 202 when a turn runs past its deadline; the hook now waits for it and
+  reports the same outcome a fast turn would, where it used to stop at the
+  partial body.
+- `useChatformSession` returns `pendingVerification` and `pendingPayment`.
+- `publishableKey` is required. `respondentToken` is removed: it was accepted
+  and never used, so a hook given only a token silently did nothing.
+- A call made before the session opens, or without a key, sets `error` instead
+  of doing nothing.
+- `ChatformEmbed` gains `onAnswered`: this device had already answered the form.
+  `onAnswer` is typed `{ ref }`, which is all the form sends.
+- The embed adds `hostClose=1` when there is no `onClose`, so the form draws no
+  close button it cannot use, and the frame may ask for geolocation.
+
 ## 0.2.0
 
 ### Fixed

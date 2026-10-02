@@ -1,5 +1,55 @@
 # @chatformhq/js
 
+## 0.3.0
+
+Every type is now generated from the API's OpenAPI spec instead of written by
+hand. The hand-written ones had drifted: `ChatformResponse` had no `metadata`,
+`TurnResult` had no `pendingPayment`, `SessionAction` was missing three
+actions, and `sessions.get()` returned `Record<string, unknown>` where the API
+documents the whole shape. A spec change now reaches these types through
+`pnpm --filter @chatformhq/js gen:types`, and CI fails until it has run.
+
+### Fixed
+
+- **`verifyWebhook` rejected every real delivery.** Chatform signs with the
+  base64-decoded bytes after `whsec_`, as Standard Webhooks specifies; this
+  keyed its HMAC with the literal string. Pinned to the spec's published test
+  vector.
+- Retries backed off by zero seconds when a 5xx carried no `Retry-After`.
+
+### New
+
+- `chatform.forms.settings`: `get`, `update`. Settings by key, with the plan's
+  refusals listed in `rejected`.
+- `chatform.forms.payments.list()`: payments a form's payment questions took.
+- `chatform.forms.knowledge.downloadFile()`.
+- `chatform.paymentAccounts`: `list`, `connectStripe`, `startOAuth`,
+  `onboardCashfree`, `update`, `disconnect`.
+- `chatform.import({ url })`: a form from Google Forms, Typeform, Tally,
+  Jotform, Youform or any public page. Saves nothing.
+- `sessions.auth.email.start()` / `.verify()`: emailed sign-in codes.
+- `sessions.startPayment()` / `confirmPayment()`: the headless Pay button.
+- `templates.use(slug, { workspace })`.
+- `webhooks.update()`, `stats()`, `retryFailed()`, and a `status` filter on
+  `deliveries()`, for the delivery queue.
+- Types for the 202 a slow turn answers with (`TurnProcessing`, and
+  `TurnOutcome` for either), `SessionState`, `PendingPayment`,
+  `CheckoutLaunch`, `Analytics`, `FormSettings` and the rest, all exported.
+
+### Breaking
+
+- `webhooks.deliveries(id, request)` is now `deliveries(id, options, request)`.
+  It returns the whole page (`{ data, has_more, next_cursor }`).
+- `respondent.ipHash` is gone from `responses.create()` and
+  `sessions.create()`. The API no longer reads or stores IP addresses.
+- `forms.get()` is typed as what it returns: the public config, or the draft
+  document for a form that was never published. Narrow on `"doc" in result`,
+  or call `getDocument()`.
+- Types that were loose are now exact, so code that relied on an index
+  signature (`question.anything`) may need a cast. `KnowledgeSource`,
+  `Integration` and `RespondentAuthResult` are the ones most likely to notice.
+- `forms.analytics()` returns every breakdown the API sends, not a subset.
+
 ## 0.2.0
 
 The API grew from 43 operations to 69 while this package sat at 0.1.1. This

@@ -1,5 +1,6 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
 import { rows } from "../internal/rows.js";
+import type { Res } from "../types/spec.js";
 
 export interface ExportFilters {
   /** Defaults to completed only, matching the read API. `["all"]` for everything. */
@@ -14,8 +15,8 @@ export interface Export {
   id: string;
   object: "export";
   formId: string;
-  status: "queued" | "running" | "ready" | "failed";
-  format: "csv" | "json";
+  status: ExportWire["status"];
+  format: ExportWire["format"];
   rowCount: number | null;
   bytes: number | null;
   error: string | null;
@@ -28,21 +29,8 @@ export interface Export {
   downloadExpiresAt: number | null;
 }
 
-interface ExportWire {
-  id: string;
-  object: "export";
-  form_id: string;
-  status: Export["status"];
-  format: Export["format"];
-  row_count: number | null;
-  bytes: number | null;
-  error: string | null;
-  created_at: number;
-  completed_at: number | null;
-  expires_at: number | null;
-  download_url: string | null;
-  download_expires_at: number | null;
-}
+/** What the API sends. `Export` is the same object in camelCase. */
+type ExportWire = Res<"/v1/exports/{id}", "get">;
 
 function toExport(w: ExportWire): Export {
   return {

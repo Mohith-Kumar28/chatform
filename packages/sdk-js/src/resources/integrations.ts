@@ -1,5 +1,6 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
 import { rows } from "../internal/rows.js";
+import type { Body, Res } from "../types/spec.js";
 import type { Integration, SpreadsheetIntegration } from "../types/index.js";
 
 /**
@@ -26,7 +27,7 @@ export class Integrations {
    */
   setSpreadsheet(
     formId: string,
-    options: { includePartials?: boolean; rotate?: boolean } = {},
+    options: Body<"/v1/forms/{id}/integrations/spreadsheet", "put"> = {},
     request?: RequestOptions,
   ) {
     return this.http.put<SpreadsheetIntegration>(`/v1/forms/${formId}/integrations/spreadsheet`, options, request);
@@ -44,7 +45,7 @@ export class Integrations {
   }
 
   removeSpreadsheet(formId: string, request?: RequestOptions) {
-    return this.http.delete<{ ok: boolean }>(`/v1/forms/${formId}/integrations/spreadsheet`, request);
+    return this.http.delete<Res<"/v1/forms/{id}/integrations/spreadsheet", "delete">>(`/v1/forms/${formId}/integrations/spreadsheet`, request);
   }
 }
 

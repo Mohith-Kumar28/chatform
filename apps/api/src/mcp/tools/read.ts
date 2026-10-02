@@ -46,7 +46,7 @@ export function registerReadTools(server: McpServer, ctx: () => McpCtx): void {
         status: z
           .enum(["draft", "published", "archived", "all"])
           .optional()
-          .describe("Defaults to published."),
+          .describe("Defaults to all."),
         ...pageArgs,
       },
       annotations: READ_ONLY,
@@ -88,7 +88,7 @@ export function registerReadTools(server: McpServer, ctx: () => McpCtx): void {
       description:
         "Read one form. The default 'document' view returns the editable question document — this is what " +
         "to read, modify and send back to update_form, and it works on drafts. The 'public' view returns " +
-        "the published respondent-facing config instead, and only exists once a form has been published.",
+        "the respondent-facing config of the published form; for a form never published it returns the draft.",
       inputSchema: {
         form_id: z.string().describe("The form id, e.g. frm_abc123."),
         view: z
@@ -100,23 +100,14 @@ export function registerReadTools(server: McpServer, ctx: () => McpCtx): void {
     },
     async ({ form_id, view }) => {
       /**
-       * Defaulted to `document`, where `/v1` defaults to `public`.
-       *
-       * Deliberate, and not a style choice: the public view 404s for any form that
-       * has never been published, so an agent asked to look at a draft would be
-       * told the form does not exist. `document` is also what it needs in order to
-       * edit anything.
+       * Defaulted to `document`, where `/v1` defaults to `public`: the document
+       * is what an agent needs in order to edit anything, and it reads the same
+       * whether or not the form has been published.
        */
       const res = await callApi(ctx(), "GET", `/v1/forms/${encodeURIComponent(form_id)}`, {
         query: { view: view ?? "document" },
       });
-      if (res.status !== 200) {
-        const hint =
-          view === "public"
-            ? " If the form has never been published there is no public config yet — read the 'document' view."
-            : "";
-        return errorResult(describeFailure(res) + hint);
-      }
+      if (res.status !== 200) return errorResult(describeFailure(res));
       return jsonResult(res.body);
     },
   );

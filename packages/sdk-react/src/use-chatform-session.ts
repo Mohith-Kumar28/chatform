@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createBrowserClient, streamSession } from "@chatformhq/js/browser";
-import type { PublicBlock, PublicEnding, SessionAction, SessionEvent } from "@chatformhq/js/browser";
+import type {
+  PendingPayment,
+  PendingVerification,
+  PublicBlock,
+  PublicEnding,
+  SessionAction,
+  SessionEvent,
+  TurnOutcome,
+} from "@chatformhq/js/browser";
 
 /**
  * A conversation, as React state.
@@ -22,9 +30,9 @@ export interface ChatMessage {
 
 export interface UseChatformSessionOptions {
   formId: string;
-  /** A `pk_` key, or omit it and pass a `respondentToken` your server minted. */
-  publishableKey?: string;
-  respondentToken?: string;
+  /** A `pk_` key, restricted to your site's origins. Every call from the hook uses it. */
+  publishableKey: string;
+  /** Resume a session your server already opened, rather than opening a new one. */
   sessionId?: string;
   hiddenFields?: Record<string, string>;
   baseUrl?: string;
@@ -42,6 +50,16 @@ export interface UseChatformSession {
   validation: { ref: string; code: string; message: string } | null;
   error: Error | null;
   awaitingSubmit: boolean;
+  /**
+   * A code the conversation is waiting on. While set, the next message is read
+   * as that code; `resendCode()` and `changeAnswer()` are the other two moves.
+   */
+  pendingVerification: PendingVerification | null;
+  /**
+   * An open checkout. While set, the payment question cannot be answered by
+   * typing: open `pendingPayment.launch` with the gateway's own checkout.
+   */
+  pendingPayment: PendingPayment | null;
   /**
    * True when the form turned this respondent away rather than thanking them.
    *
@@ -77,6 +95,8 @@ export function useChatformSession(options: UseChatformSessionOptions): UseChatf
   const [validation, setValidation] = useState<UseChatformSession["validation"]>(null);
   const [error, setError] = useState<Error | null>(null);
   const [awaitingSubmit, setAwaitingSubmit] = useState(false);
+  const [pendingVerification, setPendingVerification] = useState<PendingVerification | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(null);
 
   /**
    * Guards a double-open.
@@ -145,25 +165,63 @@ export function useChatformSession(options: UseChatformSessionOptions): UseChatf
     if (!options.manual && !sessionId && status === "idle") void start();
   }, [options.manual, sessionId, status, start]);
 
+  /**
+   * A turn that outran the API's deadline answers 202 with what it had so far.
+   * Pulling events from `sinceSeq` waits for the turn to land, and the session
+   * state then says where it ended up, so the caller sees the same outcome a
+   * fast turn would have given.
+   */
+  const settle = useCallback(async (sid: string, result: TurnOutcome) => {
+    if (!("status" in result) || result.status !== "processing") return result;
+    const events = [...result.events];
+    let since = result.sinceSeq;
+    for (;;) {
+      const page = await client.current!.sessions.events(sid, since);
+      events.push(...page.events);
+      since = page.latest_seq;
+      if (!page.has_more) break;
+    }
+    const state = await client.current!.sessions.get(sid);
+    const asked = events.filter((e) => e.type === "question").pop();
+    const refused = events.filter((e) => e.type === "validation_error").pop();
+    return {
+      ...result,
+      events,
+      question: asked ? ((asked.data as { block: PublicBlock }).block ?? null) : result.question,
+      ending: state.ending,
+      validation: (refused?.data as TurnOutcome["validation"]) ?? null,
+      awaitingSubmit: state.awaitingSubmit,
+      complete: state.status === "completed" || state.status === "disqualified",
+      pendingVerification: state.pendingVerification,
+      pendingPayment: state.pendingPayment,
+    };
+  }, []);
+
   const turn = useCallback(
-    async (run: () => Promise<Awaited<ReturnType<NonNullable<typeof client.current>["sessions"]["send"]>>>) => {
-      if (!sessionId || !client.current) return;
+    async (run: () => Promise<TurnOutcome>) => {
+      if (!sessionId || !client.current) {
+        setError(new Error(client.current ? "The session has not opened yet." : "A publishable key is required."));
+        setStatus("error");
+        return;
+      }
       setStatus("thinking");
       setValidation(null);
       try {
-        const result = await run();
+        const result = await settle(sessionId, await run());
         applyEvents(result.events ?? []);
         setQuestion(result.question);
         setEnding(result.ending);
         setValidation(result.validation);
         setAwaitingSubmit(result.awaitingSubmit);
+        setPendingVerification(result.pendingVerification);
+        setPendingPayment(result.pendingPayment);
         setStatus(result.complete ? "complete" : "ready");
       } catch (err) {
         setError(err as Error);
         setStatus("error");
       }
     },
-    [sessionId, applyEvents],
+    [sessionId, applyEvents, settle],
   );
 
   const send = useCallback(
@@ -197,6 +255,8 @@ export function useChatformSession(options: UseChatformSessionOptions): UseChatf
     validation,
     error,
     awaitingSubmit,
+    pendingVerification,
+    pendingPayment,
     screenedOut: ending?.kind === "screen_out",
     requirements: ending?.requirements ?? [],
     start,

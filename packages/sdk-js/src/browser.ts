@@ -5,7 +5,7 @@ import { Files } from "./resources/files.js";
 import { streamSession, type StreamOptions } from "./session/stream.js";
 
 /** Every action the runtime accepts, for a UI that renders buttons for them. */
-export type { SessionAction, CreateSessionOptions } from "./resources/sessions.js";
+export type { CreateSessionOptions, TurnOutcome } from "./resources/sessions.js";
 
 export { ChatformError } from "./internal/errors.js";
 export { streamSession, parseFrame } from "./session/stream.js";

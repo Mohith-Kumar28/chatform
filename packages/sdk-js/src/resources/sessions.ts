@@ -1,30 +1,28 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
-import type { AnswerValue, SessionCreated, SessionEvent, TurnResult } from "../types/index.js";
+import type { Body } from "../types/spec.js";
+import type {
+  AnswerValue,
+  PaymentConfirmed,
+  PaymentStarted,
+  RotatedToken,
+  SessionAction,
+  SessionCreated,
+  SessionEvents,
+  SessionState,
+  TurnProcessing,
+  TurnResult,
+} from "../types/index.js";
 import { RespondentAuth } from "./respondent-auth.js";
 
-export interface CreateSessionOptions {
-  hiddenFields?: Record<string, string>;
-  externalId?: string;
-  expiresIn?: number;
-  respondent?: { country?: string; userAgent?: string };
-}
+export type CreateSessionOptions = Body<"/v1/forms/{id}/sessions", "post">;
+export type { SessionAction };
 
-export type SessionAction =
-  | "skip"
-  | "stop"
-  | "restart"
-  | "edit"
-  | "submit"
-  /** Only while `pendingVerification` is set: another code to the same place. */
-  | "resend_code"
-  /** Only while `pendingVerification` is set: drop it and re-ask the question. */
-  | "change_answer"
-  /**
-   * Only on a session that reached a `screen_out` ending: take the refusal
-   * back and reopen the answer that caused it. The response returns to
-   * `in_progress` and the conversation carries on from that question.
-   */
-  | "undo_screen_out";
+/**
+ * A turn's result. When it outran `deadlineMs` the API answers 202 with
+ * `status: "processing"` and a `pollUrl`: nothing failed, the turn is still
+ * running, and `events(sessionId, result.sinceSeq)` picks it up.
+ */
+export type TurnOutcome = TurnResult | TurnProcessing;
 
 export class Sessions {
   /** Attaching a verified identity to a respondent, mid-conversation. */
@@ -47,7 +45,7 @@ export class Sessions {
 
   /** Free text, interpreted against whatever was just asked. */
   send(sessionId: string, text: string, options: { deadlineMs?: number } = {}, request?: RequestOptions) {
-    return this.http.request<TurnResult>("POST", `/v1/sessions/${sessionId}/messages`, {
+    return this.http.request<TurnOutcome>("POST", `/v1/sessions/${sessionId}/messages`, {
       query: { deadlineMs: options.deadlineMs },
       body: { type: "text", text },
       options: request,
@@ -61,7 +59,7 @@ export class Sessions {
     options: { deadlineMs?: number } = {},
     request?: RequestOptions,
   ) {
-    return this.http.request<TurnResult>("POST", `/v1/sessions/${sessionId}/messages`, {
+    return this.http.request<TurnOutcome>("POST", `/v1/sessions/${sessionId}/messages`, {
       query: { deadlineMs: options.deadlineMs },
       body: { type: "structured", ...answer },
       options: request,
@@ -76,16 +74,17 @@ export class Sessions {
    * `change_answer` are refused unless the turn before set `pendingVerification`.
    */
   act(sessionId: string, action: SessionAction, ref?: string, request?: RequestOptions) {
-    return this.http.post<TurnResult>(`/v1/sessions/${sessionId}/actions`, { action, ref }, request);
+    return this.http.post<TurnOutcome>(`/v1/sessions/${sessionId}/actions`, { action, ref }, request);
   }
 
+  /** Where the conversation stands, including any code or checkout it is waiting on. */
   get(sessionId: string, request?: RequestOptions) {
-    return this.http.get<Record<string, unknown>>(`/v1/sessions/${sessionId}`, undefined, request);
+    return this.http.get<SessionState>(`/v1/sessions/${sessionId}`, undefined, request);
   }
 
   /** Events since a sequence number, for resuming after a gap. */
   events(sessionId: string, since = 0, request?: RequestOptions) {
-    return this.http.get<{ events: SessionEvent[]; latest_seq: number; has_more: boolean }>(
+    return this.http.get<SessionEvents>(
       `/v1/sessions/${sessionId}/events`,
       { since },
       request,
@@ -93,7 +92,7 @@ export class Sessions {
   }
 
   rotateToken(sessionId: string, request?: RequestOptions) {
-    return this.http.post<{ respondentToken: string; rotatedAt: number }>(
+    return this.http.post<RotatedToken>(
       `/v1/sessions/${sessionId}/token/rotate`,
       undefined,
       request,
@@ -110,6 +109,26 @@ export class Sessions {
    * moment.
    */
   verifyPhoneAnswer(sessionId: string, input: { idToken: string }, request?: RequestOptions) {
-    return this.http.post<{ ok: true }>(`/v1/sessions/${sessionId}/verify/phone-token`, input, request);
+    return this.http.post<{ ok: boolean }>(`/v1/sessions/${sessionId}/verify/phone-token`, input, request);
+  }
+
+  /**
+   * Open the gateway's checkout for the payment question the session is on.
+   *
+   * The amount comes from the form, never the caller. Hand `launch` to the
+   * gateway in the respondent's browser; the session moves on when the gateway
+   * confirms payment, which `confirmPayment()` asks it to do now.
+   */
+  startPayment(sessionId: string, input: Body<"/v1/sessions/{sid}/payments", "post">, request?: RequestOptions) {
+    return this.http.post<PaymentStarted>(`/v1/sessions/${sessionId}/payments`, input, request);
+  }
+
+  /** Ask the gateway where a checkout stands, and settle it if it was paid. */
+  confirmPayment(sessionId: string, recordId: string, request?: RequestOptions) {
+    return this.http.post<PaymentConfirmed>(
+      `/v1/sessions/${sessionId}/payments/${recordId}/confirm`,
+      undefined,
+      request,
+    );
   }
 }

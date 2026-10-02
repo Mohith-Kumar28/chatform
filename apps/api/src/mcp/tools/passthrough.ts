@@ -2,7 +2,7 @@
  * Four tools that reach the whole developer API.
  *
  * The curated tools cover the common jobs; these cover everything else without
- * putting forty-three more schemas in front of the model on every request. The
+ * putting every remaining schema in front of the model on every request. The
  * search/details/read/write shape is the one several other vendors' MCP servers
  * converged on independently for APIs far larger than this one, which is a good
  * sign it is the pattern rather than a trick.

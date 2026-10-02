@@ -7,23 +7,19 @@ import { Exports } from "./resources/exports.js";
 import { Files } from "./resources/files.js";
 import { Templates } from "./resources/templates.js";
 import { Ai } from "./resources/ai.js";
+import { PaymentAccountsResource } from "./resources/payment-accounts.js";
 import { streamSession, type StreamOptions } from "./session/stream.js";
-import type { KeyIdentity } from "./types/index.js";
+import type { Imported, ImportInput, KeyIdentity } from "./types/index.js";
 
 export { ChatformError } from "./internal/errors.js";
 export { streamSession, parseFrame } from "./session/stream.js";
 export * from "./types/index.js";
 export type { ClientConfig, RequestOptions, StreamOptions };
 /** Resource shapes, so a caller can name what a method returned. */
-export type { SessionAction, CreateSessionOptions } from "./resources/sessions.js";
-export type { WebhookEndpoint } from "./resources/webhooks.js";
+export type { CreateSessionOptions, TurnOutcome } from "./resources/sessions.js";
+export type { CreateResponseOptions, ListResponsesOptions } from "./resources/responses.js";
 export type { Export, ExportFilters } from "./resources/exports.js";
 export type { StoredFile, UploadIntent, UploadBody } from "./resources/files.js";
-export type { TemplateSummary, TemplateDetail } from "./resources/templates.js";
-export type { FormVersion, FormVersionSummary, RestoredVersion } from "./resources/versions.js";
-export type { KnowledgeIndex, KnowledgeSource } from "./resources/knowledge.js";
-export type { Integration, SpreadsheetIntegration } from "./resources/integrations.js";
-export type { AiGenerateResult, AiEditResult, ClarifyQuestion } from "./resources/ai.js";
 
 /**
  * The Chatform client.
@@ -50,6 +46,17 @@ export function createClient(config: ClientConfig) {
     templates: new Templates(http),
     /** The designer model. The one resource here that spends money per call. */
     ai: new Ai(http),
+    /** The organization's own Stripe, Razorpay or Cashfree accounts. */
+    paymentAccounts: new PaymentAccountsResource(http),
+
+    /**
+     * Read a form from Google Forms, Typeform, Tally, Jotform, Youform or any
+     * public page into a Chatform document. Nothing is saved: pass `doc` to
+     * `forms.create()` to keep it, and read `report.notCopied` first.
+     */
+    import(input: ImportInput, options?: RequestOptions) {
+      return http.post<Imported>("/v1/import", input, options);
+    },
 
     /** Who this key is, what it may do, and what is left of the plan. */
     me(options?: RequestOptions) {

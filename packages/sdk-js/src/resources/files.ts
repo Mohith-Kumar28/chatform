@@ -1,10 +1,7 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
+import type { Res } from "../types/spec.js";
 
-export interface UploadIntent {
-  fileId: string;
-  /** Path to PUT the bytes to. Already correct for the key you are using. */
-  uploadUrl: string;
-}
+export type UploadIntent = Res<"/v1/sessions/{sid}/uploads/intent", "post">;
 
 export interface StoredFile {
   id: string;
@@ -20,18 +17,8 @@ export interface StoredFile {
   downloadExpiresAt: number;
 }
 
-interface FileWire {
-  id: string;
-  object: "file";
-  form_id: string | null;
-  response_id: string | null;
-  filename: string;
-  mime: string;
-  size_bytes: number;
-  created_at: number;
-  download_url: string;
-  download_expires_at: number;
-}
+/** What the API sends. `StoredFile` is the same object in camelCase. */
+type FileWire = Res<"/v1/files/{id}", "get">;
 
 function toFile(w: FileWire): StoredFile {
   return {

@@ -1,6 +1,6 @@
 {
   "name": "@chatformhq/js",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The official JavaScript client for the Chatform API.",
   "license": "MIT",
   "type": "module",
@@ -16,6 +16,7 @@
   },
   "scripts": {
     "build": "tsdown",
+    "gen:types": "node scripts/gen-types.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "prepublishOnly": "node ../../tooling/guard-publish.mjs && pnpm build"

@@ -1,4 +1,5 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
+import type { Body, Res } from "../types/spec.js";
 import type { KnowledgeIndex, KnowledgeSource } from "../types/index.js";
 
 /**
@@ -19,13 +20,13 @@ export class Knowledge {
     return this.http.get<KnowledgeIndex>(`/v1/forms/${formId}/knowledge`, undefined, request);
   }
 
-  addText(formId: string, input: { title: string; body: string }, request?: RequestOptions) {
-    return this.http.post<{ id: string }>(`/v1/forms/${formId}/knowledge/text`, input, request);
+  addText(formId: string, input: Body<"/v1/forms/{id}/knowledge/text", "post">, request?: RequestOptions) {
+    return this.http.post<Res<"/v1/forms/{id}/knowledge/text", "post">>(`/v1/forms/${formId}/knowledge/text`, input, request);
   }
 
   /** One page, fetched now. */
-  addLink(formId: string, input: { url: string; title?: string }, request?: RequestOptions) {
-    return this.http.post<{ id: string }>(`/v1/forms/${formId}/knowledge/link`, input, request);
+  addLink(formId: string, input: Body<"/v1/forms/{id}/knowledge/link", "post">, request?: RequestOptions) {
+    return this.http.post<Res<"/v1/forms/{id}/knowledge/link", "post">>(`/v1/forms/${formId}/knowledge/link`, input, request);
   }
 
   /**
@@ -34,8 +35,8 @@ export class Knowledge {
    * The fetching happens out of band, after this returns. `pages` bounds it;
    * leaving it off lets the plan's allowance be the bound instead.
    */
-  crawl(formId: string, input: { url: string; pages?: number }, request?: RequestOptions) {
-    return this.http.post<{ id?: string; ids?: string[] }>(`/v1/forms/${formId}/knowledge/crawl`, input, request);
+  crawl(formId: string, input: Body<"/v1/forms/{id}/knowledge/crawl", "post">, request?: RequestOptions) {
+    return this.http.post<Res<"/v1/forms/{id}/knowledge/crawl", "post">>(`/v1/forms/${formId}/knowledge/crawl`, input, request);
   }
 
   /**
@@ -53,11 +54,16 @@ export class Knowledge {
     const blob =
       file.body instanceof Blob ? file.body : new Blob([file.body as BlobPart], { type: file.type ?? "application/octet-stream" });
     form.append("file", blob, file.filename);
-    return this.http.postForm<{ id: string }>(`/v1/forms/${formId}/knowledge/upload`, form, request);
+    return this.http.postForm<Res<"/v1/forms/{id}/knowledge/upload", "post">>(`/v1/forms/${formId}/knowledge/upload`, form, request);
+  }
+
+  /** The uploaded file behind a source, as the `Response` it arrives in. */
+  downloadFile(formId: string, sourceId: string, request?: RequestOptions) {
+    return this.http.getFile(`/v1/forms/${formId}/knowledge/${sourceId}/file`, request);
   }
 
   remove(formId: string, sourceId: string, request?: RequestOptions) {
-    return this.http.delete<{ ok: boolean }>(`/v1/forms/${formId}/knowledge/${sourceId}`, request);
+    return this.http.delete<Res<"/v1/forms/{id}/knowledge/{sourceId}", "delete">>(`/v1/forms/${formId}/knowledge/${sourceId}`, request);
   }
 }
 

@@ -21,6 +21,32 @@ import { z } from "zod";
  * of it.
  */
 
+/**
+ * A form document, as the API hands one back.
+ *
+ * The envelope is typed and the parts are open: a block, an ending and a rule
+ * each span many shapes, and `GET /v1/blocks/{type}` publishes the full JSON
+ * Schema for every block type. Output only. Documents a caller sends are read
+ * leniently and linted, never rejected on shape, so inputs stay `unknown`.
+ */
+export const FormDocShape = z
+  .object({
+    schemaVersion: z.number(),
+    title: z.string(),
+    description: z.string().optional(),
+    blocks: z.array(z.record(z.string(), z.unknown())),
+    endings: z.array(z.record(z.string(), z.unknown())),
+    endingRules: z.array(z.unknown()),
+    logic: z.array(z.unknown()),
+    layout: z.record(z.string(), z.object({ x: z.number(), y: z.number() })).optional(),
+    variables: z.array(z.unknown()).optional(),
+    hiddenFields: z.array(z.unknown()).optional(),
+    settings: z.record(z.string(), z.unknown()).optional(),
+    theme: z.record(z.string(), z.unknown()).optional(),
+    embed: z.record(z.string(), z.unknown()).optional(),
+  })
+  .loose();
+
 /** The documented list envelope. */
 export const Paged = <T extends z.ZodType>(item: T) =>
   z.object({
@@ -49,7 +75,8 @@ export const PublicEndingView = z
     bodyMd: z.string().optional(),
     /** `screen_out` means the respondent was turned away rather than accepted. */
     kind: z.enum(["success", "screen_out"]).optional(),
-    requirements: z.array(z.unknown()).optional(),
+    /** On a screen-out, the requirements this response did not meet. */
+    requirements: z.array(z.string()).optional(),
   })
   .loose();
 
@@ -59,13 +86,12 @@ export const ProgressView = z.object({
   pct: z.number(),
 });
 
+/** Where the flow is waiting: a question, or the ending it reached. Null once finished. */
 export const NextView = z
-  .object({
-    kind: z.string(),
-    block: PublicBlockView.optional(),
-    ending: PublicEndingView.optional(),
-  })
-  .loose()
+  .discriminatedUnion("kind", [
+    z.object({ kind: z.literal("block"), block: PublicBlockView }),
+    z.object({ kind: z.literal("ending"), ending: PublicEndingView }),
+  ])
   .nullable();
 
 const MissingRequired = z.object({ ref: z.string(), title: z.string() });
@@ -116,8 +142,8 @@ export const ResponseView = z
     object: z.literal("response"),
     form_id: z.string(),
     status: z.enum(["in_progress", "completed", "abandoned", "disqualified"]),
-    source: z.string(),
-    mode: z.string(),
+    source: z.enum(["chat", "embed", "api"]),
+    mode: z.enum(["live", "test"]),
     started_at: z.number(),
     updated_at: z.number(),
     completed_at: z.number().nullable(),
@@ -155,8 +181,8 @@ export const SessionCreatedView = z.object({
   respondentToken: z.string(),
   expiresAt: z.number(),
   streamUrl: z.string(),
-  greeting: z.string().optional(),
-  question: PublicBlockView.nullable().optional(),
+  greeting: z.string().nullable(),
+  question: PublicBlockView.nullable(),
 });
 
 export const SessionEventView = z.object({
@@ -265,7 +291,7 @@ export const SessionStateView = z
     pendingVerification: PendingVerificationView.nullable(),
     pendingPayment: PendingPaymentView.nullable(),
     expiresAt: z.number().nullable(),
-    mode: z.string(),
+    mode: z.enum(["live", "test"]),
     source: z.string(),
   })
   .loose();
@@ -364,7 +390,7 @@ export const KeyIdentityView = z
     key: z.object({
       id: z.string(),
       type: z.string(),
-      mode: z.string(),
+      mode: z.enum(["live", "test"]),
       scopes: z.record(z.string(), z.array(z.string())),
     }),
     scope_vocabulary: z.record(z.string(), z.array(z.string())),
@@ -553,12 +579,12 @@ export const WebhookQueueStatsView = z.object({
 });
 
 export const AiDocumentView = z
-  .object({ doc: z.unknown(), issues: z.array(LintIssueView).optional() })
+  .object({ doc: FormDocShape, issues: z.array(LintIssueView).optional() })
   .loose();
 
 /** A generated document, never saved: pass `doc` to `POST /v1/forms` to keep it. */
 export const AiGeneratedView = z.object({
-  doc: z.unknown(),
+  doc: FormDocShape,
   issues: z.array(LintIssueView),
   tokens: z.number(),
   settings: z.array(SettingChangeView).optional(),
@@ -570,7 +596,7 @@ export const RestoredVersionView = z
     version: z.number(),
     summary: z.string(),
     changes: z.array(z.unknown()),
-    doc: z.unknown(),
+    doc: FormDocShape,
   })
   .loose();
 
@@ -580,7 +606,7 @@ export const FormVersionView = z
     versionId: z.string(),
     note: z.string().nullable(),
     publishedAt: z.number(),
-    doc: z.unknown(),
+    doc: FormDocShape,
     comparedTo: z.number().optional(),
     changes: z.array(z.unknown()),
     summary: z.string(),
@@ -589,7 +615,7 @@ export const FormVersionView = z
 
 /** The working draft, as `view=document` and as an unpublished form both answer. */
 export const FormDocumentView = z
-  .object({ id: z.string(), slug: z.string(), status: z.string(), doc: z.unknown() })
+  .object({ id: z.string(), slug: z.string(), status: z.string(), doc: FormDocShape })
   .loose();
 
 /** A published form's public projection: the same one a respondent receives. */
@@ -610,7 +636,7 @@ export const FormReadView = z.union([FormDocumentView, PublicFormConfigView]);
 /** `POST /v1/import`: a converted document and what did and didn't come over. */
 export const ImportedDocumentView = z
   .object({
-    doc: z.unknown(),
+    doc: FormDocShape,
     report: z.object({
       provider: z.enum(["typeform", "google_forms", "tally", "jotform", "youform", "website"]),
       sourceUrl: z.string(),

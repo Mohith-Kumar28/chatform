@@ -61,6 +61,8 @@ export class HttpClient {
        * unparseable.
        */
       form?: FormData;
+      /** `response` hands back the raw `Response`, for an endpoint that answers with bytes. */
+      as?: "json" | "response";
       options?: RequestOptions;
     } = {},
   ): Promise<T> {
@@ -105,6 +107,7 @@ export class HttpClient {
       });
 
       if (res.ok) {
+        if (args.as === "response") return res as T;
         if (res.status === 204) return undefined as T;
         return (await res.json()) as T;
       }
@@ -155,6 +158,10 @@ export class HttpClient {
   /** PUT raw bytes — the upload step, which is not JSON. */
   putRaw<T>(path: string, body: BodyInit, contentType: string, options?: RequestOptions) {
     return this.request<T>("PUT", path, { raw: { body, contentType }, options });
+  }
+  /** A GET whose body is a file, not JSON. The caller reads the `Response`. */
+  getFile(path: string, options?: RequestOptions) {
+    return this.request<Response>("GET", path, { as: "response", options });
   }
   delete<T>(path: string, options?: RequestOptions) {
     return this.request<T>("DELETE", path, { options });

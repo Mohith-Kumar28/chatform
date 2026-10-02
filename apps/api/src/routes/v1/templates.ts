@@ -11,7 +11,7 @@
  * next change lands on both.
  */
 import { Hono } from "hono";
-import { FormSummaryView, Paged } from "../../lib/v1-schemas.js";
+import { FormDocShape, FormSummaryView, Paged } from "../../lib/v1-schemas.js";
 import { page } from "../../lib/api-page.js";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../../lib/validator.js";
@@ -70,7 +70,7 @@ templatesV1Router.get(
     responses: {
       200: {
         description: "Template",
-        content: { "application/json": { schema: resolver(TemplateSummary.extend({ doc: z.unknown() })) } },
+        content: { "application/json": { schema: resolver(TemplateSummary.extend({ doc: FormDocShape })) } },
       },
       404: { description: "Not found", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
     },

@@ -1,5 +1,6 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
 import { rows } from "../internal/rows.js";
+import type { Query } from "../types/spec.js";
 import type { FormDocument, FormSummary, TemplateDetail, TemplateSummary } from "../types/index.js";
 
 /**
@@ -25,12 +26,11 @@ export class Templates {
   /**
    * Create a draft from a template.
    *
-   * Exactly what `forms.create()` does, with the document filled in. The form
-   * lands in the organization's first workspace, which is not something a key
-   * can choose: `/v1` exposes no workspace endpoint at all.
+   * Exactly what `forms.create()` does, with the document filled in. It lands
+   * in the organization's first workspace unless `workspace` names another.
    */
-  use(slug: string, request?: RequestOptions) {
-    return this.http.post<FormSummary>(`/v1/templates/${slug}/use`, {}, request);
+  use(slug: string, options: Query<"/v1/templates/{slug}/use", "post"> = {}, request?: RequestOptions) {
+    return this.http.request<FormSummary>("POST", `/v1/templates/${slug}/use`, { query: options, body: {}, options: request });
   }
 }
 

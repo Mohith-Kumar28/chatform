@@ -1,5 +1,13 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
-import type { AiEditResult, AiGenerateResult, ClarifyQuestion, FormDocument } from "../types/index.js";
+import type {
+  AiClarifyInput,
+  AiEditInput,
+  AiEditResult,
+  AiGenerateInput,
+  AiGenerateResult,
+  ClarifyQuestion,
+  FormDocument,
+} from "../types/index.js";
 
 /**
  * Chatform's own designer model, as an endpoint.
@@ -19,10 +27,7 @@ export class Ai {
   constructor(private readonly http: HttpClient) {}
 
   /** A document from a description, plus whatever the linter thinks of it. */
-  generateForm(
-    input: { prompt: string; questionCount?: number; clarifications?: { question: string; answer: string }[] },
-    request?: RequestOptions,
-  ) {
+  generateForm(input: AiGenerateInput, request?: RequestOptions) {
     return this.http.post<AiGenerateResult>("/v1/ai/generate-form", input, request);
   }
 
@@ -33,7 +38,7 @@ export class Ai {
    * fault: the model read the form, decided the instruction was already
    * satisfied, and declined to churn the document.
    */
-  editForm(input: { formId: string; prompt: string; count?: number }, request?: RequestOptions) {
+  editForm(input: AiEditInput, request?: RequestOptions) {
     return this.http.post<AiEditResult>("/v1/ai/edit-form", input, request);
   }
 
@@ -43,7 +48,7 @@ export class Ai {
    * Usually returns nothing, which is the useful answer. It runs on the
    * cheapest tier and is not charged as a generation, so asking first is free.
    */
-  clarifyForm(input: { prompt: string }, request?: RequestOptions) {
+  clarifyForm(input: AiClarifyInput, request?: RequestOptions) {
     return this.http.post<{ questions: ClarifyQuestion[] }>("/v1/ai/clarify-form", input, request);
   }
 }

@@ -24,12 +24,18 @@ export interface ChatformEmbedProps {
   onReady?: () => void;
   onQuestion?: (event: { ref: string; blockType: string; answered: number; total: number }) => void;
   /**
-   * Fires as each question is answered — with the question's ref, never the
+   * Fires as each question is answered, with the question's ref and never the
    * value. Respondent answers do not belong in the embedding page by default;
    * read them from a webhook or the responses API.
    */
-  onAnswer?: (event: { ref: string; blockType: string }) => void;
+  onAnswer?: (event: { ref: string }) => void;
   onComplete?: (event: { responseId: string; durationMs: number }) => void;
+  /**
+   * This device has already answered the form, found when it loads. `onComplete`
+   * only fires while someone finishes it on this page, so this is the one to
+   * check before showing the form again to someone who answered earlier.
+   */
+  onAnswered?: () => void;
   onClose?: () => void;
 }
 
@@ -52,6 +58,7 @@ export function ChatformEmbed({
   onQuestion,
   onAnswer,
   onComplete,
+  onAnswered,
   onClose,
 }: ChatformEmbedProps) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -80,6 +87,9 @@ export function ChatformEmbed({
         case "complete":
           onComplete?.(message as never);
           break;
+        case "answered":
+          onAnswered?.();
+          break;
         case "close":
           onClose?.();
           break;
@@ -88,7 +98,7 @@ export function ChatformEmbed({
 
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [origin, height, onReady, onQuestion, onAnswer, onComplete, onClose]);
+  }, [origin, height, onReady, onQuestion, onAnswer, onComplete, onAnswered, onClose]);
 
   const url = new URL(`${origin}/f/${slug}`);
   url.searchParams.set("embed", "1");

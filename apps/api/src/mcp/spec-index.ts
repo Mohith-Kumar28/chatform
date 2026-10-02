@@ -4,7 +4,7 @@
  * The curated tools cover the jobs an agent is actually asked to do; this is what
  * covers the rest of the surface without paying context for it. A tool schema
  * costs tokens on every single request whether or not it is used, so the whole
- * remaining API is reachable through four generic tools instead of forty-three
+ * remaining API is reachable through four generic tools instead of one per endpoint
  * specific ones. (The pattern is borrowed from other vendors' MCP servers, which
  * front a hundred-plus endpoints the same way.)
  *

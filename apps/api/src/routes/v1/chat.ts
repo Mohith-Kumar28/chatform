@@ -3,6 +3,7 @@ import {
   PaymentConfirmedView,
   PaymentStartedView,
   RotatedTokenView,
+  SessionCreatedView,
   SessionEventsView,
   SessionStateView,
   TurnProcessingView,
@@ -88,15 +89,6 @@ const CreateSessionBody = z
   })
   .prefault({});
 
-const SessionCreated = z.object({
-  sessionId: z.string(),
-  respondentToken: z.string(),
-  expiresAt: z.number(),
-  streamUrl: z.string(),
-  greeting: z.string().nullable(),
-  question: z.unknown().nullable(),
-});
-
 /**
  * Opening a session, registered at two paths.
  *
@@ -114,7 +106,7 @@ const createSessionRoute = (path: string) =>
     tags: ["v1"],
     summary: "Open a conversation on a published form",
     responses: {
-      200: { description: "Session", content: { "application/json": { schema: resolver(SessionCreated) } } },
+      200: { description: "Session", content: { "application/json": { schema: resolver(SessionCreatedView) } } },
       403: { description: "The form is closed, capped, or over its response ceiling" },
       404: { description: "Form not found" },
     },

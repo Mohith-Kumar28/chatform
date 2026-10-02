@@ -1,23 +1,25 @@
 /**
  * The write half of the curated surface.
  *
- * Six tools, no deletes. The absence is the design: an agent reading respondent
+ * No deletes. The absence is the design: an agent reading respondent
  * free text is reading attacker-supplied input, and the blast radius of a confused
  * tool call should not include destroying a form or a month of responses. Tally
  * draws the line in the same place.
  *
- * Nothing here generates a form with a model. The client already *is* one: it reads
- * the question-type contract from `list_blocks`, writes the document itself, and
- * sends it to `create_form`. So "build me an onboarding form" costs chatform no
- * model spend at all — the caller's own subscription pays for the authoring. That
- * is strictly better than exposing the dashboard's `/api/ai/*` routes, which are
- * session-only and metered against the form owner.
+ * The default way to build a form uses no model of ours. The client already *is*
+ * one: it reads the question-type contract from `list_blocks`, writes the document
+ * itself, and sends it to `create_form`, so "build me an onboarding form" costs
+ * chatform no model spend and the caller's own subscription pays for the
+ * authoring. `generate_form_with_ai` exists for a caller who asks for Chatform's
+ * own generator; it needs the `ai:generate` scope and its description steers
+ * away from it.
  */
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpCtx } from "../dispatch.js";
 import { callApi, describeFailure } from "../dispatch.js";
 import { jsonResult, errorResult } from "../shape.js";
+import { GenerateBody } from "../../routes/ai.js";
 
 /**
  * A form document, taken as JSON rather than as a typed schema.
@@ -254,7 +256,7 @@ export function registerWriteTools(server: McpServer, ctx: () => McpCtx): void {
       title: "Start a form from a template",
       description:
         "Create a draft form from one of the official templates. Faster and more reliable than authoring the " +
-        "same form from scratch — read list_templates first, and get_template to see the questions before " +
+        "same form from scratch — read list_templates first, and chatform_api_read on /v1/templates/{slug} to see the questions before " +
         "committing. The result is a draft; publish_form makes it live.",
       inputSchema: {
         slug: z.string().describe("The template slug, from list_templates."),
@@ -356,20 +358,26 @@ export function registerWriteTools(server: McpServer, ctx: () => McpCtx): void {
         "it is free. Use this when the caller explicitly asks for Chatform's own generator, or when a form needs " +
         "the flow-branching the designer model is tuned for. Returns a document without saving it.",
       inputSchema: {
-        prompt: z.string().min(5).max(2000).describe("What the form is for, in plain language."),
-        question_count: z
-          .number()
-          .int()
-          .min(2)
-          .max(50)
-          .optional()
-          .describe("Force a length. Omit to let the model size the form against the request."),
+        // The route's own field schemas, so a limit changed there changes here.
+        prompt: GenerateBody.shape.prompt.describe("What the form is for, in plain language."),
+        question_count: GenerateBody.shape.questionCount.describe(
+          "Force a length. Omit to let the model size the form against the request.",
+        ),
+        clarifications: GenerateBody.shape.clarifications.describe(
+          "Answers to questions the request left open, if you asked the person first.",
+        ),
+        workspace: GenerateBody.shape.workspaceId.describe("Workspace slug or id. Omit for the organization's first."),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    async ({ prompt, question_count }) => {
+    async ({ prompt, question_count, clarifications, workspace }) => {
       const res = await callApi(ctx(), "POST", "/v1/ai/generate-form", {
-        body: { prompt, ...(question_count === undefined ? {} : { questionCount: question_count }) },
+        body: {
+          prompt,
+          ...(question_count === undefined ? {} : { questionCount: question_count }),
+          ...(clarifications === undefined ? {} : { clarifications }),
+          ...(workspace === undefined ? {} : { workspaceId: workspace }),
+        },
       });
       if (res.status >= 400) {
         const hint =
@@ -421,14 +429,14 @@ export function registerWriteTools(server: McpServer, ctx: () => McpCtx): void {
       title: "Create a webhook",
       description:
         "Register a URL to receive event deliveries. The signing secret is returned ONCE, in this reply — " +
-        "it cannot be read again. Use chatform_api_read on /v1/events for the event names you can subscribe to.",
+        "it cannot be read again. Use list_events for the event names you can subscribe to.",
       inputSchema: {
         url: z.string().url().max(2000).describe("The HTTPS endpoint to deliver to."),
         events: z
           .array(z.string())
           .min(1)
           .max(20)
-          .describe("Event names, e.g. [\"response.completed\"]. See /v1/events for the catalogue."),
+          .describe("Event names, e.g. [\"response.completed\"]. list_events has the catalogue."),
         form_id: z.string().max(64).optional().describe("Scope to one form. Omit for every form in the organization."),
         idempotency_key: z.string().optional().describe("Optional. Guards against creating two on a retry."),
       },

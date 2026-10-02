@@ -91,7 +91,7 @@ export function projectResponseRow(row: unknown, includeAnswers: boolean): unkno
  *
  * Deliberately not `structuredContent`: the SDK only expects that field when the
  * tool also declares an `outputSchema`, and sending it without one risks the host
- * rejecting the result. Declaring output schemas for all eighteen tools is worth
+ * rejecting the result. Declaring output schemas for every tool is worth
  * doing — ChatGPT's compatibility schema asks for it — but it is a separate pass,
  * not something to half-do here.
  */

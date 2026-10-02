@@ -1,21 +1,17 @@
 import type { HttpClient, RequestOptions } from "../internal/http.js";
-import type { AnswerValue, ChatformResponse, Page } from "../types/index.js";
+import type { Body, Res } from "../types/spec.js";
+import type { ChatformResponse, NextStep, Page, ResponseSource, ResponseStatus } from "../types/index.js";
 
-export interface CreateResponseOptions {
-  answers?: Record<string, AnswerValue>;
-  hiddenFields?: Record<string, string>;
-  /** Finish in the same call. Still records one row per answer. */
-  complete?: boolean;
-  /** `flow` (default) refuses answers ahead of the flow; `free` is for imports. */
-  mode?: "flow" | "free";
-  /** Seconds before an unfinished response is abandoned. Default 24 hours. */
-  expiresIn?: number;
-  respondent?: { country?: string; userAgent?: string };
-}
+/**
+ * `answers` keyed by ref; `complete: true` finishes in the same call; `mode:
+ * "free"` accepts answers ahead of the flow, for imports.
+ */
+export type CreateResponseOptions = Body<"/v1/forms/{id}/responses", "post">;
 
+/** camelCase here, sent as the API's snake_case query parameters. */
 export interface ListResponsesOptions {
-  status?: string | string[];
-  source?: string;
+  status?: ResponseStatus | "all" | ResponseStatus[];
+  source?: ResponseSource;
   mode?: "live" | "test" | "all";
   createdAfter?: number;
   createdBefore?: number;
@@ -42,12 +38,8 @@ export class Responses {
    * A batch is all or nothing: a partial write would leave you unable to tell
    * what landed.
    */
-  answer(
-    responseId: string,
-    answer: { ref: string; value: AnswerValue } | { answers: { ref: string; value: AnswerValue }[] },
-    request?: RequestOptions,
-  ) {
-    return this.http.post<ChatformResponse & { recorded: { ref: string; value: AnswerValue }[] }>(
+  answer(responseId: string, answer: Body<"/v1/responses/{id}/answers", "post">, request?: RequestOptions) {
+    return this.http.post<Res<"/v1/responses/{id}/answers", "post">>(
       `/v1/responses/${responseId}/answers`,
       answer,
       request,
@@ -60,8 +52,8 @@ export class Responses {
   }
 
   /** Finish. Refuses if a required question that was actually asked is unanswered. */
-  complete(responseId: string, options: { endingRef?: string } = {}, request?: RequestOptions) {
-    return this.http.post<ChatformResponse & { ending: unknown }>(
+  complete(responseId: string, options: Body<"/v1/responses/{id}/complete", "post"> = {}, request?: RequestOptions) {
+    return this.http.post<Res<"/v1/responses/{id}/complete", "post">>(
       `/v1/responses/${responseId}/complete`,
       options,
       request,
@@ -69,10 +61,11 @@ export class Responses {
   }
 
   /** Give up on a response, keeping every answer that was given. */
-  abandon(responseId: string, options: { reason?: string } = {}, request?: RequestOptions) {
+  abandon(responseId: string, options: Body<"/v1/responses/{id}/abandon", "post"> = {}, request?: RequestOptions) {
     return this.http.post<ChatformResponse>(`/v1/responses/${responseId}/abandon`, options, request);
   }
 
+  /** `include: ["answers"]` adds every answer as `{ ref, type, value }`. */
   get(responseId: string, options: { include?: string[] } = {}, request?: RequestOptions) {
     return this.http.get<ChatformResponse>(
       `/v1/responses/${responseId}`,
@@ -83,13 +76,7 @@ export class Responses {
 
   /** Where the flow is waiting, without the rest of the response. */
   next(responseId: string, request?: RequestOptions) {
-    return this.http.get<{
-      next: ChatformResponse["next"];
-      progress: ChatformResponse["progress"];
-      answered: string[];
-      missing_required: { ref: string; title: string }[];
-      complete_ready: boolean;
-    }>(`/v1/responses/${responseId}/next`, undefined, request);
+    return this.http.get<NextStep>(`/v1/responses/${responseId}/next`, undefined, request);
   }
 
   list(formId: string, options: ListResponsesOptions = {}, request?: RequestOptions) {

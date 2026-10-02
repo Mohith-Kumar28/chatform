@@ -18004,10 +18004,19 @@
                       ]
                     },
                     "source": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "chat",
+                        "embed",
+                        "api"
+                      ]
                     },
                     "mode": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "live",
+                        "test"
+                      ]
                     },
                     "started_at": {
                       "type": "number"
@@ -18410,85 +18419,105 @@
                     "next": {
                       "anyOf": [
                         {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string"
-                            },
-                            "block": {
+                          "oneOf": [
+                            {
                               "type": "object",
                               "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "ref": {
-                                  "type": "string"
-                                },
-                                "type": {
-                                  "type": "string"
-                                },
-                                "title": {
-                                  "type": "string"
-                                },
-                                "required": {
-                                  "type": "boolean"
-                                },
-                                "imageKey": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                },
-                                "media": {}
-                              },
-                              "required": [
-                                "id",
-                                "ref",
-                                "type",
-                                "title",
-                                "required"
-                              ],
-                              "additionalProperties": {}
-                            },
-                            "ending": {
-                              "type": "object",
-                              "properties": {
-                                "ref": {
-                                  "type": "string"
-                                },
-                                "title": {
-                                  "type": "string"
-                                },
-                                "bodyMd": {
-                                  "type": "string"
-                                },
                                 "kind": {
                                   "type": "string",
-                                  "enum": [
-                                    "success",
-                                    "screen_out"
-                                  ]
+                                  "const": "block"
                                 },
-                                "requirements": {
-                                  "type": "array",
-                                  "items": {}
+                                "block": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "required": {
+                                      "type": "boolean"
+                                    },
+                                    "imageKey": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "media": {}
+                                  },
+                                  "required": [
+                                    "id",
+                                    "ref",
+                                    "type",
+                                    "title",
+                                    "required"
+                                  ],
+                                  "additionalProperties": {}
                                 }
                               },
                               "required": [
-                                "ref",
-                                "title"
-                              ],
-                              "additionalProperties": {}
+                                "kind",
+                                "block"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "ending"
+                                },
+                                "ending": {
+                                  "type": "object",
+                                  "properties": {
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "bodyMd": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "success",
+                                        "screen_out"
+                                      ]
+                                    },
+                                    "requirements": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "ref",
+                                    "title"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "ending"
+                              ]
                             }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": {}
+                          ]
                         },
                         {
                           "type": "null"
@@ -18775,10 +18804,19 @@
                             ]
                           },
                           "source": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "chat",
+                              "embed",
+                              "api"
+                            ]
                           },
                           "mode": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                              "live",
+                              "test"
+                            ]
                           },
                           "started_at": {
                             "type": "number"
@@ -19181,85 +19219,105 @@
                           "next": {
                             "anyOf": [
                               {
-                                "type": "object",
-                                "properties": {
-                                  "kind": {
-                                    "type": "string"
-                                  },
-                                  "block": {
+                                "oneOf": [
+                                  {
                                     "type": "object",
                                     "properties": {
-                                      "id": {
-                                        "type": "string"
-                                      },
-                                      "ref": {
-                                        "type": "string"
-                                      },
-                                      "type": {
-                                        "type": "string"
-                                      },
-                                      "title": {
-                                        "type": "string"
-                                      },
-                                      "required": {
-                                        "type": "boolean"
-                                      },
-                                      "imageKey": {
-                                        "anyOf": [
-                                          {
-                                            "type": "string"
-                                          },
-                                          {
-                                            "type": "null"
-                                          }
-                                        ]
-                                      },
-                                      "media": {}
-                                    },
-                                    "required": [
-                                      "id",
-                                      "ref",
-                                      "type",
-                                      "title",
-                                      "required"
-                                    ],
-                                    "additionalProperties": {}
-                                  },
-                                  "ending": {
-                                    "type": "object",
-                                    "properties": {
-                                      "ref": {
-                                        "type": "string"
-                                      },
-                                      "title": {
-                                        "type": "string"
-                                      },
-                                      "bodyMd": {
-                                        "type": "string"
-                                      },
                                       "kind": {
                                         "type": "string",
-                                        "enum": [
-                                          "success",
-                                          "screen_out"
-                                        ]
+                                        "const": "block"
                                       },
-                                      "requirements": {
-                                        "type": "array",
-                                        "items": {}
+                                      "block": {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "ref": {
+                                            "type": "string"
+                                          },
+                                          "type": {
+                                            "type": "string"
+                                          },
+                                          "title": {
+                                            "type": "string"
+                                          },
+                                          "required": {
+                                            "type": "boolean"
+                                          },
+                                          "imageKey": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          },
+                                          "media": {}
+                                        },
+                                        "required": [
+                                          "id",
+                                          "ref",
+                                          "type",
+                                          "title",
+                                          "required"
+                                        ],
+                                        "additionalProperties": {}
                                       }
                                     },
                                     "required": [
-                                      "ref",
-                                      "title"
-                                    ],
-                                    "additionalProperties": {}
+                                      "kind",
+                                      "block"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "const": "ending"
+                                      },
+                                      "ending": {
+                                        "type": "object",
+                                        "properties": {
+                                          "ref": {
+                                            "type": "string"
+                                          },
+                                          "title": {
+                                            "type": "string"
+                                          },
+                                          "bodyMd": {
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": [
+                                              "success",
+                                              "screen_out"
+                                            ]
+                                          },
+                                          "requirements": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "string"
+                                            }
+                                          }
+                                        },
+                                        "required": [
+                                          "ref",
+                                          "title"
+                                        ],
+                                        "additionalProperties": {}
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "ending"
+                                    ]
                                   }
-                                },
-                                "required": [
-                                  "kind"
-                                ],
-                                "additionalProperties": {}
+                                ]
                               },
                               {
                                 "type": "null"
@@ -19525,10 +19583,19 @@
                       ]
                     },
                     "source": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "chat",
+                        "embed",
+                        "api"
+                      ]
                     },
                     "mode": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "live",
+                        "test"
+                      ]
                     },
                     "started_at": {
                       "type": "number"
@@ -19931,85 +19998,105 @@
                     "next": {
                       "anyOf": [
                         {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string"
-                            },
-                            "block": {
+                          "oneOf": [
+                            {
                               "type": "object",
                               "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "ref": {
-                                  "type": "string"
-                                },
-                                "type": {
-                                  "type": "string"
-                                },
-                                "title": {
-                                  "type": "string"
-                                },
-                                "required": {
-                                  "type": "boolean"
-                                },
-                                "imageKey": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                },
-                                "media": {}
-                              },
-                              "required": [
-                                "id",
-                                "ref",
-                                "type",
-                                "title",
-                                "required"
-                              ],
-                              "additionalProperties": {}
-                            },
-                            "ending": {
-                              "type": "object",
-                              "properties": {
-                                "ref": {
-                                  "type": "string"
-                                },
-                                "title": {
-                                  "type": "string"
-                                },
-                                "bodyMd": {
-                                  "type": "string"
-                                },
                                 "kind": {
                                   "type": "string",
-                                  "enum": [
-                                    "success",
-                                    "screen_out"
-                                  ]
+                                  "const": "block"
                                 },
-                                "requirements": {
-                                  "type": "array",
-                                  "items": {}
+                                "block": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "required": {
+                                      "type": "boolean"
+                                    },
+                                    "imageKey": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "media": {}
+                                  },
+                                  "required": [
+                                    "id",
+                                    "ref",
+                                    "type",
+                                    "title",
+                                    "required"
+                                  ],
+                                  "additionalProperties": {}
                                 }
                               },
                               "required": [
-                                "ref",
-                                "title"
-                              ],
-                              "additionalProperties": {}
+                                "kind",
+                                "block"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "ending"
+                                },
+                                "ending": {
+                                  "type": "object",
+                                  "properties": {
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "bodyMd": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "success",
+                                        "screen_out"
+                                      ]
+                                    },
+                                    "requirements": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "ref",
+                                    "title"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "ending"
+                              ]
                             }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": {}
+                          ]
                         },
                         {
                           "type": "null"
@@ -20212,10 +20299,19 @@
                       ]
                     },
                     "source": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "chat",
+                        "embed",
+                        "api"
+                      ]
                     },
                     "mode": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "live",
+                        "test"
+                      ]
                     },
                     "started_at": {
                       "type": "number"
@@ -20618,85 +20714,105 @@
                     "next": {
                       "anyOf": [
                         {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string"
-                            },
-                            "block": {
+                          "oneOf": [
+                            {
                               "type": "object",
                               "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "ref": {
-                                  "type": "string"
-                                },
-                                "type": {
-                                  "type": "string"
-                                },
-                                "title": {
-                                  "type": "string"
-                                },
-                                "required": {
-                                  "type": "boolean"
-                                },
-                                "imageKey": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                },
-                                "media": {}
-                              },
-                              "required": [
-                                "id",
-                                "ref",
-                                "type",
-                                "title",
-                                "required"
-                              ],
-                              "additionalProperties": {}
-                            },
-                            "ending": {
-                              "type": "object",
-                              "properties": {
-                                "ref": {
-                                  "type": "string"
-                                },
-                                "title": {
-                                  "type": "string"
-                                },
-                                "bodyMd": {
-                                  "type": "string"
-                                },
                                 "kind": {
                                   "type": "string",
-                                  "enum": [
-                                    "success",
-                                    "screen_out"
-                                  ]
+                                  "const": "block"
                                 },
-                                "requirements": {
-                                  "type": "array",
-                                  "items": {}
+                                "block": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "required": {
+                                      "type": "boolean"
+                                    },
+                                    "imageKey": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "media": {}
+                                  },
+                                  "required": [
+                                    "id",
+                                    "ref",
+                                    "type",
+                                    "title",
+                                    "required"
+                                  ],
+                                  "additionalProperties": {}
                                 }
                               },
                               "required": [
-                                "ref",
-                                "title"
-                              ],
-                              "additionalProperties": {}
+                                "kind",
+                                "block"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "ending"
+                                },
+                                "ending": {
+                                  "type": "object",
+                                  "properties": {
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "bodyMd": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "success",
+                                        "screen_out"
+                                      ]
+                                    },
+                                    "requirements": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "ref",
+                                    "title"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "ending"
+                              ]
                             }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": {}
+                          ]
                         },
                         {
                           "type": "null"
@@ -20867,10 +20983,19 @@
                       ]
                     },
                     "source": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "chat",
+                        "embed",
+                        "api"
+                      ]
                     },
                     "mode": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "live",
+                        "test"
+                      ]
                     },
                     "started_at": {
                       "type": "number"
@@ -21273,85 +21398,105 @@
                     "next": {
                       "anyOf": [
                         {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string"
-                            },
-                            "block": {
+                          "oneOf": [
+                            {
                               "type": "object",
                               "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "ref": {
-                                  "type": "string"
-                                },
-                                "type": {
-                                  "type": "string"
-                                },
-                                "title": {
-                                  "type": "string"
-                                },
-                                "required": {
-                                  "type": "boolean"
-                                },
-                                "imageKey": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                },
-                                "media": {}
-                              },
-                              "required": [
-                                "id",
-                                "ref",
-                                "type",
-                                "title",
-                                "required"
-                              ],
-                              "additionalProperties": {}
-                            },
-                            "ending": {
-                              "type": "object",
-                              "properties": {
-                                "ref": {
-                                  "type": "string"
-                                },
-                                "title": {
-                                  "type": "string"
-                                },
-                                "bodyMd": {
-                                  "type": "string"
-                                },
                                 "kind": {
                                   "type": "string",
-                                  "enum": [
-                                    "success",
-                                    "screen_out"
-                                  ]
+                                  "const": "block"
                                 },
-                                "requirements": {
-                                  "type": "array",
-                                  "items": {}
+                                "block": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "required": {
+                                      "type": "boolean"
+                                    },
+                                    "imageKey": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "media": {}
+                                  },
+                                  "required": [
+                                    "id",
+                                    "ref",
+                                    "type",
+                                    "title",
+                                    "required"
+                                  ],
+                                  "additionalProperties": {}
                                 }
                               },
                               "required": [
-                                "ref",
-                                "title"
-                              ],
-                              "additionalProperties": {}
+                                "kind",
+                                "block"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "ending"
+                                },
+                                "ending": {
+                                  "type": "object",
+                                  "properties": {
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "bodyMd": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "success",
+                                        "screen_out"
+                                      ]
+                                    },
+                                    "requirements": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "ref",
+                                    "title"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "ending"
+                              ]
                             }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": {}
+                          ]
                         },
                         {
                           "type": "null"
@@ -21553,10 +21698,19 @@
                       ]
                     },
                     "source": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "chat",
+                        "embed",
+                        "api"
+                      ]
                     },
                     "mode": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "live",
+                        "test"
+                      ]
                     },
                     "started_at": {
                       "type": "number"
@@ -21959,85 +22113,105 @@
                     "next": {
                       "anyOf": [
                         {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string"
-                            },
-                            "block": {
+                          "oneOf": [
+                            {
                               "type": "object",
                               "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "ref": {
-                                  "type": "string"
-                                },
-                                "type": {
-                                  "type": "string"
-                                },
-                                "title": {
-                                  "type": "string"
-                                },
-                                "required": {
-                                  "type": "boolean"
-                                },
-                                "imageKey": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                },
-                                "media": {}
-                              },
-                              "required": [
-                                "id",
-                                "ref",
-                                "type",
-                                "title",
-                                "required"
-                              ],
-                              "additionalProperties": {}
-                            },
-                            "ending": {
-                              "type": "object",
-                              "properties": {
-                                "ref": {
-                                  "type": "string"
-                                },
-                                "title": {
-                                  "type": "string"
-                                },
-                                "bodyMd": {
-                                  "type": "string"
-                                },
                                 "kind": {
                                   "type": "string",
-                                  "enum": [
-                                    "success",
-                                    "screen_out"
-                                  ]
+                                  "const": "block"
                                 },
-                                "requirements": {
-                                  "type": "array",
-                                  "items": {}
+                                "block": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "required": {
+                                      "type": "boolean"
+                                    },
+                                    "imageKey": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "media": {}
+                                  },
+                                  "required": [
+                                    "id",
+                                    "ref",
+                                    "type",
+                                    "title",
+                                    "required"
+                                  ],
+                                  "additionalProperties": {}
                                 }
                               },
                               "required": [
-                                "ref",
-                                "title"
-                              ],
-                              "additionalProperties": {}
+                                "kind",
+                                "block"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "ending"
+                                },
+                                "ending": {
+                                  "type": "object",
+                                  "properties": {
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "bodyMd": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "success",
+                                        "screen_out"
+                                      ]
+                                    },
+                                    "requirements": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "ref",
+                                    "title"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "ending"
+                              ]
                             }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": {}
+                          ]
                         },
                         {
                           "type": "null"
@@ -22222,10 +22396,19 @@
                       ]
                     },
                     "source": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "chat",
+                        "embed",
+                        "api"
+                      ]
                     },
                     "mode": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "live",
+                        "test"
+                      ]
                     },
                     "started_at": {
                       "type": "number"
@@ -22628,85 +22811,105 @@
                     "next": {
                       "anyOf": [
                         {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string"
-                            },
-                            "block": {
+                          "oneOf": [
+                            {
                               "type": "object",
                               "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "ref": {
-                                  "type": "string"
-                                },
-                                "type": {
-                                  "type": "string"
-                                },
-                                "title": {
-                                  "type": "string"
-                                },
-                                "required": {
-                                  "type": "boolean"
-                                },
-                                "imageKey": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                },
-                                "media": {}
-                              },
-                              "required": [
-                                "id",
-                                "ref",
-                                "type",
-                                "title",
-                                "required"
-                              ],
-                              "additionalProperties": {}
-                            },
-                            "ending": {
-                              "type": "object",
-                              "properties": {
-                                "ref": {
-                                  "type": "string"
-                                },
-                                "title": {
-                                  "type": "string"
-                                },
-                                "bodyMd": {
-                                  "type": "string"
-                                },
                                 "kind": {
                                   "type": "string",
-                                  "enum": [
-                                    "success",
-                                    "screen_out"
-                                  ]
+                                  "const": "block"
                                 },
-                                "requirements": {
-                                  "type": "array",
-                                  "items": {}
+                                "block": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "required": {
+                                      "type": "boolean"
+                                    },
+                                    "imageKey": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "media": {}
+                                  },
+                                  "required": [
+                                    "id",
+                                    "ref",
+                                    "type",
+                                    "title",
+                                    "required"
+                                  ],
+                                  "additionalProperties": {}
                                 }
                               },
                               "required": [
-                                "ref",
-                                "title"
-                              ],
-                              "additionalProperties": {}
+                                "kind",
+                                "block"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "ending"
+                                },
+                                "ending": {
+                                  "type": "object",
+                                  "properties": {
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "bodyMd": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "success",
+                                        "screen_out"
+                                      ]
+                                    },
+                                    "requirements": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "ref",
+                                    "title"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "ending"
+                              ]
                             }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": {}
+                          ]
                         },
                         {
                           "type": "null"
@@ -22845,85 +23048,105 @@
                     "next": {
                       "anyOf": [
                         {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string"
-                            },
-                            "block": {
+                          "oneOf": [
+                            {
                               "type": "object",
                               "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "ref": {
-                                  "type": "string"
-                                },
-                                "type": {
-                                  "type": "string"
-                                },
-                                "title": {
-                                  "type": "string"
-                                },
-                                "required": {
-                                  "type": "boolean"
-                                },
-                                "imageKey": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                },
-                                "media": {}
-                              },
-                              "required": [
-                                "id",
-                                "ref",
-                                "type",
-                                "title",
-                                "required"
-                              ],
-                              "additionalProperties": {}
-                            },
-                            "ending": {
-                              "type": "object",
-                              "properties": {
-                                "ref": {
-                                  "type": "string"
-                                },
-                                "title": {
-                                  "type": "string"
-                                },
-                                "bodyMd": {
-                                  "type": "string"
-                                },
                                 "kind": {
                                   "type": "string",
-                                  "enum": [
-                                    "success",
-                                    "screen_out"
-                                  ]
+                                  "const": "block"
                                 },
-                                "requirements": {
-                                  "type": "array",
-                                  "items": {}
+                                "block": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "required": {
+                                      "type": "boolean"
+                                    },
+                                    "imageKey": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "media": {}
+                                  },
+                                  "required": [
+                                    "id",
+                                    "ref",
+                                    "type",
+                                    "title",
+                                    "required"
+                                  ],
+                                  "additionalProperties": {}
                                 }
                               },
                               "required": [
-                                "ref",
-                                "title"
-                              ],
-                              "additionalProperties": {}
+                                "kind",
+                                "block"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "ending"
+                                },
+                                "ending": {
+                                  "type": "object",
+                                  "properties": {
+                                    "ref": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "bodyMd": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "success",
+                                        "screen_out"
+                                      ]
+                                    },
+                                    "requirements": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "ref",
+                                    "title"
+                                  ],
+                                  "additionalProperties": {}
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "ending"
+                              ]
                             }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": {}
+                          ]
                         },
                         {
                           "type": "null"
@@ -23355,7 +23578,11 @@
                           "type": "string"
                         },
                         "mode": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "live",
+                            "test"
+                          ]
                         },
                         "scopes": {
                           "type": "object",
@@ -23700,7 +23927,107 @@
                         "status": {
                           "type": "string"
                         },
-                        "doc": {}
+                        "doc": {
+                          "type": "object",
+                          "properties": {
+                            "schemaVersion": {
+                              "type": "number"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "blocks": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {}
+                              }
+                            },
+                            "endings": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {}
+                              }
+                            },
+                            "endingRules": {
+                              "type": "array",
+                              "items": {}
+                            },
+                            "logic": {
+                              "type": "array",
+                              "items": {}
+                            },
+                            "layout": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                  "x": {
+                                    "type": "number"
+                                  },
+                                  "y": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "x",
+                                  "y"
+                                ]
+                              }
+                            },
+                            "variables": {
+                              "type": "array",
+                              "items": {}
+                            },
+                            "hiddenFields": {
+                              "type": "array",
+                              "items": {}
+                            },
+                            "settings": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            },
+                            "theme": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            },
+                            "embed": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "schemaVersion",
+                            "title",
+                            "blocks",
+                            "endings",
+                            "endingRules",
+                            "logic"
+                          ],
+                          "additionalProperties": {}
+                        }
                       },
                       "required": [
                         "id",
@@ -25581,7 +25908,107 @@
                     "usageCount": {
                       "type": "number"
                     },
-                    "doc": {}
+                    "doc": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "blocks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "endings": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "endingRules": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "logic": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "layout": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "x",
+                              "y"
+                            ]
+                          }
+                        },
+                        "variables": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "hiddenFields": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "settings": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        "theme": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        "embed": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "title",
+                        "blocks",
+                        "endings",
+                        "endingRules",
+                        "logic"
+                      ],
+                      "additionalProperties": {}
+                    }
                   },
                   "required": [
                     "slug",
@@ -26030,7 +26457,107 @@
                     "publishedAt": {
                       "type": "number"
                     },
-                    "doc": {},
+                    "doc": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "blocks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "endings": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "endingRules": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "logic": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "layout": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "x",
+                              "y"
+                            ]
+                          }
+                        },
+                        "variables": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "hiddenFields": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "settings": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        "theme": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        "embed": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "title",
+                        "blocks",
+                        "endings",
+                        "endingRules",
+                        "logic"
+                      ],
+                      "additionalProperties": {}
+                    },
                     "comparedTo": {
                       "type": "number"
                     },
@@ -26161,7 +26688,107 @@
                       "type": "array",
                       "items": {}
                     },
-                    "doc": {}
+                    "doc": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "blocks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "endings": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "endingRules": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "logic": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "layout": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "x",
+                              "y"
+                            ]
+                          }
+                        },
+                        "variables": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "hiddenFields": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "settings": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        "theme": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        "embed": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "title",
+                        "blocks",
+                        "endings",
+                        "endingRules",
+                        "logic"
+                      ],
+                      "additionalProperties": {}
+                    }
                   },
                   "required": [
                     "ok",
@@ -26402,7 +27029,107 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "doc": {},
+                    "doc": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "blocks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "endings": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "endingRules": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "logic": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "layout": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "x",
+                              "y"
+                            ]
+                          }
+                        },
+                        "variables": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "hiddenFields": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "settings": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        "theme": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        "embed": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "title",
+                        "blocks",
+                        "endings",
+                        "endingRules",
+                        "logic"
+                      ],
+                      "additionalProperties": {}
+                    },
                     "issues": {
                       "type": "array",
                       "items": {
@@ -26743,7 +27470,107 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "doc": {},
+                    "doc": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "blocks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "endings": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "endingRules": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "logic": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "layout": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "x",
+                              "y"
+                            ]
+                          }
+                        },
+                        "variables": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "hiddenFields": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "settings": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        "theme": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        "embed": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "title",
+                        "blocks",
+                        "endings",
+                        "endingRules",
+                        "logic"
+                      ],
+                      "additionalProperties": {}
+                    },
                     "issues": {
                       "type": "array",
                       "items": {
@@ -27213,7 +28040,107 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "doc": {},
+                    "doc": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "blocks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "endings": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "endingRules": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "logic": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "layout": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "x",
+                              "y"
+                            ]
+                          }
+                        },
+                        "variables": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "hiddenFields": {
+                          "type": "array",
+                          "items": {}
+                        },
+                        "settings": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        "theme": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        "embed": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "title",
+                        "blocks",
+                        "endings",
+                        "endingRules",
+                        "logic"
+                      ],
+                      "additionalProperties": {}
+                    },
                     "report": {
                       "type": "object",
                       "properties": {
@@ -32526,7 +33453,45 @@
                     },
                     "question": {
                       "anyOf": [
-                        {},
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "ref": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "required": {
+                              "type": "boolean"
+                            },
+                            "imageKey": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "media": {}
+                          },
+                          "required": [
+                            "id",
+                            "ref",
+                            "type",
+                            "title",
+                            "required"
+                          ],
+                          "additionalProperties": {}
+                        },
                         {
                           "type": "null"
                         }
@@ -32675,7 +33640,45 @@
                     },
                     "question": {
                       "anyOf": [
-                        {},
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "ref": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "required": {
+                              "type": "boolean"
+                            },
+                            "imageKey": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "media": {}
+                          },
+                          "required": [
+                            "id",
+                            "ref",
+                            "type",
+                            "title",
+                            "required"
+                          ],
+                          "additionalProperties": {}
+                        },
                         {
                           "type": "null"
                         }
@@ -32906,7 +33909,9 @@
                             },
                             "requirements": {
                               "type": "array",
-                              "items": {}
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           },
                           "required": [
@@ -33286,7 +34291,9 @@
                             },
                             "requirements": {
                               "type": "array",
-                              "items": {}
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           },
                           "required": [
@@ -33761,7 +34768,9 @@
                             },
                             "requirements": {
                               "type": "array",
-                              "items": {}
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           },
                           "required": [
@@ -34141,7 +35150,9 @@
                             },
                             "requirements": {
                               "type": "array",
-                              "items": {}
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           },
                           "required": [
@@ -34570,7 +35581,9 @@
                             },
                             "requirements": {
                               "type": "array",
-                              "items": {}
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           },
                           "required": [
@@ -34822,7 +35835,11 @@
                       ]
                     },
                     "mode": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "live",
+                        "test"
+                      ]
                     },
                     "source": {
                       "type": "string"
@@ -35970,7 +36987,9 @@
                             },
                             "requirements": {
                               "type": "array",
-                              "items": {}
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           },
                           "required": [
@@ -36350,7 +37369,9 @@
                             },
                             "requirements": {
                               "type": "array",
-                              "items": {}
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           },
                           "required": [
@@ -36826,7 +37847,9 @@
                             },
                             "requirements": {
                               "type": "array",
-                              "items": {}
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           },
                           "required": [
@@ -37206,7 +38229,9 @@
                             },
                             "requirements": {
                               "type": "array",
-                              "items": {}
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           },
                           "required": [
@@ -37636,7 +38661,9 @@
                             },
                             "requirements": {
                               "type": "array",
-                              "items": {}
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           },
                           "required": [
@@ -37888,7 +38915,11 @@
                       ]
                     },
                     "mode": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "live",
+                        "test"
+                      ]
                     },
                     "source": {
                       "type": "string"
