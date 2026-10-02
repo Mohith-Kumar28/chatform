@@ -1,0 +1,72 @@
+name: release
+
+# Publishes @chatformhq/js and @chatformhq/react when a push to main carries a
+# version npm does not have yet. Bumping `version` in a package.json (with its
+# CHANGELOG entry) is the whole release step; nothing is published by hand.
+#
+# Uses npm trusted publishing: no npm token is stored anywhere. Each package has
+# to name this repository and this workflow file as its trusted publisher once,
+# in the package's settings on npmjs.com, before the first run can succeed.
+# Provenance is attached automatically.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/sdk-js/**"
+      - "packages/sdk-react/**"
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install -g npm@latest
+
+      - run: pnpm install --frozen-lockfile
+
+      # The generated types must match the spec, and both packages must build
+      # and pass their tests, before anything leaves.
+      - run: pnpm sdk:verify
+      - run: pnpm --filter @chatformhq/js --filter @chatformhq/react typecheck
+      - run: pnpm --filter @chatformhq/js --filter @chatformhq/react test
+
+      # js before react: react depends on it, and a react release pinned to a js
+      # version npm does not have yet would fail to install.
+      - name: Publish what npm does not have
+        run: |
+          set -euo pipefail
+          for dir in packages/sdk-js packages/sdk-react; do
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is already on npm."
+              continue
+            fi
+            echo "Publishing $name@$version"
+            pnpm --filter "$name" build
+            # pnpm pack applies publishConfig.exports and rewrites workspace:*,
+            # which npm does not; npm then publishes that tarball as it is.
+            tarball=$(cd "$dir" && pnpm pack --pack-destination "$RUNNER_TEMP" | tail -n 1)
+            npm publish "$tarball" --access public --provenance
+          done

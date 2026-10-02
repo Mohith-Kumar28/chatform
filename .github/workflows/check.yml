@@ -39,6 +39,39 @@ jobs:
       # without wrangler set up cannot do.
       - run: pnpm openapi:verify
 
+  # No breaking change to /v1 ships by accident.
+  #
+  # `/v1` is promised to keep meaning what it means (versioning.mdx), and the spec
+  # is generated from the routes, so comparing this commit's openapi.json with the
+  # one before it is the whole check. Only /v1 is compared: /api and /p are ours to
+  # change. A deliberate break, or a documentation fix oasdiff cannot tell from one
+  # (declaring a body the route always required), goes through by putting
+  # `[api-break]` in the commit message or PR title, which still prints the report.
+  breaking:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name != 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install oasdiff
+        run: curl -sSL https://github.com/oasdiff/oasdiff/releases/download/v1.33.0/oasdiff_1.33.0_linux_amd64.tar.gz | sudo tar xz -C /usr/local/bin oasdiff
+      - name: Compare /v1 with the previous spec
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          OVERRIDE: ${{ contains(github.event.head_commit.message, '[api-break]') || contains(github.event.pull_request.title, '[api-break]') }}
+        run: |
+          if ! git show "$BASE:openapi.json" > /tmp/base.json 2>/dev/null; then
+            echo "No previous spec to compare against."
+            exit 0
+          fi
+          if [ "$OVERRIDE" = "true" ]; then
+            oasdiff breaking /tmp/base.json openapi.json --match-path '^/v1/'
+            exit 0
+          fi
+          oasdiff breaking /tmp/base.json openapi.json --match-path '^/v1/' --fail-on ERR
+
   # Asks the provider whether it still accepts the schemas we send it.
   #
   # Separate from `check` and on a schedule, because the thing it guards against
