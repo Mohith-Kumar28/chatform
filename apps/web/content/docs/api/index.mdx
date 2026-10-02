@@ -1,0 +1,34 @@
+---
+title: API reference
+description: Every endpoint, generated from the OpenAPI spec.
+llmsExclude: true
+---
+
+Generated from [the spec](https://api.chatform.in/openapi.json), which the API
+produces from its own routes. If a page here disagrees with what the API does,
+the page is the bug.
+
+## Base URL
+
+```
+https://api.chatform.in
+```
+
+## Authentication
+
+```bash
+curl https://api.chatform.in/v1/me -H "x-api-key: sk_live_…"
+```
+
+Every `/v1` call takes an API key. Each page says which scope it needs, and
+whether a publishable key may call it. See [Authentication](/docs/authentication)
+and [Scopes](/docs/scopes).
+
+## Conventions
+
+- Errors share one shape: [Errors](/docs/errors).
+- Lists page with a cursor: [Pagination](/docs/pagination).
+- Writes take an `Idempotency-Key`: [Idempotency](/docs/idempotency).
+- What may change and what will not: [Versioning](/docs/versioning).
+
+Prefer a client? [The SDKs](/docs/sdk) are typed from this same spec.

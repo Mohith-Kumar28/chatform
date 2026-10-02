@@ -15,6 +15,7 @@ import { workspacePermissionsFor } from "../lib/permissions.js";
 import { stripForPublish, checkDocLimits, checkGatewayPayments } from "../lib/doc-entitlements.js";
 import { publishFingerprint, hasUnpublishedChanges } from "../lib/publish-state.js";
 import { backfillFollowUps } from "../lib/followups.js";
+import { emitWebhookEvent } from "../lib/webhooks.js";
 import { afterResponse, parseStoredDoc, recordDocChange, recordFormEvent, stampVersionStatement } from "../lib/form-activity.js";
 import { audit } from "../lib/gate-log.js";
 import { apiError, describeSchemaError } from "../lib/api-error.js";
@@ -996,6 +997,12 @@ formsRouter.post(
          * `backfillFollowUps` for what it will and will not reach.
          */
         backfillFollowUps(c.env, id, orgId),
+        emitWebhookEvent(c.env, {
+          event: "form.published",
+          organizationId: orgId,
+          formId: id,
+          data: { version, versionId: verId, note: publishNote },
+        }),
       ]),);
 
     return c.json({ ok: true, version, stripped });

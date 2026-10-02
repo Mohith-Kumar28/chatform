@@ -134,6 +134,52 @@ for (const file of mdxFiles(OUT)) {
 }
 
 /**
+ * The reference's own landing page, at `/docs/api`.
+ *
+ * Written here rather than kept by hand because the `rmSync` above clears the
+ * folder on every run, which is how the hand-written one was lost and every
+ * "API reference" link in the docs came to 404.
+ */
+writeFileSync(
+  join(OUT, "index.mdx"),
+  `---
+title: API reference
+description: Every endpoint, generated from the OpenAPI spec.
+llmsExclude: true
+---
+
+Generated from [the spec](https://api.chatform.in/openapi.json), which the API
+produces from its own routes. If a page here disagrees with what the API does,
+the page is the bug.
+
+## Base URL
+
+\`\`\`
+https://api.chatform.in
+\`\`\`
+
+## Authentication
+
+\`\`\`bash
+curl https://api.chatform.in/v1/me -H "x-api-key: sk_live_…"
+\`\`\`
+
+Every \`/v1\` call takes an API key. Each page says which scope it needs, and
+whether a publishable key may call it. See [Authentication](/docs/authentication)
+and [Scopes](/docs/scopes).
+
+## Conventions
+
+- Errors share one shape: [Errors](/docs/errors).
+- Lists page with a cursor: [Pagination](/docs/pagination).
+- Writes take an \`Idempotency-Key\`: [Idempotency](/docs/idempotency).
+- What may change and what will not: [Versioning](/docs/versioning).
+
+Prefer a client? [The SDKs](/docs/sdk) are typed from this same spec.
+`,
+);
+
+/**
  * Order the reference deliberately.
  *
  * Fumadocs falls back to alphabetical, which put `billing` and `dashboard` ahead
@@ -149,7 +195,7 @@ const ordered = [
 ];
 writeFileSync(
   join(OUT, "meta.json"),
-  `${JSON.stringify({ title: "API reference", pages: ordered }, null, 2)}\n`,
+  `${JSON.stringify({ title: "API reference", pages: ["index", ...ordered] }, null, 2)}\n`,
 );
 
 console.log(

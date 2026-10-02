@@ -117,7 +117,11 @@ exportsV1Router.post(
      * is refused rather than quietly narrowed.
      */
     const statuses = body.status ?? ["completed"];
-    const wantsPartials = statuses.some((s) => s === "in_progress" || s === "abandoned" || s === "all");
+    // `disqualified` sits behind the gate here as it does on the read API and in
+    // the dashboard export, which only ever includes completed rows without it.
+    const wantsPartials = statuses.some(
+      (s) => s === "in_progress" || s === "abandoned" || s === "disqualified" || s === "all",
+    );
     if (wantsPartials) {
       const ent = await entitlementsFor(c as never);
       if (!ent.features.export_partials) {

@@ -16,16 +16,13 @@ your whole organization.
 | `response.partial` | A response has stalled part-way, with answers in it |
 | `response.resumed` | Someone came back to a response they had abandoned |
 | `followup.sent` | A follow-up reminder went out |
-| `response.answer_recorded` | Accepted in a subscription, not sent yet |
-| `session.started` | Accepted in a subscription, not sent yet |
-| `form.published` | Accepted in a subscription, not sent yet |
+| `response.answer_recorded` | An answer was saved, in a conversation, over the API or by a payment |
+| `session.started` | A conversation opened |
+| `form.published` | A new version went live |
 
 A screened-out respondent gets `response.disqualified`, never
 `response.completed`, so a "completed" handler that adds people to a CRM or
 sends a welcome email does not fire for someone the form turned away.
-
-The last three names are valid when you create an endpoint, but nothing emits
-them today. Do not build on them yet.
 
 `response.partial` is the one people miss. Until it existed, a half-finished lead
 was invisible until it timed out — which is exactly as long as it was worth
@@ -59,6 +56,19 @@ Subscriptions written against the old `submission.completed` and
   ]
 }
 ```
+
+Events about a response carry `submission` and every `answers` entry so far.
+The other three add a `data` object instead, or alongside:
+
+| Event | `data` |
+| --- | --- |
+| `response.answer_recorded` | `{ ref }`: the question just answered. `answers` already includes it |
+| `session.started` | `{ sessionId, source }`. No `submission`: nothing has been answered yet |
+| `form.published` | `{ version, versionId, note }` |
+
+`response.answer_recorded` fires on every answer, so it is the busiest event by
+far. Subscribe to it only when you need answers as they arrive; `response.partial`
+and `response.completed` cover most integrations with a fraction of the calls.
 
 ## Verifying a delivery
 

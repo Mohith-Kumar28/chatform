@@ -175,6 +175,15 @@ async function main() {
   await step({ method: "GET", path: "/v1/forms/{id}", params: { id: F }, query: { view: "document" } }, { status: 200, has: ["id", "doc"] });
   await step({ method: "GET", path: "/v1/forms", query: { limit: 5, status: "all" } }, { status: 200, has: ["data", "has_more"] });
 
+  await step({ method: "GET", path: "/v1/forms/{id}/settings", params: { id: F } }, { status: 200, has: ["settings"] });
+  await step(
+    {
+      method: "PATCH", path: "/v1/forms/{id}/settings", params: { id: F },
+      body: { changes: [{ key: "settings.closeRules.maxSubmissions", value: "500" }] },
+    },
+    { status: 200, has: ["changes", "rejected"] },
+  );
+
   // ---- AI ----------------------------------------------------------------
   section("4. AI generation");
   if (SKIP_AI) {
@@ -188,6 +197,17 @@ async function main() {
     await step(
       { method: "POST", path: "/v1/ai/edit-form", body: { formId: F, prompt: "Make the notes question required" } },
       { status: [200, 422], has: ["doc"], note: "422 `would change nothing` is a documented normal outcome" },
+    );
+  }
+
+  // A public page through the importer. Saves nothing; a small model rewords
+  // the questions, logged but not charged, so it sits with the AI calls.
+  if (SKIP_AI) {
+    skip("POST /v1/import", "--skip-ai");
+  } else {
+    await step(
+      { method: "POST", path: "/v1/import", body: { url: "https://chatform.in/docs/quickstart" } },
+      { status: [200, 422], note: "422 is a documented outcome for a page with no form on it" },
     );
   }
 
@@ -218,6 +238,11 @@ async function main() {
   if (kUp?.id) created.knowledge.add(kUp.id);
 
   await step({ method: "GET", path: "/v1/forms/{id}/knowledge", params: { id: F } }, { status: 200 });
+  if (kUp?.id) {
+    await step({ method: "GET", path: "/v1/forms/{id}/knowledge/{sourceId}/file", params: { id: F, sourceId: kUp.id } }, { status: 200 });
+  } else {
+    skip("GET /v1/forms/{id}/knowledge/{sourceId}/file", "the upload returned no id");
+  }
   for (const id of created.knowledge) {
     await step({ method: "DELETE", path: "/v1/forms/{id}/knowledge/{sourceId}", params: { id: F, sourceId: id } }, { status: [200, 204] });
   }
@@ -249,6 +274,11 @@ async function main() {
   );
   if (hook?.id) created.webhooks.add(hook.id);
   await step({ method: "GET", path: "/v1/webhooks" }, { status: 200 });
+  await step({ method: "GET", path: "/v1/webhooks/stats" }, { status: 200, has: ["total"] });
+  if (hook?.id) {
+    await step({ method: "PATCH", path: "/v1/webhooks/{id}", params: { id: hook.id }, body: { active: false } }, { status: 200 });
+    await step({ method: "PATCH", path: "/v1/webhooks/{id}", params: { id: hook.id }, body: { active: true } }, { status: 200 });
+  }
 
   // ---- Integrations ------------------------------------------------------
   section("8. Integrations");
@@ -394,6 +424,26 @@ async function main() {
       );
     }
 
+    // The test form signs nobody in by email and has no payment question, so
+    // these are reachable only through their refusals, which is still proof
+    // the route, its body schema and its error envelope are live.
+    await step(
+      { method: "POST", path: "/v1/sessions/{sid}/auth/email/start", params: { sid: S }, body: { email: "maya@northwind.co" } },
+      { status: [400], outcome: "negative-only", note: "the test form does not sign in by email" },
+    );
+    await step(
+      { method: "POST", path: "/v1/sessions/{sid}/auth/email/verify", params: { sid: S }, body: { code: "000000" } },
+      { status: [400], outcome: "negative-only", note: "no code was sent" },
+    );
+    await step(
+      { method: "POST", path: "/v1/sessions/{sid}/payments", params: { sid: S }, body: { ref: refs.name } },
+      { status: [400, 402, 409, 422], outcome: "negative-only", note: "the test form has no payment question" },
+    );
+    await step(
+      { method: "POST", path: "/v1/sessions/{sid}/payments/{recordId}/confirm", params: { sid: S, recordId: "rpay_doesnotexist" }, body: {} },
+      { status: [404], outcome: "negative-only", note: "no checkout exists" },
+    );
+
     // The legacy `/v1/chat/sessions/...` spelling, proven to be a real alias.
     const chat = await step({ method: "POST", path: "/v1/forms/{id}/chat/sessions", params: { id: F }, body: {} }, { status: [200, 201] });
     const C = chat?.id ?? chat?.sessionId;
@@ -413,6 +463,22 @@ async function main() {
           { status: [400, 401, 403, 409, 422], outcome: "negative-only", note: "legacy alias; needs a real identity token" },
         );
       }
+      await step(
+        { method: "POST", path: "/v1/chat/sessions/{sid}/auth/email/start", params: { sid: C }, body: { email: "maya@northwind.co" } },
+        { status: [400], outcome: "negative-only", note: "legacy alias; the test form does not sign in by email" },
+      );
+      await step(
+        { method: "POST", path: "/v1/chat/sessions/{sid}/auth/email/verify", params: { sid: C }, body: { code: "000000" } },
+        { status: [400], outcome: "negative-only", note: "legacy alias; no code was sent" },
+      );
+      await step(
+        { method: "POST", path: "/v1/chat/sessions/{sid}/payments", params: { sid: C }, body: { ref: refs.name } },
+        { status: [400, 402, 409, 422], outcome: "negative-only", note: "legacy alias; no payment question" },
+      );
+      await step(
+        { method: "POST", path: "/v1/chat/sessions/{sid}/payments/{recordId}/confirm", params: { sid: C, recordId: "rpay_doesnotexist" }, body: {} },
+        { status: [404], outcome: "negative-only", note: "legacy alias; no checkout exists" },
+      );
     }
 
     // ---- Uploads --------------------------------------------------------
@@ -456,6 +522,37 @@ async function main() {
   }
   await step({ method: "GET", path: "/v1/exports" }, { status: 200 });
 
+  // ---- Payment accounts ---------------------------------------------------
+  section("12b. Payments");
+  /**
+   * Reads, and refusals only. Connecting, editing or disconnecting a real
+   * gateway account from a script would act on the organization's money, so
+   * every write here is aimed at an id that does not exist or a body the route
+   * must refuse. Starting OAuth only mints a consent URL nobody opens.
+   */
+  await step({ method: "GET", path: "/v1/payment-accounts" }, { status: [200, 403], has: ["accounts"] });
+  await step({ method: "GET", path: "/v1/forms/{id}/payments", params: { id: F } }, { status: 200, has: ["data"] });
+  await step(
+    { method: "POST", path: "/v1/payment-accounts/stripe", body: { restrictedKey: "rk_test_notarealkey" } },
+    { status: [400, 402, 422], outcome: "negative-only", note: "a fake key; connecting a real one is not a script's job" },
+  );
+  await step(
+    { method: "POST", path: "/v1/payment-accounts/oauth/{provider}/start", params: { provider: "razorpay" }, body: { returnTo: "https://chatform.in/dashboard" } },
+    { status: [200, 402, 403, 422], note: "returns a consent URL; nobody opens it" },
+  );
+  await step(
+    { method: "POST", path: "/v1/payment-accounts/cashfree/onboard", body: {} },
+    { status: [400, 402, 422], outcome: "negative-only", note: "an empty body; onboarding a real business is not a script's job" },
+  );
+  await step(
+    { method: "PATCH", path: "/v1/payment-accounts/{id}", params: { id: "pac_doesnotexist" }, body: { label: `apitest ${runId}` } },
+    { status: [404], outcome: "negative-only", note: "never edits a real account" },
+  );
+  await step(
+    { method: "DELETE", path: "/v1/payment-accounts/{id}", params: { id: "pac_doesnotexist" } },
+    { status: [404], outcome: "negative-only", note: "never disconnects a real account" },
+  );
+
   // ---- Analytics ---------------------------------------------------------
   section("13. Analytics");
   await step({ method: "GET", path: "/v1/forms/{id}/analytics", params: { id: F } }, { status: 200, has: ["views", "starts", "completed", "completionRate"] });
@@ -471,6 +568,7 @@ async function main() {
     } else {
       skip("POST /v1/webhooks/{id}/deliveries/{deliveryId}/replay", "no delivery had been attempted yet");
     }
+    await step({ method: "POST", path: "/v1/webhooks/{id}/retry-failed", params: { id: hook.id }, body: {} }, { status: 200, has: ["queued"] });
   }
 
   // ---- Negative matrix ---------------------------------------------------
@@ -504,8 +602,19 @@ async function main() {
   const probeRes = await client.call({ method: "POST", path: "/v1/forms/{id}/responses", params: { id: F }, body: {}, incidental: true });
   findings.push(...(await runProbes(client, F, probeRes.json?.id ?? R)));
 
+  // ---- Archive -----------------------------------------------------------
+  section("17. Archive");
+  /** Deleting a form archives it now; restore one, then let cleanup purge both for good. */
+  if (fromTemplate?.id) {
+    await client.call({ method: "DELETE", path: "/v1/forms/{id}", params: { id: fromTemplate.id }, incidental: true });
+    await step({ method: "GET", path: "/v1/archive/forms" }, { status: 200 });
+    await step({ method: "POST", path: "/v1/archive/forms/{id}/restore", params: { id: fromTemplate.id }, body: {} }, { status: 200 });
+  } else {
+    skip("POST /v1/archive/forms/{id}/restore", "no template form to archive");
+  }
+
   // ---- Cleanup -----------------------------------------------------------
-  section("17. Cleanup");
+  section("18. Cleanup");
   await cleanup(preExisting);
 }
 
@@ -519,6 +628,8 @@ async function cleanup(preExisting: string[]) {
       continue;
     }
     await step({ method: "DELETE", path: "/v1/forms/{id}", params: { id } }, { status: [200, 204] });
+    // A delete only archives; purge it so the run leaves nothing for 30 days.
+    await step({ method: "DELETE", path: "/v1/archive/forms/{id}", params: { id } }, { status: [200, 204] });
   }
 
   const after = await client.call({ method: "GET", path: "/v1/forms", query: { limit: 100 }, incidental: true });

@@ -1,0 +1,80 @@
+---
+title: API changelog
+description: What changed on /v1, newest first.
+---
+
+Changes to `/v1`, the [SDKs](/docs/sdk) and the [MCP server](/docs/mcp). Within
+`/v1` changes are additive, as [Versioning](/docs/versioning) promises: a new
+field, endpoint or event is not a breaking change, so handle values you do not
+recognise. CI compares every change to the API against the previous one and
+refuses a breaking change that was not meant.
+
+## 2026-10-02
+
+- **Webhooks:** `response.answer_recorded`, `session.started` and
+  `form.published` are sent. They were accepted in a subscription before but
+  never delivered. Each carries a `data` object; see
+  [the payload](/docs/webhooks#the-payload).
+- **Exports:** asking for `disqualified` responses now needs a plan that
+  includes partial responses, the same rule as reading them.
+- **Archive:** `DELETE /v1/forms/{id}` archives a form for 30 days instead of
+  deleting it. `GET /v1/archive/forms`, `POST /v1/archive/forms/{id}/restore`
+  and `DELETE /v1/archive/forms/{id}` are new.
+- **Deprecated:** the `/v1/chat/sessions/{sid}/…` and
+  `/v1/forms/{id}/chat/sessions` spellings. They keep working and now answer
+  with `Deprecation` and `Link` headers; use `/v1/sessions/{sid}/…`.
+- **Spec:** every error response declares the error envelope; the respondent
+  sign-in routes declare their request bodies; session payments, slow (202)
+  turns, `pendingPayment` and the form document are fully described.
+- **Scopes:** knowledge-base writes were published as `form:read` and as open
+  to publishable keys. They have always required `form:write`; the spec now
+  says so.
+- **SDK 0.3.0:** types generated from the spec, every endpoint covered, and
+  `verifyWebhook` accepts real deliveries. See its changelog for the breaking
+  changes.
+
+## 2026-10-01
+
+- No IP address is read, stored or returned. `respondent.ipHash` is gone from
+  `POST /v1/forms/{id}/responses` and `POST /v1/forms/{id}/sessions`.
+
+## 2026-09-30
+
+- `POST /v1/import` turns a public Typeform, Google Forms, Tally, Jotform or
+  Youform form, or any public page, into a form document.
+- `GET` and `PATCH /v1/forms/{id}/settings` read and change settings by key.
+- `POST /v1/ai/generate-form` sets the settings a prompt asks for and lists
+  them in `settings`.
+
+## 2026-09-28
+
+- Respondent email sign-in: `POST /v1/sessions/{sid}/auth/email/start` and
+  `…/auth/email/verify`.
+
+## 2026-09-26
+
+- Webhooks have a delivery queue with per-endpoint retries:
+  `GET /v1/webhooks/stats`, `PATCH /v1/webhooks/{id}`,
+  `POST /v1/webhooks/{id}/retry-failed`, and a `status` filter on
+  deliveries.
+- Responses carry `metadata`: the channel, device and place each one came
+  from.
+
+## 2026-09-21
+
+- Every list answers `{ data, has_more, next_cursor }` and every error the
+  same envelope. Reading a form that was never published returns its draft.
+
+## 2026-09-16
+
+- Verified payments on the form owner's own Stripe, Razorpay or Cashfree
+  account: `/v1/payment-accounts` and `POST /v1/sessions/{sid}/payments`.
+
+## 2026-09-09
+
+- Templates, versions, spreadsheet feeds and AI generation reach `/v1`.
+
+## 2026-09-04
+
+- Form create, read, update and publish on `/v1`; exports, signed downloads and
+  headless file uploads.

@@ -15,8 +15,9 @@ import { convertImport } from "../../lib/import/phrase.js";
  *
  * The same conversion the dashboard's Import runs, shaped like
  * `/v1/ai/generate-form`: it returns the document and saves nothing, so a
- * caller reviews it and posts it to `/v1/forms` to keep it. No model is
- * involved, so it spends no AI allowance.
+ * caller reviews it and posts it to `/v1/forms` to keep it. A small model
+ * rewords the questions so they read as conversation; its tokens are logged
+ * against the organization but not charged to its AI allowance.
  */
 export const importV1Router = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 

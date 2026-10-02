@@ -96,7 +96,7 @@ export const PublicAccountSchema = z.object({
 
 export const AccountListSchema = z.object({
   accounts: z.array(PublicAccountSchema),
-  /** Whether gateway payments are switched on for this organization at all. */
+  /** Whether gateway payments are switched on for this deployment (`PAYMENTS_GATEWAY_ENABLED`). */
   enabled: z.boolean(),
   providers: z.object({
     cashfree: z.object({ configured: z.boolean() }),
@@ -326,7 +326,7 @@ paymentAccountsRouter.get(
   describeRoute({
     tags: ["dashboard"],
     summary: "List connected payment gateway accounts",
-    description: "Never returns a credential. `enabled` says whether verified payments are on for this organization.",
+    description: "Never returns a credential. `enabled` says whether verified payments are switched on at all.",
     responses: { 200: { description: "Accounts", content: json(AccountListSchema) } },
   }),
   async (c) => {

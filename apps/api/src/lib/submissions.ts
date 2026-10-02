@@ -4,6 +4,7 @@ import { mintRespondent, resolveRespondent } from "./respondents.js";
 import { findOpenResponseId } from "./respondent-history.js";
 import type { AnswerMap, RespondentIdentity } from "@repo/form-schema";
 import { enqueueMail } from "./mail.js";
+import { emitWebhookEvent } from "./webhooks.js";
 import { cancelFollowUps, creditFollowUpRecovery, scheduleFollowUps } from "./followups.js";
 
 /**
@@ -347,6 +348,17 @@ export async function recordAnswerRow(o: ResponseOwner, a: RecordAnswerArgs): Pr
     ),
     o.env.DB.prepare(`UPDATE submissions SET updated_at = ? WHERE id = ?`).bind(at, a.responseId),
   ]);
+  // After the write, so the payload's `answers` already contains this one.
+  await emitWebhookEvent(o.env, {
+    event: "response.answer_recorded",
+    organizationId: o.organizationId,
+    formId: o.formId,
+    submissionId: a.responseId,
+    ...(o.sessionId ? { sessionId: o.sessionId } : {}),
+    source: o.source,
+    isTest: o.isTest === true,
+    data: { ref: a.block.ref },
+  });
 }
 
 /**

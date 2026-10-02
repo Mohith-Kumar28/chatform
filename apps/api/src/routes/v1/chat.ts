@@ -1,4 +1,6 @@
 import { Hono, type MiddlewareHandler } from "hono";
+import { afterResponse } from "../../lib/form-activity.js";
+import { emitWebhookEvent } from "../../lib/webhooks.js";
 import {
   PaymentConfirmedView,
   PaymentStartedView,
@@ -152,6 +154,17 @@ const createSessionRoute = (path: string) =>
       apiKeyId: c.get("keyId") ?? null,
     });
     if (!opened.ok) return c.json(opened.body, opened.status);
+    await afterResponse(
+      c,
+      emitWebhookEvent(c.env, {
+        event: "session.started",
+        organizationId: orgId,
+        formId: formRow.id,
+        sessionId: opened.sessionId,
+        isTest: c.get("environment") === "test",
+        data: { sessionId: opened.sessionId, source: "api" },
+      }),
+    );
 
     const init = await stub(c.env, opened.sessionId).init({
       sessionId: opened.sessionId,
@@ -488,9 +501,10 @@ const eventsRoute = (base: string) =>
  * question the session is on — the headless Pay button.
  *
  * The same contract as the hosted page's: the amount comes from the session,
- * never the caller, and the respondent must already be signed in through
- * `…/auth/*`. Hand `launch` to the gateway's own checkout in the respondent's
- * browser; the session settles when the gateway confirms, not when you say so.
+ * never the caller. Sign-in is not required to pay; a form that wants a known
+ * payer turns on `settings.requireAuth`, which gates the whole conversation.
+ * Hand `launch` to the gateway's own checkout in the respondent's browser; the
+ * session settles when the gateway confirms, not when you say so.
  */
 const startPaymentRoute = (base: string) =>
   chatRouter.post(

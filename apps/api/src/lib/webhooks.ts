@@ -97,6 +97,8 @@ export interface WebhookEvent {
   formId: string;
   submissionId?: string;
   sessionId?: string;
+  /** Event-specific fields, delivered as the payload's `data`. */
+  data?: Record<string, unknown>;
   [k: string]: unknown;
 }
 
@@ -181,6 +183,41 @@ async function enqueueDeliveries(env: Bindings, ids: string[]): Promise<void> {
 }
 
 /**
+ * Queue an event that most organizations never subscribe to.
+ *
+ * `response.completed` is worth a queue message every time; an answer is not.
+ * Every answer of every respondent would otherwise be a queue message and a D1
+ * batch in `fanOutEvent` only to find no endpoint wants it, so one indexed read
+ * here decides whether to queue at all. The `LIKE` is a prefilter on the JSON
+ * list; `fanOutEvent` still matches names exactly.
+ *
+ * Never throws: a lost webhook is logged, and the answer, the publish or the
+ * session it describes carries on regardless.
+ */
+export async function emitWebhookEvent(env: Bindings, evt: WebhookEvent): Promise<void> {
+  if (evt.isTest === true) return;
+  try {
+    const names = eventNames(evt.event);
+    const wanted = await env.DB.prepare(
+      `SELECT 1 FROM webhooks
+        WHERE organization_id = ? AND active = 1 AND (form_id = ? OR form_id IS NULL)
+          AND (${names.map(() => "events LIKE ?").join(" OR ")})
+        LIMIT 1`,
+    )
+      .bind(evt.organizationId, evt.formId, ...names.map((n) => `%"${n}"%`))
+      .first();
+    if (!wanted) return;
+    await env.Q_WEBHOOKS.send(evt);
+  } catch (err) {
+    console.error("webhook_emit_failed", {
+      event: evt.event,
+      formId: evt.formId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
  * Turn one event into one delivery per matching endpoint.
  *
  * `messageId` is the queue message's own id, which stays the same when the
@@ -257,6 +294,7 @@ export async function fanOutEvent(env: Bindings, evt: WebhookEvent, messageId?: 
   if (hooks.length === 0) return 0;
 
   const payload: Record<string, unknown> = { id: eventId, event: evt.event, formId: evt.formId, timestamp: Date.now() };
+  if (evt.data) payload.data = evt.data;
   if (evt.submissionId) {
     const { is_test: isTest, ...submission } = (subRes?.results ?? [])[0] ?? {};
     // A preview response, whatever the producer said. The schema has always

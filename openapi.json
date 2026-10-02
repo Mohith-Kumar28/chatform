@@ -42249,7 +42249,7 @@
           "dashboard"
         ],
         "summary": "List connected payment gateway accounts",
-        "description": "Never returns a credential. `enabled` says whether verified payments are on for this organization.",
+        "description": "Never returns a credential. `enabled` says whether verified payments are switched on at all.",
         "responses": {
           "200": {
             "description": "Accounts",

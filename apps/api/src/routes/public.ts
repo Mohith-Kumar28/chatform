@@ -2,6 +2,8 @@ import { Hono, type Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../lib/validator.js";
+import { afterResponse } from "../lib/form-activity.js";
+import { emitWebhookEvent } from "../lib/webhooks.js";
 import { z } from "zod";
 import { sha256Hex, toPublicConfig, RefString, type FormDoc, readFormDoc } from "@repo/form-schema";
 import { EmbedInput, HiddenFieldsInput, ProviderToken } from "../lib/inputs.js";
@@ -483,6 +485,17 @@ sessionsRouter.post(
     });
     if (!opened.ok) return c.json(opened.body, opened.status);
     mark("open");
+    // After the response, so a respondent never waits on a webhook lookup.
+    await afterResponse(
+      c,
+      emitWebhookEvent(c.env, {
+        event: "session.started",
+        organizationId: formRow.organization_id,
+        formId: formRow.id,
+        sessionId: opened.sessionId,
+        data: { sessionId: opened.sessionId, source: body.embed?.origin ? "embed" : "chat" },
+      }),
+    );
 
     /*
      * Held for the sign-in: nothing about the response reaches this session,

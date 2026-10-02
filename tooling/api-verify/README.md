@@ -23,7 +23,7 @@ must not be reachable from the standing gate, so this is a script you run
 deliberately.
 
 The second reason is that vitest abandons a file at the first failed assertion,
-which is the wrong shape for "attempt 69 operations and report all 69". The run
+which is the wrong shape for "attempt every operation and report all of them". The run
 continues past a failure, and cleans up in a `finally` either way.
 
 ## Safety
@@ -56,9 +56,14 @@ lie in the direction of alarm.
 
 Response checking is likewise three-valued — `schema-verified` where the spec
 declares a response schema, `shape-asserted` against a hand-written expectation
-where it does not, `unchecked` otherwise. Printing the split is deliberate: only
-22 of the 69 operations declare a schema, and that number is a finding rather
-than a detail of the harness.
+where it does not, `unchecked` otherwise. Printing the split is deliberate: when
+this was written only 22 of 69 operations declared a schema. Every /v1 operation
+declares one now, so a `shape-asserted` row is itself worth a look.
+
+Payment-account writes are only ever aimed at ids that do not exist or bodies
+the route must refuse: connecting, editing or disconnecting a real gateway would
+act on the organization's money. Deleting a form only archives it, so cleanup
+also purges each form from the archive.
 
 ## Probes
 

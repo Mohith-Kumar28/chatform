@@ -1,3 +1,4 @@
+import { emitWebhookEvent } from "./webhooks.js";
 import { FormDoc, lintFormDoc, hasErrors, migrateFormDoc, type FormDoc as FormDocT } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { stripForPublish, checkDocLimits, checkGatewayPayments } from "./doc-entitlements.js";
@@ -187,6 +188,13 @@ export async function publishForm(
    * and a no-op for every form without a sequence.
    */
   await backfillFollowUps(env, args.formId, args.orgId ?? row.organization_id);
+
+  await emitWebhookEvent(env, {
+    event: "form.published",
+    organizationId: args.orgId ?? row.organization_id,
+    formId: args.formId,
+    data: { version, versionId, note },
+  });
 
   return { ok: true, version, versionId, stripped: stripped as unknown[] };
 }
