@@ -174,6 +174,15 @@ export function ApiKeysSection() {
   const now = useClientValue(() => Date.now(), 0);
   const { data: rawKeys, isLoading } = useGetApiKeys();
   const keys = (Array.isArray(rawKeys) ? rawKeys : []) as unknown as KeyRow[];
+  /**
+   * Revoked and expired keys stay in the database, because the audit log and
+   * every response a key submitted still name it, but not in the way: the list
+   * shows working keys, and the rest sit behind one link.
+   */
+  const isInactive = (k: KeyRow) => !k.enabled || (k.expiresAt != null && now > 0 && k.expiresAt <= now);
+  const [showInactive, setShowInactive] = useState(false);
+  const inactiveCount = keys.filter(isInactive).length;
+  const visibleKeys = showInactive ? keys : keys.filter((k) => !isInactive(k));
   const { data: rawVocab } = useGetApiKeysScopes();
   const vocab = (rawVocab ?? {}) as { scopes?: Record<string, string[]> };
 
@@ -315,7 +324,7 @@ export function ApiKeysSection() {
               <div key={i} className="bg-muted h-20 animate-pulse rounded-xl" />
             ))}
           </div>
-        ) : keys.length === 0 ? (
+        ) : visibleKeys.length === 0 ? (
           <EmptyState
             icon={KeyRound}
             title="No API keys yet"
@@ -350,7 +359,7 @@ export function ApiKeysSection() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {keys.map((k) => {
+                {visibleKeys.map((k) => {
                   const scopes = scopeList(k.scopes);
                   // Three chips read as a summary; five wrap to three lines and
                   // read as a wall. The panel has the full list.
@@ -371,7 +380,7 @@ export function ApiKeysSection() {
                           setDetailId(k.id);
                         }
                       }}
-                      className={`hover:bg-muted/50 focus-visible:ring-ring/50 cursor-pointer outline-none focus-visible:ring-2 ${k.enabled ? "" : "opacity-60"}`}
+                      className={`hover:bg-muted/50 focus-visible:ring-ring/50 cursor-pointer outline-none focus-visible:ring-2 ${isInactive(k) ? "opacity-60" : ""}`}
                     >
                       <TableCell className="h-auto py-3 pl-4">
                         <div className="flex flex-wrap items-center gap-2">
@@ -381,6 +390,7 @@ export function ApiKeysSection() {
                           </Badge>
                           {k.environment === "test" && <Badge variant="outline">Test</Badge>}
                           {!k.enabled && <Badge variant="destructive">Revoked</Badge>}
+                          {k.enabled && isInactive(k) && <Badge variant="outline">Expired</Badge>}
                           {k.expiresAt && now > 0 && k.expiresAt > now && (
                             <Badge variant="outline">expires in {hoursUntil(k.expiresAt, now)}h</Badge>
                           )}
@@ -437,6 +447,11 @@ export function ApiKeysSection() {
               </TableBody>
             </Table>
           </Card>
+        )}
+        {!isLoading && inactiveCount > 0 && (
+          <Button variant="link" size="sm" className="text-muted-foreground mt-2 px-0" onClick={() => setShowInactive((v) => !v)}>
+            {showInactive ? "Hide revoked" : `Show revoked (${inactiveCount})`}
+          </Button>
         )}
       </div>
 
