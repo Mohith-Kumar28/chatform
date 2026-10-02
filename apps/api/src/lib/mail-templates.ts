@@ -23,7 +23,6 @@ const BORDER = "#e8e3da";
 const GROUND = "#faf8f4";
 const CARD = "#ffffff";
 const ORANGE = "#fd6f29";
-const VIOLET = "#9d6ee4";
 /** The one ink that clears AA on both ends of the brand gradient. */
 const ON_PRIMARY = "#201a16";
 
@@ -77,7 +76,7 @@ function layout(opts: { preheader: string; body: string; footer?: string; brand?
     <td align="center" style="padding:32px 16px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:544px;background-color:${CARD};border:1px solid ${BORDER};border-radius:14px;overflow:hidden;">
         <tr>
-          <td style="height:4px;line-height:4px;font-size:0;background-color:${ORANGE};background-image:linear-gradient(100deg, ${ORANGE}, ${VIOLET});">&nbsp;</td>
+          <td style="height:4px;line-height:4px;font-size:0;background-color:${ORANGE};">&nbsp;</td>
         </tr>
         ${
           brand
@@ -164,12 +163,25 @@ const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial
 /** Orange at roughly 10% on white, for the check discs. Solid, because Outlook drops rgba. */
 const ORANGE_TINT = "#ffece2";
 
+/**
+ * The pill's colours, solid and soft: red for something about to be lost, amber for a
+ * warning, green for good news, grey otherwise. Never a gradient.
+ */
+const PILL_TONES = {
+  neutral: { bg: "#f1ede6", ink: INK },
+  success: { bg: "#e3f4e8", ink: "#1e6b3a" },
+  warning: { bg: "#fdf0d5", ink: "#8a5a00" },
+  danger: { bg: "#fde4e1", ink: "#b42318" },
+} as const;
+type PillTone = keyof typeof PILL_TONES;
+
 /** A small pill above the heading, then a large heading, then one line under it. */
-function hero(a: { eyebrow?: string; title: string; subtitle?: string }): string {
+function hero(a: { eyebrow?: string; tone?: PillTone; title: string; subtitle?: string }): string {
+  const tone = PILL_TONES[a.tone ?? "neutral"];
   const pill = a.eyebrow
     ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 14px 0;">
   <tr>
-    <td style="border-radius:999px;padding:4px 12px;background-color:${ORANGE};background-image:linear-gradient(100deg, ${ORANGE}, ${VIOLET});font-family:${FONT};font-size:11px;line-height:16px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${ON_PRIMARY};">${escapeHtml(a.eyebrow)}</td>
+    <td style="border-radius:999px;padding:4px 12px;background-color:${tone.bg};font-family:${FONT};font-size:11px;line-height:16px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${tone.ink};">${escapeHtml(a.eyebrow)}</td>
   </tr>
 </table>`
     : "";
@@ -336,7 +348,7 @@ function personCard(a: { name: string; email: string; badge: string }): string {
   <tr>
     <td width="48" valign="middle" style="padding:16px 0 16px 16px;">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-        <td align="center" valign="middle" width="44" height="44" style="width:44px;height:44px;border-radius:999px;background-color:${ORANGE};background-image:linear-gradient(135deg, ${ORANGE}, ${VIOLET});font-family:${FONT};font-size:18px;line-height:44px;font-weight:700;color:${ON_PRIMARY};">${initial}</td>
+        <td align="center" valign="middle" width="44" height="44" style="width:44px;height:44px;border-radius:999px;background-color:${ORANGE};font-family:${FONT};font-size:18px;line-height:44px;font-weight:700;color:${ON_PRIMARY};">${initial}</td>
       </tr></table>
     </td>
     <td valign="middle" style="padding:16px 12px;font-family:${FONT};">
@@ -1351,7 +1363,7 @@ export function planUpgradedEmail(a: {
     : `${hi}<strong style="color:${INK};">${escapeHtml(a.organizationName)}</strong> is now on ${escapeHtml(plan.name)}. Here is what just unlocked.`;
 
   const body = [
-    hero({ eyebrow: `${plan.name} plan`, title: a.gifted ? `A gift: ${plan.name} is yours` : `Welcome to ${plan.name}`, subtitle: lead }),
+    hero({ eyebrow: `${plan.name} plan`, tone: "success", title: a.gifted ? `A gift: ${plan.name} is yours` : `Welcome to ${plan.name}`, subtitle: lead }),
     featureList(shown, unlocked.length - shown.length),
     statTiles(tiles),
     detailRows(rows),
@@ -1411,6 +1423,7 @@ export function accessGrantedEmail(a: {
   const body = [
     hero({
       eyebrow: "A gift from chatform",
+      tone: "success",
       title: headline,
       subtitle: `${hi}the chatform team switched this on for <strong style="color:${INK};">${escapeHtml(a.organizationName)}</strong>. Enjoy.`,
     }),
@@ -1516,6 +1529,7 @@ export function planLapseEmail(a: {
       ? {
           subject: `Your chatform ${plan} payment didn't go through`,
           eyebrow: "Payment failed",
+          tone: "danger" as const,
           title: "We couldn't take your payment",
           lead: `${hi}the renewal for ${org} on ${plan} was declined. Everything keeps working while we retry. If it still fails, ${org} moves to Free on ${date}.`,
           cta: "Update payment",
@@ -1529,6 +1543,7 @@ export function planLapseEmail(a: {
                   ? `Your gifted chatform ${plan} ends on ${date}`
                   : `Your chatform ${plan} plan ends on ${date}`,
             eyebrow: `${plan} ends soon`,
+            tone: "warning" as const,
             title: `${plan} ends on ${date}`,
             lead:
               a.reason === "payment"
@@ -1541,6 +1556,7 @@ export function planLapseEmail(a: {
         : {
             subject: `${org} is now on chatform Free`,
             eyebrow: "Now on Free",
+            tone: "neutral" as const,
             title: `${plan} has ended`,
             lead: `${hi}${org} moved to Free on ${date}. Nothing was deleted: your forms, responses and settings are all still there, and upgrading again puts every setting back.`,
             cta: `Get ${plan} back`,
@@ -1554,7 +1570,7 @@ export function planLapseEmail(a: {
         : `These live forms use ${plan} features and will change:`;
 
   const body = [
-    hero({ eyebrow: copy.eyebrow, title: copy.title, subtitle: escapeHtml(copy.lead) }),
+    hero({ eyebrow: copy.eyebrow, tone: copy.tone, title: copy.title, subtitle: escapeHtml(copy.lead) }),
     p(escapeHtml(formsIntro)),
     a.forms.length > 0 ? lapsedFormList(a.forms, past, a.moreForms) : "",
     button(a.planUrl, copy.cta),
@@ -1646,7 +1662,7 @@ export function formPurgeNoticeEmail(a: {
   const reassurance = `If you meant to delete ${one ? "it" : "them"}, there is nothing to do.`;
 
   const body = [
-    hero({ eyebrow: a.stage === "1d" ? "Deleting tomorrow" : "Deleting in 3 days", title: `${one ? "Your form" : "Your forms"} will be deleted ${when}`, subtitle: escapeHtml(lead) }),
+    hero({ eyebrow: a.stage === "1d" ? "Deleting tomorrow" : "Deleting in 3 days", tone: a.stage === "1d" ? "danger" : "warning", title: `${one ? "Your form" : "Your forms"} will be deleted ${when}`, subtitle: escapeHtml(lead) }),
     one
       ? statTiles([
           { value: one.responses.toLocaleString("en-US"), label: one.responses === 1 ? "Response" : "Responses" },
