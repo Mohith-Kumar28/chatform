@@ -184,7 +184,7 @@ export function SkipButton({ onSkip }: { onSkip: () => void }) {
       onClick={onSkip}
       onMouseDown={keepFocus}
       className={cn(
-        "inline-flex h-11 w-full shrink-0 items-center justify-center gap-1.5 rounded-[var(--cf-radius-control)] border px-3.5 text-sm font-medium sm:w-auto",
+        "inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-[var(--cf-radius-control)] border px-3 text-sm font-medium",
         "border-[var(--cf-accent)] bg-[color-mix(in_oklch,var(--cf-accent)_8%,transparent)] text-[var(--cf-accent)]",
         "transition-[background-color,transform] duration-[var(--duration-micro)] ease-[var(--ease-out)]",
         "hover:bg-[color-mix(in_oklch,var(--cf-accent)_16%,transparent)]",
@@ -223,58 +223,56 @@ export function SendRow({
     <div className="flex items-end">
       <div className="min-w-0 flex-1">{children}</div>
       {/*
-        On a phone Skip stacks above Send instead of beside it. Side by side,
-        the two pills took nearly half the row and squeezed the message box to
-        a sliver that wrapped "Type your answer…" onto two lines. Stacked, the
-        box keeps all but one button's width. From `sm` up there is room for
-        the row.
-      */}
-      <div className="ml-2 flex shrink-0 flex-col items-stretch sm:flex-row sm:items-end">
-        {/*
-          Always mounted, animated from nothing.
+        One row at every width. Skip has been tried stacked above Send on
+        phones, both inside Send's column (the column took Skip's width, so
+        the message box lost ~9rem and Send floated in a gap) and as its own
+        row (a 56px band of nothing that pushed the conversation up and
+        cropped whatever the question was showing). Beside Send it costs the
+        box only its own width, which on a touch screen is just icon and word:
+        `kbd-hint` drops the esc chip where there is no keyboard.
 
-          Skip appears and disappears question to question, and mounting it
-          would snap the message box to a new size mid-conversation, the one
-          element that has to hold still while somebody is typing into it.
-          Animating `max-width` and `max-height` on a wrapper that is always
-          present means the box eases into the space instead (width in the row,
-          height in the stack), and the gap lives inside the wrapper so a
-          collapsed Skip leaves none behind.
-        */}
-        <div
-          aria-hidden={!canSkip}
-          className={cn(
-            "shrink-0 overflow-hidden",
-            "transition-[max-width,max-height,opacity] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none",
-            canSkip ? "max-h-14 max-w-[9rem] opacity-100" : "pointer-events-none max-h-0 max-w-0 opacity-0",
-          )}
-        >
-          <div className="pb-2 sm:pb-0 sm:pr-2">{onSkip && <SkipButton onSkip={onSkip} />}</div>
-        </div>
-        {/*
-          An icon, not a labelled pill. "Send" plus its Enter chip cost the
-          message box about 60px, which on a phone or a narrow embed is where
-          a typed email address runs out of room. The paper plane is the one
-          every messaging app has taught; Enter still sends, and the tooltip
-          says so to anyone with a pointer to hover.
-        */}
-        <button
-          type="button"
-          onClick={onSend}
-          onMouseDown={keepFocus}
-          disabled={disabled}
-          aria-label={label}
-          title={`${label} (Enter)`}
-          className={cn(
-            "inline-flex size-11 shrink-0 items-center justify-center self-end rounded-[var(--cf-radius-control)]",
-            "bg-[var(--cf-accent)] text-[var(--cf-accent-text)]",
-            "transition-transform duration-[var(--duration-micro)] active:scale-[0.94]",
-            "motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40",
-          )}
-        >
-          <SendHorizontal className="size-5 translate-x-px" strokeWidth={2.25} aria-hidden />
-        </button>
+        Always mounted, animated from nothing.
+
+        Skip appears and disappears question to question, and mounting it
+        would snap the message box to a new size mid-conversation, the one
+        element that has to hold still while somebody is typing into it.
+        Animating `max-width` on a wrapper that is always present means the
+        box eases into the space instead, and the gap lives inside the wrapper
+        so a collapsed Skip leaves none behind.
+      */}
+      <div
+        aria-hidden={!canSkip}
+        className={cn(
+          "shrink-0 overflow-hidden",
+          "transition-[max-width,opacity] duration-300 ease-[var(--ease-out)] motion-reduce:transition-none",
+          canSkip ? "max-w-[9rem] opacity-100" : "pointer-events-none max-w-0 opacity-0",
+        )}
+      >
+        <div className="pl-2">{onSkip && <SkipButton onSkip={onSkip} />}</div>
       </div>
+      {/*
+        An icon, not a labelled pill. "Send" plus its Enter chip cost the
+        message box about 60px, which on a phone or a narrow embed is where
+        a typed email address runs out of room. The paper plane is the one
+        every messaging app has taught; Enter still sends, and the tooltip
+        says so to anyone with a pointer to hover.
+      */}
+      <button
+        type="button"
+        onClick={onSend}
+        onMouseDown={keepFocus}
+        disabled={disabled}
+        aria-label={label}
+        title={`${label} (Enter)`}
+        className={cn(
+          "ml-2 inline-flex size-11 shrink-0 items-center justify-center rounded-[var(--cf-radius-control)]",
+          "bg-[var(--cf-accent)] text-[var(--cf-accent-text)]",
+          "transition-transform duration-[var(--duration-micro)] active:scale-[0.94]",
+          "motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40",
+        )}
+      >
+        <SendHorizontal className="size-5 translate-x-px" strokeWidth={2.25} aria-hidden />
+      </button>
     </div>
   );
 }
