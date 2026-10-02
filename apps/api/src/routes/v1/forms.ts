@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { withOwnerNotification } from "../../lib/owner-notification.js";
-import { AnalyticsView, DeletedView, DocSavedView, FollowUpStatsView, FormReadView, FormSummaryView, OkView, Paged, PublishedView } from "../../lib/v1-schemas.js";
+import { AnalyticsView, DeletedView, DocSavedView, FollowUpStatsView, FormReadView, FormSummaryView, OkView, OrgOverviewView, Paged, PublishedView } from "../../lib/v1-schemas.js";
+import { computeOrgOverview } from "../../lib/org-analytics.js";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../../lib/validator.js";
 import { apiError } from "../../lib/api-error.js";
@@ -616,6 +617,48 @@ formsV1Router.get(
       });
     }
     return c.json(aggregate);
+  },
+);
+
+/**
+ * Every form in the organization, added up: the dashboard's headline tiles.
+ *
+ * A key acts for the whole organization, so there is no workspace parameter;
+ * a key pinned to some forms adds up only those. The median is withheld
+ * without advanced analytics, as it is on `/forms/{id}/analytics`.
+ */
+formsV1Router.get(
+  "/analytics/overview",
+  requireScope("analytics", "read"),
+  validator("query", z.object({ tz: z.coerce.number().int().optional() })),
+  describeRoute({
+    tags: ["v1"],
+    summary: "Headline numbers across every form: the last 30 days against the 30 before",
+    parameters: [
+      {
+        name: "tz",
+        in: "query",
+        required: false,
+        schema: { type: "integer", default: 0 },
+        description: "Minutes east of UTC that a day starts in, e.g. `330` for India. View counts are always UTC days.",
+      },
+    ],
+    responses: {
+      200: { description: "Overview", content: { "application/json": { schema: resolver(OrgOverviewView) } } },
+    },
+  }),
+  async (c) => {
+    const orgId = c.get("orgId")!;
+    const pinned = c.get("keyMeta")?.formIds;
+    const scope = pinned?.length
+      ? { orgId, sql: `f.id IN (${holesFor(pinned)})`, binds: pinned }
+      : { orgId, sql: "1", binds: [] };
+    const overview = await computeOrgOverview(c.env, scope, c.req.valid("query").tz ?? 0);
+    const ent = await entitlementsFor(c as never);
+    if (!ent.features.advanced_analytics) {
+      return c.json({ ...overview, kpis: { ...overview.kpis, medianMs: { value: null, previous: null } }, locked: ["medianMs"] });
+    }
+    return c.json({ ...overview, locked: [] });
   },
 );
 

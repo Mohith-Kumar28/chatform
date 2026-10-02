@@ -71,6 +71,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/analytics/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Headline numbers across every form: the last 30 days against the 30 before */
+        get: operations["getV1AnalyticsOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/archive/forms": {
         parameters: {
             query?: never;
@@ -1807,6 +1824,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getV1AnalyticsOverview: {
+        parameters: {
+            query?: {
+                /** @description Minutes east of UTC that a day starts in, e.g. `330` for India. View counts are always UTC days. */
+                tz?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Overview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        days: number;
+                        kpis: {
+                            completionRate: {
+                                previous: number | null;
+                                value: number | null;
+                            };
+                            medianMs: {
+                                previous: number | null;
+                                value: number | null;
+                            };
+                            partial: {
+                                previous: number;
+                                value: number;
+                            };
+                            responses: {
+                                previous: number;
+                                value: number;
+                            };
+                            views: {
+                                previous: number;
+                                value: number;
+                            };
+                        };
+                        locked: string[];
+                        series: {
+                            completionRate: number[];
+                            partial: number[];
+                            responses: number[];
+                            views: number[];
+                        };
+                        today: number;
+                    };
                 };
             };
         };

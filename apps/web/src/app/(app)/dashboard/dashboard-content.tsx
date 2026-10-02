@@ -67,6 +67,7 @@ import {
 import { AiCapBanner } from "@/components/billing/ai-cap-banner";
 import { CreateFormDialog } from "@/components/forms/create-form-dialog";
 import { NoWorkspaceState } from "@/components/dashboard/no-workspace-state";
+import { OverviewTiles } from "@/components/dashboard/overview-tiles";
 import { FormCard, type FormRow } from "@/components/forms/form-card";
 import { useDuplicateForm } from "@/components/forms/use-duplicate-form";
 import { ArchiveView, type ArchivedFormRow } from "@/components/forms/archive-view";
@@ -574,6 +575,14 @@ export function DashboardContent() {
           )}
         </div>
       </div>
+
+      {/* Every form here, added up. Not on an empty workspace, where every tile
+          would be zero, and not over the Archive, which it does not count. */}
+      {allForms.length > 0 && !showArchive && (
+        <div className="mt-6">
+          <OverviewTiles ws={ws} />
+        </div>
+      )}
 
       {/* Only renders past 80% of the AI cap, and only for someone with forms — the rule is
           never to sell before there is data. */}

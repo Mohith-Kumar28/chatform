@@ -15,7 +15,10 @@ import {
 } from "../lib/response-table.js";
 import { resolveRetiredBlocks } from "../lib/retired-columns.js";
 import { parseMeta, readRespondentContext } from "../lib/respondent-context.js";
-import { MetadataView } from "../lib/v1-schemas.js";
+import { MetadataView, OrgOverviewView } from "../lib/v1-schemas.js";
+import { computeOrgOverview, type FormScope } from "../lib/org-analytics.js";
+import { requireWorkspace, ALL_WORKSPACES } from "../lib/workspace.js";
+import { accessFor, workspaceFilter } from "../lib/workspace-access.js";
 import { computeAnalytics } from "../lib/analytics-service.js";
 import { computeFollowUpStats } from "../lib/followup-analytics.js";
 import { buildXlsx } from "../lib/xlsx.js";
@@ -1136,6 +1139,46 @@ resultsRouter.get(
             worstBlockIndex: worst?.index ?? null,
           },
     });
+  },
+);
+
+/**
+ * The tiles above the forms grid: every form in the workspace being viewed,
+ * added up. `?ws=` means what it means on `GET /forms`, including `all`.
+ *
+ * The median is withheld on the same terms as the per-form one. With one form
+ * in the workspace they would be the same number, and the free half would be a
+ * way around the paid one.
+ */
+resultsRouter.get(
+  "/analytics/overview",
+  requirePermission("analytics", "read"),
+  validator("query", z.object({ ws: z.string().optional(), tz: z.coerce.number().int().optional() })),
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Headline numbers across every form in a workspace",
+    responses: {
+      200: { description: "Overview", content: { "application/json": { schema: resolver(OrgOverviewView) } } },
+      404: { description: "No such workspace" },
+    },
+  }),
+  async (c) => {
+    const orgId = c.get("orgId")!;
+    const { ws, tz } = c.req.valid("query");
+    let scope: FormScope;
+    if (ws === ALL_WORKSPACES) {
+      const filter = workspaceFilter(await accessFor(c as never), "f.workspace_id");
+      scope = { orgId, sql: `1${filter.sql}`, binds: filter.binds };
+    } else {
+      const found = await requireWorkspace(c as never, ws);
+      if (found === undefined) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
+      // A member waiting to be added to a workspace has nothing to add up.
+      scope = found ? { orgId, sql: "f.workspace_id = ?", binds: [found.wsId] } : { orgId, sql: "0", binds: [] };
+    }
+    const overview = await computeOrgOverview(c.env, scope, tz ?? 0);
+    const advanced = (await hasFeature(c, "advanced_analytics")) && !(await assertPermission(c, "analytics", "read_advanced"));
+    if (!advanced) overview.kpis.medianMs = { value: null, previous: null };
+    return c.json({ ...overview, locked: advanced ? [] : ["medianMs"] });
   },
 );
 

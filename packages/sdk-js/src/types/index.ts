@@ -59,6 +59,7 @@ export type Analytics = Res<"/v1/forms/{id}/analytics", "get">;
  * are null until a holdout group has had time to not come back.
  */
 export type FollowUpStats = Res<"/v1/forms/{id}/followup-analytics", "get">;
+export type Overview = Res<"/v1/analytics/overview", "get">;
 export type FormSettings = Res<"/v1/forms/{id}/settings", "get">;
 export type FormSetting = Item<FormSettings["settings"]>;
 export type SettingsPatch = Body<"/v1/forms/{id}/settings", "patch">;

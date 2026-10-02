@@ -4536,6 +4536,63 @@ export type GetApiFormsByIdAnalytics200 = {
   lockedContext: GetApiFormsByIdAnalytics200LockedContext;
 };
 
+export type GetApiAnalyticsOverviewParams = {
+ws?: string;
+/**
+ * @minimum -9007199254740991
+ * @maximum 9007199254740991
+ */
+tz?: number;
+};
+
+export type GetApiAnalyticsOverview200KpisResponses = {
+  value: number;
+  previous: number;
+};
+
+export type GetApiAnalyticsOverview200KpisViews = {
+  value: number;
+  previous: number;
+};
+
+export type GetApiAnalyticsOverview200KpisCompletionRate = {
+  value: number | null;
+  previous: number | null;
+};
+
+export type GetApiAnalyticsOverview200KpisPartial = {
+  value: number;
+  previous: number;
+};
+
+export type GetApiAnalyticsOverview200KpisMedianMs = {
+  value: number | null;
+  previous: number | null;
+};
+
+export type GetApiAnalyticsOverview200Kpis = {
+  responses: GetApiAnalyticsOverview200KpisResponses;
+  views: GetApiAnalyticsOverview200KpisViews;
+  completionRate: GetApiAnalyticsOverview200KpisCompletionRate;
+  partial: GetApiAnalyticsOverview200KpisPartial;
+  medianMs: GetApiAnalyticsOverview200KpisMedianMs;
+};
+
+export type GetApiAnalyticsOverview200Series = {
+  responses: number[];
+  views: number[];
+  completionRate: number[];
+  partial: number[];
+};
+
+export type GetApiAnalyticsOverview200 = {
+  days: number;
+  today: number;
+  kpis: GetApiAnalyticsOverview200Kpis;
+  series: GetApiAnalyticsOverview200Series;
+  locked: string[];
+};
+
 export type GetApiFormsByIdFollowupAnalytics200ByStepItem = {
   step: number;
   sent: number;
@@ -6024,6 +6081,7 @@ export type GetV1Forms200DataItem = {
   title: string;
   slug: string;
   status: string;
+  /** Whether the form is live and taking responses */
   published: boolean;
   created_at: number;
   updated_at: number;
@@ -6049,6 +6107,7 @@ export type PostV1Forms201 = {
   title: string;
   slug: string;
   status: string;
+  /** Whether the form is live and taking responses */
   published: boolean;
   created_at: number;
   updated_at: number;
@@ -6330,6 +6389,8 @@ export type GetV1FormsByIdAnalytics200 = {
   starts: number;
   completed: number;
   abandoned: number;
+  inProgress: number;
+  startsWithContext?: number;
   avgDurationMs: number;
   medianDurationMs: number;
   completionRate: number;
@@ -6352,6 +6413,61 @@ export type GetV1FormsByIdAnalytics200 = {
   aiFallbacks?: GetV1FormsByIdAnalytics200AiFallbacks;
   locked?: string[];
   [key: string]: unknown;
+};
+
+export type GetV1AnalyticsOverviewParams = {
+/**
+ * Minutes east of UTC that a day starts in, e.g. `330` for India. View counts are always UTC days.
+ */
+tz?: number;
+};
+
+export type GetV1AnalyticsOverview200KpisResponses = {
+  value: number;
+  previous: number;
+};
+
+export type GetV1AnalyticsOverview200KpisViews = {
+  value: number;
+  previous: number;
+};
+
+export type GetV1AnalyticsOverview200KpisCompletionRate = {
+  value: number | null;
+  previous: number | null;
+};
+
+export type GetV1AnalyticsOverview200KpisPartial = {
+  value: number;
+  previous: number;
+};
+
+export type GetV1AnalyticsOverview200KpisMedianMs = {
+  value: number | null;
+  previous: number | null;
+};
+
+export type GetV1AnalyticsOverview200Kpis = {
+  responses: GetV1AnalyticsOverview200KpisResponses;
+  views: GetV1AnalyticsOverview200KpisViews;
+  completionRate: GetV1AnalyticsOverview200KpisCompletionRate;
+  partial: GetV1AnalyticsOverview200KpisPartial;
+  medianMs: GetV1AnalyticsOverview200KpisMedianMs;
+};
+
+export type GetV1AnalyticsOverview200Series = {
+  responses: number[];
+  views: number[];
+  completionRate: number[];
+  partial: number[];
+};
+
+export type GetV1AnalyticsOverview200 = {
+  days: number;
+  today: number;
+  kpis: GetV1AnalyticsOverview200Kpis;
+  series: GetV1AnalyticsOverview200Series;
+  locked: string[];
 };
 
 export type GetV1FormsByIdFollowupAnalytics200ByStepItem = {
@@ -6613,6 +6729,7 @@ export type PostV1TemplatesBySlugUse200 = {
   title: string;
   slug: string;
   status: string;
+  /** Whether the form is live and taking responses */
   published: boolean;
   created_at: number;
   updated_at: number;
@@ -8194,6 +8311,37 @@ export type GetV1ExportsById200 = {
   download_expires_at: number | null;
 };
 
+export type GetV1ExportsByIdContentParams = {
+/**
+ * @minimum 0
+ * @maximum 9007199254740991
+ */
+offset?: number;
+/**
+ * @minimum 1000
+ * @maximum 200000
+ */
+max_bytes?: number;
+};
+
+export type GetV1ExportsByIdContent200Format = typeof GetV1ExportsByIdContent200Format[keyof typeof GetV1ExportsByIdContent200Format];
+
+
+export const GetV1ExportsByIdContent200Format = {
+  csv: 'csv',
+  json: 'json',
+} as const;
+
+export type GetV1ExportsByIdContent200 = {
+  id: string;
+  object: 'export_content';
+  format: GetV1ExportsByIdContent200Format;
+  offset: number;
+  next_offset: number | null;
+  total_bytes: number;
+  content: string;
+};
+
 export type GetV1ExportsParams = {
 form_id?: string;
 /**
@@ -8254,6 +8402,24 @@ export type GetV1FilesById200 = {
   created_at: number;
   download_url: string;
   download_expires_at: number;
+};
+
+export type GetV1FilesByIdContent200Encoding = typeof GetV1FilesByIdContent200Encoding[keyof typeof GetV1FilesByIdContent200Encoding];
+
+
+export const GetV1FilesByIdContent200Encoding = {
+  utf8: 'utf8',
+  base64: 'base64',
+} as const;
+
+export type GetV1FilesByIdContent200 = {
+  id: string;
+  object: 'file_content';
+  filename: string;
+  mime: string;
+  size_bytes: number;
+  encoding: GetV1FilesByIdContent200Encoding;
+  data: string;
 };
 
 export type PostV1SessionsBySidUploadsIntentBody = {
@@ -10201,6 +10367,20 @@ export type PostV1ChatSessionsBySidVerifyPhoneTokenBody = {
 export type PostV1ChatSessionsBySidVerifyPhoneToken200 = {
   ok: boolean;
   [key: string]: unknown;
+};
+
+export type PostApiMcpConsentByIdBodyDecision = typeof PostApiMcpConsentByIdBodyDecision[keyof typeof PostApiMcpConsentByIdBodyDecision];
+
+
+export const PostApiMcpConsentByIdBodyDecision = {
+  allow: 'allow',
+  deny: 'deny',
+} as const;
+
+export type PostApiMcpConsentByIdBody = {
+  decision: PostApiMcpConsentByIdBodyDecision;
+  /** @maxLength 64 */
+  orgId?: string;
 };
 
 export type GetApiKeys200ItemKeyType = typeof GetApiKeys200ItemKeyType[keyof typeof GetApiKeys200ItemKeyType];

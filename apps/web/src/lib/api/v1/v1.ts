@@ -31,6 +31,8 @@ import type {
   DeleteV1ResponsesByIdAnswersByRefParams,
   DeleteV1WebhooksById200,
   ErrorEnvelope,
+  GetV1AnalyticsOverview200,
+  GetV1AnalyticsOverviewParams,
   GetV1ArchiveForms200,
   GetV1Blocks200,
   GetV1BlocksByType200,
@@ -40,8 +42,11 @@ import type {
   GetV1Events200,
   GetV1Exports200,
   GetV1ExportsById200,
+  GetV1ExportsByIdContent200,
+  GetV1ExportsByIdContentParams,
   GetV1ExportsParams,
   GetV1FilesById200,
+  GetV1FilesByIdContent200,
   GetV1Forms200,
   GetV1FormsById200,
   GetV1FormsByIdAnalytics200,
@@ -762,6 +767,11 @@ export type postV1FormsByIdResponsesResponse404 = {
   status: 404
 }
 
+export type postV1FormsByIdResponsesResponse409 = {
+  data: ErrorEnvelope
+  status: 409
+}
+
 export type postV1FormsByIdResponsesResponse422 = {
   data: ErrorEnvelope
   status: 422
@@ -770,7 +780,7 @@ export type postV1FormsByIdResponsesResponse422 = {
 export type postV1FormsByIdResponsesResponseSuccess = (postV1FormsByIdResponsesResponse201) & {
   headers: Headers;
 };
-export type postV1FormsByIdResponsesResponseError = (postV1FormsByIdResponsesResponse404 | postV1FormsByIdResponsesResponse422) & {
+export type postV1FormsByIdResponsesResponseError = (postV1FormsByIdResponsesResponse404 | postV1FormsByIdResponsesResponse409 | postV1FormsByIdResponsesResponse422) & {
   headers: Headers;
 };
 
@@ -3017,6 +3027,101 @@ export function useGetV1FormsByIdAnalytics<TData = Awaited<ReturnType<typeof get
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetV1FormsByIdAnalyticsQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getV1AnalyticsOverviewResponse200 = {
+  data: GetV1AnalyticsOverview200
+  status: 200
+}
+
+export type getV1AnalyticsOverviewResponseSuccess = (getV1AnalyticsOverviewResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getV1AnalyticsOverviewResponse = (getV1AnalyticsOverviewResponseSuccess)
+
+export const getGetV1AnalyticsOverviewUrl = (params?: GetV1AnalyticsOverviewParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/analytics/overview?${stringifiedParams}` : `/v1/analytics/overview`
+}
+
+/**
+ * @summary Headline numbers across every form: the last 30 days against the 30 before
+ */
+export const getV1AnalyticsOverview = async (params?: GetV1AnalyticsOverviewParams, options?: Parameters<typeof customFetch>[1]): Promise<getV1AnalyticsOverviewResponse> => {
+
+  return customFetch<getV1AnalyticsOverviewResponse>(getGetV1AnalyticsOverviewUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1AnalyticsOverviewQueryKey = (params?: GetV1AnalyticsOverviewParams,) => {
+    return [
+    `/v1/analytics/overview`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetV1AnalyticsOverviewQueryOptions = <TData = Awaited<ReturnType<typeof getV1AnalyticsOverview>>, TError = unknown>(params?: GetV1AnalyticsOverviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1AnalyticsOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1AnalyticsOverviewQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1AnalyticsOverview>>> = ({ signal }) => getV1AnalyticsOverview(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1AnalyticsOverview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1AnalyticsOverviewQueryResult = NonNullable<Awaited<ReturnType<typeof getV1AnalyticsOverview>>>
+export type GetV1AnalyticsOverviewQueryError = unknown
+
+
+/**
+ * @summary Headline numbers across every form: the last 30 days against the 30 before
+ */
+
+export function useGetV1AnalyticsOverview<TData = Awaited<ReturnType<typeof getV1AnalyticsOverview>>, TError = unknown>(
+ params?: GetV1AnalyticsOverviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1AnalyticsOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1AnalyticsOverviewQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -6321,6 +6426,119 @@ export function useGetV1ExportsById<TData = Awaited<ReturnType<typeof getV1Expor
 
 
 
+export type getV1ExportsByIdContentResponse200 = {
+  data: GetV1ExportsByIdContent200
+  status: 200
+}
+
+export type getV1ExportsByIdContentResponse404 = {
+  data: ErrorEnvelope
+  status: 404
+}
+
+export type getV1ExportsByIdContentResponse409 = {
+  data: ErrorEnvelope
+  status: 409
+}
+
+export type getV1ExportsByIdContentResponseSuccess = (getV1ExportsByIdContentResponse200) & {
+  headers: Headers;
+};
+export type getV1ExportsByIdContentResponseError = (getV1ExportsByIdContentResponse404 | getV1ExportsByIdContentResponse409) & {
+  headers: Headers;
+};
+
+export type getV1ExportsByIdContentResponse = (getV1ExportsByIdContentResponseSuccess | getV1ExportsByIdContentResponseError)
+
+export const getGetV1ExportsByIdContentUrl = (id: string,
+    params?: GetV1ExportsByIdContentParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/exports/${id}/content?${stringifiedParams}` : `/v1/exports/${id}/content`
+}
+
+/**
+ * The export's text, a slice at a time, under the same API key, for a caller that cannot fetch `download_url` (an agent sandbox that only reaches allow-listed hosts, say). Read from `offset` 0 and pass `next_offset` back until it is null; the slices join into the exact file.
+ * @summary Read a ready export's contents
+ */
+export const getV1ExportsByIdContent = async (id: string,
+    params?: GetV1ExportsByIdContentParams, options?: Parameters<typeof customFetch>[1]): Promise<getV1ExportsByIdContentResponse> => {
+
+  return customFetch<getV1ExportsByIdContentResponse>(getGetV1ExportsByIdContentUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1ExportsByIdContentQueryKey = (id: string,
+    params?: GetV1ExportsByIdContentParams,) => {
+    return [
+    `/v1/exports/${id}/content`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetV1ExportsByIdContentQueryOptions = <TData = Awaited<ReturnType<typeof getV1ExportsByIdContent>>, TError = ErrorEnvelope>(id: string,
+    params?: GetV1ExportsByIdContentParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1ExportsByIdContent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1ExportsByIdContentQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1ExportsByIdContent>>> = ({ signal }) => getV1ExportsByIdContent(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1ExportsByIdContent>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1ExportsByIdContentQueryResult = NonNullable<Awaited<ReturnType<typeof getV1ExportsByIdContent>>>
+export type GetV1ExportsByIdContentQueryError = ErrorEnvelope
+
+
+/**
+ * @summary Read a ready export's contents
+ */
+
+export function useGetV1ExportsByIdContent<TData = Awaited<ReturnType<typeof getV1ExportsByIdContent>>, TError = ErrorEnvelope>(
+ id: string,
+    params?: GetV1ExportsByIdContentParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1ExportsByIdContent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1ExportsByIdContentQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type getV1ExportsResponse200 = {
   data: GetV1Exports200
   status: 200
@@ -6502,6 +6720,107 @@ export function useGetV1FilesById<TData = Awaited<ReturnType<typeof getV1FilesBy
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetV1FilesByIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getV1FilesByIdContentResponse200 = {
+  data: GetV1FilesByIdContent200
+  status: 200
+}
+
+export type getV1FilesByIdContentResponse404 = {
+  data: ErrorEnvelope
+  status: 404
+}
+
+export type getV1FilesByIdContentResponse413 = {
+  data: ErrorEnvelope
+  status: 413
+}
+
+export type getV1FilesByIdContentResponseSuccess = (getV1FilesByIdContentResponse200) & {
+  headers: Headers;
+};
+export type getV1FilesByIdContentResponseError = (getV1FilesByIdContentResponse404 | getV1FilesByIdContentResponse413) & {
+  headers: Headers;
+};
+
+export type getV1FilesByIdContentResponse = (getV1FilesByIdContentResponseSuccess | getV1FilesByIdContentResponseError)
+
+export const getGetV1FilesByIdContentUrl = (id: string,) => {
+
+
+
+
+  return `/v1/files/${id}/content`
+}
+
+/**
+ * The file's bytes in the JSON body under the same API key: UTF-8 text for text types, base64 otherwise. For a caller that cannot fetch `download_url`. Files over 4 MB answer 413; use `download_url` for those.
+ * @summary A respondent's uploaded file, inline
+ */
+export const getV1FilesByIdContent = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getV1FilesByIdContentResponse> => {
+
+  return customFetch<getV1FilesByIdContentResponse>(getGetV1FilesByIdContentUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetV1FilesByIdContentQueryKey = (id: string,) => {
+    return [
+    `/v1/files/${id}/content`
+    ] as const;
+    }
+
+
+export const getGetV1FilesByIdContentQueryOptions = <TData = Awaited<ReturnType<typeof getV1FilesByIdContent>>, TError = ErrorEnvelope>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FilesByIdContent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetV1FilesByIdContentQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getV1FilesByIdContent>>> = ({ signal }) => getV1FilesByIdContent(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getV1FilesByIdContent>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetV1FilesByIdContentQueryResult = NonNullable<Awaited<ReturnType<typeof getV1FilesByIdContent>>>
+export type GetV1FilesByIdContentQueryError = ErrorEnvelope
+
+
+/**
+ * @summary A respondent's uploaded file, inline
+ */
+
+export function useGetV1FilesByIdContent<TData = Awaited<ReturnType<typeof getV1FilesByIdContent>>, TError = ErrorEnvelope>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getV1FilesByIdContent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetV1FilesByIdContentQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -32,6 +32,8 @@ import type {
   DeleteApiWebhooksById200,
   DeleteApiWorkspacesByIdMembersByMemberId200,
   DeleteApiWorkspacesByIdMembersByMemberId404,
+  GetApiAnalyticsOverview200,
+  GetApiAnalyticsOverviewParams,
   GetApiArchiveForms200Item,
   GetApiArchiveFormsParams,
   GetApiAuditLogs200,
@@ -140,6 +142,7 @@ import type {
   PostApiKeysBody,
   PostApiKeysByIdRotate200,
   PostApiKeysByIdRotateBody,
+  PostApiMcpConsentByIdBody,
   PostApiPaymentAccountsCashfreeOnboard200,
   PostApiPaymentAccountsCashfreeOnboard402,
   PostApiPaymentAccountsCashfreeOnboardBody,
@@ -5059,6 +5062,108 @@ export function useGetApiFormsByIdAnalytics<TData = Awaited<ReturnType<typeof ge
 
 
 
+export type getApiAnalyticsOverviewResponse200 = {
+  data: GetApiAnalyticsOverview200
+  status: 200
+}
+
+export type getApiAnalyticsOverviewResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAnalyticsOverviewResponseSuccess = (getApiAnalyticsOverviewResponse200) & {
+  headers: Headers;
+};
+export type getApiAnalyticsOverviewResponseError = (getApiAnalyticsOverviewResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAnalyticsOverviewResponse = (getApiAnalyticsOverviewResponseSuccess | getApiAnalyticsOverviewResponseError)
+
+export const getGetApiAnalyticsOverviewUrl = (params?: GetApiAnalyticsOverviewParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/analytics/overview?${stringifiedParams}` : `/api/analytics/overview`
+}
+
+/**
+ * @summary Headline numbers across every form in a workspace
+ */
+export const getApiAnalyticsOverview = async (params?: GetApiAnalyticsOverviewParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAnalyticsOverviewResponse> => {
+
+  return customFetch<getApiAnalyticsOverviewResponse>(getGetApiAnalyticsOverviewUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAnalyticsOverviewQueryKey = (params?: GetApiAnalyticsOverviewParams,) => {
+    return [
+    `/api/analytics/overview`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiAnalyticsOverviewQueryOptions = <TData = Awaited<ReturnType<typeof getApiAnalyticsOverview>>, TError = void>(params?: GetApiAnalyticsOverviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAnalyticsOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAnalyticsOverviewQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAnalyticsOverview>>> = ({ signal }) => getApiAnalyticsOverview(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAnalyticsOverview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAnalyticsOverviewQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAnalyticsOverview>>>
+export type GetApiAnalyticsOverviewQueryError = void
+
+
+/**
+ * @summary Headline numbers across every form in a workspace
+ */
+
+export function useGetApiAnalyticsOverview<TData = Awaited<ReturnType<typeof getApiAnalyticsOverview>>, TError = void>(
+ params?: GetApiAnalyticsOverviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAnalyticsOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAnalyticsOverviewQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type getApiFormsByIdFollowupAnalyticsResponse200 = {
   data: GetApiFormsByIdFollowupAnalytics200
   status: 200
@@ -5147,7 +5252,377 @@ export function useGetApiFormsByIdFollowupAnalytics<TData = Awaited<ReturnType<t
 
 
 
-export type getApiKeysResponse200 = {
+export type getApiMcpConsentByIdResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getApiMcpConsentByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiMcpConsentByIdResponseSuccess = (getApiMcpConsentByIdResponse200) & {
+  headers: Headers;
+};
+export type getApiMcpConsentByIdResponseError = (getApiMcpConsentByIdResponse404) & {
+  headers: Headers;
+};
+
+export type getApiMcpConsentByIdResponse = (getApiMcpConsentByIdResponseSuccess | getApiMcpConsentByIdResponseError)
+
+export const getGetApiMcpConsentByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/mcp/consent/${id}`
+}
+
+/**
+ * @summary An AI app's pending connection request, for the consent page
+ */
+export const getApiMcpConsentById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiMcpConsentByIdResponse> => {
+
+  return customFetch<getApiMcpConsentByIdResponse>(getGetApiMcpConsentByIdUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiMcpConsentByIdQueryKey = (id: string,) => {
+    return [
+    `/api/mcp/consent/${id}`
+    ] as const;
+    }
+
+
+export const getGetApiMcpConsentByIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiMcpConsentById>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiMcpConsentById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiMcpConsentByIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiMcpConsentById>>> = ({ signal }) => getApiMcpConsentById(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiMcpConsentById>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiMcpConsentByIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiMcpConsentById>>>
+export type GetApiMcpConsentByIdQueryError = void
+
+
+/**
+ * @summary An AI app's pending connection request, for the consent page
+ */
+
+export function useGetApiMcpConsentById<TData = Awaited<ReturnType<typeof getApiMcpConsentById>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiMcpConsentById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiMcpConsentByIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postApiMcpConsentByIdResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postApiMcpConsentByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiMcpConsentByIdResponseSuccess = (postApiMcpConsentByIdResponse200) & {
+  headers: Headers;
+};
+export type postApiMcpConsentByIdResponseError = (postApiMcpConsentByIdResponse404) & {
+  headers: Headers;
+};
+
+export type postApiMcpConsentByIdResponse = (postApiMcpConsentByIdResponseSuccess | postApiMcpConsentByIdResponseError)
+
+export const getPostApiMcpConsentByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/mcp/consent/${id}`
+}
+
+/**
+ * @summary Allow or deny an AI app's connection
+ */
+export const postApiMcpConsentById = async (id: string,
+    postApiMcpConsentByIdBody: PostApiMcpConsentByIdBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiMcpConsentByIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiMcpConsentByIdResponse>(getPostApiMcpConsentByIdUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiMcpConsentByIdBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiMcpConsentByIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiMcpConsentById>>, TError,PostApiMcpConsentByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiMcpConsentById>>, TError,PostApiMcpConsentByIdMutationVariables, TContext> => {
+
+const mutationKey = ['postApiMcpConsentById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiMcpConsentById>>, PostApiMcpConsentByIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postApiMcpConsentById(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiMcpConsentByIdMutationResult = NonNullable<Awaited<ReturnType<typeof postApiMcpConsentById>>>
+    export type PostApiMcpConsentByIdMutationBody = PostApiMcpConsentByIdBody
+    export type PostApiMcpConsentByIdMutationError = void
+    export type PostApiMcpConsentByIdMutationVariables = {id: string;data: PostApiMcpConsentByIdBody}
+
+    /**
+ * @summary Allow or deny an AI app's connection
+ */
+export const usePostApiMcpConsentById = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiMcpConsentById>>, TError,PostApiMcpConsentByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiMcpConsentById>>,
+        TError,
+        PostApiMcpConsentByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiMcpConsentByIdMutationOptions(options));
+    }
+    export type getApiMcpConnectionsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getApiMcpConnectionsResponseSuccess = (getApiMcpConnectionsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiMcpConnectionsResponse = (getApiMcpConnectionsResponseSuccess)
+
+export const getGetApiMcpConnectionsUrl = () => {
+
+
+
+
+  return `/api/mcp/connections`
+}
+
+/**
+ * @summary AI apps connected to the organization
+ */
+export const getApiMcpConnections = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiMcpConnectionsResponse> => {
+
+  return customFetch<getApiMcpConnectionsResponse>(getGetApiMcpConnectionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiMcpConnectionsQueryKey = () => {
+    return [
+    `/api/mcp/connections`
+    ] as const;
+    }
+
+
+export const getGetApiMcpConnectionsQueryOptions = <TData = Awaited<ReturnType<typeof getApiMcpConnections>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiMcpConnections>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiMcpConnectionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiMcpConnections>>> = ({ signal }) => getApiMcpConnections({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiMcpConnections>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiMcpConnectionsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiMcpConnections>>>
+export type GetApiMcpConnectionsQueryError = unknown
+
+
+/**
+ * @summary AI apps connected to the organization
+ */
+
+export function useGetApiMcpConnections<TData = Awaited<ReturnType<typeof getApiMcpConnections>>, TError = unknown>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiMcpConnections>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiMcpConnectionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type deleteApiMcpConnectionsByIdResponse200 = {
+  data: void
+  status: 200
+}
+
+export type deleteApiMcpConnectionsByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type deleteApiMcpConnectionsByIdResponseSuccess = (deleteApiMcpConnectionsByIdResponse200) & {
+  headers: Headers;
+};
+export type deleteApiMcpConnectionsByIdResponseError = (deleteApiMcpConnectionsByIdResponse404) & {
+  headers: Headers;
+};
+
+export type deleteApiMcpConnectionsByIdResponse = (deleteApiMcpConnectionsByIdResponseSuccess | deleteApiMcpConnectionsByIdResponseError)
+
+export const getDeleteApiMcpConnectionsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/mcp/connections/${id}`
+}
+
+/**
+ * @summary Disconnect an AI app
+ */
+export const deleteApiMcpConnectionsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteApiMcpConnectionsByIdResponse> => {
+
+  return customFetch<deleteApiMcpConnectionsByIdResponse>(getDeleteApiMcpConnectionsByIdUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiMcpConnectionsByIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiMcpConnectionsById>>, TError,DeleteApiMcpConnectionsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiMcpConnectionsById>>, TError,DeleteApiMcpConnectionsByIdMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiMcpConnectionsById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiMcpConnectionsById>>, DeleteApiMcpConnectionsByIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiMcpConnectionsById(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiMcpConnectionsByIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiMcpConnectionsById>>>
+
+    export type DeleteApiMcpConnectionsByIdMutationError = void
+    export type DeleteApiMcpConnectionsByIdMutationVariables = {id: string}
+
+    /**
+ * @summary Disconnect an AI app
+ */
+export const useDeleteApiMcpConnectionsById = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiMcpConnectionsById>>, TError,DeleteApiMcpConnectionsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiMcpConnectionsById>>,
+        TError,
+        DeleteApiMcpConnectionsByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiMcpConnectionsByIdMutationOptions(options));
+    }
+    export type getApiKeysResponse200 = {
   data: GetApiKeys200Item[]
   status: 200
 }
@@ -6741,7 +7216,7 @@ export const getGetApiPaymentAccountsUrl = () => {
 }
 
 /**
- * Never returns a credential. `enabled` says whether verified payments are on for this organization.
+ * Never returns a credential. `enabled` says whether verified payments are switched on at all.
  * @summary List connected payment gateway accounts
  */
 export const getApiPaymentAccounts = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiPaymentAccountsResponse> => {

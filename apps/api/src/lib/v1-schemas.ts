@@ -504,6 +504,35 @@ export const AnalyticsView = z
   })
   .loose();
 
+const CountPair = z.object({ value: z.number(), previous: z.number() });
+const NullablePair = z.object({ value: z.number().nullable(), previous: z.number().nullable() });
+
+/** Every form added up: the last `days` days against the `days` before them. */
+export const OrgOverviewView = z.object({
+  days: z.number(),
+  /** Completed responses so far today, on the caller's clock. */
+  today: z.number(),
+  kpis: z.object({
+    responses: CountPair,
+    views: CountPair,
+    /** Of the responses started in the window, the share that finished (0–1). Null with no starts. */
+    completionRate: NullablePair,
+    /** Started in the window and not finished: abandoned, in progress or disqualified. */
+    partial: CountPair,
+    /** Median time to finish. Null with no completions, or when `locked` names it. */
+    medianMs: NullablePair,
+  }),
+  /** One value per day, oldest first. */
+  series: z.object({
+    responses: z.array(z.number()),
+    views: z.array(z.number()),
+    completionRate: z.array(z.number()),
+    partial: z.array(z.number()),
+  }),
+  /** KPIs withheld because the plan does not include advanced analytics. */
+  locked: z.array(z.string()),
+});
+
 export const FollowUpStatsView = z
   .object({
     everScheduled: z.boolean(),

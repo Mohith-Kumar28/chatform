@@ -18052,6 +18052,225 @@
         ]
       }
     },
+    "/api/analytics/overview": {
+      "get": {
+        "operationId": "getApiAnalyticsOverview",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ws",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tz",
+            "schema": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Headline numbers across every form in a workspace",
+        "responses": {
+          "200": {
+            "description": "Overview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "days": {
+                      "type": "number"
+                    },
+                    "today": {
+                      "type": "number"
+                    },
+                    "kpis": {
+                      "type": "object",
+                      "properties": {
+                        "responses": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "number"
+                            },
+                            "previous": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "previous"
+                          ]
+                        },
+                        "views": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "number"
+                            },
+                            "previous": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "previous"
+                          ]
+                        },
+                        "completionRate": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "previous": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "previous"
+                          ]
+                        },
+                        "partial": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "number"
+                            },
+                            "previous": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "previous"
+                          ]
+                        },
+                        "medianMs": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "previous": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "previous"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "responses",
+                        "views",
+                        "completionRate",
+                        "partial",
+                        "medianMs"
+                      ]
+                    },
+                    "series": {
+                      "type": "object",
+                      "properties": {
+                        "responses": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "views": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "completionRate": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "partial": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        }
+                      },
+                      "required": [
+                        "responses",
+                        "views",
+                        "completionRate",
+                        "partial"
+                      ]
+                    },
+                    "locked": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "days",
+                    "today",
+                    "kpis",
+                    "series",
+                    "locked"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such workspace"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
     "/api/forms/{id}/followup-analytics": {
       "get": {
         "operationId": "getApiFormsByIdFollowupAnalytics",
@@ -25643,6 +25862,219 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "analytics:read",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/analytics/overview": {
+      "get": {
+        "operationId": "getV1AnalyticsOverview",
+        "parameters": [
+          {
+            "name": "tz",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Minutes east of UTC that a day starts in, e.g. `330` for India. View counts are always UTC days."
+          }
+        ],
+        "tags": [
+          "v1"
+        ],
+        "summary": "Headline numbers across every form: the last 30 days against the 30 before",
+        "responses": {
+          "200": {
+            "description": "Overview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "days": {
+                      "type": "number"
+                    },
+                    "today": {
+                      "type": "number"
+                    },
+                    "kpis": {
+                      "type": "object",
+                      "properties": {
+                        "responses": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "number"
+                            },
+                            "previous": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "previous"
+                          ]
+                        },
+                        "views": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "number"
+                            },
+                            "previous": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "previous"
+                          ]
+                        },
+                        "completionRate": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "previous": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "previous"
+                          ]
+                        },
+                        "partial": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "number"
+                            },
+                            "previous": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "previous"
+                          ]
+                        },
+                        "medianMs": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "previous": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "previous"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "responses",
+                        "views",
+                        "completionRate",
+                        "partial",
+                        "medianMs"
+                      ]
+                    },
+                    "series": {
+                      "type": "object",
+                      "properties": {
+                        "responses": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "views": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "completionRate": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        },
+                        "partial": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
+                        }
+                      },
+                      "required": [
+                        "responses",
+                        "views",
+                        "completionRate",
+                        "partial"
+                      ]
+                    },
+                    "locked": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "days",
+                    "today",
+                    "kpis",
+                    "series",
+                    "locked"
+                  ]
                 }
               }
             }

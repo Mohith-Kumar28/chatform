@@ -12,6 +12,7 @@ import type {
   FormRead,
   FormSettings,
   FormSummary,
+  Overview,
   Page,
   Published,
   SettingsPatch,
@@ -111,6 +112,17 @@ export class Forms {
       { source: options.source, includeTest: options.includeTest ? "1" : undefined },
       request,
     );
+  }
+
+  /**
+   * Every form the key can see, added up: responses, views, completion rate,
+   * partials and median time, the last 30 days against the 30 before.
+   *
+   * `tz` is minutes east of UTC that a day starts in (`330` for India), so
+   * `today` and the daily series line up with the caller's calendar.
+   */
+  overview(options: { tz?: number } = {}, request?: RequestOptions) {
+    return this.http.get<Overview>("/v1/analytics/overview", { tz: options.tz }, request);
   }
 
   /**
