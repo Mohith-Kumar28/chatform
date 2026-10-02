@@ -1,5 +1,13 @@
 import { Hono } from "hono";
-import { DeletedView, OkView, Paged, WebhookDeliveryView, WebhookQueueStatsView } from "../../lib/v1-schemas.js";
+import {
+  DeletedView,
+  Paged,
+  ReplayQueuedView,
+  WebhookCreatedView,
+  WebhookDeliveryView,
+  WebhookQueueStatsView,
+  WebhookView,
+} from "../../lib/v1-schemas.js";
 import { page } from "../../lib/api-page.js";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../../lib/validator.js";
@@ -30,17 +38,6 @@ export const webhooksV1Router = new Hono<{
 const KNOWN_EVENTS = Object.keys(EVENT_ALIASES);
 /** Both namespaces, because a subscription may legitimately use either. */
 const ACCEPTED_EVENTS = [...new Set([...KNOWN_EVENTS, ...Object.values(EVENT_ALIASES).flat()])];
-
-const WebhookView = z.object({
-  id: z.string(),
-  url: z.string(),
-  events: z.array(z.string()),
-  formId: z.string().nullable(),
-  active: z.boolean(),
-  consecutiveFailures: z.number(),
-  createdAt: z.number(),
-  secretPreview: z.string(),
-});
 
 interface WebhookRow {
   id: string;
@@ -76,6 +73,15 @@ webhooksV1Router.get(
   describeRoute({
     tags: ["v1"],
     summary: "List webhook endpoints",
+    parameters: [
+      {
+        name: "formId",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description: "Only endpoints for this form, plus the organization-wide ones.",
+      },
+    ],
     responses: { 200: { description: "Endpoints", content: { "application/json": { schema: resolver(Paged(WebhookView)) } } } },
   }),
   async (c) => {
@@ -98,6 +104,15 @@ webhooksV1Router.get(
   describeRoute({
     tags: ["v1"],
     summary: "Delivery queue status: pending, failed and delivered in the last 24 hours, per endpoint",
+    parameters: [
+      {
+        name: "formId",
+        in: "query",
+        required: false,
+        schema: { type: "string" },
+        description: "Only endpoints for this form, plus the organization-wide ones.",
+      },
+    ],
     responses: { 200: { description: "Counts", content: { "application/json": { schema: resolver(WebhookQueueStatsView) } } } },
   }),
   async (c) => c.json(await webhookQueueStats(c.env, c.get("orgId")!, c.req.query("formId") ?? null)),
@@ -158,7 +173,7 @@ webhooksV1Router.post(
     tags: ["v1"],
     summary: "Create a webhook endpoint. The signing secret is returned ONCE",
     responses: {
-      201: { description: "Created, with the signing secret", content: { "application/json": { schema: resolver(WebhookView) } } },
+      201: { description: "Created, with the signing secret", content: { "application/json": { schema: resolver(WebhookCreatedView) } } },
       404: { description: "Form not found" },
       422: { description: "Unknown event name" },
     },
@@ -282,6 +297,15 @@ webhooksV1Router.get(
   describeRoute({
     tags: ["v1"],
     summary: "Recent deliveries with every attempt, for working out why an endpoint is quiet. Filter with ?status=pending|failed|success",
+    parameters: [
+      {
+        name: "status",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: ["pending", "failed", "success"] },
+        description: "Only deliveries in this state. Any other value is ignored.",
+      },
+    ],
     responses: {
       200: { description: "Deliveries", content: { "application/json": { schema: resolver(Paged(WebhookDeliveryView)) } } },
       404: { description: "Not found" },
@@ -314,7 +338,7 @@ webhooksV1Router.post(
     tags: ["v1"],
     summary: "Replay one delivery",
     responses: {
-      200: { description: "Queued", content: { "application/json": { schema: resolver(OkView) } } },
+      200: { description: "Queued", content: { "application/json": { schema: resolver(ReplayQueuedView) } } },
       404: { description: "Not found" },
       422: { description: "Nothing to replay" },
     },

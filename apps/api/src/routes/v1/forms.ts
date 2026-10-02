@@ -457,6 +457,22 @@ formsV1Router.get(
   describeRoute({
     tags: ["v1"],
     summary: "Counts, per-question funnel and answer distributions",
+    parameters: [
+      {
+        name: "source",
+        in: "query",
+        required: false,
+        schema: { type: "string", default: "all" },
+        description: "Only responses from this channel (`chat`, `embed`, `api`), or `all`.",
+      },
+      {
+        name: "includeTest",
+        in: "query",
+        required: false,
+        schema: { type: "string", enum: ["1"] },
+        description: "`1` counts test-mode responses too. A test key always does.",
+      },
+    ],
     responses: {
       200: { description: "Analytics", content: { "application/json": { schema: resolver(AnalyticsView) } } },
       402: { description: "The per-question detail needs a plan that includes it" },

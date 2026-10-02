@@ -167,6 +167,60 @@ export const SessionEventView = z.object({
   data: z.unknown(),
 });
 
+/** What a browser needs to open the gateway's checkout. Never carries a secret. */
+export const CheckoutLaunchView = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("cashfree_sdk"),
+    orderId: z.string(),
+    paymentSessionId: z.string(),
+    mode: z.enum(["sandbox", "production"]),
+  }),
+  z.object({
+    kind: z.literal("razorpay_checkout"),
+    orderId: z.string(),
+    key: z.string(),
+    amountMinor: z.number(),
+    currency: z.string(),
+    name: z.string(),
+    description: z.string().optional(),
+    prefill: z.object({ name: z.string().optional(), email: z.string().optional(), contact: z.string().optional() }).optional(),
+  }),
+  z.object({ kind: z.literal("redirect"), url: z.string(), sessionId: z.string() }),
+]);
+
+/** A code the conversation is waiting on. The code itself arrives as an ordinary message. */
+export const PendingVerificationView = z.object({
+  ref: z.string(),
+  channel: z.enum(["sms", "email"]),
+  sentTo: z.string(),
+  sentAt: z.number(),
+});
+
+/** An open checkout. While set, the payment question cannot be answered with a message. */
+export const PendingPaymentView = z.object({
+  ref: z.string(),
+  recordId: z.string(),
+  provider: z.enum(["cashfree", "razorpay", "stripe"]),
+  amountMinor: z.number(),
+  amount: z.number(),
+  currency: z.string(),
+  display: z.string(),
+  launch: CheckoutLaunchView,
+  expiresAt: z.number(),
+});
+
+export const PaymentStartedView = z.object({
+  recordId: z.string(),
+  launch: CheckoutLaunchView,
+  expiresAt: z.number(),
+});
+
+export const PaymentConfirmedView = z.object({
+  recordId: z.string(),
+  status: z.enum(["created", "paid", "failed", "expired", "refunded", "superseded"]),
+  settled: z.boolean(),
+});
+
 export const TurnResultView = z
   .object({
     accepted: z.boolean(),
@@ -179,11 +233,18 @@ export const TurnResultView = z
     validation: z.object({ ref: z.string(), code: z.string(), message: z.string() }).nullable(),
     answers: z.record(z.string(), z.unknown()),
     collected: z.number(),
-    pendingVerification: z.unknown().nullable(),
+    pendingVerification: PendingVerificationView.nullable(),
+    pendingPayment: PendingPaymentView.nullable(),
     events: z.array(SessionEventView),
     sinceSeq: z.number(),
   })
   .loose();
+
+/** A turn that outran its deadline. Nothing failed: resume from `pollUrl`. */
+export const TurnProcessingView = TurnResultView.extend({
+  status: z.literal("processing"),
+  pollUrl: z.string(),
+});
 
 export const SessionStateView = z
   .object({
@@ -193,13 +254,16 @@ export const SessionStateView = z
     collected: z.number(),
     answers: z.record(z.string(), z.unknown()),
     variables: z.record(z.string(), z.unknown()),
-    summary: z.array(z.unknown()),
+    summary: z.array(z.object({ ref: z.string(), title: z.string(), display: z.string() })),
     awaitingSubmit: z.boolean(),
     completedAt: z.number().nullable(),
     ending: PublicEndingView.nullable(),
     canRepeat: z.boolean(),
-    auth: z.unknown().nullable(),
-    pendingVerification: z.unknown().nullable(),
+    auth: z
+      .object({ method: z.string(), message: z.string(), verified: z.boolean(), label: z.string().nullable() })
+      .nullable(),
+    pendingVerification: PendingVerificationView.nullable(),
+    pendingPayment: PendingPaymentView.nullable(),
     expiresAt: z.number().nullable(),
     mode: z.string(),
     source: z.string(),
@@ -271,7 +335,7 @@ const SettingView = z
 export const FormSettingsView = z.object({ settings: z.array(SettingView) });
 
 /** One setting a call changed, with its value on each side. `locked` ones were not applied. */
-const SettingChangeView = z
+export const SettingChangeView = z
   .object({
     key: z.string(),
     section: z.string(),
@@ -352,14 +416,40 @@ export const AnalyticsView = z
         dropOff: z.number(),
       }),
     ),
-    /** Shape varies by block type: options for a select, a summary for a number. */
-    distributions: z.array(z.unknown()),
+    /** Every field is present on every entry; the ones that do not apply to a block type are empty. */
+    distributions: z.array(
+      z.object({
+        blockRef: z.string(),
+        title: z.string(),
+        type: z.string(),
+        answered: z.number(),
+        options: z.array(z.object({ label: z.string(), count: z.number() })),
+        multi: z.boolean(),
+        values: z.array(z.object({ value: z.number(), count: z.number() })),
+        numericSummary: z.object({ avg: z.number(), min: z.number(), max: z.number(), median: z.number() }).nullable(),
+        samples: z.array(z.string()),
+        ranking: z.array(z.object({ label: z.string(), avgRank: z.number() })),
+        matrix: z.object({ rows: z.array(z.string()), cols: z.array(z.string()), counts: z.array(z.array(z.number())) }).nullable(),
+        timeline: z.array(z.object({ label: z.string(), count: z.number() })),
+      }),
+    ),
     daily: z.array(z.object({ date: z.string(), views: z.number(), starts: z.number(), completed: z.number() })),
-    bySource: z.array(z.unknown()),
-    byCountry: z.array(z.unknown()),
+    bySource: z.array(z.object({ source: z.string(), count: z.number() })),
+    byCountry: z.array(z.object({ country: z.string(), count: z.number() })),
     byDevice: z.record(z.string(), z.number()),
-    /** One point per city: `{ country, region, city, lat, lon, count }`. */
-    places: z.array(z.unknown()).optional(),
+    places: z
+      .array(
+        z.object({
+          country: z.string().nullable(),
+          region: z.string().nullable(),
+          city: z.string().nullable(),
+          lat: z.number(),
+          lon: z.number(),
+          count: z.number(),
+          completed: z.number(),
+        }),
+      )
+      .optional(),
     byBrowser: z.array(z.object({ label: z.string(), count: z.number() })).optional(),
     byOs: z.array(z.object({ label: z.string(), count: z.number() })).optional(),
     byChannel: z.array(z.object({ label: z.string(), count: z.number() })).optional(),
@@ -393,7 +483,7 @@ export const FollowUpStatsView = z
     recovered: z.number(),
     clickRate: z.number(),
     recoveryRate: z.number(),
-    byStep: z.array(z.unknown()),
+    byStep: z.array(z.object({ step: z.number(), sent: z.number(), clicked: z.number(), recovered: z.number() })),
     daily: z.array(z.object({ date: z.string(), sent: z.number(), recovered: z.number() })),
     /** Null until a holdout group has had time to not come back. */
     holdout: z.number().nullable(),
@@ -411,10 +501,13 @@ export const WebhookView = z
     consecutiveFailures: z.number(),
     createdAt: z.number(),
     secretPreview: z.string(),
-    /** Returned by create and never again. Store it then. */
-    secret: z.string().optional(),
   })
   .loose();
+
+/** Create is the one response that carries the full signing secret. Store it then. */
+export const WebhookCreatedView = WebhookView.extend({ secret: z.string() });
+
+export const ReplayQueuedView = z.object({ ok: z.boolean(), queued: z.boolean() });
 
 export const WebhookAttemptView = z.object({
   attempt: z.number(),
@@ -462,6 +555,14 @@ export const WebhookQueueStatsView = z.object({
 export const AiDocumentView = z
   .object({ doc: z.unknown(), issues: z.array(LintIssueView).optional() })
   .loose();
+
+/** A generated document, never saved: pass `doc` to `POST /v1/forms` to keep it. */
+export const AiGeneratedView = z.object({
+  doc: z.unknown(),
+  issues: z.array(LintIssueView),
+  tokens: z.number(),
+  settings: z.array(SettingChangeView).optional(),
+});
 
 export const RestoredVersionView = z
   .object({

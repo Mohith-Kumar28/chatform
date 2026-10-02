@@ -348,6 +348,18 @@ knowledgeRouter.post(
   describeRoute({
     tags: [tag],
     summary: "Upload a document, image or recording as knowledge",
+    requestBody: {
+      required: true,
+      content: {
+        "multipart/form-data": {
+          schema: {
+            type: "object",
+            properties: { file: { type: "string", format: "binary", description: `At most ${MAX_KNOWLEDGE_MB} MB.` } },
+            required: ["file"],
+          },
+        },
+      },
+    },
     responses: {
       200: { description: "Added", content: { "application/json": { schema: resolver(z.object({ id: z.string() })) } } },
       413: { description: "Too large", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },

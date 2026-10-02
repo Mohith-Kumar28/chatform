@@ -210,6 +210,15 @@ function projectResponse(row: ResponseRow, doc: FormDoc, answers: AnswerMap, inc
   };
 }
 
+/** Documents `include`, read by `includeSet`. */
+const INCLUDE_PARAM = {
+  name: "include",
+  in: "query" as const,
+  required: false,
+  schema: { type: "string" as const },
+  description: "Comma-separated extras. `answers` adds every answer as `{ ref, type, value }`.",
+};
+
 function includeSet(c: { req: { query(k: string): string | undefined } }): Set<string> {
   return new Set((c.req.query("include") ?? "").split(",").map((s) => s.trim()).filter(Boolean));
 }
@@ -453,6 +462,7 @@ responsesRouter.post(
   describeRoute({
     tags: ["v1"],
     summary: "Record one or more answers on an open response",
+    parameters: [INCLUDE_PARAM],
     responses: {
       200: { description: "Updated response", content: { "application/json": { schema: resolver(ResponseView) } } },
       404: { description: "Response not found" },
@@ -526,6 +536,7 @@ responsesRouter.delete(
   describeRoute({
     tags: ["v1"],
     summary: "Retract one answer, moving the flow back to it",
+    parameters: [INCLUDE_PARAM],
     responses: {
       200: { description: "Updated response", content: { "application/json": { schema: resolver(ResponseView) } } },
       404: { description: "Not found" },
@@ -702,6 +713,7 @@ responsesRouter.get(
   describeRoute({
     tags: ["v1"],
     summary: "Read one response",
+    parameters: [INCLUDE_PARAM],
     responses: {
       200: { description: "Response", content: { "application/json": { schema: resolver(ResponseView) } } },
       404: { description: "Not found" },

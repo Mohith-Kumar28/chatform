@@ -21,6 +21,7 @@ import { builderFeedbackRouter } from "./routes/builder-feedback.js";
 import { aiRouter } from "./routes/ai.js";
 import { resultsRouter } from "./routes/results.js";
 import { v1Router } from "./routes/v1.js";
+import { deprecationFor, deprecationHeaders } from "./lib/deprecations.js";
 import { mcpRouter } from "./routes/mcp.js";
 import { setDispatchTarget } from "./mcp/dispatch.js";
 import { keysRouter } from "./routes/keys.js";
@@ -275,6 +276,20 @@ export function createApp() {
       maxAge: 86400,
     }),
   );
+
+  /**
+   * The headers `versioning.mdx` promises, on every response from a path in
+   * `DEPRECATIONS`. Re-wrapped rather than set in place because a response
+   * handed back from a Durable Object (the event stream) has immutable headers.
+   */
+  app.use("/v1/*", async (c, next) => {
+    await next();
+    const deprecation = deprecationFor(c.req.path);
+    if (!deprecation) return;
+    const res = new Response(c.res.body, c.res);
+    for (const [name, value] of Object.entries(deprecationHeaders(deprecation))) res.headers.set(name, value);
+    c.res = res;
+  });
 
   /** Every `/v1` error body leaves with a request id and a link to its docs. */
   app.use("/v1/*", async (c, next) => {

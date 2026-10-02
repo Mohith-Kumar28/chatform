@@ -1,5 +1,13 @@
 import { Hono, type MiddlewareHandler } from "hono";
-import { RotatedTokenView, SessionEventsView, SessionStateView, TurnResultView } from "../../lib/v1-schemas.js";
+import {
+  PaymentConfirmedView,
+  PaymentStartedView,
+  RotatedTokenView,
+  SessionEventsView,
+  SessionStateView,
+  TurnProcessingView,
+  TurnResultView,
+} from "../../lib/v1-schemas.js";
 import { resolveRespondent } from "../../lib/respondents.js";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../../lib/validator.js";
@@ -277,6 +285,16 @@ async function respondToTurn(
   return c.json(body);
 }
 
+/** Documents `deadlineMs`, read by `deadlineFrom` rather than a validator so a bad value is ignored, not refused. */
+const DEADLINE_PARAM = {
+  name: "deadlineMs",
+  in: "query" as const,
+  required: false,
+  schema: { type: "number" as const },
+  description:
+    "How long to wait for the turn, in milliseconds, before answering 202 with what is done so far. Unparseable values are ignored.",
+};
+
 const deadlineFrom = (c: { req: { query(k: string): string | undefined } }) => {
   const raw = Number(c.req.query("deadlineMs"));
   return Number.isFinite(raw) ? { deadlineMs: raw } : {};
@@ -290,9 +308,13 @@ const messagesRoute = (base: string) =>
   describeRoute({
     tags: ["v1"],
     summary: "Send a message or a structured answer, and get the turn's result",
+    parameters: [DEADLINE_PARAM],
     responses: {
       200: { description: "The turn, with the next question", content: { "application/json": { schema: resolver(TurnResultView) } } },
-      202: { description: "Still running; resume from sinceSeq" },
+      202: {
+        description: "Still running; resume from `pollUrl`",
+        content: { "application/json": { schema: resolver(TurnProcessingView) } },
+      },
       400: { description: "Rejected" },
     },
   }),
@@ -352,9 +374,13 @@ const actionsRoute = (base: string) =>
   describeRoute({
     tags: ["v1"],
     summary: "Skip, edit, restart, stop, submit, undo a screen-out, or resend a verification code",
+    parameters: [DEADLINE_PARAM],
     responses: {
       200: { description: "The turn's result", content: { "application/json": { schema: resolver(TurnResultView) } } },
-      202: { description: "Still running" },
+      202: {
+        description: "Still running; resume from `pollUrl`",
+        content: { "application/json": { schema: resolver(TurnProcessingView) } },
+      },
       400: { description: "Rejected" },
     },
   }),
@@ -406,6 +432,15 @@ const eventsRoute = (base: string) =>
   describeRoute({
     tags: ["v1"],
     summary: "The session's events, streamed or pulled since a sequence number",
+    parameters: [
+      {
+        name: "since",
+        in: "query",
+        required: false,
+        schema: { type: "integer", minimum: 0 },
+        description: "Return a JSON page of events after this sequence number instead of a stream.",
+      },
+    ],
     responses: {
       200: {
         description:
@@ -481,7 +516,10 @@ const startPaymentRoute = (base: string) =>
     tags: ["v1"],
     summary: "Open a verified checkout for the current payment question",
     responses: {
-      200: { description: "Checkout opened, or the one already open" },
+      200: {
+        description: "Checkout opened, or the one already open",
+        content: { "application/json": { schema: resolver(PaymentStartedView) } },
+      },
       402: { description: "The organization's plan does not include payments" },
       409: {
         description:
@@ -507,7 +545,7 @@ const confirmPaymentRoute = (base: string) =>
     tags: ["v1"],
     summary: "Re-check a checkout with the gateway, and settle it if it was paid",
     responses: {
-      200: { description: "Where the payment stands: `{ recordId, status, settled }`" },
+      200: { description: "Where the payment stands", content: { "application/json": { schema: resolver(PaymentConfirmedView) } } },
       404: { description: "No such payment on this session" },
       502: { description: "The gateway could not be reached" },
     },

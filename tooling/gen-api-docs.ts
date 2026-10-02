@@ -30,7 +30,7 @@ const SPEC_COPY = resolve(here, "../apps/web/src/lib/openapi/spec.json");
 
 const METHODS = ["get", "post", "put", "patch", "delete"];
 
-type Operation = { "x-internal"?: boolean; tags?: string[] };
+type Operation = { "x-internal"?: boolean; deprecated?: boolean; tags?: string[] };
 type Spec = {
   paths: Record<string, Record<string, Operation>>;
   tags?: { name: string; description?: string }[];
@@ -38,14 +38,24 @@ type Spec = {
 
 const spec = JSON.parse(readFileSync(SPEC, "utf8")) as Spec;
 
-/** Drop every operation the API marked internal, then any path left with none. */
+/**
+ * Drop every operation the API marked internal or deprecated, then any path left
+ * with none. A deprecated alias still answers, but a reference that lists both
+ * `/v1/sessions/{sid}` and `/v1/chat/sessions/{sid}` offers two names for one
+ * job and no reason to prefer either.
+ */
 const paths: Spec["paths"] = {};
 let dropped = 0;
+let deprecated = 0;
 for (const [path, item] of Object.entries(spec.paths)) {
   const kept: Record<string, Operation> = {};
   for (const [method, op] of Object.entries(item)) {
     if (METHODS.includes(method) && op?.["x-internal"]) {
       dropped++;
+      continue;
+    }
+    if (METHODS.includes(method) && op?.deprecated) {
+      deprecated++;
       continue;
     }
     kept[method] = op;
@@ -144,5 +154,5 @@ writeFileSync(
 
 console.log(
   `wrote the API reference to ${OUT} — ${excluded} operations in ${ordered.length} group(s), ` +
-    `${dropped} internal operations withheld`,
+    `${dropped} internal and ${deprecated} deprecated operations withheld`,
 );

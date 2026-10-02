@@ -20,6 +20,8 @@ type Operation = {
   tags?: string[];
   "x-internal"?: boolean;
   "x-required-scope"?: string;
+  deprecated?: boolean;
+  responses?: Record<string, { content?: unknown }>;
 };
 type Spec = { paths: Record<string, Record<string, Operation>>; tags?: { name: string }[] };
 
@@ -147,5 +149,32 @@ describe("the security block on /v1", () => {
     // reading the route table would leave the scope absent everywhere and pass
     // the tests above on their own.
     expect(guarded.length).toBe(v1.length - UNGATED.length);
+  });
+});
+
+describe("one source for errors and deprecations", () => {
+  it("documents a body on every /v1 error response", () => {
+    for (const { path, method, op } of operations(publicSpec)) {
+      if (!path.startsWith("/v1/")) continue;
+      for (const [status, response] of Object.entries(op.responses ?? {})) {
+        if (Number(status) < 400) continue;
+        expect(response.content, `${method.toUpperCase()} ${path} ${status}`).toBeDefined();
+      }
+    }
+  });
+
+  it("marks the legacy session aliases deprecated, and only them", () => {
+    const deprecated = operations(publicSpec).filter(({ op }) => op.deprecated);
+    expect(deprecated.length).toBeGreaterThan(0);
+    for (const { path } of deprecated) expect(path).toMatch(/\/chat\/sessions/);
+    expect(publicSpec.paths["/v1/sessions/{sid}"]?.get?.deprecated).toBeUndefined();
+  });
+
+  it("sends Deprecation and Link on a deprecated path, even when the call is refused", async () => {
+    const res = await fetchApi("/v1/chat/sessions/ses_none");
+    expect(res.headers.get("deprecation")).toMatch(/^@\d+$/);
+    expect(res.headers.get("link")).toContain('rel="deprecation"');
+    const current = await fetchApi("/v1/sessions/ses_none");
+    expect(current.headers.get("deprecation")).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import { openAPIRouteHandler } from "hono-openapi";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
 import { scopeOf } from "./authorize.js";
+import { deprecationFor } from "./deprecations.js";
 import { PUBLISHABLE_SCOPES } from "./scopes.js";
 
 export const CreateSessionResponse = z.object({
@@ -201,6 +202,44 @@ export function publicSpec<T extends { paths?: Record<string, Record<string, unk
 }
 
 /** Mounts GET /openapi.json generating the spec from described routes. */
+/**
+ * Every `/v1` error response documents the one envelope every error uses.
+ *
+ * Stamped here rather than declared per route for the same reason as `security`:
+ * ninety routes each restating the error shape is ninety chances to forget it,
+ * which is how most of them came to document a status code and no body. Inlined
+ * rather than `$ref`'d because the generator inlines everything else, and the
+ * MCP index and the docs renderer read schemas without resolving references.
+ */
+const ERROR_ENVELOPE_JSON_SCHEMA = (() => {
+  const { $schema: _dialect, ...schema } = z.toJSONSchema(ErrorEnvelope, { io: "output" }) as Record<string, unknown>;
+  return schema;
+})();
+
+function stampErrors(doc: { paths?: Record<string, Record<string, unknown>> }) {
+  for (const [path, item] of Object.entries(doc.paths ?? {})) {
+    if (!path.startsWith("/v1/")) continue;
+    for (const method of METHODS) {
+      const op = item[method] as { responses?: Record<string, { content?: unknown }> } | undefined;
+      for (const [status, response] of Object.entries(op?.responses ?? {})) {
+        if (Number(status) < 400 || response.content !== undefined) continue;
+        response.content = { "application/json": { schema: ERROR_ENVELOPE_JSON_SCHEMA } };
+      }
+    }
+  }
+}
+
+/** Marks the operations `DEPRECATIONS` lists, so the spec and the response headers share one list. */
+function stampDeprecations(doc: { paths?: Record<string, Record<string, unknown>> }) {
+  for (const [path, item] of Object.entries(doc.paths ?? {})) {
+    if (!deprecationFor(path)) continue;
+    for (const method of METHODS) {
+      const op = item[method] as { deprecated?: boolean } | undefined;
+      if (op) op.deprecated = true;
+    }
+  }
+}
+
 export function mountOpenApiSpec(app: Hono<{ Bindings: Bindings; Variables: Record<string, unknown> }>) {
   /**
    * Registered before the generator, not after.
@@ -217,6 +256,8 @@ export function mountOpenApiSpec(app: Hono<{ Bindings: Bindings; Variables: Reco
       tags?: { name: string }[];
     };
     stampSecurity(doc, app as unknown as Hono<never>);
+    stampErrors(doc);
+    stampDeprecations(doc);
     /**
      * Public by default. The dashboard's surface is session-authenticated and
      * unreachable with a key, so publishing it here only ever sent integrators

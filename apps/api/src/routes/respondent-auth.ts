@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import { EmailCodeSentView, RespondentAuthView } from "../lib/v1-schemas.js";
 import { describeRoute, resolver } from "hono-openapi";
-import { zValidator } from "@hono/zod-validator";
+import { validator } from "../lib/validator.js";
 import { z } from "zod";
 import {
   readFormDoc,
@@ -389,7 +389,7 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
         409: { description: "This identity has already answered" },
       },
     }),
-    zValidator("json", googleSchema),
+    validator("json", googleSchema),
     async (c) => {
     const sessionId = await resolve(c);
     if (!sessionId) return unauthorized(c);
@@ -418,7 +418,7 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
         409: { description: "This identity has already answered" },
       },
     }),
-    zValidator("json", phoneTokenSchema),
+    validator("json", phoneTokenSchema),
     async (c) => {
       const sessionId = await resolve(c);
       if (!sessionId) return unauthorized(c);
@@ -446,7 +446,7 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
         400: { description: "Not an address, too many codes, or this form does not sign in by email" },
       },
     }),
-    zValidator("json", emailStartSchema),
+    validator("json", emailStartSchema),
     async (c) => {
       const sessionId = await resolve(c);
       if (!sessionId) return unauthorized(c);
@@ -490,7 +490,7 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
         409: { description: "This identity has already answered" },
       },
     }),
-    zValidator("json", emailVerifySchema),
+    validator("json", emailVerifySchema),
     async (c) => {
       const sessionId = await resolve(c);
       if (!sessionId) return unauthorized(c);
@@ -519,7 +519,7 @@ export function mountRespondentAuth(router: AuthRouter, opts: Options): void {
         400: { description: "The token did not check out, or proves a different number" },
       },
     }),
-    zValidator("json", phoneTokenSchema),
+    validator("json", phoneTokenSchema),
     async (c) => {
       const sessionId = await resolve(c);
       if (!sessionId) return unauthorized(c);

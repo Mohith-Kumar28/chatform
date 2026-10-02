@@ -19,7 +19,7 @@
  * option on the table.
  */
 import { Hono } from "hono";
-import { AiDocumentView } from "../../lib/v1-schemas.js";
+import { AiDocumentView, AiGeneratedView } from "../../lib/v1-schemas.js";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../../lib/validator.js";
 import { z } from "zod";
@@ -62,7 +62,7 @@ aiV1Router.post(
         description: "The generated document, its lint issues, the tokens spent, and the settings it set",
         content: {
           "application/json": {
-            schema: resolver(z.object({ doc: z.unknown(), issues: z.array(z.any()), tokens: z.number(), settings: z.array(z.unknown()).optional() })),
+            schema: resolver(AiGeneratedView),
           },
         },
       },
