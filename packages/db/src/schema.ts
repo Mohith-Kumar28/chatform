@@ -323,6 +323,12 @@ export const forms = sqliteTable(
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
     updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
     deletedAt: ts("deleted_at"),
+    /** When an archived form is deleted for good. Null on every live form. */
+    purgeAt: ts("purge_at"),
+    /** Who archived it; the purge warnings go to them. */
+    deletedBy: text("deleted_by"),
+    /** The last purge warning sent: `3d` or `1d`. */
+    purgeNotice: text("purge_notice"),
   },
   (t) => [
     index("idx_forms_workspace").on(t.workspaceId),

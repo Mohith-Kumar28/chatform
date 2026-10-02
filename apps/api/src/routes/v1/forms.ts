@@ -18,6 +18,8 @@ import { decodeCursor, paginate } from "../../lib/cursor.js";
 import { getEntitlements } from "../../lib/entitlements.js";
 import { computeAnalytics } from "../../lib/analytics-service.js";
 import { computeFollowUpStats } from "../../lib/followup-analytics.js";
+import { ARCHIVED_FORM_SELECT, archiveForm, purgeFormNow, restoreForm, type ArchivedFormRow } from "../../lib/form-archive.js";
+import { holesFor } from "../../lib/d1-bindings.js";
 
 /**
  * Forms, programmatically.
@@ -428,7 +430,7 @@ formsV1Router.delete(
   requireScope("form", "write"),
   describeRoute({
     tags: ["v1"],
-    summary: "Delete a form (soft, so responses are kept)",
+    summary: "Delete a form: it moves to the Archive and is deleted for good after 30 days",
     responses: {
       200: { description: "Deleted", content: { "application/json": { schema: resolver(DeletedView) } } },
       404: { description: "Not found" },
@@ -438,15 +440,100 @@ formsV1Router.delete(
     const orgId = c.get("orgId")!;
     const id = c.req.param("id");
     if (!keyOwnsForm(c, id)) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
-    const res = await c.env.DB.prepare(
-      `UPDATE forms SET deleted_at = ?, status = 'archived' WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`,
-    )
-      .bind(Date.now(), id, orgId)
-      .run();
-    if ((res.meta?.changes ?? 0) === 0) {
+    if (!(await archiveForm(c.env, { formId: id, orgId, userId: c.get("userId") ?? null }))) {
       return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
     }
-    // Soft, so the responses collected against it stay readable and exportable.
+    return c.json({ ok: true, deleted: true });
+  },
+);
+
+const ArchivedFormView = z.object({
+  id: z.string(),
+  title: z.string(),
+  workspace_id: z.string(),
+  archived_at: z.number(),
+  purge_at: z.number().describe("When the form and everything it collected is deleted for good"),
+  responses: z.number(),
+  partials: z.number(),
+  conversations: z.number(),
+  uploads: z.number(),
+});
+
+formsV1Router.get(
+  "/archive/forms",
+  requireScope("form", "read"),
+  describeRoute({
+    tags: ["v1"],
+    summary: "List archived forms",
+    description: "Deleted forms stay here for 30 days, restorable, then are deleted for good with their responses.",
+    responses: {
+      200: { description: "Archived forms, most recently archived first", content: { "application/json": { schema: resolver(z.object({ data: z.array(ArchivedFormView) })) } } },
+    },
+  }),
+  async (c) => {
+    const orgId = c.get("orgId")!;
+    const pinned = c.get("keyMeta")?.formIds ?? [];
+    const rows = await c.env.DB.prepare(
+      `${ARCHIVED_FORM_SELECT}
+        WHERE f.organization_id = ? AND f.deleted_at IS NOT NULL AND f.purge_at > ?
+          ${pinned.length ? `AND f.id IN (${holesFor(pinned)})` : ""}
+        ORDER BY f.deleted_at DESC`,
+    )
+      .bind(orgId, Date.now(), ...pinned)
+      .all<ArchivedFormRow>();
+    return c.json({
+      data: (rows.results ?? []).map((r) => ({
+        id: r.id,
+        title: r.title,
+        workspace_id: r.workspace_id,
+        archived_at: r.deleted_at,
+        purge_at: r.purge_at,
+        responses: r.responses,
+        partials: r.partials,
+        conversations: r.conversations,
+        uploads: r.uploads,
+      })),
+    });
+  },
+);
+
+formsV1Router.post(
+  "/archive/forms/:id/restore",
+  requireScope("form", "write"),
+  describeRoute({
+    tags: ["v1"],
+    summary: "Restore an archived form, as a draft",
+    responses: {
+      200: { description: "Restored", content: { "application/json": { schema: resolver(OkView) } } },
+      404: { description: "Not in the Archive" },
+    },
+  }),
+  async (c) => {
+    const id = c.req.param("id");
+    if (!keyOwnsForm(c, id) || !(await restoreForm(c.env, { formId: id, orgId: c.get("orgId")! }))) {
+      return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    }
+    return c.json({ ok: true });
+  },
+);
+
+formsV1Router.delete(
+  "/archive/forms/:id",
+  requireScope("form", "write"),
+  describeRoute({
+    tags: ["v1"],
+    summary: "Delete an archived form for good, now",
+    description: "Removes the form with every response, conversation and upload within a few minutes. Cannot be undone.",
+    responses: {
+      200: { description: "Deleted", content: { "application/json": { schema: resolver(DeletedView) } } },
+      404: { description: "Not in the Archive" },
+    },
+  }),
+  async (c) => {
+    const id = c.req.param("id");
+    if (!keyOwnsForm(c, id) || !(await purgeFormNow(c.env, { formId: id, orgId: c.get("orgId")! }))) {
+      return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    }
     return c.json({ ok: true, deleted: true });
   },
 );

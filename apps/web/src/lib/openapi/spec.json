@@ -6382,7 +6382,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "Delete a form (soft, so responses are kept)",
+        "summary": "Delete a form: it moves to the Archive and is deleted for good after 30 days",
         "responses": {
           "200": {
             "description": "Deleted",
@@ -6703,6 +6703,213 @@
           }
         ],
         "x-required-scope": "form:publish",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/archive/forms": {
+      "get": {
+        "operationId": "getV1ArchiveForms",
+        "tags": [
+          "v1"
+        ],
+        "summary": "List archived forms",
+        "description": "Deleted forms stay here for 30 days, restorable, then are deleted for good with their responses.",
+        "responses": {
+          "200": {
+            "description": "Archived forms, most recently archived first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "workspace_id": {
+                            "type": "string"
+                          },
+                          "archived_at": {
+                            "type": "number"
+                          },
+                          "purge_at": {
+                            "type": "number",
+                            "description": "When the form and everything it collected is deleted for good"
+                          },
+                          "responses": {
+                            "type": "number"
+                          },
+                          "partials": {
+                            "type": "number"
+                          },
+                          "conversations": {
+                            "type": "number"
+                          },
+                          "uploads": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "workspace_id",
+                          "archived_at",
+                          "purge_at",
+                          "responses",
+                          "partials",
+                          "conversations",
+                          "uploads"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-required-scope": "form:read",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "publishableKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/archive/forms/{id}/restore": {
+      "post": {
+        "operationId": "postV1ArchiveFormsByIdRestore",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Restore an archived form, as a draft",
+        "responses": {
+          "200": {
+            "description": "Restored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not in the Archive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-required-scope": "form:write",
+        "security": [
+          {
+            "secretKey": []
+          },
+          {
+            "apiKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/archive/forms/{id}": {
+      "delete": {
+        "operationId": "deleteV1ArchiveFormsById",
+        "tags": [
+          "v1"
+        ],
+        "summary": "Delete an archived form for good, now",
+        "description": "Removes the form with every response, conversation and upload within a few minutes. Cannot be undone.",
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "deleted"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not in the Archive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-required-scope": "form:write",
         "security": [
           {
             "secretKey": []

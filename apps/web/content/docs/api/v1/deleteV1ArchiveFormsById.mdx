@@ -1,5 +1,7 @@
 ---
-title: 'Delete a form: it moves to the Archive and is deleted for good after 30 days'
+title: Delete an archived form for good, now
+description: Removes the form with every response, conversation and upload
+  within a few minutes. Cannot be undone.
 full: true
 _openapi:
   preload:
@@ -9,7 +11,9 @@ _openapi:
   toc: []
   structuredData:
     headings: []
-    contents: []
+    contents:
+      - content: Removes the form with every response, conversation and upload within a
+          few minutes. Cannot be undone.
 llmsExclude: true
 ---
 
@@ -22,7 +26,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="chatform" operations={[{"path":"/v1/forms/{id}","method":"delete"}]} />
+      <Comp document="chatform" operations={[{"path":"/v1/archive/forms/{id}","method":"delete"}]} />
     </>
   );
 }

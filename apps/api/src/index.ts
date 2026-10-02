@@ -24,6 +24,7 @@ import {
 } from "./lib/feedback-triage.js";
 import { runBuilderFeedbackTriage } from "./lib/builder-feedback.js";
 import { sweepDeletedFormFeedback } from "./lib/feedback-issues.js";
+import { purgeDueForms, sweepPurgeNotices } from "./lib/form-archive.js";
 import { pruneMailDeliveries, recordMailDelivery, type MailJob } from "./lib/mail.js";
 import {
   sweepExpiredResponses,
@@ -235,6 +236,13 @@ export default {
       await sweepDeletedFormKnowledge(env).catch((err) => console.error("knowledge_delete_sweep_failed", err));
       // A deleted form's bug reports, their vectors and any issue they leave empty — the same week later.
       await sweepDeletedFormFeedback(env).catch((err) => console.error("feedback_delete_sweep_failed", err));
+      /**
+       * The Archive. A deleted form is kept for thirty days, with warnings three days and
+       * one day out (sent in one morning hour, so a batch is one email), then purged here,
+       * after the two sweeps above have cleared what it kept outside D1.
+       */
+      await sweepPurgeNotices(env).catch((err) => console.error("purge_notice_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
+      await purgeDueForms(env).catch((err) => console.error("form_purge_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
 
       /**
        * The API path's housekeeping.

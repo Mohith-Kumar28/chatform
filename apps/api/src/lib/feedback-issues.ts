@@ -578,19 +578,17 @@ export async function deleteOrganizationReports(env: Bindings, orgId: string): P
 }
 
 /**
- * How long a deleted form's bug reports outlive it — the same week its knowledge
- * gets, and for the same reason: a form delete is soft and can be a mis-click.
+ * Delete the reports of archived forms whose time is up.
+ *
+ * Keyed on `purge_at`, the same clock as the purge itself: a form is restorable for its
+ * whole stay in the Archive, and its bug reports come back with it.
  */
-export const FEEDBACK_RETENTION_MS = 7 * DAY_MS;
-
-/** Delete the reports of forms deleted longer ago than the retention window. */
 export async function sweepDeletedFormFeedback(env: Bindings, limit = 200): Promise<number> {
-  const cutoff = Date.now() - FEEDBACK_RETENTION_MS;
   const page = await env.DB.prepare(
     `SELECT fb.id FROM respondent_feedback fb JOIN forms f ON f.id = fb.form_id
-      WHERE f.deleted_at IS NOT NULL AND f.deleted_at < ?1 LIMIT ?2`,
+      WHERE f.purge_at IS NOT NULL AND f.purge_at <= ?1 LIMIT ?2`,
   )
-    .bind(cutoff, limit)
+    .bind(Date.now(), limit)
     .all<{ id: string }>();
   return deleteReports(env, (page.results ?? []).map((r) => r.id));
 }

@@ -467,6 +467,19 @@ export type MailJob =
     }
   | {
       /**
+       * Archived forms are about to be deleted for good. Queued by `sweepPurgeNotices`,
+       * one per recipient, stage and organization; the forms are read again when it is
+       * rendered, so one restored in between is left out.
+       */
+      kind: "form_purge_notice";
+      /** Who archived them, or created them for forms archived before that was recorded. */
+      userId: string | null;
+      organizationId: string;
+      stage: "3d" | "1d";
+      formIds: string[];
+    }
+  | {
+      /**
        * A paid plan is lapsing, or has lapsed. Mailed to the owner by `sweepPlanNotices`,
        * with every live form that uses what the plan is taking away.
        *

@@ -1,10 +1,10 @@
 ---
-title: 'Delete a form: it moves to the Archive and is deleted for good after 30 days'
+title: Restore an archived form, as a draft
 full: true
 _openapi:
   preload:
     - chatform
-  method: DELETE
+  method: POST
   webhook: false
   toc: []
   structuredData:
@@ -22,7 +22,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="chatform" operations={[{"path":"/v1/forms/{id}","method":"delete"}]} />
+      <Comp document="chatform" operations={[{"path":"/v1/archive/forms/{id}/restore","method":"post"}]} />
     </>
   );
 }

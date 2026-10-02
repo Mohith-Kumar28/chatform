@@ -14,8 +14,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
+  getGetApiArchiveFormsQueryKey,
   getGetApiFormsQueryKey,
   useDeleteApiFormsById,
+  useGetApiArchiveForms,
+  usePostApiArchiveFormsByIdRestore,
   usePostApiFormsByIdUnpublish,
   usePostApiFormsByIdPublish,
   useGetApiForms,
@@ -66,9 +69,10 @@ import { CreateFormDialog } from "@/components/forms/create-form-dialog";
 import { NoWorkspaceState } from "@/components/dashboard/no-workspace-state";
 import { FormCard, type FormRow } from "@/components/forms/form-card";
 import { useDuplicateForm } from "@/components/forms/use-duplicate-form";
+import { ArchiveView, type ArchivedFormRow } from "@/components/forms/archive-view";
 
 type Sort = "newest" | "oldest" | "responses" | "alpha";
-type StatusFilter = "all" | "live" | "draft";
+type StatusFilter = "all" | "live" | "draft" | "archive";
 
 /**
  * The last workspace, status and sort, remembered per browser.
@@ -187,9 +191,20 @@ export function DashboardContent() {
 
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>(stored.sort ?? "newest");
-  const [status, setStatus] = useState<StatusFilter>(stored.status ?? "all");
+  // `?view=archive` is where the purge warning email lands; `&form=` opens that form.
+  const [status, setStatus] = useState<StatusFilter>(
+    searchParams.get("view") === "archive" ? "archive" : (stored.status ?? "all"),
+  );
+  const [openArchived, setOpenArchived] = useState<string | null>(searchParams.get("form"));
 
-  useEffect(() => writePrefs({ ws, sort, status }), [ws, sort, status]);
+  // The Archive is somewhere you visit, not a filter to come back to.
+  useEffect(() => writePrefs({ ws, sort, ...(status === "archive" ? {} : { status }) }), [ws, sort, status]);
+
+  const { data: archiveData } = useGetApiArchiveForms(formsParams, {
+    query: { queryKey: getGetApiArchiveFormsQueryKey(formsParams) },
+  });
+  const archived = useMemo(() => apiData<ArchivedFormRow[]>(archiveData) ?? [], [archiveData]);
+  const showArchive = status === "archive";
 
   /*
     Put the remembered workspace into the URL, so everything else that reads
@@ -348,11 +363,23 @@ export function DashboardContent() {
 
   const duplicate = useDuplicateForm();
 
-  const remove = useDeleteApiFormsById<Error>({
+  const restore = usePostApiArchiveFormsByIdRestore<Error>({
     mutation: {
       onSuccess: () => {
         void invalidateForms(queryClient);
-        toast.success("Form deleted");
+        toast.success("Form restored");
+      },
+      onError: (e) => toast.error("Couldn't restore it", { description: e.message }),
+    },
+  });
+
+  const remove = useDeleteApiFormsById<Error>({
+    mutation: {
+      onSuccess: (_data, { id }) => {
+        void invalidateForms(queryClient);
+        toast.success("Moved to Archive", {
+          action: { label: "Undo", onClick: () => restore.mutate({ id }) },
+        });
       },
       onError: (e) =>
         toast.error("Couldn't delete", { description: e.message }),
@@ -417,7 +444,7 @@ export function DashboardContent() {
       <div className="flex flex-wrap items-center gap-2">
         <WorkspaceSwitcher value={ws} />
 
-        {allForms.length > 0 && (
+        {allForms.length > 0 && !showArchive && (
           <div className="relative min-w-0 flex-1 sm:max-w-xs">
             <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2" />
             <Input
@@ -484,7 +511,7 @@ export function DashboardContent() {
             </>
           ) : (
             <>
-              {allForms.length > 0 && (
+              {(allForms.length > 0 || archived.length > 0 || showArchive) && (
                 <>
                   {/* Counts dropped from the labels. Three chips reading
                   "All 12 / Live 3 / Drafts 9" is six numbers to hold in your
@@ -497,10 +524,14 @@ export function DashboardContent() {
                       { value: "all", label: "All" },
                       { value: "live", label: "Live" },
                       { value: "draft", label: "Drafts" },
+                      ...(archived.length > 0 || showArchive
+                        ? [{ value: "archive" as const, label: "Archive" }]
+                        : []),
                     ]}
-                    className="hidden pb-0 sm:flex"
+                    className="pb-0"
                   />
 
+                  {!showArchive && (
                   <Select
                     value={sort}
                     onValueChange={(v) => setSort(v as Sort)}
@@ -516,6 +547,7 @@ export function DashboardContent() {
                       <SelectItem value="alpha">Name A–Z</SelectItem>
                     </SelectContent>
                   </Select>
+                  )}
                 </>
               )}
 
@@ -560,6 +592,18 @@ export function DashboardContent() {
           </div>
         ) : noWorkspace ? (
           <NoWorkspaceState />
+        ) : showArchive ? (
+          <ArchiveView
+            forms={archived}
+            workspaceName={showingAll ? (id) => workspaceById.get(id)?.name : undefined}
+            canEdit={(id) =>
+              showingAll
+                ? (workspaceById.get(id)?.permissions?.form ?? []).includes("delete")
+                : (currentWorkspace?.permissions?.form ?? ["delete"]).includes("delete")
+            }
+            openId={openArchived}
+            onOpenChange={setOpenArchived}
+          />
         ) : error && allForms.length === 0 ? (
           // A failed request is not an empty workspace; saying "No forms yet"
           // to someone with forms is the worst answer available.
@@ -760,23 +804,12 @@ export function DashboardContent() {
         </DialogContent>
       </Dialog>
 
-      {/*
-        Keyed by the form, so the typed-name box starts empty for each one
-        rather than carrying the last form’s half-typed name into the next.
-      */}
+      {/* No typed name: deleting moves the form to the Archive, and the toast can undo it. */}
       <ConfirmDialog
-        key={pendingDelete?.id}
         open={pendingDelete !== null && !deleteBlocked}
         onOpenChange={(open) => !open && setPendingDelete(null)}
         title={`Delete “${pendingDelete?.title}”?`}
-        description={
-          <>
-            This can’t be undone. The form, its questions and its settings go
-            for good, and the link stops working for anyone who still has it.
-            Responses already collected stay in your account.
-          </>
-        }
-        confirmText={pendingDelete?.title}
+        description="It moves to the Archive and the link stops working. You can restore it for 30 days, then it's deleted for good with all its responses."
         confirmLabel="Delete form"
         /*
           `mutate`, not `mutateAsync`. Both report through the same `onError`

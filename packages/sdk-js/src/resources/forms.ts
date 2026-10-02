@@ -32,6 +32,8 @@ export class Forms {
   readonly settings: FormSettingsResource;
   /** Payments collected by a form's payment questions. */
   readonly payments: FormPaymentsResource;
+  /** Deleted forms, restorable for 30 days before they are deleted for good. */
+  readonly archive: FormArchiveResource;
 
   constructor(private readonly http: HttpClient) {
     this.versions = new Versions(http);
@@ -39,6 +41,7 @@ export class Forms {
     this.integrations = new Integrations(http);
     this.settings = new FormSettingsResource(http);
     this.payments = new FormPaymentsResource(http);
+    this.archive = new FormArchiveResource(http);
   }
 
   /** Every form, whatever its status, unless `status` narrows it. */
@@ -86,7 +89,7 @@ export class Forms {
     return this.http.post<Res<"/v1/forms/{id}/unpublish", "post">>(`/v1/forms/${formId}/unpublish`, undefined, request);
   }
 
-  /** Soft: the responses collected against it stay readable. */
+  /** Moves the form to the archive (`forms.archive`): restorable for 30 days, then deleted for good. */
   delete(formId: string, request?: RequestOptions) {
     return this.http.delete<Res<"/v1/forms/{id}", "delete">>(`/v1/forms/${formId}`, request);
   }
@@ -144,6 +147,29 @@ export class FormPaymentsResource {
 
   list(formId: string, options: Query<"/v1/forms/{id}/payments", "get"> = {}, request?: RequestOptions) {
     return this.http.get<FormPayments>(`/v1/forms/${formId}/payments`, options, request);
+  }
+}
+
+/**
+ * Deleting a form moves it here. It stays restorable for 30 days, then it is
+ * deleted for good with its responses, conversations and uploads.
+ */
+export class FormArchiveResource {
+  constructor(private readonly http: HttpClient) {}
+
+  /** Archived forms, most recently archived first, with when each goes for good. */
+  list(request?: RequestOptions) {
+    return this.http.get<Res<"/v1/archive/forms", "get">>("/v1/archive/forms", undefined, request);
+  }
+
+  /** Bring a form back. It returns as a draft; publish it again to put it live. */
+  restore(formId: string, request?: RequestOptions) {
+    return this.http.post<Res<"/v1/archive/forms/{id}/restore", "post">>(`/v1/archive/forms/${formId}/restore`, undefined, request);
+  }
+
+  /** Delete an archived form for good now, instead of at the end of its 30 days. Cannot be undone. */
+  delete(formId: string, request?: RequestOptions) {
+    return this.http.delete<Res<"/v1/archive/forms/{id}", "delete">>(`/v1/archive/forms/${formId}`, request);
   }
 }
 

@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../lib/validator.js";
 import { withOwnerNotification } from "../lib/owner-notification.js";
@@ -22,6 +22,8 @@ import { saveLimit } from "../lib/ratelimit.js";
 import { limitReached } from "@repo/entitlements";
 import { requireWorkspace, formSlug, ALL_WORKSPACES } from "../lib/workspace.js";
 import { enqueueMail } from "../lib/mail.js";
+import { canOpenWorkspace } from "../lib/workspace-access.js";
+import { ARCHIVED_FORM_SELECT, archiveForm, purgeFormNow, restoreForm, type ArchivedFormRow } from "../lib/form-archive.js";
 
 export const formsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
@@ -464,12 +466,130 @@ formsRouter.post(
 
 formsRouter.delete(
   "/forms/:id",
-  describeRoute({ tags: ["dashboard"], summary: "Soft-delete a form", responses: { 200: { description: "Deleted", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } } } }),
+  describeRoute({ tags: ["dashboard"], summary: "Archive a form (deleted for good after 30 days)", responses: { 200: { description: "Deleted", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } } } }),
   async (c) => {
     const form = c.get("form")!;
-    await c.env.DB.prepare(`UPDATE forms SET deleted_at = ?, status = 'archived' WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`)
-      .bind(Date.now(), form.id, form.organization_id)
-      .run();
+    await archiveForm(c.env, { formId: form.id, orgId: form.organization_id, userId: c.get("userId") ?? null });
+    return c.json({ ok: true });
+  },
+);
+
+// ─── the Archive: deleted forms, restorable until their purge date ───
+
+const ArchivedForm = z.object({
+  id: z.string(),
+  title: z.string(),
+  workspaceId: z.string(),
+  archivedAt: z.number(),
+  /** When the form and everything it collected is deleted for good. */
+  purgeAt: z.number(),
+  /** Who archived it, when that is known. */
+  archivedBy: z.string().nullable(),
+  responses: z.number(),
+  partials: z.number(),
+  conversations: z.number(),
+  uploads: z.number(),
+});
+
+export function archivedFormView(r: ArchivedFormRow) {
+  return {
+    id: r.id,
+    title: r.title,
+    workspaceId: r.workspace_id,
+    archivedAt: r.deleted_at,
+    purgeAt: r.purge_at,
+    archivedBy: r.deleted_by_name,
+    responses: r.responses,
+    partials: r.partials,
+    conversations: r.conversations,
+    uploads: r.uploads,
+  };
+}
+
+formsRouter.get(
+  "/archive/forms",
+  describeRoute({ tags: ["dashboard"], summary: "List archived forms in a workspace", responses: { 200: { description: "Archived forms", content: { "application/json": { schema: resolver(z.array(ArchivedForm)) } } } } }),
+  validator("query", z.object({ ws: z.string().optional() })),
+  async (c) => {
+    // Scoped exactly as `GET /forms` is, so the Archive never shows a form the grid would not.
+    let scope: { sql: string; binds: string[] };
+    if (c.req.query("ws") === ALL_WORKSPACES) {
+      const orgId = c.get("orgId");
+      if (!orgId) return c.json([]);
+      const filter = workspaceFilter(await accessFor(c as never), "f.workspace_id");
+      scope = { sql: `f.organization_id = ?${filter.sql}`, binds: [orgId, ...filter.binds] };
+    } else {
+      const ws = await requireWorkspace(c, c.req.query("ws"));
+      if (ws === undefined) return c.json({ error: { code: "not_found", message: "No such workspace" } }, 404);
+      if (!ws) return c.json([]);
+      scope = { sql: "f.workspace_id = ?", binds: [ws.wsId] };
+    }
+    const rows = await c.env.DB.prepare(
+      `${ARCHIVED_FORM_SELECT} WHERE ${scope.sql} AND f.deleted_at IS NOT NULL AND f.purge_at > ? ORDER BY f.deleted_at DESC`,
+    )
+      .bind(...scope.binds, Date.now())
+      .all<ArchivedFormRow>();
+    return c.json((rows.results ?? []).map(archivedFormView));
+  },
+);
+
+/**
+ * The archived form a restore or a delete acts on, with the same checks the live routes
+ * get from `requireFormAccess`: this organization, a workspace the caller can open, and
+ * `form:delete` in it. Archiving was a delete; undoing one, or finishing it, is the same authority.
+ */
+async function archivedFormFor(c: Context<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>) {
+  const orgId = c.get("orgId");
+  const id = c.req.param("id");
+  const missing = { denied: c.json({ error: { code: "not_found", message: "Form not found" } }, 404) } as const;
+  if (!orgId || !id) return missing;
+  const row = await c.env.DB.prepare(
+    `SELECT id, workspace_id FROM forms WHERE id = ? AND organization_id = ? AND deleted_at IS NOT NULL AND purge_at > ?`,
+  )
+    .bind(id, orgId, Date.now())
+    .first<{ id: string; workspace_id: string }>();
+  if (!row || !(await canOpenWorkspace(c, row.workspace_id))) return missing;
+  const denied = await assertPermission(c, "form", "delete", { workspaceId: row.workspace_id });
+  if (denied) return { denied } as const;
+  return { form: { id: row.id, orgId } } as const;
+}
+
+formsRouter.post(
+  "/archive/forms/:id/restore",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Restore an archived form, as a draft",
+    responses: {
+      200: { description: "Restored", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } },
+      404: { description: "Not in the Archive", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
+    },
+  }),
+  async (c) => {
+    const found = await archivedFormFor(c);
+    if ("denied" in found) return found.denied;
+    if (!(await restoreForm(c.env, { formId: found.form.id, orgId: found.form.orgId }))) {
+      return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    }
+    return c.json({ ok: true });
+  },
+);
+
+formsRouter.delete(
+  "/archive/forms/:id",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Delete an archived form for good, now",
+    responses: {
+      200: { description: "Deleted", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } },
+      404: { description: "Not in the Archive", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
+    },
+  }),
+  async (c) => {
+    const found = await archivedFormFor(c);
+    if ("denied" in found) return found.denied;
+    if (!(await purgeFormNow(c.env, { formId: found.form.id, orgId: found.form.orgId }))) {
+      return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+    }
     return c.json({ ok: true });
   },
 );

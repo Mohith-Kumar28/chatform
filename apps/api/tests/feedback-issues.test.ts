@@ -306,7 +306,7 @@ describe("deleting", () => {
     expect((await asAdmin(`/api/admin/feedback/reports/${two}`, { method: "DELETE" })).status).toBe(404);
   });
 
-  it("clears a deleted form's reports after the retention week, not before", async () => {
+  it("clears an archived form's reports when its purge comes due, not before", async () => {
     const gone = await seedTenant("issuesgone");
     const put = async (id: string) => {
       await DB().DB.prepare(
@@ -317,11 +317,11 @@ describe("deleting", () => {
     };
     await put("fbk_gone_1");
 
-    await DB().DB.prepare(`UPDATE forms SET deleted_at = ? WHERE id = ?`).bind(Date.now() - 86_400_000, gone.formId).run();
+    await DB().DB.prepare(`UPDATE forms SET deleted_at = ?, purge_at = ? WHERE id = ?`).bind(Date.now() - 8 * 86_400_000, Date.now() + 86_400_000, gone.formId).run();
     await sweepDeletedFormFeedback(DB());
     expect(await count(`SELECT COUNT(*) n FROM respondent_feedback WHERE id = 'fbk_gone_1'`)).toBe(1);
 
-    await DB().DB.prepare(`UPDATE forms SET deleted_at = ? WHERE id = ?`).bind(Date.now() - 8 * 86_400_000, gone.formId).run();
+    await DB().DB.prepare(`UPDATE forms SET purge_at = ? WHERE id = ?`).bind(Date.now() - 1, gone.formId).run();
     await sweepDeletedFormFeedback(DB());
     expect(await count(`SELECT COUNT(*) n FROM respondent_feedback WHERE id = 'fbk_gone_1'`)).toBe(0);
     expect(await count(`SELECT COUNT(*) n FROM feedback_embeddings WHERE feedback_id = 'fbk_gone_1'`)).toBe(0);

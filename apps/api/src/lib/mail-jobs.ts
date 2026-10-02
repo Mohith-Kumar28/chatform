@@ -27,6 +27,7 @@ import {
 } from "./mail.js";
 import {
   accessGrantedEmail,
+  formPurgeNoticeEmail,
   autoReplyEmail,
   builderFeedbackEmail,
   escapeHtml,
@@ -45,6 +46,8 @@ import {
   type InvitationWorkspace,
 } from "./mail-templates.js";
 import { webOrigins } from "./origins.js";
+import { holesFor } from "./d1-bindings.js";
+import { ARCHIVED_FORM_SELECT, type ArchivedFormRow } from "./form-archive.js";
 import { lapsedForms } from "./plan-notices.js";
 import { platformAdminEmails } from "./platform-admin.js";
 import { tagFeedback } from "./feedback-tags.js";
@@ -177,6 +180,9 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOu
       return oneMessage(who.email, await sendMail(env, { to: who.email, ...msg }));
     }
 
+    case "form_purge_notice":
+      return runPurgeNoticeJob(env, job);
+
     case "invitation_accepted":
       return runInvitationAcceptedJob(env, job);
 
@@ -193,6 +199,56 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOu
       return oneMessage(who.email, await sendMail(env, { to: who.email, ...msg }));
     }
   }
+}
+
+/**
+ * The purge warning, to whoever archived the forms, or the owner when that person
+ * has left. Forms restored since the warning was queued are dropped; none left, no mail.
+ */
+async function runPurgeNoticeJob(env: Bindings, job: Extract<MailJob, { kind: "form_purge_notice" }>): Promise<MailJobOutcome> {
+  const forms = (
+    await env.DB.prepare(
+      `${ARCHIVED_FORM_SELECT}
+        WHERE f.id IN (${holesFor(job.formIds)}) AND f.organization_id = ? AND f.deleted_at IS NOT NULL AND f.purge_at > ?
+        ORDER BY f.purge_at`,
+    )
+      .bind(...job.formIds, job.organizationId, Date.now())
+      .all<ArchivedFormRow>()
+  ).results ?? [];
+  if (forms.length === 0) return NO_MAIL;
+
+  const member = job.userId
+    ? await env.DB.prepare(
+        `SELECT u.email AS email, u.name AS name, o.name AS orgName
+           FROM members m JOIN users u ON u.id = m.user_id JOIN organizations o ON o.id = m.organization_id
+          WHERE m.user_id = ? AND m.organization_id = ?`,
+      )
+        .bind(job.userId, job.organizationId)
+        .first<{ email: string; name: string | null; orgName: string }>()
+    : null;
+  const who = member ?? (await ownerOf(env, job.organizationId));
+  if (!who) return NO_MAIL;
+
+  const archive = new URL(`${webOrigins(env)[0]!}/dashboard`);
+  archive.searchParams.set("ws", "all");
+  archive.searchParams.set("view", "archive");
+  if (forms.length === 1) archive.searchParams.set("form", forms[0]!.id);
+  const msg = formPurgeNoticeEmail({
+    organizationName: who.orgName,
+    recipientName: who.name,
+    stage: job.stage,
+    forms: forms.map((f) => ({
+      title: f.title,
+      responses: f.responses,
+      partials: f.partials,
+      conversations: f.conversations,
+      uploads: f.uploads,
+      archivedAt: f.deleted_at,
+      purgeAt: f.purge_at,
+    })),
+    archiveUrl: withUtm(archive.toString(), job.kind),
+  });
+  return oneMessage(who.email, await sendMail(env, { to: who.email, ...msg }));
 }
 
 /** The workspaces an invitation opens, by name, for the invitation mail. */

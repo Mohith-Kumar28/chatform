@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import {
+  getGetApiArchiveFormsQueryKey,
   getGetApiFormsQueryKey,
   getGetApiWorkspacesQueryKey,
 } from "@/lib/api/dashboard/dashboard";
@@ -36,6 +37,7 @@ import { getGetApiBillingEntitlementsQueryKey } from "@/lib/api/billing/billing"
 export function invalidateForms(client: QueryClient): Promise<void> {
   return Promise.all([
     client.invalidateQueries({ queryKey: getGetApiFormsQueryKey() }),
+    client.invalidateQueries({ queryKey: getGetApiArchiveFormsQueryKey() }),
     client.invalidateQueries({ queryKey: getGetApiWorkspacesQueryKey() }),
     client.invalidateQueries({ queryKey: getGetApiBillingEntitlementsQueryKey() }),
   ]).then(() => undefined);

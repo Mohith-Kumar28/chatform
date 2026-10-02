@@ -1584,3 +1584,98 @@ export function planLapseEmail(a: {
     ].join("\n"),
   };
 }
+
+// ─────────────────────────── archived form purge ───────────────────────────
+
+export interface PurgingForm {
+  title: string;
+  responses: number;
+  partials: number;
+  conversations: number;
+  uploads: number;
+  archivedAt: number;
+  purgeAt: number;
+}
+
+function count(n: number, one: string, many: string): string {
+  return `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
+}
+
+/** One line per form: its name, then what goes with it. */
+function purgingFormList(forms: PurgingForm[]): string {
+  const rows = forms
+    .map(
+      (f) => `<tr>
+    <td valign="top" style="padding:12px 16px;border-top:1px solid ${BORDER};font-family:${FONT};">
+      <div style="font-size:15px;line-height:20px;font-weight:600;color:${INK};">${escapeHtml(f.title)}</div>
+      <div style="margin-top:2px;font-size:13px;line-height:1.5;color:${MUTED};">${escapeHtml(
+        [count(f.responses, "response", "responses"), count(f.partials, "partial", "partials"), count(f.uploads, "file", "files")].join(", "),
+      )}</div>
+    </td>
+  </tr>`,
+    )
+    .join("\n");
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 4px 0;background-color:${GROUND};border:1px solid ${BORDER};border-top:0;border-radius:12px;">
+${rows}
+</table>`;
+}
+
+/**
+ * Archived forms are about to be deleted for good: three days out, then the day before.
+ *
+ * Leads with what is lost, in numbers, because "a form" is easy to shrug at and
+ * "212 responses" is not. One button, to the Archive, where the form can be restored.
+ */
+export function formPurgeNoticeEmail(a: {
+  organizationName: string;
+  recipientName: string | null;
+  stage: "3d" | "1d";
+  forms: PurgingForm[];
+  archiveUrl: string;
+}): Omit<MailMessage, "to"> {
+  const one = a.forms.length === 1 ? a.forms[0]! : null;
+  const purgeAt = Math.min(...a.forms.map((f) => f.purgeAt));
+  const date = longDate(purgeAt);
+  const when = a.stage === "1d" ? "tomorrow" : `on ${date}`;
+  const hi = a.recipientName?.trim() ? `${a.recipientName.trim().split(/\s+/)[0]!}, ` : "";
+  const what = one ? `“${one.title}”` : `${a.forms.length} archived forms`;
+  const lead = one
+    ? `${hi}${what} has been in the Archive since ${longDate(one.archivedAt)}. It will be deleted for good ${when}, with every response, conversation and file it collected.`
+    : `${hi}${what} in ${a.organizationName} will be deleted for good ${when}, with every response, conversation and file they collected.`;
+  const cta = one ? "Restore form" : "Open Archive";
+  const reassurance = `If you meant to delete ${one ? "it" : "them"}, there is nothing to do.`;
+
+  const body = [
+    hero({ eyebrow: a.stage === "1d" ? "Deleting tomorrow" : "Deleting in 3 days", title: `${one ? "Your form" : "Your forms"} will be deleted ${when}`, subtitle: escapeHtml(lead) }),
+    one
+      ? statTiles([
+          { value: one.responses.toLocaleString("en-US"), label: one.responses === 1 ? "Response" : "Responses" },
+          { value: one.conversations.toLocaleString("en-US"), label: one.conversations === 1 ? "Conversation" : "Conversations" },
+          { value: one.uploads.toLocaleString("en-US"), label: one.uploads === 1 ? "File" : "Files" },
+        ])
+      : purgingFormList(a.forms),
+    one ? detailRows([["Archived on", escapeHtml(longDate(one.archivedAt))], ["Deleted on", escapeHtml(date)]]) : "",
+    button(a.archiveUrl, cta),
+    p(`<span style="color:${MUTED};">${escapeHtml(reassurance)}</span>`),
+  ].join("\n");
+
+  return {
+    subject: one ? `${what} will be deleted ${when}` : `${a.forms.length} archived forms will be deleted ${when}`,
+    html: layout({
+      preheader: lead,
+      body,
+      footer: `You received this because you archived ${one ? "this form" : "these forms"} in ${escapeHtml(a.organizationName)} on chatform.`,
+    }),
+    text: [
+      lead,
+      ``,
+      ...a.forms.map(
+        (f) => `- ${f.title}: ${[count(f.responses, "response", "responses"), count(f.partials, "partial", "partials"), count(f.conversations, "conversation", "conversations"), count(f.uploads, "file", "files")].join(", ")}`,
+      ),
+      ``,
+      `${cta}: ${a.archiveUrl}`,
+      ``,
+      reassurance,
+    ].join("\n"),
+  };
+}

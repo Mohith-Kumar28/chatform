@@ -20,6 +20,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  DeleteApiArchiveFormsById200,
+  DeleteApiArchiveFormsById404,
   DeleteApiFormsById200,
   DeleteApiFormsByIdKnowledgeBySourceId200,
   DeleteApiFormsByIdSubmissions200,
@@ -30,6 +32,8 @@ import type {
   DeleteApiWebhooksById200,
   DeleteApiWorkspacesByIdMembersByMemberId200,
   DeleteApiWorkspacesByIdMembersByMemberId404,
+  GetApiArchiveForms200Item,
+  GetApiArchiveFormsParams,
   GetApiAuditLogs200,
   GetApiAuditLogsParams,
   GetApiAuthOk200,
@@ -88,6 +92,8 @@ import type {
   PostApiAiGenerateForm200,
   PostApiAiGenerateFormBody,
   PostApiAiGenerateFormStreamBody,
+  PostApiArchiveFormsByIdRestore200,
+  PostApiArchiveFormsByIdRestore404,
   PostApiFeedback200,
   PostApiForms200,
   PostApiForms403,
@@ -106,6 +112,7 @@ import type {
   PostApiFormsByIdKnowledgeUpload200,
   PostApiFormsByIdKnowledgeUpload413,
   PostApiFormsByIdKnowledgeUpload415,
+  PostApiFormsByIdKnowledgeUploadBody,
   PostApiFormsByIdPreviewSessions200,
   PostApiFormsByIdPublish200,
   PostApiFormsByIdPublish402,
@@ -1170,7 +1177,7 @@ export const getDeleteApiFormsByIdUrl = (id: string,) => {
 }
 
 /**
- * @summary Soft-delete a form
+ * @summary Archive a form (deleted for good after 30 days)
  */
 export const deleteApiFormsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteApiFormsByIdResponse> => {
 
@@ -1220,7 +1227,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DeleteApiFormsByIdMutationVariables = {id: string}
 
     /**
- * @summary Soft-delete a form
+ * @summary Archive a form (deleted for good after 30 days)
  */
 export const useDeleteApiFormsById = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFormsById>>, TError,DeleteApiFormsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -1327,7 +1334,282 @@ export function useGetApiFormsById<TData = Awaited<ReturnType<typeof getApiForms
 
 
 
-export type patchApiFormsByIdWorkspaceResponse200 = {
+export type getApiArchiveFormsResponse200 = {
+  data: GetApiArchiveForms200Item[]
+  status: 200
+}
+
+export type getApiArchiveFormsResponseSuccess = (getApiArchiveFormsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiArchiveFormsResponse = (getApiArchiveFormsResponseSuccess)
+
+export const getGetApiArchiveFormsUrl = (params?: GetApiArchiveFormsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/archive/forms?${stringifiedParams}` : `/api/archive/forms`
+}
+
+/**
+ * @summary List archived forms in a workspace
+ */
+export const getApiArchiveForms = async (params?: GetApiArchiveFormsParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiArchiveFormsResponse> => {
+
+  return customFetch<getApiArchiveFormsResponse>(getGetApiArchiveFormsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiArchiveFormsQueryKey = (params?: GetApiArchiveFormsParams,) => {
+    return [
+    `/api/archive/forms`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiArchiveFormsQueryOptions = <TData = Awaited<ReturnType<typeof getApiArchiveForms>>, TError = unknown>(params?: GetApiArchiveFormsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiArchiveForms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiArchiveFormsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiArchiveForms>>> = ({ signal }) => getApiArchiveForms(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiArchiveForms>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiArchiveFormsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiArchiveForms>>>
+export type GetApiArchiveFormsQueryError = unknown
+
+
+/**
+ * @summary List archived forms in a workspace
+ */
+
+export function useGetApiArchiveForms<TData = Awaited<ReturnType<typeof getApiArchiveForms>>, TError = unknown>(
+ params?: GetApiArchiveFormsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiArchiveForms>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiArchiveFormsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postApiArchiveFormsByIdRestoreResponse200 = {
+  data: PostApiArchiveFormsByIdRestore200
+  status: 200
+}
+
+export type postApiArchiveFormsByIdRestoreResponse404 = {
+  data: PostApiArchiveFormsByIdRestore404
+  status: 404
+}
+
+export type postApiArchiveFormsByIdRestoreResponseSuccess = (postApiArchiveFormsByIdRestoreResponse200) & {
+  headers: Headers;
+};
+export type postApiArchiveFormsByIdRestoreResponseError = (postApiArchiveFormsByIdRestoreResponse404) & {
+  headers: Headers;
+};
+
+export type postApiArchiveFormsByIdRestoreResponse = (postApiArchiveFormsByIdRestoreResponseSuccess | postApiArchiveFormsByIdRestoreResponseError)
+
+export const getPostApiArchiveFormsByIdRestoreUrl = (id: string,) => {
+
+
+
+
+  return `/api/archive/forms/${id}/restore`
+}
+
+/**
+ * @summary Restore an archived form, as a draft
+ */
+export const postApiArchiveFormsByIdRestore = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postApiArchiveFormsByIdRestoreResponse> => {
+
+  return customFetch<postApiArchiveFormsByIdRestoreResponse>(getPostApiArchiveFormsByIdRestoreUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiArchiveFormsByIdRestoreMutationOptions = <TError = PostApiArchiveFormsByIdRestore404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiArchiveFormsByIdRestore>>, TError,PostApiArchiveFormsByIdRestoreMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiArchiveFormsByIdRestore>>, TError,PostApiArchiveFormsByIdRestoreMutationVariables, TContext> => {
+
+const mutationKey = ['postApiArchiveFormsByIdRestore'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiArchiveFormsByIdRestore>>, PostApiArchiveFormsByIdRestoreMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postApiArchiveFormsByIdRestore(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiArchiveFormsByIdRestoreMutationResult = NonNullable<Awaited<ReturnType<typeof postApiArchiveFormsByIdRestore>>>
+
+    export type PostApiArchiveFormsByIdRestoreMutationError = PostApiArchiveFormsByIdRestore404
+    export type PostApiArchiveFormsByIdRestoreMutationVariables = {id: string}
+
+    /**
+ * @summary Restore an archived form, as a draft
+ */
+export const usePostApiArchiveFormsByIdRestore = <TError = PostApiArchiveFormsByIdRestore404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiArchiveFormsByIdRestore>>, TError,PostApiArchiveFormsByIdRestoreMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiArchiveFormsByIdRestore>>,
+        TError,
+        PostApiArchiveFormsByIdRestoreMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiArchiveFormsByIdRestoreMutationOptions(options));
+    }
+    export type deleteApiArchiveFormsByIdResponse200 = {
+  data: DeleteApiArchiveFormsById200
+  status: 200
+}
+
+export type deleteApiArchiveFormsByIdResponse404 = {
+  data: DeleteApiArchiveFormsById404
+  status: 404
+}
+
+export type deleteApiArchiveFormsByIdResponseSuccess = (deleteApiArchiveFormsByIdResponse200) & {
+  headers: Headers;
+};
+export type deleteApiArchiveFormsByIdResponseError = (deleteApiArchiveFormsByIdResponse404) & {
+  headers: Headers;
+};
+
+export type deleteApiArchiveFormsByIdResponse = (deleteApiArchiveFormsByIdResponseSuccess | deleteApiArchiveFormsByIdResponseError)
+
+export const getDeleteApiArchiveFormsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/archive/forms/${id}`
+}
+
+/**
+ * @summary Delete an archived form for good, now
+ */
+export const deleteApiArchiveFormsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteApiArchiveFormsByIdResponse> => {
+
+  return customFetch<deleteApiArchiveFormsByIdResponse>(getDeleteApiArchiveFormsByIdUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiArchiveFormsByIdMutationOptions = <TError = DeleteApiArchiveFormsById404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiArchiveFormsById>>, TError,DeleteApiArchiveFormsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiArchiveFormsById>>, TError,DeleteApiArchiveFormsByIdMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiArchiveFormsById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiArchiveFormsById>>, DeleteApiArchiveFormsByIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiArchiveFormsById(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiArchiveFormsByIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiArchiveFormsById>>>
+
+    export type DeleteApiArchiveFormsByIdMutationError = DeleteApiArchiveFormsById404
+    export type DeleteApiArchiveFormsByIdMutationVariables = {id: string}
+
+    /**
+ * @summary Delete an archived form for good, now
+ */
+export const useDeleteApiArchiveFormsById = <TError = DeleteApiArchiveFormsById404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiArchiveFormsById>>, TError,DeleteApiArchiveFormsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiArchiveFormsById>>,
+        TError,
+        DeleteApiArchiveFormsByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiArchiveFormsByIdMutationOptions(options));
+    }
+    export type patchApiFormsByIdWorkspaceResponse200 = {
   data: PatchApiFormsByIdWorkspace200
   status: 200
 }
@@ -2218,14 +2500,17 @@ export const getPostApiFormsByIdKnowledgeUploadUrl = (id: string,) => {
 /**
  * @summary Upload a document, image or recording as knowledge
  */
-export const postApiFormsByIdKnowledgeUpload = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postApiFormsByIdKnowledgeUploadResponse> => {
+export const postApiFormsByIdKnowledgeUpload = async (id: string,
+    postApiFormsByIdKnowledgeUploadBody: PostApiFormsByIdKnowledgeUploadBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiFormsByIdKnowledgeUploadResponse> => {
+    const formData = new FormData();
+formData.append(`file`, postApiFormsByIdKnowledgeUploadBody.file);
 
   return customFetch<postApiFormsByIdKnowledgeUploadResponse>(getPostApiFormsByIdKnowledgeUploadUrl(id),
   {
     ...options,
     method: 'POST'
-
-
+    ,
+    body: formData
   }
 );}
 
@@ -2248,9 +2533,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeUpload>>, PostApiFormsByIdKnowledgeUploadMutationVariables> = (props) => {
-          const {id} = props ?? {};
+          const {id,data} = props ?? {};
 
-          return  postApiFormsByIdKnowledgeUpload(id,requestOptions)
+          return  postApiFormsByIdKnowledgeUpload(id,data,requestOptions)
         }
 
 
@@ -2261,9 +2546,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type PostApiFormsByIdKnowledgeUploadMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFormsByIdKnowledgeUpload>>>
-
+    export type PostApiFormsByIdKnowledgeUploadMutationBody = PostApiFormsByIdKnowledgeUploadBody
     export type PostApiFormsByIdKnowledgeUploadMutationError = PostApiFormsByIdKnowledgeUpload413 | PostApiFormsByIdKnowledgeUpload415
-    export type PostApiFormsByIdKnowledgeUploadMutationVariables = {id: string}
+    export type PostApiFormsByIdKnowledgeUploadMutationVariables = {id: string;data: PostApiFormsByIdKnowledgeUploadBody}
 
     /**
  * @summary Upload a document, image or recording as knowledge

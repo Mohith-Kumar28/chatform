@@ -402,17 +402,10 @@ export async function pruneTestData(env: Bindings, limit = 500): Promise<number>
 }
 
 /**
- * How long a deleted form's knowledge outlives it.
+ * Forget the knowledge of archived forms whose time is up.
  *
- * A form delete is soft — `forms.deleted_at`, with the row and its responses
- * kept — so the knowledge behind it should not evaporate the instant someone
- * mis-clicks. A week is long enough to undo a mistake and short enough that a
- * deleted form is not still paying for storage a month later.
- */
-const KNOWLEDGE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
-
-/**
- * Forget the knowledge of forms deleted longer ago than the retention window.
+ * Keyed on `purge_at`, the same clock as the purge, which waits for this to finish:
+ * a form is restorable for its whole stay in the Archive, knowledge included.
  *
  * Ordering is the whole of it: vectors, then chunk rows, then the R2 objects,
  * then `files`. `files` is the only index of what is in R2, so it goes last —
@@ -421,15 +414,14 @@ const KNOWLEDGE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
  * would leave bytes nothing can ever find.
  */
 export async function sweepDeletedFormKnowledge(env: Bindings, limit = 20): Promise<number> {
-  const cutoff = Date.now() - KNOWLEDGE_RETENTION_MS;
   const { results } = await env.DB.prepare(
     `SELECT DISTINCT s.form_id AS form_id
        FROM knowledge_sources s
        JOIN forms f ON f.id = s.form_id
-      WHERE f.deleted_at IS NOT NULL AND f.deleted_at < ?
+      WHERE f.purge_at IS NOT NULL AND f.purge_at <= ?
       LIMIT ?`,
   )
-    .bind(cutoff, limit)
+    .bind(Date.now(), limit)
     .all<{ form_id: string }>();
 
   const formIds = (results ?? []).map((r) => r.form_id);

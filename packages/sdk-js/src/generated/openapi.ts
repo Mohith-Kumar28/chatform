@@ -71,6 +71,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/archive/forms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List archived forms
+         * @description Deleted forms stay here for 30 days, restorable, then are deleted for good with their responses.
+         */
+        get: operations["getV1ArchiveForms"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/archive/forms/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete an archived form for good, now
+         * @description Removes the form with every response, conversation and upload within a few minutes. Cannot be undone.
+         */
+        delete: operations["deleteV1ArchiveFormsById"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/archive/forms/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore an archived form, as a draft */
+        post: operations["postV1ArchiveFormsByIdRestore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/blocks": {
         parameters: {
             query?: never;
@@ -214,7 +271,7 @@ export interface paths {
         get: operations["getV1FormsById"];
         put?: never;
         post?: never;
-        /** Delete a form (soft, so responses are kept) */
+        /** Delete a form: it moves to the Archive and is deleted for good after 30 days */
         delete: operations["deleteV1FormsById"];
         options?: never;
         head?: never;
@@ -1705,6 +1762,106 @@ export interface operations {
             };
             /** @description AI is not configured on this deployment */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    getV1ArchiveForms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Archived forms, most recently archived first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            archived_at: number;
+                            conversations: number;
+                            id: string;
+                            partials: number;
+                            /** @description When the form and everything it collected is deleted for good */
+                            purge_at: number;
+                            responses: number;
+                            title: string;
+                            uploads: number;
+                            workspace_id: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    deleteV1ArchiveFormsById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        deleted: boolean;
+                        ok: boolean;
+                    };
+                };
+            };
+            /** @description Not in the Archive */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    postV1ArchiveFormsByIdRestore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        ok: boolean;
+                    };
+                };
+            };
+            /** @description Not in the Archive */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

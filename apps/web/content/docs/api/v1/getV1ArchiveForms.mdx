@@ -1,15 +1,19 @@
 ---
-title: 'Delete a form: it moves to the Archive and is deleted for good after 30 days'
+title: List archived forms
+description: Deleted forms stay here for 30 days, restorable, then are deleted
+  for good with their responses.
 full: true
 _openapi:
   preload:
     - chatform
-  method: DELETE
+  method: GET
   webhook: false
   toc: []
   structuredData:
     headings: []
-    contents: []
+    contents:
+      - content: Deleted forms stay here for 30 days, restorable, then are deleted for
+          good with their responses.
 llmsExclude: true
 ---
 
@@ -22,7 +26,7 @@ export default function Layout(props) {
   return (
     <>
       {props.children}
-      <Comp document="chatform" operations={[{"path":"/v1/forms/{id}","method":"delete"}]} />
+      <Comp document="chatform" operations={[{"path":"/v1/archive/forms","method":"get"}]} />
     </>
   );
 }
