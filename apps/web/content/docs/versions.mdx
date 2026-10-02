@@ -1,0 +1,35 @@
+---
+title: Versions
+description: See what you published, compare two versions, and roll one back.
+---
+
+Every publish makes a new, immutable version of a form. These endpoints list
+them, show what changed between two, and put an old one back.
+
+## Endpoints
+
+| Endpoint | Scope | What it does |
+| --- | --- | --- |
+| `GET /v1/forms/{id}/versions` | `form:read` | Every published version, newest first |
+| `GET /v1/forms/{id}/versions/{version}` | `form:read` | One version's document. Add `?compare=` with another version number for the changes between them |
+| `POST /v1/forms/{id}/versions/{version}/restore` | `form:write` | Copy that version into the working document |
+
+```bash
+curl "https://api.chatform.in/v1/forms/$FORM_ID/versions/$VERSION?compare=2" \
+  -H "x-api-key: $CHATFORM_SECRET_KEY"
+```
+
+## Good to know
+
+- **Restore writes the draft, not the live form.** Respondents see nothing
+  change until you call `POST /v1/forms/{id}/publish`. That is why restore needs
+  `form:write` and not `form:publish`.
+- **Each version counts its responses.** `responses` on a version is how many
+  completed responses were recorded against it. A version with responses behind
+  it is the schema those answers belong to, so think before replacing it.
+- `isActive` marks the form's active version, the one respondents get while it
+  is published.
+- A restore is recorded in the form's history as done by the API key, not by
+  the person who created the key.
+- The list answers in the usual page shape, with `has_more` always `false`.
+- Restore takes an [`Idempotency-Key`](/docs/idempotency).

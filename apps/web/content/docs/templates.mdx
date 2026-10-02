@@ -1,0 +1,36 @@
+---
+title: Templates
+description: Start a form from one of the official templates.
+---
+
+The templates in the dashboard's gallery are available over the API too. Read
+one to see its questions, or turn it into a draft form of your own in one call.
+
+## Endpoints
+
+| Endpoint | Scope | What it does |
+| --- | --- | --- |
+| `GET /v1/templates` | `form:read` | Every template, most used first |
+| `GET /v1/templates/{slug}` | `form:read` | One template, with the `doc` it would create |
+| `POST /v1/templates/{slug}/use` | `form:write` | Create a draft form from it |
+
+```bash
+curl -X POST https://api.chatform.in/v1/templates/$TEMPLATE_SLUG/use \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "idempotency-key: $(uuidgen)"
+```
+
+The reply is the new form's summary, the same shape `POST /v1/forms` returns.
+
+## Good to know
+
+- **It is a draft.** Nothing is live until you call `POST /v1/forms/{id}/publish`.
+- **It counts as a new form.** A plan at its form limit gets a `402`, exactly as
+  `POST /v1/forms` would.
+- **Want to change it first?** Read the template's `doc`, edit it, and send it
+  to `POST /v1/forms` as `doc` instead of using the template.
+- A template that no longer matches the current form schema answers `404` with
+  `invalid_template`.
+- `POST /v1/templates/{slug}/use` takes an [`Idempotency-Key`](/docs/idempotency),
+  so a retry after a timeout does not create a second form.
+- The list answers in the usual page shape, with `has_more` always `false`.

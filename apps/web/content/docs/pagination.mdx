@@ -29,6 +29,17 @@ handful of versions and an organization a handful of webhooks, so
 `has_more` is always `false`. Read them the same way as the rest and nothing
 will need changing on the day one of them grows a cursor.
 
+Two lists are not in that shape, because they answer with more than the list:
+
+- `GET /v1/forms/{id}/knowledge` returns `{ sources, usage, enabled }`: the
+  sources, how much of the plan's allowance they use, and whether the plan has a
+  knowledge base at all.
+- `GET /v1/payment-accounts` returns `{ accounts, enabled, providers }`: the
+  connected accounts, whether verified payments are switched on, and which
+  gateways can be connected.
+
+Neither is paginated.
+
 ## Why not offsets
 
 Responses arrive while you are reading them. With `?page=2`, a new response

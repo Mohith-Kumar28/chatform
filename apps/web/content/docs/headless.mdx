@@ -136,6 +136,35 @@ one turn at a time. That makes it a long poll, which is usually what you want.
 The stream is the genuinely concurrent reader.
 </Callout>
 
+## Signing the respondent in
+
+A form with sign-in switched on asks for it before the first question: the
+session emits `auth_required` with the `method` it wants (`google`, `phone` or
+`email`). You collect the proof in your own UI and pass it through.
+
+| Method | Call |
+| --- | --- |
+| Google | `POST /v1/sessions/{id}/auth/google` with `{ "idToken": … }`, a Google ID token |
+| Phone | `POST /v1/sessions/{id}/auth/phone/token` with `{ "idToken": … }`, from Firebase phone sign-in in your page |
+| Email | `POST /v1/sessions/{id}/auth/email/start` with `{ "email": … }`, then `POST /v1/sessions/{id}/auth/email/verify` with `{ "code": … }` |
+
+```bash
+curl -X POST https://api.chatform.in/v1/sessions/$SESSION_ID/auth/email/start \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"email":"maya@northwind.co"}'
+```
+
+We send the email code ourselves: five sends per session, and it lasts ten
+minutes. Starting email sign-in on a form that does not sign in by email is a
+400 with `email_signin_off`.
+
+Success is `{ ok: true, identity, resumed }` and the session emits
+`auth_verified`. `resumed: true` means the person had a response open and the
+conversation picks it up. A `409` with `already_answered` means this person has
+already responded and the form allows one response each; the error carries
+`completedAt` so you can say when.
+
 ## Verified answers
 
 An `email` or `phone` question with `verify` on does not record the answer when
@@ -198,6 +227,19 @@ checkout with `POST /v1/sessions/{id}/payments` and `{ "ref": … }`, open the
 `launch` it returns, and wait for `payment_settled` — the answer is written from
 the gateway's confirmation and the conversation moves on by itself. Each turn
 result carries `pendingPayment` while a checkout is open.
+
+```bash
+curl -X POST https://api.chatform.in/v1/sessions/$SESSION_ID/payments \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"ref":"q_payment"}'
+```
+
+The reply is `{ recordId, launch, expiresAt }`. The amount comes from the
+session, never from you. When the respondent returns from the gateway,
+`POST /v1/sessions/{id}/payments/{recordId}/confirm` checks with the gateway
+straight away instead of waiting for its webhook, and answers
+`{ recordId, status, settled }`.
 
 [Verified payments →](/docs/payments)
 

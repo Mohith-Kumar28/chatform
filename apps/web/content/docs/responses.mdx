@@ -137,9 +137,13 @@ Cursor-paginated. Filters: `status`, `created_after`, `created_before`,
 `updated_since`, `ending_ref`, `source`, `q` (full-text over answers), and
 `mode` for test data.
 
-Omitting `status` means completed only. Asking for `in_progress` or `abandoned`
-needs a plan that includes partial responses; if yours does not, you get a 402
-rather than a quietly narrowed result set.
+A response is `in_progress`, `abandoned`, `completed` or `disqualified`. The
+last is as final as `completed`: the respondent reached a screen-out ending and
+the form turned them away. Pass several statuses comma-separated, or `all`.
+
+Omitting `status` means completed only. Asking for `in_progress`, `abandoned`,
+`disqualified` or `all` needs a plan that includes partial responses; if yours
+does not, you get a 402 rather than a quietly narrowed result set.
 
 [Pagination →](/docs/pagination)
 

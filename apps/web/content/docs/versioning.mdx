@@ -36,13 +36,23 @@ do not need rewriting for a tidier URL.
 
 ## Deprecations
 
-If we ever deprecate something, the response says so:
+A deprecated endpoint says so on every response, following
+[RFC 9745](https://www.rfc-editor.org/rfc/rfc9745):
 
 ```
-Deprecation: Wed, 01 Apr 2026 00:00:00 GMT
-Sunset: Wed, 01 Oct 2026 00:00:00 GMT
-Link: <https://chatform.in/docs/…>; rel="deprecation"
+Deprecation: @1788480000
+Link: <https://chatform.in/docs/headless>; rel="deprecation"
 ```
+
+`Deprecation` is when the replacement shipped, in Unix seconds. `Link` points to
+the page for the name to use instead. A `Sunset` header is added only once an
+endpoint has a removal date, and within `/v1` none do: deprecated means "use the
+new name in new code", not "this stops working".
+
+Today the deprecated endpoints are the `/v1/chat/sessions/{sid}/…` and
+`/v1/forms/{id}/chat/sessions` spellings of the [session](/docs/headless)
+endpoints. The reference lists only the current names, and the spec marks the
+old ones `deprecated: true`.
 
 ## Advice
 

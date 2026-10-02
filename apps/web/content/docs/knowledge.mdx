@@ -1,0 +1,52 @@
+---
+title: Knowledge base
+description: Give the interviewer documents, pages and notes to answer respondents' questions from.
+---
+
+A form's knowledge base is what the interviewer searches when a respondent asks
+something the questions do not cover: your pricing, your refund policy, what
+the event includes. Add sources and they are read, split and indexed in the
+background.
+
+Reading sources needs `form:read`. Adding or removing them needs `form:write`.
+
+## Endpoints
+
+| Endpoint | Adds |
+| --- | --- |
+| `POST /v1/forms/{id}/knowledge/text` | Pasted text: `{ "title", "body" }` |
+| `POST /v1/forms/{id}/knowledge/link` | One web page: `{ "url", "title"? }` |
+| `POST /v1/forms/{id}/knowledge/crawl` | A site: `{ "url", "pages"? }`, up to 25 pages |
+| `POST /v1/forms/{id}/knowledge/upload` | A file, as multipart with a `file` field and an optional `title` |
+
+`GET /v1/forms/{id}/knowledge` lists the sources with their status and your
+plan's usage. `GET /v1/forms/{id}/knowledge/{sourceId}/file` downloads an
+uploaded file, and `DELETE /v1/forms/{id}/knowledge/{sourceId}` removes a source.
+
+```bash
+curl -X POST https://api.chatform.in/v1/forms/$FORM_ID/knowledge/link \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"url": "https://northwind.co/pricing"}'
+```
+
+```json
+{ "id": "…" }
+```
+
+## Good to know
+
+- **Adding returns before reading.** A new source starts `pending`, moves
+  through `extracting` and `indexing`, and ends `ready` or `failed`. A failed one
+  carries a sentence in `error` saying why. Poll the list to see where it is.
+- **The plan decides.** A plan without a knowledge base, or one at its size or
+  source limit, gets a `402` before anything is stored. Failed sources do not
+  count towards either limit.
+- **Uploads** are PDFs, Word, Excel, CSV, text, images and audio, up to 25 MB
+  each. The bytes decide the type, not the header you send, and a mismatch is a
+  `415`. Send a `Content-Length`; without one the upload is refused with `411`.
+  Uploads also count towards the organization's file storage.
+- **Only public pages.** A link or crawl to a private, loopback or internal
+  address is a `400` with `bad_url`.
+- The list is not paginated: it answers `{ sources, usage, enabled }`.
+  [Pagination →](/docs/pagination)

@@ -1,0 +1,41 @@
+---
+title: Form settings
+description: Read and change one setting at a time, without sending the whole document back.
+---
+
+`PUT /v1/forms/{id}/doc` can change any setting, but only by sending the whole
+document. These two endpoints change settings by key instead: colours and
+fonts, the interviewer's tone and goal, who can respond, when the form closes,
+emails, sharing and embedding. They are the same settings, by the same keys, as
+the builder's AI can change.
+
+| Endpoint | Scope | What it does |
+| --- | --- | --- |
+| `GET /v1/forms/{id}/settings` | `form:read` | Every setting with its key, current value, label, where it lives in the builder, and the values it takes |
+| `PATCH /v1/forms/{id}/settings` | `form:write` | Change up to 40 settings in one call |
+
+```bash
+curl -X PATCH https://api.chatform.in/v1/forms/$FORM_ID/settings \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"changes": [
+        {"key": "theme.accent", "value": "#1e3a8a"},
+        {"key": "settings.closeRules.closeAt", "value": "2026-12-31T18:00"}
+      ], "utcOffsetMinutes": -330}'
+```
+
+The reply is `{ changes, rejected }`: each setting that changed with its value
+`before` and `after`, and a reason for each value that did not parse.
+
+## Good to know
+
+- **Every value is text.** Send it as you would type it in the builder. Empty
+  text clears a setting that can be cleared.
+- **It changes the draft.** Nothing is live until `POST /v1/forms/{id}/publish`.
+- **One bad value does not sink the call.** It goes in `rejected` and the rest
+  are applied. Only when nothing could be applied is the call a `422`.
+- **Plan limits are reported, not hidden.** A setting your plan does not include
+  shows `locked` in the list, and a change to it comes back in `changes` with
+  `locked` and is not applied.
+- **Dates without a zone** are read in the zone you give as `utcOffsetMinutes`,
+  in the sign JavaScript's `Date#getTimezoneOffset()` uses: India is `-330`.

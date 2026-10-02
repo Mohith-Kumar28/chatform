@@ -67,11 +67,12 @@ if (!issues.some((i) => i.level === "error")) await chatform.forms.publish(form.
 `chatform.blocks.list()` is how you read it. Build the document against that
 rather than a hardcoded list, and a new question type will not surprise you.
 
-<Callout type="warn">
-`forms.get()` reads the **published** form, so a form you have just created
-answers 404. Use `forms.getDocument()` for a draft. `forms.list()` is the same
-story: it returns published forms unless you ask for `status: "draft"` or
-`"all"`.
+<Callout>
+`forms.get()` returns the published form's public config. A form that has never
+been published answers with its draft document instead, with `status` saying
+which you got. Use `forms.getDocument()` when you always want the working
+document. `forms.list()` returns every form, drafts included, unless you ask for
+`status: "draft"`, `"published"` or `"archived"`.
 </Callout>
 
 ### Versions

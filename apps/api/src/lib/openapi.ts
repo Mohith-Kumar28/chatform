@@ -207,26 +207,30 @@ export function publicSpec<T extends { paths?: Record<string, Record<string, unk
  *
  * Stamped here rather than declared per route for the same reason as `security`:
  * ninety routes each restating the error shape is ninety chances to forget it,
- * which is how most of them came to document a status code and no body. Inlined
- * rather than `$ref`'d because the generator inlines everything else, and the
- * MCP index and the docs renderer read schemas without resolving references.
+ * which is how most of them came to document a status code and no body. One
+ * shared component, referenced, rather than a copy inlined into each of some
+ * three hundred error responses: the copies added a third to the spec the docs
+ * worker bundles, and a generated client gets one named error type from it.
  */
 const ERROR_ENVELOPE_JSON_SCHEMA = (() => {
   const { $schema: _dialect, ...schema } = z.toJSONSchema(ErrorEnvelope, { io: "output" }) as Record<string, unknown>;
   return schema;
 })();
+const ERROR_ENVELOPE_REF = { $ref: "#/components/schemas/ErrorEnvelope" };
 
-function stampErrors(doc: { paths?: Record<string, Record<string, unknown>> }) {
+function stampErrors(doc: { paths?: Record<string, Record<string, unknown>>; components?: Record<string, unknown> }) {
   for (const [path, item] of Object.entries(doc.paths ?? {})) {
     if (!path.startsWith("/v1/")) continue;
     for (const method of METHODS) {
       const op = item[method] as { responses?: Record<string, { content?: unknown }> } | undefined;
       for (const [status, response] of Object.entries(op?.responses ?? {})) {
         if (Number(status) < 400 || response.content !== undefined) continue;
-        response.content = { "application/json": { schema: ERROR_ENVELOPE_JSON_SCHEMA } };
+        response.content = { "application/json": { schema: ERROR_ENVELOPE_REF } };
       }
     }
   }
+  const components = (doc.components ??= {}) as { schemas?: Record<string, unknown> };
+  (components.schemas ??= {}).ErrorEnvelope = ERROR_ENVELOPE_JSON_SCHEMA;
 }
 
 /** Marks the operations `DEPRECATIONS` lists, so the spec and the response headers share one list. */
@@ -254,6 +258,7 @@ export function mountOpenApiSpec(app: Hono<{ Bindings: Bindings; Variables: Reco
     const doc = (await c.res.json()) as {
       paths?: Record<string, Record<string, unknown>>;
       tags?: { name: string }[];
+      components?: Record<string, unknown>;
     };
     stampSecurity(doc, app as unknown as Hono<never>);
     stampErrors(doc);

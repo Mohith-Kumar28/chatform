@@ -11,12 +11,21 @@ your whole organization.
 | Event | When |
 | --- | --- |
 | `response.completed` | Someone finished |
+| `response.disqualified` | The form screened someone out: they reached a screen-out ending |
 | `response.abandoned` | A response was given up on or timed out |
 | `response.partial` | A response has stalled part-way, with answers in it |
 | `response.resumed` | Someone came back to a response they had abandoned |
 | `followup.sent` | A follow-up reminder went out |
-| `session.started` | A conversation opened |
-| `form.published` | A new version went live |
+| `response.answer_recorded` | Accepted in a subscription, not sent yet |
+| `session.started` | Accepted in a subscription, not sent yet |
+| `form.published` | Accepted in a subscription, not sent yet |
+
+A screened-out respondent gets `response.disqualified`, never
+`response.completed`, so a "completed" handler that adds people to a CRM or
+sends a welcome email does not fire for someone the form turned away.
+
+The last three names are valid when you create an endpoint, but nothing emits
+them today. Do not build on them yet.
 
 `response.partial` is the one people miss. Until it existed, a half-finished lead
 was invisible until it timed out — which is exactly as long as it was worth
@@ -158,6 +167,33 @@ over roughly ten hours. Only a 2xx counts as success. Redirects are not followed
 Endpoints that fail twenty attempts in a row are switched off. Their pending
 deliveries move to the Failed list, so turning the endpoint back on and pressing
 **Retry all** recovers everything it missed.
+
+### From the API
+
+Everything the Integrate tab does is also an endpoint. Reading needs
+`webhook:read`; changing anything needs `webhook:write`.
+
+| Endpoint | What it does |
+| --- | --- |
+| `GET /v1/webhooks/stats` | Pending, failed and delivered-in-the-last-24-hours counts, per endpoint and in total. Add `?formId=` for one form's endpoints |
+| `GET /v1/webhooks/{id}/deliveries` | The 50 most recent deliveries, newest first, each with every attempt. Filter with `?status=pending`, `failed` or `success` |
+| `POST /v1/webhooks/{id}/deliveries/{deliveryId}/replay` | Send one delivery again now. A failed one gets a fresh round of retries; a delivered one is sent again as a copy with the same `webhook-id` |
+| `POST /v1/webhooks/{id}/retry-failed` | Put every failed delivery of the endpoint back in the queue, up to 500 at a time. Returns `{ ok, queued }` |
+| `PATCH /v1/webhooks/{id}` | `{ "active": true }` or `false`. Turning an endpoint on clears its failure count |
+
+The recovery after an outage is two calls:
+
+```bash
+curl -X PATCH https://api.chatform.in/v1/webhooks/$WEBHOOK_ID \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"active": true}'
+
+curl -X POST https://api.chatform.in/v1/webhooks/$WEBHOOK_ID/retry-failed \
+  -H "x-api-key: $CHATFORM_SECRET_KEY"
+```
+
+A test send from the dashboard is never replayed and never counted in the stats.
 
 ## Handling them well
 

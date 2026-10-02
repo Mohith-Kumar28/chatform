@@ -1,0 +1,41 @@
+---
+title: Import
+description: Turn a public Google Form, Typeform, Tally, Jotform or Youform into a form document.
+---
+
+`POST /v1/import` reads the form behind a public link and converts it: the
+questions, options, required fields, endings and jumps. It is the same
+conversion as the dashboard's Import. Like [AI authoring](/docs/ai), it saves
+nothing. You get the document back, look at it, and post it to `POST /v1/forms`
+to keep it.
+
+It needs `form:write`.
+
+```bash
+curl -X POST https://api.chatform.in/v1/import \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"url": "https://forms.gle/…"}'
+```
+
+The reply is `{ doc, report }`. `report` says which `provider` it read, how many
+questions, branches and endings it copied, and lists in `notCopied` anything it
+could not bring across, such as payments, scores, or rules that test a different
+question.
+
+## Good to know
+
+- **Sources.** Google Forms, Typeform, Tally, Jotform and Youform links are read
+  directly. Any other public page is searched for a form on it, and the report
+  says `website`.
+- **It must open without signing in.** A Google Forms editor link
+  (`…/edit`) is refused with `edit_link`; send the link from Send instead. A form
+  behind a sign-in or a password is refused too.
+- **Errors are specific.** A link that cannot be imported is a `422` whose
+  `error.code` says why: `unsupported_url`, `edit_link`, `not_found`,
+  `sign_in_required`, `closed_hidden`, `password_protected`, `no_questions` or
+  `no_form`. A source that did not answer is a `502` with `unreachable`.
+- **It does not spend your AI allowance.** A small model rewords each question
+  to suit a chat. If it is unavailable, the source's own words are kept.
+- `report.closed` is `true` when the source form is no longer accepting
+  responses but its questions could still be read.

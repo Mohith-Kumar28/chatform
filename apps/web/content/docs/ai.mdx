@@ -1,0 +1,48 @@
+---
+title: AI authoring
+description: Draft a conversational form from a sentence, or change one by describing the change.
+---
+
+The builder's AI is available over the API. It drafts a form from a prompt,
+edits an existing one, and can tell you what a prompt leaves open before it
+drafts. Nothing it returns is saved: you review the document and save it
+yourself.
+
+All three need the `ai:generate` [scope](/docs/scopes), which no key preset
+includes. It is the one scope that spends your plan's AI allowance, so a key
+has to be given it on purpose.
+
+## Endpoints
+
+| Endpoint | Returns | Save it with |
+| --- | --- | --- |
+| `POST /v1/ai/generate-form` | A new `doc`, its lint `issues`, the `tokens` spent, and any `settings` the prompt set | `POST /v1/forms` |
+| `POST /v1/ai/edit-form` | The proposed `doc` for `formId`, and what changed | `PUT /v1/forms/{id}/doc` |
+| `POST /v1/ai/clarify-form` | Up to three `questions` worth asking first, usually none | Pass the answers as `clarifications` to generate |
+
+```bash
+curl -X POST https://api.chatform.in/v1/ai/generate-form \
+  -H "x-api-key: $CHATFORM_SECRET_KEY" \
+  -H "content-type: application/json" \
+  -d '{"prompt": "Speaker submissions for a design meetup, with a talk title, abstract and length"}'
+```
+
+## Good to know
+
+- **What it costs.** A generation or an edit uses one unit of your plan's AI
+  generations, and only when a usable document comes back. Clarifying is not
+  charged as a generation, though its tokens are counted. Out of generations is
+  a `402`.
+- **Writing the document yourself is free.** If you already have a model of your
+  own, build the document against [`GET /v1/blocks`](/docs/blocks) and post it to
+  `POST /v1/forms`. No `ai:generate` needed.
+- **Settings ride along.** "A dark form that closes on the 30th" sets those
+  settings on `doc` and lists each one in `settings` with its value before and
+  after. One marked `locked` is not on your plan and was left alone.
+- **Edits are conversations.** Pass `history`, oldest first, on a follow-up, or
+  the model cannot tell what "also" or "instead" refers to. An edit that would
+  change nothing is a `422`. A question about how to do something comes back as
+  `answer`, and a request the model needs to ask about comes back as
+  `question`. Neither has a `doc`, and neither is charged as a generation.
+- **An empty clarify answer is the normal one.** It means the prompt can be
+  drafted as it stands. Skipping clarify entirely is fine.
