@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { CopyButton } from "@/components/ui/copy-button";
+import { CodeBlock } from "@/components/ui/code-block";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -765,12 +766,7 @@ function prettyJson(raw: string) {
 
 function JsonBlock({ json }: { json: string }) {
   return (
-    <div className="relative">
-      <pre className="bg-muted/50 max-h-96 overflow-y-auto rounded-xl p-3 pr-10 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
-        {json}
-      </pre>
-      <CopyButton value={json} className="absolute top-2 right-2" toastMessage="Copied" />
-    </div>
+    <CodeBlock code={json} className="bg-muted/50 text-xs leading-relaxed" />
   );
 }
 

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CopyButton } from "@/components/ui/copy-button";
+import { CodeBlock } from "@/components/ui/code-block";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -137,17 +138,7 @@ export function SpreadsheetPanel({ formId }: { formId: string }) {
               <Label className="text-muted-foreground text-caption font-normal">
                 Paste into cell A1 of a Google Sheet
               </Label>
-              <div className="flex gap-2">
-                <pre className="bg-muted text-caption min-w-0 flex-1 overflow-x-auto rounded-xl p-3 font-mono">
-                  <code>{`=IMPORTDATA("${feed.feedUrl}")`}</code>
-                </pre>
-                <CopyButton
-                  value={`=IMPORTDATA("${feed.feedUrl}")`}
-                  label="Copy"
-                  variant="outline"
-                  className="self-start"
-                />
-              </div>
+              <CodeBlock code={`=IMPORTDATA("${feed.feedUrl}")`} />
               <p className="text-muted-foreground text-micro">
                 In Excel: <strong>Data → From Web</strong>, paste the same URL. Both refresh on
                 their own schedule — roughly hourly in Sheets.

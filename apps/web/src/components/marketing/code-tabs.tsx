@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CopyButton } from "@/components/ui/copy-button";
+import { CodeBlock } from "@/components/ui/code-block";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
 /**
@@ -14,10 +14,9 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 
 type TabId = "api" | "embed" | "webhook";
 
-const SNIPPETS: Record<TabId, { label: string; lang: string; code: string }> = {
+const SNIPPETS: Record<TabId, { label: string; code: string }> = {
   api: {
     label: "Headless API",
-    lang: "bash",
     code: `# Start a conversation from your own backend
 curl -X POST https://api.chatform.in/v1/forms/frm_8Kd2/chat/sessions \\
   -H "Authorization: Bearer $CHATFORM_API_KEY" \\
@@ -32,7 +31,6 @@ curl -X POST https://api.chatform.in/v1/chat/sessions/ses_91xQ/messages \\
   },
   embed: {
     label: "Embed",
-    lang: "html",
     code: `<!-- popup · side-tab · inline · full page -->
 <script
   src="https://chatform.in/embed.js"
@@ -44,7 +42,6 @@ curl -X POST https://api.chatform.in/v1/chat/sessions/ses_91xQ/messages \\
   },
   webhook: {
     label: "Webhooks",
-    lang: "json",
     code: `POST https://yours.example.com/hooks/chatform
 x-chatform-signature: t=1756281600, v1=9f2c…
 
@@ -70,7 +67,7 @@ export function CodeTabs() {
 
   return (
     <div className="border-border/70 bg-card overflow-hidden rounded-2xl border shadow-sm">
-      <div className="border-border/60 flex flex-wrap items-center gap-3 border-b px-3 py-3">
+      <div className="border-border/60 overflow-x-auto border-b px-3 py-3">
         <SegmentedControl
           options={OPTIONS}
           value={tab}
@@ -78,17 +75,8 @@ export function CodeTabs() {
           size="sm"
           ariaLabel="Code example"
         />
-        <span className="text-micro text-muted-foreground font-mono">{snippet.lang}</span>
-        <CopyButton
-          value={snippet.code}
-          label="Copy"
-          toastMessage="Snippet copied"
-          className="ml-auto"
-        />
       </div>
-      <pre className="overflow-x-auto px-4 py-4 text-[0.8125rem] leading-relaxed">
-        <code className="font-mono">{snippet.code}</code>
-      </pre>
+      <CodeBlock code={snippet.code} className="max-h-none rounded-none bg-transparent text-[0.8125rem] leading-relaxed" />
     </div>
   );
 }

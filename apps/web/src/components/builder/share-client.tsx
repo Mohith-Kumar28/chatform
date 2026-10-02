@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Blocks, FileDown, Link2, Loader2, Mail, QrCode, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
+import { CodeBlock } from "@/components/ui/code-block";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -233,13 +234,8 @@ function emailSnippet(url: string): string {
 function Snippet({ label, code }: { label: string; code: string }) {
   return (
     <div className="space-y-2">
-      <div className="flex items-start justify-between gap-3">
-        <Label className="text-muted-foreground text-caption font-normal">{label}</Label>
-        <CopyButton value={code} label="Copy" variant="outline" />
-      </div>
-      <pre className="bg-muted text-caption overflow-x-auto rounded-xl p-3 font-mono">
-        <code>{code}</code>
-      </pre>
+      <Label className="text-muted-foreground text-caption font-normal">{label}</Label>
+      <CodeBlock code={code} />
     </div>
   );
 }

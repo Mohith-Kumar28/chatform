@@ -18,6 +18,7 @@ import {
 import type { Block, ThemeDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
+import { CodeBlock } from "@/components/ui/code-block";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -556,9 +557,7 @@ export function EmbedStudio({
           />
         </div>
 
-        <pre className="bg-muted text-caption max-h-64 overflow-auto rounded-xl p-4 font-mono">
-          <code>{snippet}</code>
-        </pre>
+        <CodeBlock code={snippet} copy={false} className="max-h-64" />
 
         {(target === "html" || target === "react") && (
           <details className="group">
@@ -567,9 +566,9 @@ export function EmbedStudio({
             <summary className="text-muted-foreground hover:text-foreground text-micro cursor-pointer list-none underline underline-offset-2">
               Your site sets a Content Security Policy?
             </summary>
-            <pre className="bg-muted text-caption mt-2 overflow-x-auto rounded-xl p-3 font-mono">
-              <code>{cspSnippet(appOrigin)}</code>
-            </pre>
+            <div className="mt-2">
+              <CodeBlock code={cspSnippet(appOrigin)} />
+            </div>
           </details>
         )}
       </div>

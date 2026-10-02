@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { LockedControl } from "@/components/billing/gate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CopyButton } from "@/components/ui/copy-button";
+import { CodeBlock } from "@/components/ui/code-block";
 import { InfoHint } from "@/components/ui/info-hint";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useEntitlements } from "@/hooks/use-entitlements";
@@ -241,9 +242,7 @@ function PromptSteps() {
     <Steps>
       <Step title="Copy this prompt">
         {/* The same scrolling block the embed and webhook prompts use, so the whole prompt is readable before it is pasted. */}
-        <pre className="bg-muted text-caption max-h-64 overflow-auto rounded-xl p-4 font-mono whitespace-pre-wrap">
-          <code>{SETUP_PROMPT}</code>
-        </pre>
+        <CodeBlock code={SETUP_PROMPT} copy={false} wrap className="max-h-64" />
         <CopyButton value={SETUP_PROMPT} label="Copy prompt" variant="default" size="sm" toastMessage="Prompt copied" />
       </Step>
       <Step title="Paste it into your AI">
