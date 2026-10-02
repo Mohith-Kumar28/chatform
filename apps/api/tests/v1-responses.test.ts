@@ -443,3 +443,21 @@ describe("a form that is no longer live", () => {
     expect((await api(`/v1/forms/frm_nosuchform/responses`, { method: "POST", body: "{}" })).status).toBe(404);
   });
 });
+
+describe("listing without answers", () => {
+  it("still reports how far each response got", async () => {
+    const { id } = (await (
+      await api(`/v1/forms/${t.formId}/responses`, {
+        method: "POST",
+        body: JSON.stringify({ answers: { q_email: "progress@example.com" } }),
+      })
+    ).json()) as { id: string };
+
+    const page = (await (await api(`/v1/forms/${t.formId}/responses?status=in_progress&limit=100`)).json()) as {
+      data: { id: string; progress: { answered: number }; answers?: unknown }[];
+    };
+    const row = page.data.find((r) => r.id === id)!;
+    expect(row.progress.answered).toBe(1);
+    expect(row.answers).toBeUndefined();
+  });
+});

@@ -939,8 +939,13 @@ responsesRouter.get(
      * twenty-six responses. It reads its page in one `DB.batch()` now, for the
      * same reason this has always been one query.
      */
+    /*
+     * Loaded whether or not `include=answers` asked to see them: `progress`,
+     * `next` and `missing_required` are worked out from the answers, and
+     * without them every row on the page read as 0 answered.
+     */
     let answersByResponse = new Map<string, AnswerMap>();
-    if (include.has("answers") && page.data.length > 0) {
+    if (page.data.length > 0) {
       const ids = page.data.map((r) => r.id);
       /**
        * Still one round trip, now within the binding ceiling.
