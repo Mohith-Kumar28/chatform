@@ -10,7 +10,6 @@ import {
   KeyRound,
   MessageSquare,
   Sheet as SheetIcon,
-  Sparkles,
   Webhook,
   Workflow,
 } from "lucide-react";
@@ -34,7 +33,7 @@ import {
 import { customFetch } from "@/lib/api/mutator";
 import { EmbedStudio } from "./embed-studio";
 import { PAYMENT_SHEET_COPY, PaymentAccountPanel } from "./payment-account-sheet";
-import { ProviderLogo } from "./provider-logo";
+import { McpMark, ProviderLogo } from "./provider-logo";
 import { usePaymentAccounts, type PaymentAccountsPayload } from "./payment-accounts";
 import { SpreadsheetPanel } from "./spreadsheet-panel";
 import { AiConnectPanel, useAiConnections } from "./ai-connect-panel";
@@ -129,9 +128,9 @@ export function IntegrationsWorkspace({
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <DestinationCard
-            icon={Sparkles}
-            accent="var(--brand-violet, var(--primary))"
-            name="AI assistants"
+            icon={McpMark}
+            accent="var(--foreground)"
+            name="AI assistants (MCP)"
             blurb="Claude, ChatGPT and more: ask about the responses, or have it build and edit forms."
             state={aiCount > 0 ? "connected" : "available"}
             detail={aiCount > 1 ? `${aiCount} connected` : undefined}
@@ -212,7 +211,7 @@ export function IntegrationsWorkspace({
               {paymentProvider
                 ? PAYMENT_SHEET_COPY[paymentProvider].title
                 : panel === "ai"
-                  ? "Connect your AI"
+                  ? "Connect your AI (MCP)"
                   : panel === "spreadsheet"
                   ? "Google Sheets & Excel"
                   : "Webhooks"}
@@ -221,7 +220,7 @@ export function IntegrationsWorkspace({
               {paymentProvider
                 ? PAYMENT_SHEET_COPY[paymentProvider].description
                 : panel === "ai"
-                  ? "Use Chatform from Claude, ChatGPT or any app that supports MCP. Paste one link and sign in."
+                  ? "Ask about your responses, or build and edit forms, from Claude, ChatGPT or any MCP app."
                   : panel === "spreadsheet"
                   ? "Download the responses, or keep a sheet pointed at them."
                   : "Signed HTTP callbacks from a delivery queue, retried for about ten hours."}
