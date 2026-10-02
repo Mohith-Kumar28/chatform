@@ -13164,13 +13164,10 @@
             "required": true
           }
         ],
-        "x-required-scope": "form:read",
+        "x-required-scope": "form:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -13300,13 +13297,10 @@
             "required": true
           }
         ],
-        "x-required-scope": "form:read",
+        "x-required-scope": "form:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -13440,13 +13434,10 @@
             "required": true
           }
         ],
-        "x-required-scope": "form:read",
+        "x-required-scope": "form:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -13613,13 +13604,10 @@
             "required": true
           }
         ],
-        "x-required-scope": "form:read",
+        "x-required-scope": "form:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []
@@ -13786,13 +13774,10 @@
             "required": true
           }
         ],
-        "x-required-scope": "form:read",
+        "x-required-scope": "form:write",
         "security": [
           {
             "secretKey": []
-          },
-          {
-            "publishableKey": []
           },
           {
             "apiKeyHeader": []

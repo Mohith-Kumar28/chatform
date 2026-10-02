@@ -93,12 +93,12 @@ type HonoRoute = { method: string; path: string; handler: unknown };
  */
 function scopeIndex(app: Hono<never>) {
   const exact = new Map<string, string>();
-  const prefixes: { prefix: string; scope: string }[] = [];
+  const prefixes: { method: string; prefix: string; scope: string }[] = [];
   for (const route of (app as unknown as { routes: HonoRoute[] }).routes ?? []) {
     const scope = scopeOf(route.handler);
     if (!scope) continue;
     if (route.path.includes("*")) {
-      prefixes.push({ prefix: route.path.slice(0, route.path.indexOf("*")), scope });
+      prefixes.push({ method: route.method.toUpperCase(), prefix: route.path.slice(0, route.path.indexOf("*")), scope });
     } else {
       exact.set(`${route.method.toUpperCase()} ${route.path}`, scope);
     }
@@ -115,7 +115,12 @@ function requiredScope(index: ReturnType<typeof scopeIndex>, method: string, spe
   const honoPath = toHonoPath(specPath);
   const direct = index.exact.get(`${method.toUpperCase()} ${honoPath}`) ?? index.exact.get(`ALL ${honoPath}`);
   if (direct) return direct;
-  return index.prefixes.find(({ prefix }) => honoPath.startsWith(prefix))?.scope ?? null;
+  // Method first: `knowledge.ts` guards GET, POST and DELETE on one wildcard
+  // with different scopes, and matching on the prefix alone published the GET
+  // guard (`form:read`) on every write.
+  const verb = method.toUpperCase();
+  const matching = index.prefixes.filter(({ prefix }) => honoPath.startsWith(prefix));
+  return (matching.find((p) => p.method === verb) ?? matching.find((p) => p.method === "ALL"))?.scope ?? null;
 }
 
 /**

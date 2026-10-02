@@ -81,7 +81,10 @@ export async function errorFromResponse(res: Response): Promise<ChatformError> {
   } catch {
     // A non-JSON error body — a gateway page, say. The status still means something.
   }
-  const retryAfter = Number(res.headers.get("retry-after"));
+  // Number(null) is 0, so a missing header has to be ruled out before parsing,
+  // or every retry would wait zero seconds instead of backing off.
+  const retryHeader = res.headers.get("retry-after");
+  const retryAfter = retryHeader === null || retryHeader.trim() === "" ? Number.NaN : Number(retryHeader);
   return new ChatformError({
     status: res.status,
     code: typeof error.code === "string" ? error.code : `http_${res.status}`,

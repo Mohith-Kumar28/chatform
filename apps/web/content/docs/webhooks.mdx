@@ -65,7 +65,8 @@ webhook-signature: v1,<base64 HMAC-SHA256>
 ```
 
 The signed content is `{id}.{timestamp}.{body}`, so a replayed body with a fresh
-id fails.
+id fails. The HMAC key is the part of your secret after `whsec_`, base64-decoded,
+which is what every Standard Webhooks library does.
 
 <Tabs items={['Node', 'Python', 'Workers']}>
 
@@ -82,16 +83,16 @@ function verify(rawBody, headers, secret) {
   // Reject anything older than five minutes, before doing real work.
   if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
 
-  const expected = crypto
-    .createHmac("sha256", secret)
-    .update(`${id}.${timestamp}.${rawBody}`)
-    .digest("base64");
+  // The key is the base64 after `whsec_`, decoded. Not the characters.
+  const key = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+  const expected = Buffer.from(
+    crypto.createHmac("sha256", key).update(`${id}.${timestamp}.${rawBody}`).digest("base64"),
+  );
 
-  return signature
-    .split(" ")
-    .some((part) =>
-      crypto.timingSafeEqual(Buffer.from(part.replace("v1,", "")), Buffer.from(expected)),
-    );
+  return signature.split(" ").some((part) => {
+    const given = Buffer.from(part.replace("v1,", ""));
+    return given.length === expected.length && crypto.timingSafeEqual(given, expected);
+  });
 }
 ```
 
@@ -107,7 +108,7 @@ def verify(raw_body: bytes, headers: dict, secret: str) -> bool:
     if abs(time.time() - int(ts)) > 300:
         return False
     expected = base64.b64encode(
-        hmac.new(secret.encode(), f"{wid}.{ts}.".encode() + raw_body, hashlib.sha256).digest()
+        hmac.new(base64.b64decode(secret.removeprefix("whsec_")), f"{wid}.{ts}.".encode() + raw_body, hashlib.sha256).digest()
     ).decode()
     return any(hmac.compare_digest(p.removeprefix("v1,"), expected) for p in sig.split(" "))
 ```
@@ -122,8 +123,10 @@ async function verify(rawBody: string, headers: Headers, secret: string) {
   const ts = headers.get("webhook-timestamp")!;
   if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false;
 
+  // The key is the base64 after `whsec_`, decoded. Not the characters.
+  const keyBytes = Uint8Array.from(atob(secret.replace(/^whsec_/, "")), (c) => c.charCodeAt(0));
   const key = await crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(secret),
+    "raw", keyBytes,
     { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
   );
   const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${id}.${ts}.${rawBody}`));

@@ -48,6 +48,27 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 /**
+ * The bytes the secret stands for.
+ *
+ * A Standard Webhooks secret is `whsec_` followed by base64, and the HMAC key is
+ * the decoded bytes, not the characters. Chatform signs that way, so keying the
+ * HMAC with the literal string rejects every real delivery. A secret that is not
+ * valid base64 is taken at face value, as the API does.
+ */
+function signingKey(secret: string): Uint8Array<ArrayBuffer> {
+  const body = secret.startsWith("whsec_") ? secret.slice("whsec_".length) : secret;
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(body) || body.length % 4 !== 0) return new TextEncoder().encode(secret);
+  try {
+    const binary = atob(body);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+    return out;
+  } catch {
+    return new TextEncoder().encode(secret);
+  }
+}
+
+/**
  * Verify a delivery and return its parsed body.
  *
  * Throws rather than returning false: a caller who forgets to check a boolean
@@ -74,7 +95,7 @@ export async function verifyWebhook<T = unknown>(args: VerifyWebhookArgs): Promi
 
   const key = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(args.secret),
+    signingKey(args.secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],

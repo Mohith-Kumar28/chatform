@@ -92,6 +92,44 @@ describe("verifyWebhook", () => {
     expect(event).toBeTruthy();
   });
 
+  it("accepts the Standard Webhooks published test vector", async () => {
+    // The key is the base64-decoded secret, not its characters. Pinned to the
+    // spec's own vector because a test that signs with this file's helper can
+    // only prove the two halves agree with each other.
+    const event = await verifyWebhook({
+      body: '{"test": 2432232314}',
+      headers: {
+        "webhook-id": "msg_p5jXN8AQM9LWM0D4loKWxJek",
+        "webhook-timestamp": "1614265330",
+        "webhook-signature": "v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=",
+      },
+      secret: "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw",
+      toleranceSeconds: Number.MAX_SAFE_INTEGER,
+    });
+    expect(event).toEqual({ test: 2432232314 });
+  });
+
+  it("accepts a delivery signed the way the API signs a real secret", async () => {
+    // Real secrets are `whsec_` plus 32 hex characters, which is valid base64,
+    // so the API keys its HMAC with the decoded bytes. Keying with the literal
+    // string is the bug that rejected every genuine delivery.
+    const secret = "whsec_0123456789abcdef0123456789abcdef";
+    const raw = atob(secret.slice("whsec_".length));
+    const keyBytes = Uint8Array.from(raw, (ch) => ch.charCodeAt(0));
+    const id = "evt_1";
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const body = JSON.stringify({ event: "response.completed" });
+    const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${id}.${timestamp}.${body}`));
+    const signature = btoa(String.fromCharCode(...new Uint8Array(mac)));
+    const event = await verifyWebhook({
+      body,
+      headers: { "webhook-id": id, "webhook-timestamp": timestamp, "webhook-signature": `v1,${signature}` },
+      secret,
+    });
+    expect(event).toEqual({ event: "response.completed" });
+  });
+
   it("throws rather than returning false", async () => {
     // A caller who forgets to check a boolean has written an unauthenticated
     // endpoint; the failure must not be silent.
