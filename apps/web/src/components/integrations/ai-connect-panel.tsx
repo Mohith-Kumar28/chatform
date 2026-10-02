@@ -240,10 +240,11 @@ function PromptSteps() {
   return (
     <Steps>
       <Step title="Copy this prompt">
-        <div className="bg-muted space-y-3 rounded-xl p-3">
-          <p className="text-caption text-muted-foreground line-clamp-3">{SETUP_PROMPT}</p>
-          <CopyButton value={SETUP_PROMPT} label="Copy prompt" variant="default" toastMessage="Prompt copied" />
-        </div>
+        {/* The same scrolling block the embed and webhook prompts use, so the whole prompt is readable before it is pasted. */}
+        <pre className="bg-muted text-caption max-h-64 overflow-auto rounded-xl p-4 font-mono whitespace-pre-wrap">
+          <code>{SETUP_PROMPT}</code>
+        </pre>
+        <CopyButton value={SETUP_PROMPT} label="Copy prompt" variant="default" size="sm" toastMessage="Prompt copied" />
       </Step>
       <Step title="Paste it into your AI">
         <Detail>Claude, ChatGPT, Cursor, Claude Code, Codex or any other. It adds Chatform, or tells you the exact clicks.</Detail>
