@@ -1175,10 +1175,22 @@ resultsRouter.get(
       // A member waiting to be added to a workspace has nothing to add up.
       scope = found ? { orgId, sql: "f.workspace_id = ?", binds: [found.wsId] } : { orgId, sql: "0", binds: [] };
     }
-    const overview = await computeOrgOverview(c.env, scope, tz ?? 0);
     const advanced = (await hasFeature(c, "advanced_analytics")) && !(await assertPermission(c, "analytics", "read_advanced"));
+    /*
+      A minute in KV, KV's shortest expiry. Every dashboard load asks, and the
+      answer is seven days of totals, so a minute of lag costs nothing; the
+      cards' own "today" counts come with the forms list and stay live. The key
+      names everything the answer depends on: who may see which workspaces
+      (`scope`), whose clock, and whether the median is on the plan.
+    */
+    const cacheKey = `overview:${orgId}:${scope.sql}:${scope.binds.join(",")}:${tz ?? 0}:${advanced ? 1 : 0}`;
+    const cached = await c.env.KV_CONFIG.get(cacheKey);
+    if (cached) return c.json(JSON.parse(cached));
+    const overview = await computeOrgOverview(c.env, scope, tz ?? 0);
     if (!advanced) overview.kpis.medianMs = { value: null, previous: null };
-    return c.json({ ...overview, locked: advanced ? [] : ["medianMs"] });
+    const payload = { ...overview, locked: advanced ? [] : ["medianMs"] };
+    await c.env.KV_CONFIG.put(cacheKey, JSON.stringify(payload), { expirationTtl: 60 });
+    return c.json(payload);
   },
 );
 

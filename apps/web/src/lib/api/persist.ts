@@ -60,6 +60,8 @@ const PERSISTED_PATHS = new Set([
   "/api/billing/plans",
   // The public template catalogue.
   "/api/templates",
+  // The dashboard tiles: seven-day totals across forms, no respondent data.
+  "/api/analytics/overview",
 ]);
 
 /** Public, immutable-ish detail pages under an allowlisted collection. */

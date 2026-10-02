@@ -152,6 +152,14 @@ describe("GET /api/analytics/overview", () => {
   });
 });
 
+describe("caching", () => {
+  it("serves the overview from KV for a minute", async () => {
+    const before = await overview(owner.cookie, wsB);
+    await submission("sub_orgov_late", formB, "completed", 1000, 1000).run();
+    expect((await overview(owner.cookie, wsB)).kpis.responses.value).toBe(before.kpis.responses.value);
+  });
+});
+
 describe("GET /api/forms today counts", () => {
   it("counts finished and worked-on responses since local midnight, test runs excluded", async () => {
     const res = await fetchApi(`/api/forms?ws=${owner.workspaceId}`, { headers: { cookie: owner.cookie } });

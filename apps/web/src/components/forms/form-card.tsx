@@ -287,21 +287,6 @@ export function FormCard({
       <span className="text-muted-foreground text-xs">
         {relativeTime(form.updatedAt)}
       </span>
-      {/* Only on a form something happened to today, so a busy card stands
-          out from a quiet grid. The split is one hover away. */}
-      {todayTotal > 0 && (
-        <TooltipProvider delayDuration={300}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="tabular ml-auto inline-flex items-center gap-1 text-xs text-[var(--success)]">
-                <Activity className="size-3" aria-hidden />
-                {todayTotal} today
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top">{todaySplit}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
     </>
   );
 
@@ -754,10 +739,36 @@ export function FormCard({
               // moment you reach for it. Both halves come from the plate instead.
               "[&_[data-slot=button]]:hover:bg-[var(--thumb-plate-wash)]",
               "[&_[data-slot=button]]:hover:text-[var(--thumb-plate-ink)]",
-              "opacity-0 transition-opacity duration-[var(--duration-micro)]",
-              "group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100",
+              "transition-opacity duration-[var(--duration-micro)]",
+              todayTotal === 0 && "opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100",
             )}
           >
+            {/*
+              Today's activity rides on the same plate, at rest, so a busy card
+              stands out from a quiet grid without a second badge competing for
+              the corner. The buttons fold out beside it on hover; collapsed by
+              width rather than `display`, so they stay reachable by Tab.
+            */}
+            {todayTotal > 0 && (
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="tabular inline-flex h-7 items-center gap-1 px-2 text-xs font-medium">
+                      <Activity className="size-3 text-[var(--success)]" aria-hidden />
+                      {todayTotal} today
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">{todaySplit}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            <span
+              className={cn(
+                "flex items-center gap-0.5",
+                todayTotal > 0 &&
+                  "max-w-0 overflow-hidden transition-[max-width] duration-[var(--duration-micro)] group-hover:max-w-40 focus-within:max-w-40 max-sm:max-w-40",
+              )}
+            >
             {published && (
               <Button
                 variant="ghost"
@@ -774,6 +785,7 @@ export function FormCard({
               </Link>
             </Button>
             {actions}
+            </span>
           </div>
 
           {/*
