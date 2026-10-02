@@ -38,7 +38,6 @@ import {
 } from "@/components/ui/tooltip";
 import { NEW_FORM_EVENT } from "@/components/dashboard/use-app-shortcuts";
 import { ALL_WORKSPACES, WorkspaceSwitcher } from "@/components/dashboard/workspace-switcher";
-import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterChips } from "@/components/ui/filter-chips";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -68,6 +67,7 @@ import { AiCapBanner } from "@/components/billing/ai-cap-banner";
 import { CreateFormDialog } from "@/components/forms/create-form-dialog";
 import { NoWorkspaceState } from "@/components/dashboard/no-workspace-state";
 import { OverviewTiles } from "@/components/dashboard/overview-tiles";
+import { ExpandingSearch } from "@/components/dashboard/expanding-search";
 import { FormCard, type FormRow } from "@/components/forms/form-card";
 import { useDuplicateForm } from "@/components/forms/use-duplicate-form";
 import { ArchiveView, type ArchivedFormRow } from "@/components/forms/archive-view";
@@ -207,7 +207,14 @@ export function DashboardContent() {
     query: { queryKey: getGetApiArchiveFormsQueryKey(formsParams) },
   });
   const archived = useMemo(() => apiData<ArchivedFormRow[]>(archiveData) ?? [], [archiveData]);
-  const showArchive = status === "archive";
+  /*
+    The Archive pill exists only while there is something in it. Restoring or
+    deleting the last archived form while looking at it drops back to All
+    rather than leaving an empty tab behind its own pill.
+  */
+  const archiveEmpty = archiveData !== undefined && archived.length === 0;
+  const activeStatus: StatusFilter = status === "archive" && archiveEmpty ? "all" : status;
+  const showArchive = activeStatus === "archive";
 
   /*
     Put the remembered workspace into the URL, so everything else that reads
@@ -448,15 +455,7 @@ export function DashboardContent() {
         <WorkspaceSwitcher value={ws} />
 
         {allForms.length > 0 && !showArchive && (
-          <div className="relative min-w-0 flex-1 sm:max-w-xs">
-            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search forms…"
-              className="h-9 rounded-full pl-8"
-            />
-          </div>
+          <ExpandingSearch value={query} onChange={setQuery} />
         )}
 
         <div className="ml-auto flex items-center gap-2">
@@ -521,13 +520,13 @@ export function DashboardContent() {
                   head to choose between three buttons. */}
                   <FilterChips
                     ariaLabel="Status"
-                    value={status}
+                    value={activeStatus}
                     onChange={setStatus}
                     options={[
                       { value: "all", label: "All" },
                       { value: "live", label: "Live" },
                       { value: "draft", label: "Drafts" },
-                      ...(archived.length > 0 || showArchive
+                      ...(archived.length > 0
                         ? [{ value: "archive" as const, label: "Archive" }]
                         : []),
                     ]}
