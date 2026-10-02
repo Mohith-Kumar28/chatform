@@ -40420,6 +40420,149 @@
         "deprecated": true
       }
     },
+    "/api/mcp/consent/{id}": {
+      "get": {
+        "operationId": "getApiMcpConsentById",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "An AI app's pending connection request, for the consent page",
+        "responses": {
+          "200": {
+            "description": "Who is asking and which organizations can be connected"
+          },
+          "404": {
+            "description": "Expired"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "postApiMcpConsentById",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Allow or deny an AI app's connection",
+        "responses": {
+          "200": {
+            "description": "Where to send the browser back to the app"
+          },
+          "404": {
+            "description": "Expired"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "allow",
+                      "deny"
+                    ]
+                  },
+                  "orgId": {
+                    "type": "string",
+                    "maxLength": 64
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/mcp/connections": {
+      "get": {
+        "operationId": "getApiMcpConnections",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "AI apps connected to the organization",
+        "responses": {
+          "200": {
+            "description": "Connections"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/mcp/connections/{id}": {
+      "delete": {
+        "operationId": "deleteApiMcpConnectionsById",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Disconnect an AI app",
+        "responses": {
+          "200": {
+            "description": "Disconnected"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
     "/d/{kind}/{id}": {
       "get": {
         "operationId": "getDByKindById",

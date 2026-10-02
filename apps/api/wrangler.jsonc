@@ -3,7 +3,9 @@
   "name": "chatform-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
-  "compatibility_flags": ["nodejs_compat"],
+  // `global_fetch_strictly_public`: MCP OAuth fetches a client's metadata document from a URL
+  // the client chooses (CIMD), so outbound fetches must never reach anything internal.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   // The custom domain is declared here rather than clicked into the dashboard, so a fresh
   // account can reproduce the deployment from this file alone. Wrangler creates the DNS
   // record and the edge certificate on deploy; the workers.dev URL keeps working too.
@@ -33,6 +35,11 @@
     {
       "binding": "KV_CONFIG",
       "id": "a72116dbd29c4e07b7d887272c1e999e"
+    },
+    // MCP OAuth: clients, grants, hashed tokens, pending consents. See `src/mcp/oauth.ts`.
+    {
+      "binding": "OAUTH_KV",
+      "id": "b4c98b9623344b9b8e0e4d688830f110"
     }
   ],
   // Cloudflare Email Service. The binding is the whole integration: no API key, no

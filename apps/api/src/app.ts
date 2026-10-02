@@ -23,6 +23,7 @@ import { resultsRouter } from "./routes/results.js";
 import { v1Router } from "./routes/v1.js";
 import { deprecationFor, deprecationHeaders } from "./lib/deprecations.js";
 import { mcpRouter } from "./routes/mcp.js";
+import { mcpAuthorizeRouter, mcpConnectRouter } from "./routes/mcp-connect.js";
 import { setDispatchTarget } from "./mcp/dispatch.js";
 import { keysRouter } from "./routes/keys.js";
 import { webhooksRouter } from "./routes/webhook-admin.js";
@@ -388,6 +389,9 @@ export function createApp() {
   app.route("/api", resultsRouter);
   app.route("/v1", v1Router);
   app.route("/mcp", mcpRouter);
+  // OAuth for `/mcp`: the authorize step and the consent page's data. The protocol endpoints are `mcp/oauth.ts`.
+  app.route("/", mcpAuthorizeRouter);
+  app.route("/api", mcpConnectRouter);
   /**
    * Signed downloads sit outside every auth chain on purpose: the signature is
    * the credential. See `lib/signed-url.ts`.

@@ -79,6 +79,22 @@ export const LIMITS = {
     kind: "monthly",
     metric: "api_requests",
   },
+  /**
+   * Tool calls from an AI app connected over MCP OAuth ("Connect your AI"), on a
+   * plan without `api_access`.
+   *
+   * Its own counter rather than `api_requests`, because giving Free an API
+   * allowance would put "API requests" on the Free column of the pricing page —
+   * and Free still cannot mint a key. A plan that has `api_access` meters these
+   * calls as API requests like any other, so this only ever counts on Free.
+   */
+  connector_requests_per_month: {
+    label: "AI connector requests",
+    unit: "count",
+    mode: "hard",
+    kind: "monthly",
+    metric: "connector_requests",
+  },
   emails_per_month: {
     label: "Emails sent",
     unit: "count",
@@ -149,6 +165,7 @@ export const METRICS = [
   "ai_tokens",
   "ai_generations",
   "api_requests",
+  "connector_requests",
   "emails_sent",
   "followups_shared_domain",
 ] as const;

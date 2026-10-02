@@ -62,6 +62,8 @@ const FREE: Plan = {
     ai_tokens_per_month: 500_000,
     ai_generations_per_month: 10,
     api_requests_per_month: 0,
+    // Enough to ask an assistant about your responses most days of the month.
+    connector_requests_per_month: 1_000,
     emails_per_month: 500,
     followups_shared_domain_per_month: 0,
 
@@ -124,6 +126,8 @@ const PRO: Plan = {
     ai_tokens_per_month: 6_000_000,
     ai_generations_per_month: 200,
     api_requests_per_month: 50_000,
+    // Unused: with `api_access`, connector calls count as API requests.
+    connector_requests_per_month: null,
     emails_per_month: 10_000,
     followups_shared_domain_per_month: 500,
 
@@ -167,6 +171,7 @@ const BUSINESS: Plan = {
     ai_tokens_per_month: 30_000_000,
     ai_generations_per_month: 1_000,
     api_requests_per_month: 250_000,
+    connector_requests_per_month: null,
     emails_per_month: 50_000,
     followups_shared_domain_per_month: 2_000,
 

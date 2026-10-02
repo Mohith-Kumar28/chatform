@@ -10,6 +10,7 @@ import {
   KeyRound,
   MessageSquare,
   Sheet as SheetIcon,
+  Sparkles,
   Webhook,
   Workflow,
 } from "lucide-react";
@@ -36,6 +37,7 @@ import { PAYMENT_SHEET_COPY, PaymentAccountPanel } from "./payment-account-sheet
 import { ProviderLogo } from "./provider-logo";
 import { usePaymentAccounts, type PaymentAccountsPayload } from "./payment-accounts";
 import { SpreadsheetPanel } from "./spreadsheet-panel";
+import { AiConnectPanel, useAiConnections } from "./ai-connect-panel";
 import { WebhooksPanel } from "./webhooks-panel";
 import { cn } from "@/lib/utils";
 
@@ -52,7 +54,7 @@ import { cn } from "@/lib/utils";
  * it is what most people opened this tab for.
  */
 
-type PanelKey = "spreadsheet" | "webhooks" | `payments:${PaymentProviderName}`;
+type PanelKey = "ai" | "spreadsheet" | "webhooks" | `payments:${PaymentProviderName}`;
 
 function paymentProviderOf(panel: PanelKey | null): PaymentProviderName | null {
   return panel?.startsWith("payments:") ? (panel.slice("payments:".length) as PaymentProviderName) : null;
@@ -80,6 +82,8 @@ export function IntegrationsWorkspace({
   const [panel, setPanel] = useState<PanelKey | null>(null);
   const payments = usePaymentAccounts();
   const paymentProvider = paymentProviderOf(panel);
+  const { data: aiConnections } = useAiConnections();
+  const aiCount = Array.isArray(aiConnections) ? aiConnections.length : 0;
 
   const { data: integrations } = useQuery({
     queryKey: ["integrations", formId],
@@ -124,6 +128,15 @@ export function IntegrationsWorkspace({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <DestinationCard
+            icon={Sparkles}
+            accent="var(--brand-violet, var(--primary))"
+            name="AI assistants"
+            blurb="Claude, ChatGPT and more: ask about the responses, or have it build and edit forms."
+            state={aiCount > 0 ? "connected" : "available"}
+            detail={aiCount > 1 ? `${aiCount} connected` : undefined}
+            onClick={() => setPanel("ai")}
+          />
           <DestinationCard
             icon={SheetIcon}
             accent="var(--family-choice, var(--primary))"
@@ -198,19 +211,24 @@ export function IntegrationsWorkspace({
             <SheetTitle className="font-display">
               {paymentProvider
                 ? PAYMENT_SHEET_COPY[paymentProvider].title
-                : panel === "spreadsheet"
+                : panel === "ai"
+                  ? "Connect your AI"
+                  : panel === "spreadsheet"
                   ? "Google Sheets & Excel"
                   : "Webhooks"}
             </SheetTitle>
             <SheetDescription className={cn(panel === "webhooks" && "sr-only")}>
               {paymentProvider
                 ? PAYMENT_SHEET_COPY[paymentProvider].description
-                : panel === "spreadsheet"
+                : panel === "ai"
+                  ? "Use Chatform from Claude, ChatGPT or any app that supports MCP. Paste one link and sign in."
+                  : panel === "spreadsheet"
                   ? "Download the responses, or keep a sheet pointed at them."
                   : "Signed HTTP callbacks from a delivery queue, retried for about ten hours."}
             </SheetDescription>
           </SheetHeader>
           <div className="px-4 pb-8">
+            {panel === "ai" && <AiConnectPanel formTitle={formTitle} />}
             {panel === "spreadsheet" && <SpreadsheetPanel formId={formId} />}
             {panel === "webhooks" && (
               <WebhooksPanel formId={formId} formTitle={formTitle} blocks={blocks} />

@@ -9,16 +9,90 @@ Chatform runs a Model Context Protocol server at:
 https://api.chatform.in/mcp
 ```
 
-Point an AI assistant at it with an API key and it can list your forms, read
+Paste that link into an AI app and sign in, and it can list your forms, read
 responses, analyse completion rates, author a new form from a description, publish
 it, and reach the rest of the API when it needs something the named tools do not
 cover.
 
 It is the same worker, the same keys and the same scopes as `/v1`. Nothing here can
-do anything your key could not already do over HTTP — with one deliberate
+do anything a key could not already do over HTTP, with one deliberate
 subtraction: **nothing can delete.**
 
-## Get a key
+## Connect with one link
+
+Most apps need nothing but the URL. They open your browser on a Chatform page that
+asks **Allow Claude to use Chatform?** (or Cursor, or ChatGPT), you click Allow, and
+the app keeps itself signed in from then on. No key to create or paste. The same
+steps, with copy buttons, are in every form's **Integrate** tab under **AI assistants**.
+
+<Tabs items={["Claude", "ChatGPT", "Claude Code", "Cursor", "Codex CLI", "Other"]}>
+<Tab value="Claude">
+
+1. Open [Connectors](https://claude.ai/settings/connectors) in Claude's settings.
+2. Click **Add custom connector**, name it **Chatform** and paste `https://api.chatform.in/mcp`.
+3. Click **Connect**, then **Allow**.
+
+Free Claude plans allow one custom connector. On Team and Enterprise, an owner adds
+it once under Organization settings and everyone then connects it themselves.
+
+</Tab>
+<Tab value="ChatGPT">
+
+1. In **Settings → Apps → Advanced settings**, turn on **Developer mode**.
+2. Click **Create**, name it **Chatform**, paste `https://api.chatform.in/mcp` and choose **OAuth**.
+3. Click **Create**, then **Allow**.
+
+Developer mode needs a paid ChatGPT plan, on the web.
+
+</Tab>
+<Tab value="Claude Code">
+
+```bash
+claude mcp add --transport http chatform https://api.chatform.in/mcp
+```
+
+Then run `/mcp` in a session and choose chatform to sign in.
+
+</Tab>
+<Tab value="Cursor">
+
+[Add to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=Chatform&config=eyJ1cmwiOiJodHRwczovL2FwaS5jaGF0Zm9ybS5pbi9tY3AifQ%3D%3D),
+or in `~/.cursor/mcp.json`:
+
+```json
+{ "mcpServers": { "chatform": { "url": "https://api.chatform.in/mcp" } } }
+```
+
+</Tab>
+<Tab value="Codex CLI">
+
+```bash
+codex mcp add chatform --url https://api.chatform.in/mcp
+codex mcp login chatform
+```
+
+</Tab>
+<Tab value="Other">
+
+Any client that supports remote MCP servers with OAuth: add
+`https://api.chatform.in/mcp` as a Streamable HTTP server. It discovers the rest
+from the `401` (protected resource metadata, then
+`/.well-known/oauth-authorization-server`), registers itself with a Client ID
+Metadata Document or dynamic registration, and signs in with PKCE.
+
+</Tab>
+</Tabs>
+
+Connecting an organization is an owner or admin decision, the same as creating an
+API key. Each connection appears under **Connected** in the AI assistants panel,
+where **Disconnect** cuts it off at once.
+
+## Use an API key instead
+
+For a server, a script, or a client that cannot open a browser, send a secret key
+on every request instead. Keys need a plan with API access.
+
+### Get a key
 
 MCP needs more than a new key is given by default. A default secret key can read
 forms and responses; it cannot publish, read analytics or export, so an assistant
@@ -51,7 +125,7 @@ analytics, so almost nothing would work anyway. Treat the key like a password: a
 assistant that holds it can read every response you have collected.
 </Callout>
 
-## Install
+### Install with a key
 
 <Tabs items={["Claude Code", "Cursor", "VS Code", "Codex CLI", "Other"]}>
 <Tab value="Claude Code">
@@ -128,9 +202,6 @@ For a client that only speaks stdio, bridge it:
 
 </Tab>
 </Tabs>
-
-Connecting from **claude.ai** or **ChatGPT** as a consumer connector needs OAuth,
-which is not built yet — see [What is not here](#what-is-not-here).
 
 ## The tools
 
@@ -243,9 +314,6 @@ the reason, and reports a setting your plan does not include without applying it
   from the dashboard.
 - **Key and plan management.** No key can mint keys or change a plan; see
   [Scopes](/docs/scopes).
-- **OAuth**, so claude.ai's and ChatGPT's connector dialogs — which want it rather
-  than a static header — cannot install this yet. Bearer keys work in Claude Code,
-  Cursor, VS Code and Codex today.
 - **`.xlsx`.** The API exports `csv` and `json`; the typed workbook is
   dashboard-only. See [Spreadsheets](/docs/spreadsheets).
 - **Deleting responses in bulk**, sending a synthetic webhook test, and moving a form
@@ -255,9 +323,10 @@ the reason, and reports a setting your plan does not include without applying it
 
 ## Plan and usage
 
-`/mcp` is part of the developer API, so it needs a plan that includes API access,
-and every tool call that reaches an endpoint counts as one request against your
-monthly quota. Listing the tools is free, which is why an assistant can connect and
+An app connected with one link works on every plan. On a plan with API access each
+tool call that reaches an endpoint counts as one API request; on Free, connected
+apps share an allowance of 1,000 calls a month. A pasted key needs a plan that
+includes API access. Listing the tools is free, which is why an assistant can connect and
 show you what it could do before the plan refuses the first call — and the refusal
 says which plan lifts it.
 
@@ -281,6 +350,8 @@ withheld, so an assistant will not report an empty funnel as "no data".
 
 | What you see | What it means |
 | --- | --- |
+| Sign-in page says "Ask an admin to connect" | Only an owner or admin can connect an organization |
+| The app asks you to sign in again | It was disconnected, or unused for two months |
 | `unauthorized` on connect | No key, or the header is not reaching the server |
 | `secret_key_required` | You used a `pk_` key. `/mcp` needs `sk_` |
 | `secret_key_in_browser` | A secret key arrived with an `Origin` header. `/mcp` is server-to-server |

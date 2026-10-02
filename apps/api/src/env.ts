@@ -3,6 +3,12 @@
 export interface Bindings {
   DB: D1Database;
   KV_CONFIG: KVNamespace;
+  /**
+   * The MCP OAuth server's store: clients, grants, hashed tokens, and the
+   * authorization requests waiting on the consent page. The name is fixed by
+   * `@cloudflare/workers-oauth-provider`. See `mcp/oauth.ts`.
+   */
+  OAUTH_KV: KVNamespace;
   R2: R2Bucket;
   SESSION_DO: DurableObjectNamespace;
   Q_WEBHOOKS: Queue;

@@ -1,5 +1,6 @@
 import type { Bindings } from "./env.js";
 import { createApp } from "./app.js";
+import { handleRequest } from "./mcp/oauth.js";
 import { SessionDO } from "./do/session-do.js";
 import {
   deliverOne,
@@ -50,7 +51,8 @@ const MAX_EMAIL_ATTEMPTS = 5;
 
 export default {
   fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
-    return app.fetch(request, env, ctx);
+    // MCP OAuth (discovery, token, registration, and the token check on `/mcp`) wraps the app.
+    return handleRequest(app.fetch, request, env, ctx);
   },
   async queue(batch: MessageBatch, env: Bindings, _ctx: ExecutionContext): Promise<void> {
     /**

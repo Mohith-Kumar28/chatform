@@ -73,10 +73,18 @@ v1Router.use("*", async (c, next) => {
     return c.json({ error: { code: "unauthorized", message: "Key has no organization" } }, 401);
   }
   const ent = await entitlementsFor(c as never);
-  if (!ent.features.api_access) {
+  /**
+   * An AI app someone connected with "Connect your AI" (MCP OAuth) works on
+   * every plan. Its key was minted by the consent screen, never shown to
+   * anyone, and only ever presented by `/mcp`, so it cannot be used as a
+   * general API key on a plan that does not include one. Without `api_access`
+   * it draws on its own monthly allowance instead of the API's.
+   */
+  const connector = Boolean((c.get("keyMeta") as { connector?: unknown } | undefined)?.connector);
+  if (!ent.features.api_access && !connector) {
     return c.json(featureLocked("api_access", ent.planId, { surface: "v1" }), 402);
   }
-  const result = await meter(c.env, orgId, "api_requests", 1, ent);
+  const result = await meter(c.env, orgId, ent.features.api_access ? "api_requests" : "connector_requests", 1, ent);
   if (!result.ok && result.limitKey && result.limit != null) {
     c.header("retry-after", String(Math.max(1, Math.ceil((result.resetsAt - Date.now()) / 1000))));
     return c.json(
