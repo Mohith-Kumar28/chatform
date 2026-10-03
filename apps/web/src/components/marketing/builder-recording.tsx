@@ -43,14 +43,19 @@ function Recording() {
     let wantSound = true;
     let userPaused = false;
     let inView = false;
-    // Set around our own changes, so the player's events can tell a visitor
-    // pressing a control from this effect doing its job.
-    let ours = false;
-    const byUs = (change: () => void) => {
-      ours = true;
-      change();
-      queueMicrotask(() => setTimeout(() => (ours = false), 0));
+    /*
+      What this effect last set `muted` to, so `volumechange` can tell a
+      visitor pressing the speaker from the effect doing its job. Compared by
+      value rather than by a "this one is ours" flag: the event arrives later
+      and in no promised order, and setting the volume above fires one too,
+      which a flag read as the visitor muting before anything had played.
+    */
+    let mutedByUs = el.muted;
+    const setMuted = (muted: boolean) => {
+      mutedByUs = muted;
+      el.muted = muted;
     };
+    let pausedByUs = false;
 
     const GESTURES = ["pointerdown", "keydown", "touchend", "click"] as const;
     let armed = false;
@@ -64,7 +69,7 @@ function Recording() {
       for (const type of GESTURES) window.addEventListener(type, onGesture, { capture: true });
     };
     const playSilently = () => {
-      byUs(() => (el.muted = true));
+      setMuted(true);
       el.play().catch(() => {});
       arm();
     };
@@ -74,7 +79,7 @@ function Recording() {
         el.play().catch(() => {});
         return;
       }
-      byUs(() => (el.muted = false));
+      setMuted(false);
       el.play().then(disarm, playSilently);
     };
     function onGesture(event: Event) {
@@ -84,17 +89,20 @@ function Recording() {
       // Off screen it is paused; the next time it scrolls in, `start` tries
       // with sound, and this gesture is what lets that succeed.
       if (el!.paused || !el!.muted) return;
-      byUs(() => (el!.muted = false));
+      setMuted(false);
       // A gesture the browser does not count (the end of a scroll, say)
       // pauses an unmuted video: go back to silent and wait for a real one.
       el!.play().then(disarm, playSilently);
     }
 
     const onVolume = () => {
-      if (!ours) wantSound = !el.muted;
+      if (el.muted === mutedByUs) return;
+      mutedByUs = el.muted;
+      wantSound = !el.muted;
     };
     const onPause = () => {
-      if (!ours && inView && !el.ended) userPaused = true;
+      if (!pausedByUs && inView && !el.ended) userPaused = true;
+      pausedByUs = false;
     };
     const onPlay = () => {
       userPaused = false;
@@ -108,7 +116,10 @@ function Recording() {
         inView = entry?.isIntersecting ?? false;
         if (inView) {
           if (!userPaused) start();
-        } else byUs(() => el.pause());
+        } else if (!el.paused) {
+          pausedByUs = true;
+          el.pause();
+        }
       },
       { threshold: 0.35 },
     );
