@@ -21,7 +21,7 @@ function Sparkle({ className }: { className?: string }) {
 
 export function AiBuilderSection() {
   return (
-    <Band id="ai-builder" hairline>
+    <Band id="ai-builder">
       <Split cols="lg:grid-cols-2">
         <div>
           <SectionTitle eyebrow="Meet your AI form builder" accent="AI builds it.">

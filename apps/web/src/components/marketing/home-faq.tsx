@@ -4,7 +4,7 @@ import { Band } from "./band";
 import { SectionTitle, TextLink } from "./kit";
 
 /**
- * Five questions, the ones somebody asks before signing up. The long FAQ is on
+ * The questions somebody asks before signing up. The long FAQ is on
  * /pricing. Every answer is checkable against the plans and the product.
  */
 const free = PLANS.free.limits;
@@ -13,6 +13,10 @@ export const HOME_FAQ = [
   {
     q: "Is it really free?",
     a: `Yes. The free plan has unlimited submissions, up to ${free.forms_count} forms and ${free.ai_conversations_per_month} AI conversations a month, with no card and no time limit. When the AI conversations run out, your forms keep working and simply ask your questions as written.`,
+  },
+  {
+    q: "How is it different from Typeform or Google Forms?",
+    a: "Those show a page of boxes, or one box per screen. chatform asks your questions as a conversation: it asks again when an answer is thin, answers a respondent's own questions from the docs you give it, and emails the people who leave halfway.",
   },
   {
     q: "What can I make with it?",
@@ -27,6 +31,18 @@ export const HOME_FAQ = [
     a: "Yes. Share the link, embed it in a page, add a popup button, or put a QR code on a poster. It works with any site builder that lets you paste a snippet.",
   },
   {
+    q: "Do people need an app or an account to answer?",
+    a: "No. A form opens from a link in any browser, on a phone or a computer. Nobody installs anything or signs up, unless you choose to ask respondents to sign in.",
+  },
+  {
+    q: "Can I turn the AI off?",
+    a: "Yes. One switch makes a form ask every question exactly as you wrote it, and a choice is always recorded exactly as it was picked.",
+  },
+  {
+    q: "Where do my answers go?",
+    a: "Into a results page you can search, filter and export to CSV or Excel. They can also go to Google Sheets, a webhook, the API, or Claude and ChatGPT through the connector.",
+  },
+  {
     q: "What if I need more?",
     a: "Pro adds verification, partial submissions, follow-up emails, payments, your own fonts and logo, and removes our branding. Every limit is on the pricing page.",
   },
@@ -34,7 +50,7 @@ export const HOME_FAQ = [
 
 export function HomeFaq() {
   return (
-    <Band id="faq" hairline>
+    <Band id="faq">
       <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16">
         <div>
           <SectionTitle eyebrow="Good questions">Glad you asked.</SectionTitle>
@@ -42,7 +58,7 @@ export function HomeFaq() {
             <TextLink href="/contact">Something else on your mind? Ask us</TextLink>
           </div>
         </div>
-        <div className="divide-border/70 border-border/70 divide-y border-y">
+        <div className="divide-border/70 divide-y">
           {HOME_FAQ.map((item) => (
             <details key={item.q} className="group py-1">
               <summary className="font-display flex cursor-pointer list-none items-center justify-between gap-6 py-4 text-lg font-semibold [&::-webkit-details-marker]:hidden">

@@ -35,7 +35,7 @@ export function CtaBand() {
         <div className="text-center lg:text-left">
           <p className="text-xs font-bold tracking-[0.09em] uppercase opacity-75">There is a good answer on the other side</p>
           <h2 className="font-display mt-4 text-[clamp(2.5rem,1.4rem+3.6vw,4.25rem)] leading-[1.02] font-bold tracking-[-0.045em] text-balance">
-            You bring the question.
+            You bring the idea.
             <span className="font-hand block text-[1.1em] font-normal tracking-normal">We&apos;ll get it answered.</span>
           </h2>
           <div className="mt-9 flex flex-col items-center gap-4 lg:flex-row">

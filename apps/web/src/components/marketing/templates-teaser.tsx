@@ -14,7 +14,7 @@ export function TemplatesTeaser() {
   const tiles = PICKS.map(getTemplate).filter((t) => t !== undefined).map(tileOf);
 
   return (
-    <Band id="templates" tone="sand" className="border-border/70 border-y">
+    <Band id="templates" tone="sand">
       <div className="flex flex-wrap items-end justify-between gap-6">
         <div>
           <SectionTitle eyebrow="Skip the blank page" accent="for your next big thing.">

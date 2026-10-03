@@ -40,7 +40,7 @@ export function ReviewsCarousel() {
   };
 
   return (
-    <Band id="reviews" hairline>
+    <Band id="reviews">
       <div className="flex flex-wrap items-end justify-between gap-6">
         <SectionTitle eyebrow="Good forms, happy people" accent="from the people asking.">
           Hear it

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Blocks, Maximize2, Palette, Pause, Play, RotateCcw, Send, Volume2, VolumeX } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Blocks, Palette, Send } from "lucide-react";
 import { TESTIMONIALS } from "@/content/social-proof";
 import { Band } from "./band";
 import { Doodle } from "./doodles";
@@ -17,29 +17,40 @@ const VIDEO = "/marketing/builder-demo.mp4";
 const POSTER = "/marketing/builder-demo-poster.webp";
 
 /**
- * Plays while on screen and pauses when it leaves, so it never burns a
- * phone's battery in the background. `preload="none"`: nothing downloads until
- * the section is close. Reduced motion leaves it on its poster with the play
- * button showing.
+ * An ordinary video player: the browser's own controls, so it can be paused,
+ * scrubbed, muted and put full screen the way any video can.
+ *
+ * It plays while on screen and pauses when it leaves. `preload="none"`:
+ * nothing downloads until the section is close. Reduced motion leaves it on
+ * its poster until play is pressed.
+ *
+ * Sound is on unless the visitor mutes it. The same approach as the product
+ * tour: always try to play with sound first, because a browser allows it for
+ * anyone who has tapped or typed on the page and, in Chrome, for a returning
+ * visitor who has played our video before. Only when that is refused does it
+ * play silently, and then the first tap, click or key anywhere on the page
+ * brings the sound in without restarting it.
  */
 function Recording() {
   const video = useRef<HTMLVideoElement>(null);
-  const [playing, setPlaying] = useState(false);
-  const [userPaused, setUserPaused] = useState(false);
-  const [muted, setMuted] = useState(true);
-  /* Sound is on unless the visitor turns it off. The same approach as the
-     product tour: always try to play with sound first, because a browser
-     allows it for anyone who has tapped or typed on the page and, in Chrome,
-     for a returning visitor who has played our video before. Only when that
-     is refused does it play silently, and then the first tap, click or key
-     anywhere on the page brings the sound in without restarting it. */
-  const wantSound = useRef(true);
 
   useEffect(() => {
     const el = video.current;
     if (!el || typeof IntersectionObserver === "undefined") return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     el.volume = 0.7;
+
+    let wantSound = true;
+    let userPaused = false;
+    let inView = false;
+    // Set around our own changes, so the player's events can tell a visitor
+    // pressing a control from this effect doing its job.
+    let ours = false;
+    const byUs = (change: () => void) => {
+      ours = true;
+      change();
+      queueMicrotask(() => setTimeout(() => (ours = false), 0));
+    };
 
     const GESTURES = ["pointerdown", "keydown", "touchend", "click"] as const;
     let armed = false;
@@ -53,37 +64,51 @@ function Recording() {
       for (const type of GESTURES) window.addEventListener(type, onGesture, { capture: true });
     };
     const playSilently = () => {
-      el.muted = true;
+      byUs(() => (el.muted = true));
       el.play().catch(() => {});
       arm();
     };
     /* With sound if the browser allows it, silently and listening if not. */
     const start = () => {
-      if (!wantSound.current) {
-        el.muted = true;
+      if (!wantSound) {
         el.play().catch(() => {});
         return;
       }
-      el.muted = false;
+      byUs(() => (el.muted = false));
       el.play().then(disarm, playSilently);
     };
     function onGesture(event: Event) {
-      // The player's own buttons speak for themselves.
-      if (event.target instanceof Node && el!.parentElement?.contains(event.target)) return;
-      if (!wantSound.current) return disarm();
+      // The player's own controls speak for themselves.
+      if (event.target instanceof Node && el!.contains(event.target)) return;
+      if (!wantSound) return disarm();
       // Off screen it is paused; the next time it scrolls in, `start` tries
       // with sound, and this gesture is what lets that succeed.
       if (el!.paused || !el!.muted) return;
-      el!.muted = false;
+      byUs(() => (el!.muted = false));
       // A gesture the browser does not count (the end of a scroll, say)
       // pauses an unmuted video: go back to silent and wait for a real one.
       el!.play().then(disarm, playSilently);
     }
 
+    const onVolume = () => {
+      if (!ours) wantSound = !el.muted;
+    };
+    const onPause = () => {
+      if (!ours && inView && !el.ended) userPaused = true;
+    };
+    const onPlay = () => {
+      userPaused = false;
+    };
+    el.addEventListener("volumechange", onVolume);
+    el.addEventListener("pause", onPause);
+    el.addEventListener("play", onPlay);
+
     const io = new IntersectionObserver(
       ([entry]) => {
-        if (entry?.isIntersecting && !userPaused) start();
-        else el.pause();
+        inView = entry?.isIntersecting ?? false;
+        if (inView) {
+          if (!userPaused) start();
+        } else byUs(() => el.pause());
       },
       { threshold: 0.35 },
     );
@@ -91,84 +116,26 @@ function Recording() {
     return () => {
       io.disconnect();
       disarm();
+      el.removeEventListener("volumechange", onVolume);
+      el.removeEventListener("pause", onPause);
+      el.removeEventListener("play", onPlay);
     };
-  }, [userPaused]);
-
-  const toggle = () => {
-    const el = video.current;
-    if (!el) return;
-    if (el.paused) {
-      setUserPaused(false);
-      el.play().catch(() => {});
-    } else {
-      setUserPaused(true);
-      el.pause();
-    }
-  };
-
-  const restart = () => {
-    const el = video.current;
-    if (!el) return;
-    el.currentTime = 0;
-    setUserPaused(false);
-    el.play().catch(() => {});
-  };
-
-  const toggleSound = () => {
-    const el = video.current;
-    if (!el) return;
-    el.muted = !el.muted;
-    wantSound.current = !el.muted;
-    if (!el.muted && el.paused) el.play().catch(() => {});
-  };
-
-  /* Full screen, mostly for phones, where the builder is too small to read
-     inline. iOS Safari only full-screens a video through its own API. */
-  const maximize = () => {
-    const el = video.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
-    if (!el) return;
-    if (el.requestFullscreen) el.requestFullscreen().catch(() => el.webkitEnterFullscreen?.());
-    else el.webkitEnterFullscreen?.();
-    el.play().catch(() => {});
-  };
-
-  const pill =
-    "bg-card/95 text-foreground hover:bg-primary hover:text-on-primary inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold shadow-md backdrop-blur transition-colors";
+  }, []);
 
   return (
-    <div className={`group bg-card ring-foreground/10 relative overflow-hidden rounded-[14px] ring-1 ${PANEL_SHADOW}`}>
+    <div className={`bg-card ring-foreground/10 overflow-hidden rounded-[14px] ring-1 [transform:translateZ(0)] ${PANEL_SHADOW}`}>
       <video
         ref={video}
         src={VIDEO}
         poster={POSTER}
         muted
         loop
+        controls
         playsInline
         preload="none"
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onVolumeChange={(e) => setMuted(e.currentTarget.muted)}
-        aria-label="Screen recording: a form is built from a sentence, the questions are walked through, a rating question is added, the design is changed and the share page is opened."
+        aria-label="Screen recording of chatform: a form is built from a sentence, edited, styled and shared, then its responses and analytics are opened."
         className="block aspect-[1600/900] w-full bg-[var(--muted)]"
       />
-      <button type="button" onClick={toggleSound} className={`${pill} absolute bottom-3 left-3`} aria-pressed={!muted}>
-        {muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
-        {muted ? "Sound off" : "Sound on"}
-      </button>
-      <div className="absolute right-3 bottom-3 flex gap-2">
-        <button type="button" onClick={maximize} className={pill} aria-label="Full screen">
-          <Maximize2 className="size-3.5" />
-          <span className="hidden sm:inline">Full screen</span>
-        </button>
-        <button type="button" onClick={toggle} className={pill}>
-          {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
-          {playing ? "Pause" : "Play"}
-        </button>
-        <button type="button" onClick={restart} className={`${pill} max-sm:hidden`}>
-          <RotateCcw className="size-3.5" />
-          Restart
-        </button>
-      </div>
     </div>
   );
 }
@@ -193,7 +160,7 @@ const STEPS = [
 
 export function BuilderRecording() {
   return (
-    <Band id="features" hairline>
+    <Band id="features">
       <div className="grid items-end gap-8 lg:grid-cols-2">
         <SectionTitle eyebrow="A builder that stays out of your way" accent="should feel this easy.">
           Building a form

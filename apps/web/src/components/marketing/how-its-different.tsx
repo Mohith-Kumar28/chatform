@@ -51,7 +51,7 @@ function Card({ tone, art, title, other, ours, source }: { tone: "text" | "choic
 
 export function HowItsDifferent() {
   return (
-    <Band id="how-it-works" hairline>
+    <Band id="how-it-works">
       <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
         <SectionTitle eyebrow="Not another form builder" accent="from other forms?">
           How is this different

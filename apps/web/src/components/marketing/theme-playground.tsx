@@ -246,7 +246,7 @@ function Control({ label, children }: { label: string; children: React.ReactNode
 
 export function CustomizeSection() {
   return (
-    <Band id="design" hairline>
+    <Band id="design">
       <Split cols="lg:grid-cols-[1fr_1.12fr]">
         <div>
           <SectionTitle eyebrow="Make it yours" accent="Your kind of form.">

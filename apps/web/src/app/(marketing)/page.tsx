@@ -86,7 +86,7 @@ export const metadata: Metadata = {
 /**
  * The home page, rebuilt on 2026-10-03 on Youform's structure at the owner's
  * call: one feature per section, each an eyebrow, a two-line heading, a short
- * paragraph and one picture or live demo, separated by hairlines, with tinted
+ * paragraph and one picture or live demo, separated by space alone, with tinted
  * panels (unlimited, partials, ask-your-data) and full-bleed bands (templates,
  * the close) for contrast. Testimonials are woven between features, not
  * collected at the end.
@@ -139,7 +139,7 @@ export default function LandingPage() {
       <Developers />
       <TemplatesTeaser />
       {TESTIMONIALS.big && (
-        <Band hairline>
+        <Band>
           <TestimonialQuote testimonial={TESTIMONIALS.big} variant="big" />
         </Band>
       )}

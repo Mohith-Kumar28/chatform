@@ -164,7 +164,7 @@ export function ShareTabs() {
   const tab = TABS.find((t) => t.id === active)!;
 
   return (
-    <Band id="share" hairline>
+    <Band id="share">
       <SectionTitle eyebrow="Share and embed your form" accent="Embed it on your site.">
         Share a link.
       </SectionTitle>

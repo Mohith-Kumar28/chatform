@@ -90,16 +90,19 @@ function IntegrationsArt() {
 const CARDS = [
   {
     art: <DeadEndArt />,
+    tone: "number",
     title: "It can\u2019t publish a dead end.",
     body: "Branch on any answer with nineteen operators, nested groups and scoring. Every path is checked before you publish.",
   },
   {
     art: <ReadsArt />,
+    tone: "contact",
     title: "It understands what people type.",
     body: "Choices stay instant and exact. Free text is read for what it means, and when it isn\u2019t sure, it asks instead of guessing.",
   },
   {
     art: <IntegrationsArt />,
+    tone: "content",
     title: "Answers go where you work.",
     body: "A live feed for Google Sheets and Excel, signed webhooks to your own server, an API, and a connector for your AI assistant.",
     wide: true,
@@ -120,7 +123,7 @@ const CHIPS = ["File uploads", "Signatures", "Payments", "Scheduling links", "Qu
 
 export function Capabilities() {
   return (
-    <Band id="capabilities" hairline>
+    <Band id="capabilities">
       <div className="mx-auto max-w-3xl text-center">
         <SectionTitle eyebrow="Easy on the surface, a lot underneath" accent="can do a whole lot.">
           A simple form
@@ -135,7 +138,7 @@ export function Capabilities() {
             key={c.title}
             className={`bg-card/60 border-border overflow-hidden rounded-[18px] border ${"wide" in c ? "md:col-span-2 md:grid md:grid-cols-[1.2fr_1fr] md:items-center" : "flex flex-col"}`}
           >
-            <div className={`bg-muted/40 relative overflow-hidden ${"wide" in c ? "h-60 md:h-full md:min-h-60" : "flex-1 py-4 md:min-h-80 [&>*]:h-full"}`}>{c.art}</div>
+            <div style={{ background: `var(--family-${c.tone}-soft)` }} className={`relative overflow-hidden ${"wide" in c ? "h-60 md:h-full md:min-h-60" : "flex-1 py-4 md:min-h-80 [&>*]:h-full"}`}>{c.art}</div>
             <div className="p-7 sm:p-8">
               <h3 className="font-display text-xl font-semibold tracking-tight">{c.title}</h3>
               <p className="text-muted-foreground mt-2 leading-relaxed">{c.body}</p>
@@ -144,7 +147,7 @@ export function Capabilities() {
         ))}
       </div>
 
-      <div className="border-border/70 mt-12 border-y py-10">
+      <div className="bg-card/60 border-border mt-5 rounded-[18px] border p-7 sm:p-8">
         <h3 className="font-display text-xl font-semibold tracking-tight">And the ordinary things, done properly.</h3>
         <dl className="mt-6 grid gap-x-10 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
           {ORDINARY.map((o) => (

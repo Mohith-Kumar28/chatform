@@ -17,7 +17,7 @@ const COLUMNS: { title: string; tones: BlockTone[] }[] = [
 
 export function QuestionTypesSection() {
   return (
-    <Band id="question-types" hairline>
+    <Band id="question-types">
       <div className="grid gap-12 lg:grid-cols-[1fr_1.6fr] lg:gap-16">
         <div>
           <SectionTitle eyebrow="The right block for every ask" accent="every kind of answer.">

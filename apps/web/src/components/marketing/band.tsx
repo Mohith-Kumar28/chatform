@@ -94,7 +94,6 @@ export function Band({
   containerClassName,
   size = "default",
   mark,
-  hairline = false,
 }: {
   id?: string;
   tone?: BandTone;
@@ -109,8 +108,6 @@ export function Band({
    * Off unless asked for, and asked for rarely — see the note below.
    */
   mark?: keyof typeof MARK_PLACEMENTS;
-  /** A 1px rule across the top: how two cream sections meet without a colour change. */
-  hairline?: boolean;
 }) {
   /**
    * The plain tones are the flat ones.
@@ -146,7 +143,6 @@ export function Band({
         size === "tall" && "py-24 sm:py-32",
         tone === "sand" && "bg-muted/50",
         tone === "ink" && "bg-foreground text-background dark:bg-card dark:text-foreground",
-        hairline && "border-border/70 border-t",
         className,
       )}
     >

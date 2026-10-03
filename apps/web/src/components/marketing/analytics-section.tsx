@@ -8,7 +8,7 @@ import { CheckItem, PANEL_SHADOW, SectionLede, SectionTitle, Split, TextLink } f
  */
 export function AnalyticsSection() {
   return (
-    <Band id="analytics" hairline>
+    <Band id="analytics">
       <Split cols="lg:grid-cols-[0.9fr_1.2fr]">
         <div>
           <SectionTitle eyebrow="Understand every step of your form" accent="See what works.">

@@ -25,7 +25,7 @@ export function SwitchBand() {
   const page = IMPORT_PAGES.find((p) => p.source === active)!;
 
   return (
-    <Band id="import" hairline>
+    <Band id="import">
       <div className="max-w-2xl">
         <SectionTitle eyebrow="Already using something else?" accent="Bring your questions with you.">
           Switch to chatform.

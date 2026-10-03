@@ -22,7 +22,7 @@ const ARTICLES = [
 
 export function TrustSection() {
   return (
-    <Band id="trust" hairline>
+    <Band id="trust">
       <Split cols="lg:grid-cols-[0.9fr_1.1fr]" className="items-start">
         <div>
           <SectionTitle accent="Work together.">Verify contacts.</SectionTitle>
