@@ -1,7 +1,8 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Cloud, CloudAlert, CloudCheck, CloudOff, Loader2, Palette, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { Cloud, CloudAlert, CloudCheck, CloudOff, Languages, Loader2, Palette, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TooltipHint } from "@/components/ui/kbd";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -71,7 +72,7 @@ export function BuildToolbar() {
   return (
     <TooltipProvider delayDuration={400}>
       <div className="flex items-center gap-2 px-4 pt-3">
-        <div className="flex flex-1 justify-start">
+        <div className="flex flex-1 items-center justify-start gap-1">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -91,6 +92,26 @@ export function BuildToolbar() {
             </TooltipTrigger>
             <TooltipContent side="bottom">
               <TooltipHint label="Design" hint="Colours, type and layout" keys={KEY.design} />
+            </TooltipContent>
+          </Tooltip>
+          {/* A way in, not a panel: the languages live in Settings, and this
+              is the shortest path there from where the questions are written. */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                href={`/forms/${formId}/settings/language`}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
+                  "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
+                  "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+                )}
+              >
+                <Languages className="size-3.5" strokeWidth={1.75} />
+                Language
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <TooltipHint label="Language" hint="Offer the form in more languages" />
             </TooltipContent>
           </Tooltip>
         </div>
