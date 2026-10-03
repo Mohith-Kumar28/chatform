@@ -2,6 +2,7 @@ import type { Bindings } from "../env.js";
 import { deleteOrganizationReports } from "./feedback-issues.js";
 import { deleteOrganizationBuilderFeedback } from "./builder-feedback.js";
 import { revokeOrganizationPaymentAccounts } from "./payments/accounts.js";
+import { cancelSubscriptionNow } from "./dodo.js";
 
 /**
  * Everything a departing account leaves behind, removed before the account is.
@@ -58,34 +59,8 @@ export async function purgeUserData(env: Bindings, userId: string): Promise<void
       continue;
     }
 
-    /*
-      Sole member: the whole workspace goes.
-
-      R2 first, and deliberately so. The `files` table is the only index we
-      have of what this workspace put in the bucket; deleting the organization
-      row cascades those rows away, and every object they pointed at would
-      still be sitting in R2 with nothing left that knows its key. Orphaned
-      objects are not a tidiness problem — they are the customer's respondents'
-      uploads, surviving a deletion that told everyone it had removed them.
-
-      It also means anything that throws in here throws with objects already
-      destroyed, which is why `purgeOrgObjects` is written so that nothing in
-      it scales with the size of the workspace.
-    */
-    await purgeOrgObjects(env, org);
-    // Bug reports name the organization without a foreign key, so nothing
-    // cascades them — nor the vectors and issues built from them.
-    await deleteOrganizationReports(env, org);
-    // And what their own people told us from the dashboard, screenshots included.
-    await deleteOrganizationBuilderFeedback(env, org);
-    /*
-      Connected payment gateways. Their rows go with the organization's cascade — and the
-      payments recorded against them with the forms — but the grants live at Cashfree, Razorpay
-      and Stripe, and a deleted workspace must not leave a working token or a subscribed webhook
-      endpoint on someone's merchant account. Best effort, account by account: a gateway that is
-      down does not get to veto a person's deletion.
-    */
-    await revokeOrganizationPaymentAccounts(env, org);
+    // Sole member: the whole organization goes.
+    await purgeOrganization(env, org);
     await env.DB.prepare(`DELETE FROM organizations WHERE id = ?`).bind(org).run();
   }
 
@@ -97,6 +72,62 @@ export async function purgeUserData(env: Bindings, userId: string): Promise<void
     env.DB.prepare(`UPDATE workspaces SET created_by = NULL WHERE created_by = ?`).bind(userId),
     env.DB.prepare(`UPDATE form_versions SET created_by = NULL WHERE created_by = ?`).bind(userId),
   ]);
+}
+
+/**
+ * Everything an organization holds outside the rows that cascade with it, removed
+ * before the organization row is deleted. Shared by account purge and by deleting
+ * an organization from settings (`beforeDeleteOrganization`), so the two can never
+ * clean up differently.
+ *
+ * What cascades still leaves outside D1 (exports, knowledge vectors, conversation
+ * objects) is queued by the database's own triggers; see `storage-purges.ts`.
+ */
+export async function purgeOrganization(env: Bindings, orgId: string): Promise<void> {
+  /*
+    Billing first. A failure throws and the organization stays, which is the right
+    way round: an erased workspace still being charged is the worst outcome here.
+  */
+  const subs = await env.DB.prepare(
+    `SELECT dodo_subscription_id AS id FROM subscriptions
+      WHERE organization_id = ? AND status IN ('active', 'trialing', 'on_hold')
+        AND dodo_subscription_id NOT LIKE 'internal!_%' ESCAPE '!'`,
+  )
+    .bind(orgId)
+    .all<{ id: string }>();
+  // Gifts from the console (`internal_manual_…`) were never at Dodo. A worker with
+  // no Dodo key (local dev, tests) has no real subscription to stop.
+  for (const { id } of subs.results ?? []) {
+    if (!env.DODO_API_KEY) console.error("subscription_cancel_skipped_no_key", id);
+    else await cancelSubscriptionNow(env, id);
+  }
+
+  /*
+    R2 first, and deliberately so. The `files` table is the only index we
+    have of what this workspace put in the bucket; deleting the organization
+    row cascades those rows away, and every object they pointed at would
+    still be sitting in R2 with nothing left that knows its key. Orphaned
+    objects are not a tidiness problem — they are the customer's respondents'
+    uploads, surviving a deletion that told everyone it had removed them.
+
+    It also means anything that throws in here throws with objects already
+    destroyed, which is why `purgeOrgObjects` is written so that nothing in
+    it scales with the size of the workspace.
+  */
+  await purgeOrgObjects(env, orgId);
+  // Bug reports name the organization without a foreign key, so nothing
+  // cascades them — nor the vectors and issues built from them.
+  await deleteOrganizationReports(env, orgId);
+  // And what their own people told us from the dashboard, screenshots included.
+  await deleteOrganizationBuilderFeedback(env, orgId);
+  /*
+    Connected payment gateways. Their rows go with the organization's cascade — and the
+    payments recorded against them with the forms — but the grants live at Cashfree, Razorpay
+    and Stripe, and a deleted workspace must not leave a working token or a subscribed webhook
+    endpoint on someone's merchant account. Best effort, account by account: a gateway that is
+    down does not get to veto a person's deletion.
+  */
+  await revokeOrganizationPaymentAccounts(env, orgId);
 }
 
 /**

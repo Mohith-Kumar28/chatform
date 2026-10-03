@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { deleteReports } from "../lib/feedback-issues.js";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../lib/validator.js";
 import { z } from "zod";
@@ -908,6 +909,17 @@ resultsRouter.delete(
         c.env.DB.prepare(`DELETE FROM chat_sessions WHERE id IN (${holesFor(chunk)})`).bind(...chunk),
       ),
     ];
+    /*
+      Bug reports respondents filed from these conversations carry a snapshot of
+      the transcript in R2, so they go with it. The uploads and the conversation
+      objects are queued by the delete triggers (see `lib/storage-purges.ts`).
+    */
+    const reportPages = sessionIds.length === 0 ? [] : ((await c.env.DB.batch(
+      bindChunks(sessionIds).map((chunk) =>
+        c.env.DB.prepare(`SELECT id FROM respondent_feedback WHERE session_id IN (${holesFor(chunk)})`).bind(...chunk),
+      ),
+    )) as D1Result<{ id: string }>[]);
+    await deleteReports(c.env, reportPages.flatMap((p) => (p.results ?? []).map((r) => r.id)));
     await c.env.DB.batch(stmts);
     return c.json({ deleted: rows.length });
   },

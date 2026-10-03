@@ -636,6 +636,15 @@ async function applyEvent(env: Bindings, evt: DodoWebhookEvent): Promise<string>
   if (!target) return "ignored: no organizationId in metadata";
 
   const { orgId } = target;
+  /*
+    The echo of erasing an organization: `purgeOrganization` cancelled the
+    subscription on the way out, and Dodo reports it after the row is gone.
+    Anything else for a missing organization still fails loudly below.
+  */
+  if (evt.type === "subscription.cancelled" || evt.type === "subscription.expired" || evt.type === "subscription.failed") {
+    const exists = await env.DB.prepare(`SELECT 1 AS ok FROM organizations WHERE id = ?`).bind(orgId).first();
+    if (!exists) return "ignored: organization no longer exists";
+  }
   const customerId = evt.data?.customer?.customer_id ?? null;
   if (customerId) await upsertCustomer(env, orgId, customerId, evt.data?.customer?.email ?? null);
 

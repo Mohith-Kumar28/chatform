@@ -6214,6 +6214,17 @@ export class SessionDO extends DurableObject<Bindings> {
     return id;
   }
 
+  /**
+   * The response this conversation belongs to is gone: forget all of it. Called
+   * by `drainStoragePurges` once the `chat_sessions` row has been deleted.
+   */
+  async purge(): Promise<void> {
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+    // Nothing stored is left to load, so every later call finds no session.
+    this.loaded = false;
+  }
+
   async getTranscript(): Promise<{ id: string; role: string; content: string; blockRef: string | null; createdAt: number }[]> {
     await this.ensureLoaded();
     const entries = await this.ctx.storage.list<{ id: string; role: string; content: string; blockRef: string | null; createdAt: number }>({ prefix: "msg:" });

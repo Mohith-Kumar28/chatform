@@ -345,7 +345,18 @@ workspacesRouter.delete(
       );
     }
 
-    await c.env.DB.prepare(`DELETE FROM workspaces WHERE id = ? AND organization_id = ?`).bind(id, orgId).run();
+    /*
+      Forms in the Archive are not counted above, and the cascade would have
+      erased them on the spot, cutting their thirty days short. They move to
+      the organization's oldest other workspace first, still restorable there.
+    */
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE forms SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.organization_id = ?2 AND w.id <> ?1 ORDER BY w.created_at LIMIT 1)
+          WHERE workspace_id = ?1 AND deleted_at IS NOT NULL`,
+      ).bind(id, orgId),
+      c.env.DB.prepare(`DELETE FROM workspaces WHERE id = ? AND organization_id = ?`).bind(id, orgId),
+    ]);
     await audit(c.env, {
       orgId,
       actorType: "user",

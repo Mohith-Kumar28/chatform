@@ -23,6 +23,7 @@ import { APIError } from "better-auth/api";
 import { webOrigins, returnOrigin, needsCrossSiteCookies, isSecureOrigin } from "./origins.js";
 import { enqueueMail } from "./mail.js";
 import { accountDeletionPlugin } from "./account-deletion.js";
+import { purgeOrganization } from "./delete-account.js";
 import { recordUserContext } from "./user-context.js";
 import { impersonationPlugin } from "./impersonation.js";
 
@@ -448,6 +449,18 @@ export function createAuth(env: Bindings) {
         // dead before anyone read it on Monday.
         invitationExpiresIn: 7 * 24 * 3600,
         organizationHooks: {
+          /**
+           * Deleting an organization from settings. Better Auth deletes the
+           * members, invitations and the row, and the row's cascades take the
+           * forms and everything under them; this does the rest first, the same
+           * teardown account deletion uses: billing at Dodo, uploads in R2, bug
+           * reports, payment-gateway grants. It throws on failure, so the
+           * organization stays rather than half-deleted.
+           */
+          beforeDeleteOrganization: async ({ organization }) => {
+            await purgeOrganization(env, organization.id);
+            console.log("organization_deleted", organization.id);
+          },
           /**
            * An organization made from "New organization" opens with a
            * workspace in it, the same as the one made at sign-up. Without one

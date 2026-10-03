@@ -2053,3 +2053,20 @@ export const templateDemoQuota = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.keyHash, t.day] })],
 );
+
+/**
+ * What a deleted row leaves outside D1: an R2 key, a Vectorize id or a SessionDO
+ * name. Filled by triggers (migration 0058) on every delete, cascades included,
+ * and drained by the cron in `apps/api/src/lib/storage-purges.ts`.
+ */
+export const storagePurges = sqliteTable(
+  "storage_purges",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    kind: text("kind").notNull(),
+    ref: text("ref").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    queuedAt: integer("queued_at").notNull(),
+  },
+  (t) => [index("idx_storage_purges_kind").on(t.kind, t.id)],
+);

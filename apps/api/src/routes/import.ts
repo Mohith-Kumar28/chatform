@@ -180,7 +180,8 @@ importRouter.post(
     });
     if (!published.ok) {
       console.error("import_trial_publish_failed", { formId, status: published.status, body: JSON.stringify(published.body).slice(0, 500) });
-      await c.env.DB.prepare(`UPDATE forms SET deleted_at = ? WHERE id = ?`).bind(Date.now(), formId).run();
+      // Purged on the next sweep: a trial nobody can open has nothing to restore.
+      await c.env.DB.prepare(`UPDATE forms SET deleted_at = ?1, purge_at = ?1 WHERE id = ?2`).bind(Date.now(), formId).run();
       return c.json(
         { error: { code: "import_failed", message: "We copied the form but couldn't build a working preview. Sign in to import it straight into the builder." } },
         422,
@@ -324,7 +325,8 @@ importRouter.post(
 
 /**
  * Trials nobody claimed, a day on. Soft-deleted like any form (the chat
- * runtime and every listing already skip `deleted_at`), and the ticket goes.
+ * runtime and every listing already skip `deleted_at`), due for the purge
+ * sweep straight away since nobody owns them, and the ticket goes.
  */
 export async function expireImportTrials(env: Bindings, now = Date.now()): Promise<number> {
   const cutoff = now - 6 * 60 * 60 * 1000;
@@ -334,7 +336,7 @@ export async function expireImportTrials(env: Bindings, now = Date.now()): Promi
   const rows = due.results ?? [];
   if (rows.length === 0) return 0;
   await env.DB.batch([
-    ...rows.map((r) => env.DB.prepare(`UPDATE forms SET deleted_at = ? WHERE id = ? AND organization_id = ? AND deleted_at IS NULL`).bind(now, r.form_id, IMPORT_TRIAL_ORG)),
+    ...rows.map((r) => env.DB.prepare(`UPDATE forms SET deleted_at = ?1, purge_at = ?1 WHERE id = ?2 AND organization_id = ?3 AND deleted_at IS NULL`).bind(now, r.form_id, IMPORT_TRIAL_ORG)),
     ...rows.map((r) => env.DB.prepare(`DELETE FROM import_trials WHERE token = ?`).bind(r.token)),
   ]);
   // Old day counters are useless once the day is over.

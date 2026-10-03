@@ -220,3 +220,22 @@ export async function getSubscription(
     `/subscriptions/${encodeURIComponent(subscriptionId)}`,
   );
 }
+
+/** Statuses at which Dodo will never charge again. */
+const ENDED = new Set(["cancelled", "expired", "failed"]);
+
+/**
+ * Stop a subscription now, for an organization that is being erased.
+ *
+ * The one place we originate a change at Dodo rather than linking to the portal: there
+ * is no customer left to open it, and a deleted workspace must not keep being charged.
+ * Asks first, so one already ended is not an error.
+ */
+export async function cancelSubscriptionNow(env: Bindings, subscriptionId: string): Promise<void> {
+  const current = await getSubscription(env, subscriptionId);
+  if (ENDED.has(current.status)) return;
+  await call<unknown>(env, `/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: "cancelled" }),
+  });
+}
