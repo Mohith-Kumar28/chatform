@@ -1,10 +1,11 @@
 "use client";
 
-import { MARKETING_LINKS } from "./nav-links";
+import { MARKETING_LINKS, RESOURCE_LINKS } from "./nav-links";
 import Link from "next/link";
 
 import { usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
+import { ChevronDown, Menu } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -66,6 +67,10 @@ export function MarketingNav() {
    * logged them out.
    */
   const signedIn = useSignedIn();
+  const navItem = cn(
+    "rounded-full px-3 py-1.5 transition-colors duration-[var(--duration-micro)]",
+    overWash ? "font-medium hover:bg-black/5" : "text-foreground/80 hover:text-foreground hover:bg-accent/60",
+  );
 
   return (
     <header
@@ -74,7 +79,9 @@ export function MarketingNav() {
     >
       <nav
         aria-label="Main"
-        className="mx-auto flex max-w-6xl items-center gap-6 px-6 py-3.5"
+        // Three columns from `lg`, so the links sit in the middle of the
+        // screen whatever the widths of the logo and the buttons either side.
+        className="mx-auto flex max-w-6xl items-center gap-6 px-6 py-3.5 lg:grid lg:grid-cols-[1fr_auto_1fr]"
       >
         {/* Over the hero the two-tone mark is two brand-coloured plates on a
             brand-coloured wash: the orange plate all but disappears into the
@@ -89,34 +96,44 @@ export function MarketingNav() {
             theme, so it put near-black type on a near-black pill. */}
         <Link
           href="/"
-          className="rounded-md focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+          className="rounded-md justify-self-start focus-visible:ring-ring/50 focus-visible:ring-[3px]"
         >
           <Logo variant={overWash ? "mono" : "duo"} />
           <span className="sr-only">chatform home</span>
         </Link>
 
-        <ul className="hidden flex-1 items-center gap-1 lg:flex">
+        <ul className="hidden items-center gap-1 lg:flex">
           {LINKS.map((link) => (
             <li key={link.href}>
-              <Link
-                href={link.href}
-                // `text-body` stays outside `cn`: tailwind-merge reads our
-                // custom size as a colour and drops it beside
-                // `text-muted-foreground`, so the links grew 2px on scroll.
-                className={`text-body ${cn(
-                  "rounded-full px-3 py-1.5 transition-colors duration-[var(--duration-micro)]",
-                  overWash
-                    ? "font-medium hover:bg-black/5"
-                    : "text-foreground/80 hover:text-foreground hover:bg-accent/60",
-                )}`}
-              >
+              {/* `text-body` stays outside `cn`: tailwind-merge reads our
+                  custom size as a colour and drops it beside
+                  `text-muted-foreground`. */}
+              <Link href={link.href} className={`text-body ${navItem}`}>
                 {link.label}
               </Link>
             </li>
           ))}
+          <li>
+            <DropdownMenu>
+              <DropdownMenuTrigger className={`text-body group flex items-center gap-1 outline-none ${navItem}`}>
+                Resources
+                <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180" strokeWidth={2} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" sideOffset={10} className="w-72 rounded-2xl p-2">
+                {RESOURCE_LINKS.map((link) => (
+                  <DropdownMenuItem key={link.href} asChild className="cursor-pointer rounded-xl px-3 py-2.5">
+                    <Link href={link.href} className="flex flex-col items-start gap-0.5">
+                      <span className="text-[0.9375rem] font-semibold">{link.label}</span>
+                      <span className="text-muted-foreground text-xs">{link.detail}</span>
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </li>
         </ul>
 
-        <div className="ml-auto flex items-center gap-1.5 lg:ml-0">
+        <div className="ml-auto flex items-center gap-1.5 lg:ml-0 lg:justify-self-end">
           {/* "Log in" as quiet text, "Sign up free" as the button. They go
               to the two modes of `/signin`, so they are different
               destinations now, and the button stays the one loud thing in the
@@ -164,7 +181,7 @@ export function MarketingNav() {
                   somebody has to open with a thumb. */}
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
                 <ul className="flex flex-col gap-1">
-                  {LINKS.map((link) => (
+                  {[...LINKS, ...RESOURCE_LINKS].map((link) => (
                     <li key={link.href}>
                       <SheetClose asChild>
                         <Link

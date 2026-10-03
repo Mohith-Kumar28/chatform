@@ -17,9 +17,17 @@
  */
 export const MARKETING_LINKS = [
   { href: "/form-templates", label: "Templates" },
-  { href: "/why-conversation-works", label: "Why chat?" },
-  { href: "/compare", label: "Compare" },
   { href: "/pricing", label: "Pricing" },
-  { href: "/docs", label: "Docs" },
   { href: "/contact", label: "Contact" },
+] as const;
+
+/**
+ * Behind "Resources", the last item in the bar: the reading, as opposed to the
+ * three places somebody goes to do something. The owner's call, to keep the
+ * bar to four words.
+ */
+export const RESOURCE_LINKS = [
+  { href: "/why-conversation-works", label: "Why chat?", detail: "The research behind a form that talks" },
+  { href: "/compare", label: "Compare", detail: "chatform beside the form builder you use" },
+  { href: "/docs", label: "Docs", detail: "The API, embeds, webhooks and the connector" },
 ] as const;
