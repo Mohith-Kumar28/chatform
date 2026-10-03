@@ -10,7 +10,7 @@ import { TestimonialQuote } from "./social-proof";
 
 /**
  * A screen recording of the real builder with quiet click and typing sounds,
- * about 1 MB, served as a static asset. Re-record with `tooling/builder-recording/record.mjs` and `encode.mjs`
+ * about 5 MB and ninety seconds, served as a static asset. Re-record with `tooling/builder-recording/record.mjs` and `encode.mjs`
  * when the builder changes enough that this stops matching it.
  */
 const VIDEO = "/marketing/builder-demo.mp4";

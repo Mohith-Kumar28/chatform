@@ -4,7 +4,8 @@
  *   node tooling/builder-recording/encode.mjs <recording.webm> [outdir]
  *
  * Reads the .events.json written beside the recording and:
- *  - speeds up the slow stretches (typing ~2x, the AI drafting the form ~4x),
+ *  - speeds up the slow stretches (typing ~2x, the AI drafting the form ~4x,
+ *    the tour after it 1.4x) and cuts the hop to the seeded form,
  *  - zooms in on the prompt while it is typed, and back out,
  *  - lays a soft click on every click, keys under every typing stretch, a
  *    whoosh as the AI starts and a ding when the form lands (sounds from
@@ -42,15 +43,25 @@ const typeStart = at("type-start");
 const typeEnd = at("type-end");
 const waitStart = at("wait-start");
 const waitEnd = at("wait-end");
+const cutStart = at("cut-start");
+const cutEnd = at("cut-end");
+/* Everything after the form is built runs a little fast: it is a tour, and
+   nobody needs to watch a cursor cross the screen in real time. */
+const TOUR = 1.4;
 
-/** [start, end, speed, zoom?] in source seconds. */
-const segments = [
-  [LEAD, typeStart.t, 1],
-  [typeStart.t, typeEnd.t, 2.1, { x: typeStart.x, y: typeStart.y, z: 1.55 }],
-  [typeEnd.t, waitStart.t, 1],
-  [waitStart.t, waitEnd.t, 4],
-  [waitEnd.t, duration - TAIL, 1],
-].filter(([a, b]) => b - a > 0.05);
+/** [start, end, speed, zoom?] in source seconds. The hop between the two forms is simply not in the list. */
+const segments = (
+  typeStart
+    ? [
+        [LEAD, typeStart.t, 1],
+        [typeStart.t, typeEnd.t, 2.1, { x: typeStart.x, y: typeStart.y, z: 1.55 }],
+        [typeEnd.t, waitStart.t, 1],
+        [waitStart.t, waitEnd.t, 4],
+        [waitEnd.t, cutStart.t, 1],
+        [cutEnd.t, duration - TAIL, TOUR],
+      ]
+    : [[cutEnd.t, duration - TAIL, TOUR]]
+).filter(([a, b]) => b - a > 0.05);
 
 /** Source time to edited time. */
 function warp(t) {
@@ -102,14 +113,19 @@ function sound(file, t, { volume = 1, length, lowpass, skip = 0 } = {}) {
 // Quiet on purpose. The first mix used Kenney's click, an 11 ms tick at full
 // brightness, and it was harsh at any volume: a real mouse click, rolled off
 // and well under the typing, is felt more than heard.
+const kept = (t) => segments.some(([a, b]) => t >= a && t < b);
 for (const e of events)
-  if (e.type === "click" && e.t > LEAD) sound("sfx/rm-mouse-click.wav", e.t, { volume: 0.5, skip: 0.095, length: 0.08, lowpass: 4500 });
-sound("sfx/typing-soft.mp3", typeStart.t, { volume: 0.5, length: warp(typeEnd.t) - warp(typeStart.t), lowpass: 5000 });
-const keys = [at("keys-start"), at("keys-end")];
-if (keys[0] && keys[1])
-  sound("sfx/typing-soft.mp3", keys[0].t, { volume: 0.45, length: Math.max(0.3, keys[1].t - keys[0].t), lowpass: 5000 });
-sound("sfx/rm-whoosh.wav", waitStart.t, { volume: 0.14, lowpass: 4000 });
-sound("sfx/rm-ding.wav", waitEnd.t, { volume: 0.16 });
+  if (e.type === "click" && kept(e.t)) sound("sfx/rm-mouse-click.wav", e.t, { volume: 0.5, skip: 0.095, length: 0.08, lowpass: 4500 });
+if (typeStart) {
+  sound("sfx/typing-soft.mp3", typeStart.t, { volume: 0.5, length: warp(typeEnd.t) - warp(typeStart.t), lowpass: 5000 });
+  sound("sfx/rm-whoosh.wav", waitStart.t, { volume: 0.14, lowpass: 4000 });
+  sound("sfx/rm-ding.wav", waitEnd.t, { volume: 0.16 });
+}
+events.forEach((e, i) => {
+  if (e.type !== "keys-start" || !kept(e.t)) return;
+  const end = events.slice(i).find((x) => x.type === "keys-end");
+  if (end) sound("sfx/typing-soft.mp3", e.t, { volume: 0.45, length: Math.max(0.3, warp(end.t) - warp(e.t)), lowpass: 5000 });
+});
 
 a.push(
   `${Array.from({ length: n }, (_, i) => `[a${i + 1}]`).join("")}amix=inputs=${n}:normalize=0:duration=longest,` +
@@ -129,9 +145,9 @@ execFileSync(
   { stdio: "inherit" },
 );
 
-// The poster: a moment after the form lands in the builder.
+// The poster: the builder, a moment into the tour.
 const png = join(out, "poster.png");
-execFileSync("ffmpeg", ["-v", "error", "-y", "-ss", (warp(waitEnd.t) + 3).toFixed(2), "-i", mp4, "-frames:v", "1", png]);
+execFileSync("ffmpeg", ["-v", "error", "-y", "-ss", (warp(cutEnd.t) + 2).toFixed(2), "-i", mp4, "-frames:v", "1", png]);
 execFileSync("cwebp", ["-quiet", "-q", "82", png, "-o", join(out, "builder-demo-poster.webp")]);
 rmSync(png);
 

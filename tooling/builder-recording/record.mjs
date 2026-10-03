@@ -1,6 +1,12 @@
 /**
  * Records the builder demo on the home page (components/marketing/builder-recording.tsx).
  *
+ * The take: describe a form and the AI builds it, walk the questions, restyle
+ * it, answer it in the preview, brief the agent, share and embed it, then read
+ * the responses and the analytics. Everything after the AI builds the form is
+ * shot on FORM, a local form seeded with sample responses, because a form made
+ * a second ago has no results; encode.mjs cuts out the hop between the two.
+ *
  * Runs against a LOCAL stack: `next dev` on :3000 and `wrangler dev` on :8787
  * with mail switched off (see the local-dev notes), signed in as a throwaway
  * account whose session is saved in STATE. It drives the real product (AI
@@ -18,6 +24,11 @@ const ORIGIN = process.env.ORIGIN ?? "http://localhost:3000";
 const STATE = process.env.STATE ?? "/tmp/lp/state.json";
 const OUT = process.env.OUT ?? "/tmp/lp/rec";
 const SIZE = { width: 1600, height: 900 };
+
+/** A form with seeded sample responses, for the parts a brand-new form cannot show (results, analytics). */
+const FORM = process.env.FORM ?? "frm_9fc8e90b56f4";
+/** SKIP_GEN=1 leaves out the AI generation: a free dry run of everything after it. */
+const SKIP_GEN = Boolean(process.env.SKIP_GEN);
 
 const PROMPT =
   "A client intake form for my interior design studio: the space, the budget, the timeline, and photos if they have them. No more than 6 questions.";
@@ -69,6 +80,34 @@ async function moveTo(locator) {
   at = to;
 }
 
+/** Click if it is there; a missing control is logged, not fatal, so one renamed button does not waste a take. */
+async function tryClick(locator, name, wait = 900) {
+  try {
+    await locator.waitFor({ state: "visible", timeout: 6000 });
+    await click(locator);
+    await pause(wait);
+    return true;
+  } catch {
+    console.error(`skipped: ${name}`);
+    return false;
+  }
+}
+
+/** Scroll like a hand on a trackpad: small steps, so the video sees it move. */
+async function scroll(dy, ms = 900) {
+  const steps = Math.max(8, Math.round(ms / 16));
+  for (let i = 0; i < steps; i++) {
+    await page.mouse.wheel(0, dy / steps);
+    await pause(16);
+  }
+}
+
+async function type(text, delay = 34) {
+  mark("keys-start");
+  await page.keyboard.type(text, { delay });
+  mark("keys-end");
+}
+
 async function click(locator) {
   await moveTo(locator);
   await pause(180);
@@ -78,61 +117,117 @@ async function click(locator) {
   await page.mouse.up();
 }
 
-await page.goto(`${ORIGIN}/dashboard`, { waitUntil: "networkidle", timeout: 180_000 });
-await page.mouse.move(at.x, at.y);
-await pause(1200);
+if (!SKIP_GEN) {
+  await page.goto(`${ORIGIN}/dashboard`, { waitUntil: "networkidle", timeout: 180_000 });
+  await page.mouse.move(at.x, at.y);
+  await pause(1200);
 
-// 1. Describe it, and the AI builds it.
-await click(page.getByRole("button", { name: /New form/ }));
-await pause(900);
-const promptBox = page.getByPlaceholder(/Describe the form/);
-await click(promptBox);
-const pb = await promptBox.boundingBox();
-mark("type-start", { x: pb.x + pb.width / 2, y: pb.y + pb.height / 2 });
-await page.keyboard.type(PROMPT, { delay: 30 });
-mark("type-end");
-await pause(500);
-await click(page.getByRole("button", { name: /Generate/ }));
-mark("wait-start");
-await page.waitForURL(/\/forms\/[^/]+\/build/, { timeout: 120_000 });
-await page.waitForLoadState("networkidle");
-mark("wait-end");
-await pause(1800);
-
-// 2. Walk the questions.
-const questions = page.locator("button", { hasText: /space or rooms|budget|timeline/i });
-for (let i = 0; i < Math.min(3, await questions.count()); i++) {
-  await click(questions.nth(i));
-  await pause(1100);
+  // 1. Describe it, and the AI builds it.
+  await click(page.getByRole("button", { name: /New form/ }));
+  await pause(900);
+  const promptBox = page.getByPlaceholder(/Describe the form/);
+  await click(promptBox);
+  const pb = await promptBox.boundingBox();
+  mark("type-start", { x: pb.x + pb.width / 2, y: pb.y + pb.height / 2 });
+  await page.keyboard.type(PROMPT, { delay: 30 });
+  mark("type-end");
+  await pause(500);
+  await click(page.getByRole("button", { name: /Generate/ }));
+  mark("wait-start");
+  await page.waitForURL(/\/forms\/[^/]+\/build/, { timeout: 120_000 });
+  await page.waitForLoadState("networkidle");
+  mark("wait-end");
+  await pause(2200);
 }
 
-// 3. Add a rating question.
-await click(page.getByRole("button", { name: "Add a question" }));
-await pause(500);
-mark("keys-start");
-await page.keyboard.type("rat", { delay: 90 });
-mark("keys-end");
-await pause(400);
-await click(page.getByRole("option", { name: /Rating/ }).or(page.getByRole("button", { name: /^Rating/ })).first());
-await pause(1800);
-
-// 4. Make it look like you.
-await click(page.getByRole("button", { name: /^Design$/ }));
+// The hop to the seeded form, cut from the edit.
+mark("cut-start");
+await page.goto(`${ORIGIN}/forms/${FORM}/build`, { waitUntil: "networkidle", timeout: 180_000 });
+await page.mouse.move(at.x, at.y);
 await pause(900);
-await click(page.getByText("Violet Bloom", { exact: true }));
-await pause(1400);
-await click(page.getByText("Dark", { exact: true }).first());
-await pause(2200);
-await click(page.getByText("Light", { exact: true }).first());
-await pause(1000);
-await page.keyboard.press("Escape");
-await pause(600);
+mark("cut-end");
+await pause(700);
 
-// 5. Send it out.
-await click(page.locator('a[href$="/share"]').first());
-await page.waitForURL(/\/share/, { timeout: 30_000 });
-await page.waitForLoadState("networkidle");
-await pause(3000);
+// 2. Walk the questions.
+for (const q of [/Which space or rooms/, /estimated total/, /existing photos/]) {
+  await tryClick(page.locator("button", { hasText: q }).first(), `question ${q}`, 1000);
+}
+
+// 3. Make it look like you: a few themes, each with its own ground and type.
+await tryClick(page.getByRole("button", { name: /^Design$/ }), "Design", 800);
+await tryClick(page.getByText("Violet Bloom", { exact: true }), "Violet Bloom", 1100);
+await tryClick(page.getByText(/Show all \d+/), "Show all", 500);
+for (const theme of ["Notebook", "Neo Brutalism", "Retro Arcade", "Ocean Breeze"]) {
+  const tile = page.getByText(theme, { exact: true });
+  await tile.scrollIntoViewIfNeeded().catch(() => {});
+  await pause(250);
+  await tryClick(tile, theme, 1100);
+}
+await page.keyboard.press("Escape");
+await pause(500);
+
+// 4. Try it the way a respondent will: the real chat, typed and tapped.
+if (await tryClick(page.getByRole("button", { name: "Preview the conversation" }), "Preview", 2600)) {
+  const composer = page.getByPlaceholder(/type it out|Type your answer/).last();
+  if (await tryClick(composer, "composer", 300)) {
+    await type("Maya Chen, maya@northwind.co, +1 415 555 0134");
+    await pause(400);
+    await page.keyboard.press("Enter");
+    await pause(4200);
+    const option = (text) => page.locator("button", { hasText: text }).last();
+    await tryClick(option("Living Room"), "Living Room", 450);
+    await tryClick(option("Kitchen & Dining"), "Kitchen", 450);
+    await tryClick(option("Continue"), "Continue", 3000);
+    await tryClick(option("$25,000 to $50,000"), "budget", 2800);
+  }
+  await tryClick(page.getByRole("dialog").getByRole("button", { name: "Close" }).first(), "close preview", 700);
+}
+
+// 5. Brief the agent.
+await tryClick(page.locator('a[href$="/settings"]').first(), "Settings", 1200);
+await tryClick(page.locator('a[href$="/settings/agent"]').first(), "Agent", 1500);
+for (const name of ["Goal", "Knowledge", "Guardrails"]) {
+  await tryClick(page.getByRole("tab", { name, exact: true }).or(page.getByRole("button", { name, exact: true })).first(), name, 1500);
+}
+
+// 6. Send it out, and put it on a site.
+await tryClick(page.locator('a[href$="/share"]').first(), "Share", 1800);
+await tryClick(page.getByRole("button", { name: /Show QR code/ }), "QR", 1800);
+await page.keyboard.press("Escape");
+await pause(400);
+await tryClick(page.locator('a[href$="/integrate"]').first(), "Integrate", 1800);
+await tryClick(page.getByRole("button", { name: /^Side tab$/ }).or(page.getByText("Side tab", { exact: true })).first(), "Side tab", 1500);
+await tryClick(page.getByRole("button", { name: /^Inline$/ }).or(page.getByText("Inline", { exact: true })).first(), "Inline", 1500);
+await page.mouse.move(800, 600, { steps: 14 });
+at = { x: 800, y: 600 };
+await scroll(1500, 1500);
+await pause(1500);
+
+// 7. Read what came back.
+await tryClick(page.locator('a[href$="/results"]').first(), "Results", 2200);
+await page.mouse.move(700, 480, { steps: 14 });
+at = { x: 700, y: 480 };
+await pause(900);
+const tab = (name) => page.getByRole("tab", { name }).first();
+await tryClick(tab(/^Summary/), "Summary", 2400);
+await page.mouse.move(800, 560, { steps: 10 });
+at = { x: 800, y: 560 };
+await scroll(900, 1400);
+await pause(1200);
+// Back to the top: the tabs have scrolled out of reach.
+await scroll(-900, 700);
+await pause(300);
+await tryClick(tab(/^Analytics/), "Analytics", 2600);
+await page.mouse.move(800, 560, { steps: 10 });
+at = { x: 800, y: 560 };
+await scroll(620, 1500);
+await pause(1700);
+await scroll(640, 1500);
+await pause(1700);
+await scroll(640, 1500);
+await pause(2200);
+await scroll(-2200, 1400);
+await pause(1500);
 
 const video = page.video();
 await ctx.close();
