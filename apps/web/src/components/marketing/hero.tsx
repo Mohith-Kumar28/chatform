@@ -1,13 +1,12 @@
 import Link from "next/link";
-import { ArrowRight, Play } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatDemo } from "./chat-demo";
 import { HERO_SCRIPT } from "./chat-demo-scripts";
 import { GradientField } from "@/components/brand/gradient-field";
 import { CircleMark } from "./annotate";
 import { WatchVideoButton } from "./launch-video";
-import { HeroDemo, HeroDemoButton } from "./hero-demo";
+import { HeroDemo } from "./hero-demo";
 
 /**
  * The published demo form, or nothing.
@@ -351,35 +350,12 @@ export function Hero() {
                 `on-brand-outline` is left as it is: the closing CTA still uses
                 it over the full-strength gradient, where the ink is
                 `--on-primary` and the calculus is different. */}
-            {/*
-              The second pill goes to the product tour on wider screens, where
-              the live demo is already beside it. On a phone the demo is a
-              screen further down, so there the pill starts it instead, full
-              screen.
-            */}
-            {DEMO_SLUG ? (
-              <Button
-                asChild
-                size="lg"
-                shape="pill"
-                variant="on-brand"
-                className="h-12 bg-white px-7 text-[var(--on-band-vivid)] hover:bg-white/90 max-sm:w-full sm:hidden"
-              >
-                <HeroDemoButton>
-                  Try live demo
-                  <ArrowRight className="size-4" strokeWidth={2.25} />
-                </HeroDemoButton>
-              </Button>
-            ) : null}
             <Button
               asChild
               size="lg"
               shape="pill"
               variant="on-brand"
-              className={cn(
-                "h-12 bg-white px-7 text-[var(--on-band-vivid)] hover:bg-white/90",
-                DEMO_SLUG && "hidden sm:inline-flex",
-              )}
+              className="h-12 bg-white px-7 text-[var(--on-band-vivid)] hover:bg-white/90 max-sm:w-full"
             >
               <WatchVideoButton>
                 <Play className="size-4 fill-current" strokeWidth={2.25} />

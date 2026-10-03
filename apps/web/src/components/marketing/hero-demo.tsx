@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ButtonHTMLAttributes } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, ExternalLink, X } from "lucide-react";
 import { LogoMark } from "@/components/brand/logo";
 
@@ -21,9 +21,6 @@ import { LogoMark } from "@/components/brand/logo";
  */
 const PHONE_QUERY = "(max-width: 639px)";
 
-/** Fired by `HeroDemoButton` so the hero's own pill can start the demo. */
-const START_EVENT = "chatform:hero-demo-start";
-
 export function HeroDemo({ slug }: { slug: string }) {
   const [playing, setPlaying] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -35,11 +32,6 @@ export function HeroDemo({ slug }: { slug: string }) {
     if (window.matchMedia(PHONE_QUERY).matches) setFullscreen(true);
     else setPlaying(true);
   }, []);
-
-  useEffect(() => {
-    window.addEventListener(START_EVENT, start);
-    return () => window.removeEventListener(START_EVENT, start);
-  }, [start]);
 
   // Full screen owns the page: no scrolling behind it, Escape closes it.
   useEffect(() => {
@@ -144,20 +136,5 @@ export function HeroDemo({ slug }: { slug: string }) {
         </div>
       ) : null}
     </div>
-  );
-}
-
-/**
- * The hero pill that starts the demo. Phones only: there the window sits a
- * screen below the buttons, so the pill opens the form straight to full screen.
- */
-export function HeroDemoButton({
-  children,
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button {...props} type="button" onClick={() => window.dispatchEvent(new Event(START_EVENT))}>
-      {children}
-    </button>
   );
 }
