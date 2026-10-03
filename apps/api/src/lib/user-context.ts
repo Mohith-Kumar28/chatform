@@ -172,31 +172,3 @@ export async function recordUserContext(
     console.error("user_context_failed", userId, kind, err instanceof Error ? err.message : String(err));
   }
 }
-
-/**
- * Classifies sign-ups recorded before migration 0050, a page per cron tick.
- * Sign-ins are marked "none" in SQL; they are never attributed.
- */
-export async function backfillSignupAttribution(env: Bindings, limit = 200): Promise<number> {
-  await env.DB.prepare(`UPDATE user_sign_ins SET channel = 'none' WHERE channel IS NULL AND kind = 'sign_in'`).run();
-  const { results } = await env.DB.prepare(
-    `SELECT id, context_json FROM user_sign_ins WHERE channel IS NULL AND kind = 'sign_up' LIMIT ?`,
-  )
-    .bind(limit)
-    .all<{ id: string; context_json: string }>();
-  if (!results.length) return 0;
-  const updates = results.map((row) => {
-    let context: Partial<RespondentContext> = {};
-    try {
-      context = JSON.parse(row.context_json) as Partial<RespondentContext>;
-    } catch {
-      context = {};
-    }
-    const a = attributionOf({ referrer: context.referrer ?? null, pageUrl: context.pageUrl ?? null, utm: context.utm ?? {} });
-    return env.DB.prepare(
-      `UPDATE user_sign_ins SET channel = ?, source = ?, medium = ?, campaign = ?, landing_path = ? WHERE id = ?`,
-    ).bind(a.channel, a.source, a.medium, a.campaign, a.landingPath, row.id);
-  });
-  await env.DB.batch(updates);
-  return results.length;
-}

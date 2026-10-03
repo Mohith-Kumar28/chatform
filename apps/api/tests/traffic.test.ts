@@ -4,7 +4,7 @@ import { applySchema, fetchApi } from "./helpers.js";
 import type { Bindings } from "../src/env.js";
 import { classifySource } from "../src/lib/traffic-source.js";
 import { TRAFFIC_BLOBS, writeTraffic, type TrafficBeacon } from "../src/lib/traffic.js";
-import { attributionOf, backfillSignupAttribution } from "../src/lib/user-context.js";
+import { attributionOf } from "../src/lib/user-context.js";
 import { withUtm } from "../src/lib/mail-jobs.js";
 import { sqlText } from "../src/lib/traffic-query.js";
 
@@ -163,25 +163,6 @@ describe("sign-up attribution", () => {
       .bind(email)
       .first();
     expect(row).toEqual({ visitor_id: "visitorabc123", channel: "Social", source: "YouTube", medium: "ugc", campaign: "launch-video" });
-  });
-
-  it("classifies older sign-ups and marks sign-ins as never attributed", async () => {
-    const user = await env.DB.prepare(`SELECT id FROM users LIMIT 1`).first<{ id: string }>();
-    const context = JSON.stringify({ referrer: "https://www.reddit.com/r/SaaS", pageUrl: "https://chatform.in/", utm: {} });
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO user_sign_ins (id, user_id, kind, method, context_json, created_at) VALUES ('usi_old_up', ?, 'sign_up', 'email', ?, 1)`,
-      ).bind(user!.id, context),
-      env.DB.prepare(
-        `INSERT INTO user_sign_ins (id, user_id, kind, method, context_json, created_at) VALUES ('usi_old_in', ?, 'sign_in', 'email', ?, 1)`,
-      ).bind(user!.id, context),
-    ]);
-    await backfillSignupAttribution(env as unknown as Bindings);
-    const rows = await env.DB.prepare(`SELECT id, channel, source FROM user_sign_ins WHERE id IN ('usi_old_up', 'usi_old_in') ORDER BY id`).all();
-    expect(rows.results).toEqual([
-      { id: "usi_old_in", channel: "none", source: null },
-      { id: "usi_old_up", channel: "Social", source: "Reddit" },
-    ]);
   });
 });
 

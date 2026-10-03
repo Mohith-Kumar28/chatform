@@ -541,19 +541,31 @@ resultsRouter.get(
        * session that has not finalised yet. A response that never had a chat
        * joins to nothing, which is still the empty transcript it should be.
        *
-       * `chat_sessions` is joined LEFT, and the second arm matches on the
-       * message's own `session_id` rather than on `cs.id`, because messages
+       * The second arm never touches `chat_sessions`: it matches on the
+       * message's own `session_id`, because messages
        * outlive their session row: the expiry sweep clears old sessions and
        * leaves the transcript behind, so a form in production already has rows
        * whose session is gone. An inner join dropped exactly those — swapping
        * one silently-missing transcript for another.
+       *
+       * The two arms are a UNION, not an OR in one join condition. The OR kept
+       * SQLite off every index, so each page load read every chat message on the
+       * platform (D1 insights, 2026-10-03: ~17k rows a load). Each arm now starts
+       * from the page's fifty responses and walks an index; `m.id` is selected so
+       * the UNION only folds a message found by both arms, as the OR did.
        */
       c.env.DB.prepare(
-        `SELECT w.id AS submission_id, m.role, m.content, m.created_at
-           FROM chat_messages m
-           LEFT JOIN chat_sessions cs ON cs.id = m.session_id
-           JOIN (${WINDOW}) w ON cs.submission_id = w.id OR m.session_id = w.session_id
-          ORDER BY m.created_at`,
+        `SELECT submission_id, role, content, created_at FROM (
+           SELECT w.id AS submission_id, m.id AS message_id, m.role, m.content, m.created_at
+             FROM (${WINDOW}) w
+             JOIN chat_sessions cs ON cs.submission_id = w.id
+             JOIN chat_messages m ON m.session_id = cs.id
+           UNION
+           SELECT w.id, m.id, m.role, m.content, m.created_at
+             FROM (${WINDOW}) w
+             JOIN chat_messages m ON m.session_id = w.session_id
+         )
+         ORDER BY created_at`,
       ).bind(id, effectiveStatus, limit, offset),
       /**
        * Follow-up state, for the whole page in one query — and only for the page.

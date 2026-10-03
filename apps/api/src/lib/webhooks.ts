@@ -725,8 +725,7 @@ const SWEEP_GRACE_MS = 2 * 60_000;
  * The queue carries every retry with its own delay, so this normally finds
  * nothing. It re-queues a pending delivery whose message never arrived (a send
  * that failed after the row was written) and a claimed one whose worker died
- * mid-attempt. A duplicate it causes is harmless: the claim drops it. It also
- * forgets finished deliveries past the retention window.
+ * mid-attempt. A duplicate it causes is harmless: the claim drops it.
  */
 export async function sweepWebhookDeliveries(env: Bindings): Promise<number> {
   const now = Date.now();
@@ -749,13 +748,22 @@ export async function sweepWebhookDeliveries(env: Bindings): Promise<number> {
       .run();
     await enqueueDeliveries(env, ids);
   }
-
-  const expired = `SELECT id FROM webhook_deliveries WHERE created_at < ? AND status IN ('success', 'dead') ORDER BY id LIMIT 500`;
-  await env.DB.batch([
-    env.DB.prepare(`DELETE FROM webhook_attempts WHERE delivery_id IN (${expired})`).bind(now - RETENTION_MS),
-    env.DB.prepare(`DELETE FROM webhook_deliveries WHERE id IN (${expired})`).bind(now - RETENTION_MS),
-  ]);
   return ids.length;
+}
+
+/**
+ * Forgets finished deliveries past the retention window, 500 a run.
+ *
+ * Hourly rather than with the sweep above: nobody waits on a row disappearing,
+ * and the lookup reads the table on every run.
+ */
+export async function pruneWebhookDeliveries(env: Bindings): Promise<void> {
+  const expired = `SELECT id FROM webhook_deliveries WHERE created_at < ? AND status IN ('success', 'dead') ORDER BY id LIMIT 500`;
+  const cutoff = Date.now() - RETENTION_MS;
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM webhook_attempts WHERE delivery_id IN (${expired})`).bind(cutoff),
+    env.DB.prepare(`DELETE FROM webhook_deliveries WHERE id IN (${expired})`).bind(cutoff),
+  ]);
 }
 
 export type DeliveryFilter = "pending" | "failed" | "success";

@@ -372,7 +372,7 @@ endpoint on its second run, and therefore duplicate deliveries of every event. I
 | KV | `chatform-config` · `a72116dbd29c4e07b7d887272c1e999e` |
 | R2 | `chatform-uploads` |
 | Queues | `q-submissions` (+dlq) · `q-webhooks` (+dlq) · `q-exports` |
-| Cron | `*/5 * * * *` |
+| Cron | `*/5 * * * *` (latency-sensitive sweeps) · `10 * * * *` (hourly housekeeping, platform rollup) · `20 0 * * *` (daily retention, backfill, traffic) |
 | Dodo mode | **live — real money** (since 2026-09-08) |
 | Dodo webhook endpoint | `ep_3IzRqJmHxaSRU5Oc8a9IB5iI8Vd` |
 | Dodo product collection | `pdc_0Nn4KsmmETgQqrYkfc2HO` |

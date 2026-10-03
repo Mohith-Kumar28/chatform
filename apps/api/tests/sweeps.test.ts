@@ -185,4 +185,15 @@ describe("test data retention", () => {
     expect(await env.DB.prepare(`SELECT id FROM submissions WHERE id = 'sbm_swtestold'`).first()).toBeNull();
     expect(await env.DB.prepare(`SELECT id FROM submissions WHERE id = 'sbm_swtestnew'`).first()).toBeTruthy();
   });
+
+  it("keeps deleting in batches until a pass comes back short", async () => {
+    const old = Date.now() - 40 * 24 * 60 * 60 * 1000;
+    for (const id of ["sbm_swbatch1", "sbm_swbatch2", "sbm_swbatch3"]) {
+      await seedResponse(id, { is_test: 1, started_at: old, updated_at: old, status: "completed" });
+    }
+    // One row a pass: three passes to clear them, a fourth that finds nothing.
+    expect(await pruneTestData(env as never, 1)).toBe(3);
+    const left = await env.DB.prepare(`SELECT COUNT(*) AS n FROM submissions WHERE id LIKE 'sbm_swbatch%'`).first<{ n: number }>();
+    expect(left?.n).toBe(0);
+  });
 });

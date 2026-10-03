@@ -7,6 +7,7 @@ import {
   fanOutEvent,
   isDeliveryMessage,
   markDeadFromDlq,
+  pruneWebhookDeliveries,
   sweepWebhookDeliveries,
   type WebhookMessage,
 } from "./lib/webhooks.js";
@@ -41,8 +42,7 @@ import {
   sweepPaymentTokens,
 } from "./lib/sweeps.js";
 import { sweepPlanNotices } from "./lib/plan-notices.js";
-import { rollupPlatformDaily, rollupFormStructure, backfillPlatformDaily, rollupTrafficDaily } from "./lib/platform-rollup.js";
-import { backfillSignupAttribution } from "./lib/user-context.js";
+import { rollupPlatformDaily, rollupFormStructure, backfillPlatformDaily, rollupTrafficDaily, utcDay } from "./lib/platform-rollup.js";
 
 export { SessionDO };
 
@@ -216,13 +216,6 @@ export default {
       // Spent and expired OTP rows have no reason to be kept; they are only
       // ever read by the challenge that created them.
       await pruneOtpChallenges(env).catch((err) => console.error("otp_prune_failed", err));
-      // Unconverted gate denials are only interesting while they are recent; a converted
-      // row is kept forever because it is the attribution for a sale.
-      await pruneGateLog(env).catch((err) => console.error("gate_log_prune_failed", err));
-      // Imported trial forms nobody claimed within a day, and spent daily import counters.
-      await expireImportTrials(env).catch((err) => console.error("import_trial_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
-      // Spent template-try counters and the session rows the tries left behind.
-      await pruneTemplateDemos(env).catch((err) => console.error("template_demo_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
       /**
        * The knowledge base's housekeeping.
        *
@@ -255,9 +248,6 @@ export default {
        * conversation objects, queued by the database's own delete triggers. After
        * every purge above, so what they just deleted goes on the same tick.
        */
-      await prunePendingUploads(env).catch((err) => console.error("pending_upload_prune_failed", err));
-      await sweepUnusedAssets(env).catch((err) => console.error("unused_asset_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
-      await pruneOrphanRespondents(env).catch((err) => console.error("respondent_prune_failed", { error: err instanceof Error ? err.message : String(err) }));
       await drainStoragePurges(env).catch((err) => console.error("storage_purge_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
 
       /**
@@ -278,6 +268,21 @@ export default {
        * simply picked up on the next one.
        */
       await sweepFollowUps(env).catch((err) => console.error("followup_sweep_failed", err));
+    }
+    /**
+     * Hourly: housekeeping nobody waits on, and the console's numbers.
+     *
+     * Split from the five-minute tick because each of these reads its table
+     * whatever there is to do, and 288 runs a day of that was most of the
+     * database's reads (D1 insights, 2026-10-03).
+     */
+    if (controller.cron === "10 * * * *") {
+      await pruneWebhookDeliveries(env).catch((err) => console.error("webhook_prune_failed", err));
+      // Imported trial forms nobody claimed within a day, and spent daily import counters.
+      await expireImportTrials(env).catch((err) => console.error("import_trial_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
+      await prunePendingUploads(env).catch((err) => console.error("pending_upload_prune_failed", err));
+      await sweepUnusedAssets(env).catch((err) => console.error("unused_asset_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
+      await pruneOrphanRespondents(env).catch((err) => console.error("respondent_prune_failed", { error: err instanceof Error ? err.message : String(err) }));
       // Plan emails: a failed payment, a plan ending within the week, and the switch to
       // Free. Gifts and cancellations lapse the same way, so they are one sweep.
       await sweepPlanNotices(env).catch((err) => console.error("plan_notice_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
@@ -288,17 +293,6 @@ export default {
        * refresh — and a refresh token left unused for ninety days is gone for good.
        */
       await sweepPaymentTokens(env).catch((err) => console.error("payment_token_sweep_failed", err));
-      // A row per message sent. Kept long enough to explain last week's outage,
-      // not long enough to become the largest table in the database.
-      await pruneMailDeliveries(env).catch((err) => console.error("mail_prune_failed", err));
-      await pruneTestData(env).catch((err) => console.error("test_data_prune_failed", err));
-      /**
-       * A form's history, bounded. Entries that shipped in a version are kept for two
-       * years because they are that version's changelog; entries still marked
-       * unpublished describe a draft that was long since published or abandoned, and
-       * are kept for four months.
-       */
-      await pruneFormActivity(env).catch((err) => console.error("form_activity_prune_failed", err));
       // An export is a full copy of respondent data sitting in a bucket. It is
       // kept for a day, not forever.
       await pruneExpiredExports(env).catch((err) => console.error("export_prune_failed", err));
@@ -306,18 +300,11 @@ export default {
       /**
        * The platform's own numbers, for the super-admin console.
        *
-       * Today's counters every tick — the work is bounded by one day of traffic,
-       * not by how long the product has been running, so it stays cheap forever.
-       * The form-structure walk parses every document and is not bounded by
-       * anything, so it runs in one quiet UTC hour and pages itself across ticks.
+       * Today's counters, recounted hourly. Every five minutes was 288 recounts a
+       * day of a console read a handful of times, and each one also emptied the
+       * overview cache.
        */
       await rollupPlatformDaily(env).catch((err) => console.error("platform_rollup_failed", err));
-      /**
-       * History, a few days per tick, oldest gap first. Also the repair path: a
-       * day the worker was down for has no rows and is simply picked up later.
-       * Does nothing once there are no gaps left.
-       */
-      await backfillPlatformDaily(env).catch((err) => console.error("platform_backfill_failed", err));
       /**
        * The form-structure walk, which pages itself across ticks and marks the
        * day done when it finishes.
@@ -329,16 +316,43 @@ export default {
        * cursor does not already give.
        */
       await rollupFormStructure(env).catch((err) => console.error("form_structure_rollup_failed", err));
+    }
+    /**
+     * Daily, at 00:20 UTC: retention, history, and the previous day's traffic.
+     */
+    if (controller.cron === "20 0 * * *") {
+      // Unconverted gate denials are only interesting while they are recent; a converted
+      // row is kept forever because it is the attribution for a sale.
+      await pruneGateLog(env).catch((err) => console.error("gate_log_prune_failed", err));
+      // Spent template-try counters and the session rows the tries left behind.
+      await pruneTemplateDemos(env).catch((err) => console.error("template_demo_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
+      // A row per message sent. Kept long enough to explain last week's outage,
+      // not long enough to become the largest table in the database.
+      await pruneMailDeliveries(env).catch((err) => console.error("mail_prune_failed", err));
+      await pruneTestData(env).catch((err) => console.error("test_data_prune_failed", err));
+      /**
+       * A form's history, bounded. Entries that shipped in a version are kept for two
+       * years because they are that version's changelog; entries still marked
+       * unpublished describe a draft that was long since published or abandoned, and
+       * are kept for four months.
+       */
+      await pruneFormActivity(env).catch((err) => console.error("form_activity_prune_failed", err));
+      // Yesterday's final count: the last hourly run of the day was at 23:10.
+      await rollupPlatformDaily(env, utcDay(Date.now() - 24 * 60 * 60 * 1000)).catch((err) =>
+        console.error("platform_rollup_failed", err),
+      );
+      /**
+       * History, a few days per run, oldest gap first. Also the repair path: a
+       * day the worker was down for has no rows and is picked up the next night.
+       */
+      await backfillPlatformDaily(env).catch((err) => console.error("platform_backfill_failed", err));
       /**
        * Traffic history, copied out of Analytics Engine a finished day at a
-       * time before its three months are up; and sign-ups from before
-       * migration 0050, classified by source a page per tick.
+       * time before its three months are up. Its own guard skips anything
+       * before 00:10 UTC, which is why the daily cron fires at 00:20.
        */
       await rollupTrafficDaily(env).catch((err) =>
         console.error("traffic_rollup_failed", { error: err instanceof Error ? err.message : String(err) }),
-      );
-      await backfillSignupAttribution(env).catch((err) =>
-        console.error("signup_attribution_backfill_failed", { error: err instanceof Error ? err.message : String(err) }),
       );
     }
   },

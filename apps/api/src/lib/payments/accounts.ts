@@ -37,8 +37,11 @@ export const REFRESH_SKEW_MS = 5 * 60 * 1000;
 export const REFRESH_LEASE_MS = 30 * 1000;
 const REFRESH_POLL_MS = 200;
 const REFRESH_WAIT_MS = 8 * 1000;
-/** The sweep renews anything expiring within the hour, so a quiet form's token never lapses between cron ticks. */
-const SWEEP_WINDOW_MS = 60 * 60 * 1000;
+/**
+ * The hourly sweep renews anything expiring within two hours, so a quiet form's token never
+ * lapses between runs, even when one run fails.
+ */
+const SWEEP_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 interface AccountDbRow {
   id: string;
@@ -751,7 +754,7 @@ export async function withAdapter<T>(
  *
  * Lazy refresh only happens when a respondent pays, and a Cashfree access token lasts a day — so
  * a form that takes one payment a week would find its token expired every time, and a refresh
- * token unused for ninety days is gone for good. From the five-minute cron.
+ * token unused for ninety days is gone for good. From the hourly cron.
  */
 export async function sweepPaymentTokens(env: Bindings, limit = 25): Promise<number> {
   const now = Date.now();

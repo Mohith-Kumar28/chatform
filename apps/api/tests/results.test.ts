@@ -412,8 +412,8 @@ describe("transcripts follow the response, not the pointer", () => {
    * production database has them — the response this suite was written for
    * pointed at a session id `chat_sessions` no longer holds — but the FK is
    * enforced in the test binding, so the state cannot be built. It is why the
-   * session join in the query is LEFT and why the second arm matches on
-   * `m.session_id` rather than `cs.id`; an inner join drops those rows.
+   * second arm matches on `m.session_id` and never joins `chat_sessions`; a
+   * join through the session row drops those messages.
    */
   it("a response that never had a chat still reads as empty", async () => {
     const res = await fetchApi(`/api/forms/${t.formId}/submissions?status=all`, { headers: auth() });

@@ -136,15 +136,19 @@ export const HAS_BEEN_OPENED = `
  * record — while the cohort filter tested the one condition on its own. Reading
  * `stage >= n` on both sides makes them agree by construction rather than by
  * two expressions being kept in step by hand.
+ *
+ * The response stages stop counting at ten: the question is "ten or more", and
+ * counting every response of every account to answer it was most of the
+ * funnel's cost.
  */
 export const STAGE_OF_ORG = `
   CASE
     WHEN EXISTS (SELECT 1 FROM subscriptions s WHERE s.organization_id = o.id
                   AND s.status IN ('active','trialing') AND ${NOT_COMPED}) THEN 6
-    WHEN (SELECT COUNT(*) FROM submissions s
-           WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed') >= 10 THEN 5
-    WHEN (SELECT COUNT(*) FROM submissions s
-           WHERE s.organization_id = o.id AND s.is_test = 0 AND s.status = 'completed') >= 1 THEN 4
+    WHEN (SELECT COUNT(*) FROM (SELECT 1 FROM submissions s
+           WHERE s.organization_id = o.id AND s.status = 'completed' AND s.is_test = 0 LIMIT 10)) >= 10 THEN 5
+    WHEN EXISTS (SELECT 1 FROM submissions s
+           WHERE s.organization_id = o.id AND s.status = 'completed' AND s.is_test = 0) THEN 4
     WHEN ${HAS_BEEN_OPENED} THEN 3
     WHEN ${HAS_PUBLISHED} THEN 2
     WHEN EXISTS (SELECT 1 FROM forms f WHERE f.organization_id = o.id AND f.deleted_at IS NULL) THEN 1

@@ -208,7 +208,7 @@ coreRouter.get(
  * date picker offers is a whole day. None of that answers the question you
  * actually have after a launch tweet or a deploy — *is anything happening right
  * now* — and the honest answer to that cannot come from a table that is
- * recomputed every five minutes.
+ * recomputed every hour.
  *
  * So this one reads the source tables directly. Three things keep that
  * defensible:

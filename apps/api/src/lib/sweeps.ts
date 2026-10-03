@@ -369,36 +369,42 @@ async function hasVerifiedSendingDomain(_env: Bindings, _orgId: string): Promise
 /** Test data is real data, and it is not kept. */
 const TEST_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
-export async function pruneTestData(env: Bindings, limit = 500): Promise<number> {
+/**
+ * Runs once a day, so it keeps deleting in pages of `limit` until a pass comes
+ * back short, up to `maxPasses`. Whatever is left goes the next night.
+ */
+export async function pruneTestData(env: Bindings, limit = 500, maxPasses = 20): Promise<number> {
   const cutoff = Date.now() - TEST_RETENTION_MS;
-  // submission_answers cascade on the FK, so the parent rows are enough.
-  const res = await env.DB.prepare(
-    `DELETE FROM submissions WHERE id IN (
-       SELECT id FROM submissions WHERE is_test = 1 AND started_at < ? LIMIT ?
-     )`,
-  )
-    .bind(cutoff, limit)
-    .run();
-  await env.DB.prepare(
-    `DELETE FROM chat_sessions WHERE id IN (
-       SELECT id FROM chat_sessions WHERE is_test = 1 AND created_at < ? LIMIT ?
-     )`,
-  )
-    .bind(cutoff, limit)
-    .run();
-  /*
-    Checkout attempts made from test sessions and previews. They cascade with their form, not
-    with the chat session above, so they need their own pass — and a test payment is exactly as
-    disposable as the test response it belonged to.
-  */
-  await env.DB.prepare(
-    `DELETE FROM respondent_payments WHERE id IN (
-       SELECT id FROM respondent_payments WHERE is_test = 1 AND created_at < ? LIMIT ?
-     )`,
-  )
-    .bind(cutoff, limit)
-    .run();
-  return res.meta?.changes ?? 0;
+  let submissions = 0;
+  for (let pass = 0; pass < maxPasses; pass++) {
+    // submission_answers cascade on the FK, so the parent rows are enough.
+    const res = await env.DB.batch([
+      env.DB.prepare(
+        `DELETE FROM submissions WHERE id IN (
+           SELECT id FROM submissions WHERE is_test = 1 AND started_at < ? LIMIT ?
+         )`,
+      ).bind(cutoff, limit),
+      env.DB.prepare(
+        `DELETE FROM chat_sessions WHERE id IN (
+           SELECT id FROM chat_sessions WHERE is_test = 1 AND created_at < ? LIMIT ?
+         )`,
+      ).bind(cutoff, limit),
+      /*
+        Checkout attempts made from test sessions and previews. They cascade with their form, not
+        with the chat session above, so they need their own pass — and a test payment is exactly as
+        disposable as the test response it belonged to.
+      */
+      env.DB.prepare(
+        `DELETE FROM respondent_payments WHERE id IN (
+           SELECT id FROM respondent_payments WHERE is_test = 1 AND created_at < ? LIMIT ?
+         )`,
+      ).bind(cutoff, limit),
+    ]);
+    const changes = res.map((r) => r.meta?.changes ?? 0);
+    submissions += changes[0] ?? 0;
+    if (changes.every((n) => n < limit)) break;
+  }
+  return submissions;
 }
 
 /**

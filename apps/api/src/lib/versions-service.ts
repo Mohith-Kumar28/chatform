@@ -41,8 +41,13 @@ export function loadVersion(env: Bindings, formId: string, version: number): Pro
 export async function listVersions(env: Bindings, form: Pick<FormRow, "id" | "active_version_id">) {
   const rows = await env.DB.prepare(
     `SELECT v.id, v.version, v.note, v.published_at, v.created_at, v.created_by,
-            (SELECT COUNT(*) FROM submissions s WHERE s.form_version_id = v.id AND s.status = 'completed') AS responses,
-            (SELECT COUNT(*) FROM form_activity a WHERE a.form_version_id = v.id AND a.kind = 'edited') AS change_entries
+            -- \`form_id\` is redundant with the version id but is what the indexes lead
+            -- with; without it each count walked every completed response or every
+            -- activity row on the platform (~30k rows a load).
+            (SELECT COUNT(*) FROM submissions s
+              WHERE s.form_id = v.form_id AND s.status = 'completed' AND s.form_version_id = v.id) AS responses,
+            (SELECT COUNT(*) FROM form_activity a
+              WHERE a.form_id = v.form_id AND a.form_version_id = v.id AND a.kind = 'edited') AS change_entries
        FROM form_versions v
       WHERE v.form_id = ?
       ORDER BY v.version DESC`,

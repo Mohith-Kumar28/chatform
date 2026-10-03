@@ -1363,6 +1363,36 @@ describe("what a call cost", () => {
     expect(row?.calls).toBe(2);
     expect(body.totals.errors).toBeGreaterThanOrEqual(1);
   });
+
+  /**
+   * Percentiles moved from three queries per model to one window-function pass.
+   * Same nearest-rank rule as before: row ⌊n/2⌋ and row ⌊0.9n⌋, 0-based.
+   */
+  it("reads each model's p50 and p90 off one ranked pass", async () => {
+    const tenant = await seedTenant("latency");
+    const now = Date.now();
+    const stmt = DB().DB.prepare(
+      `INSERT INTO ai_generations (id, organization_id, kind, provider, model, prompt_tokens, completion_tokens, cost_usd, status, latency_ms, created_at)
+       VALUES (?, ?, 'reply', 'openrouter', 'test/latency-model', 1, 1, 0, ?, ?, ?)`,
+    );
+    // Ten calls at 100…1000 ms, inserted out of order; one of them failed.
+    await DB().DB.batch(
+      [700, 100, 1000, 400, 300, 900, 200, 600, 500, 800].map((ms, i) =>
+        stmt.bind(`gen_lat_${i}`, tenant.orgId, ms === 300 ? "error" : "ok", ms, now),
+      ),
+    );
+
+    const body = (await (await fetchApi("/api/admin/ai", { headers: { cookie: admin.cookie } })).json()) as {
+      latency: { model: string; calls: number; p50: number; p90: number; errorRate: number }[];
+    };
+    expect(body.latency.find((l) => l.model === "test/latency-model")).toEqual({
+      model: "test/latency-model",
+      calls: 10,
+      p50: 600,
+      p90: 1000,
+      errorRate: 10,
+    });
+  });
 });
 
 /**

@@ -15,14 +15,15 @@ import { dailyTrafficRollup } from "./traffic-query.js";
  *
  * Two jobs with very different costs:
  *
- *   rollupPlatformDaily   every tick, recomputes TODAY only. A handful of grouped
- *                         queries over indexed timestamp columns, bounded by one
- *                         day of traffic no matter how long the product has run.
+ *   rollupPlatformDaily   hourly, recomputes TODAY only, and once more just after
+ *                         midnight for yesterday. A handful of grouped queries
+ *                         over indexed timestamp columns, bounded by one day of
+ *                         traffic no matter how long the product has run.
  *
  *   rollupFormStructure   once a day, walks `forms` in batches parsing JSON
  *                         documents. Unbounded work by nature, so it is spread
- *                         across ticks behind a cursor rather than attempted in
- *                         one invocation.
+ *                         across hourly runs behind a cursor rather than
+ *                         attempted in one invocation.
  *
  * Conventions that are not optional here. Getting any of them wrong produces
  * numbers that look plausible and are wrong, which is worse than an error:
@@ -84,8 +85,8 @@ const PLAN_OF_ORG = `
  *
  * Batched rather than looped: D1 charges per round trip, and a day's rollup is
  * thirty-odd small upserts that have no reason to be thirty-odd requests. The
- * upsert is what makes the job safe to run every five minutes — the last run of
- * the day is the one that counts, and a re-run after a deploy is a no-op.
+ * upsert is what makes the job safe to run every hour — the last run of the day
+ * is the one that counts, and a re-run after a deploy is a no-op.
  */
 async function writeMetrics(env: Bindings, date: string, rows: MetricRow[]): Promise<void> {
   if (rows.length === 0) return;
@@ -465,7 +466,7 @@ async function invalidateOverview(env: Bindings): Promise<void> {
 }
 
 /**
- * Fill in history, a few days per tick.
+ * Fill in history, a few days per run (nightly).
  *
  * The console needs a year of chart before it is worth opening, and the daily
  * job only ever counts today — so on the day this ships every series is a single
@@ -475,18 +476,24 @@ async function invalidateOverview(env: Bindings): Promise<void> {
  * in a chart nobody will think to distrust.
  *
  * So history is filled by the same function that fills today, from the same
- * cron, a few days at a time. It also self-heals: a day the worker was down for
- * has no rows, so it is simply picked up on a later tick.
+ * cron, a month at most per night. It also self-heals: a day the worker was down
+ * for has no rows, so it is simply picked up the next night.
  *
  * Bounded by the first signup — there is nothing to count before the first user
  * existed, and walking back to 1970 would rewrite the same zeros forever.
  */
-export async function backfillPlatformDaily(env: Bindings, maxDays = 4): Promise<number> {
+export async function backfillPlatformDaily(env: Bindings, maxDays = 30): Promise<number> {
   const first = await env.DB.prepare(`SELECT MIN(created_at) AS t FROM users`).first<{ t: number | null }>();
   if (!first?.t) return 0;
 
+  /*
+   * One row per counted day. Every run writes `signups`, even as a zero (a
+   * COUNT with no GROUP BY always returns a row), so its dates are exactly the
+   * days that were counted. `SELECT DISTINCT date` over the whole table read
+   * every metric of every day to answer the same question.
+   */
   const filled = await env.DB.prepare(
-    `SELECT DISTINCT date FROM platform_metrics_daily WHERE date >= ?`,
+    `SELECT date FROM platform_metrics_daily WHERE metric = 'signups' AND dimension = '' AND date >= ?`,
   )
     .bind(utcDay(first.t))
     .all<{ date: string }>();

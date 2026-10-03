@@ -12,7 +12,7 @@ import { webOrigins } from "./origins.js";
  *
  * Nothing downgrades an organization: `effectivePlan` reads the dates on every request, so
  * a plan ends by the clock passing a column. That made the end silent. This sweep watches
- * the same columns from the five-minute cron and mails the owner at three points:
+ * the same columns from the hourly cron and mails the owner at three points:
  *
  *   payment_failed  the first time a renewal is declined, with the date grace runs out
  *   ending          seven days before a cancelled or gifted plan ends, two before grace does

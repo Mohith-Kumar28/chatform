@@ -112,42 +112,43 @@ const AiResponse = z.object({
 });
 
 /**
- * Percentiles, the way SQLite can do them.
+ * Percentiles, the way SQLite can do them, for every model in one pass.
  *
- * There is no `percentile()`, so latency is read off an ordered scan with an
- * OFFSET — the same trick `analytics-service.ts` uses for median completion
- * time. Bounded to the window and to one model at a time, so it stays an
- * indexed range rather than a table scan.
+ * There is no `percentile()`, so each model's calls are numbered by latency
+ * and the median and p90 are read off the rank: the same nearest-rank rule the
+ * old per-model `ORDER BY … OFFSET` used (row ⌊n/2⌋ and row ⌊0.9n⌋, 0-based),
+ * and the same window-function shape as `percentileSql` in `latency.ts`. One
+ * query instead of three per model, each of which read the whole window.
  */
-async function latencyFor(env: Bindings, model: string, since: number) {
-  const count = await env.DB.prepare(
-    `SELECT COUNT(*) AS n,
-            COALESCE(SUM(CASE WHEN status != 'ok' THEN 1 ELSE 0 END), 0) AS errors
-       FROM ai_generations WHERE model = ? AND created_at >= ? AND latency_ms IS NOT NULL`,
+async function latencyByModel(env: Bindings, models: string[], since: number) {
+  const res = await env.DB.prepare(
+    `WITH r AS (
+       SELECT model, latency_ms AS v, status,
+              ROW_NUMBER() OVER (PARTITION BY model ORDER BY latency_ms) AS rn,
+              COUNT(*) OVER (PARTITION BY model) AS n
+         FROM ai_generations
+        WHERE created_at >= ? AND latency_ms IS NOT NULL
+     )
+     SELECT model, MAX(n) AS n,
+            SUM(CASE WHEN status != 'ok' THEN 1 ELSE 0 END) AS errors,
+            MAX(CASE WHEN rn = n / 2 + 1 THEN v END) AS p50,
+            MAX(CASE WHEN rn = MIN(n, n * 9 / 10 + 1) THEN v END) AS p90
+       FROM r GROUP BY model`,
   )
-    .bind(model, since)
-    .first<{ n: number; errors: number }>();
-  const n = count?.n ?? 0;
-  if (n === 0) return { model, calls: 0, p50: 0, p90: 0, errorRate: 0 };
-
-  const at = async (offset: number) => {
-    const row = await env.DB.prepare(
-      `SELECT latency_ms AS v FROM ai_generations
-        WHERE model = ? AND created_at >= ? AND latency_ms IS NOT NULL
-        ORDER BY latency_ms LIMIT 1 OFFSET ?`,
-    )
-      .bind(model, since, offset)
-      .first<{ v: number }>();
-    return row?.v ?? 0;
-  };
-
-  return {
-    model,
-    calls: n,
-    p50: await at(Math.floor(n / 2)),
-    p90: await at(Math.min(n - 1, Math.floor(n * 0.9))),
-    errorRate: Math.round(((count?.errors ?? 0) / n) * 1000) / 10,
-  };
+    .bind(since)
+    .all<{ model: string; n: number; errors: number; p50: number | null; p90: number | null }>();
+  const byModel = new Map((res.results ?? []).map((r) => [r.model, r]));
+  return models.map((model) => {
+    const r = byModel.get(model);
+    if (!r || r.n === 0) return { model, calls: 0, p50: 0, p90: 0, errorRate: 0 };
+    return {
+      model,
+      calls: r.n,
+      p50: r.p50 ?? 0,
+      p90: r.p90 ?? 0,
+      errorRate: Math.round((r.errors / r.n) * 1000) / 10,
+    };
+  });
 }
 
 aiRouter.get(
@@ -275,7 +276,7 @@ aiRouter.get(
       ),
     ]);
 
-    const latency = await Promise.all(models.map((m) => latencyFor(c.env, m.model, since)));
+    const latency = await latencyByModel(c.env, models.map((m) => m.model), since);
 
     /**
      * Losing money on an account is cost exceeding revenue over the same month.

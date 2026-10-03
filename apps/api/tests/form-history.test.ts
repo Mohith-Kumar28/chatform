@@ -208,6 +208,34 @@ describe("versions", () => {
     expect(list[1]!.isActive).toBe(false);
   });
 
+  it("counts the completed responses recorded against each version, and only those", async () => {
+    await save(org, (d) => { d.blocks[1]!.title = "v1 question"; });
+    await publish(org, "one");
+    await save(org, (d) => { d.blocks[1]!.title = "v2 question"; });
+    await publish(org, "two");
+    const v1 = await env.DB.prepare(`SELECT id FROM form_versions WHERE form_id = ? AND version = 1`)
+      .bind(org.formId)
+      .first<{ id: string }>();
+    const now = Date.now();
+    const insert = env.DB.prepare(
+      `INSERT INTO submissions (id, form_id, form_version_id, organization_id, status, started_at, completed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
+    await env.DB.batch([
+      insert.bind("sbm_hist_v1a", org.formId, v1!.id, org.orgId, "completed", now, now),
+      insert.bind("sbm_hist_v1b", org.formId, v1!.id, org.orgId, "completed", now, now),
+      // Not finished, so not a response this version is answerable for.
+      insert.bind("sbm_hist_v1c", org.formId, v1!.id, org.orgId, "in_progress", now, null),
+    ]);
+
+    const list = await (await fetchApi(`/api/forms/${org.formId}/versions`, { headers: auth(org) })).json<
+      { version: number; responses: number }[]
+    >();
+    expect(list.find((v) => v.version === 1)?.responses).toBe(2);
+    expect(list.find((v) => v.version === 2)?.responses).toBe(0);
+    await env.DB.prepare(`DELETE FROM submissions WHERE id LIKE 'sbm_hist_v1%'`).run();
+  });
+
   it("diffs one version against another on request", async () => {
     await save(org, (d) => { d.blocks[1]!.title = "Before"; });
     await publish(org);

@@ -113,7 +113,7 @@ export async function audit(env: Bindings, entry: AuditEntry): Promise<void> {
     .run();
 }
 
-/** Keep `feature_access_log` bounded. Called from the existing 5-minute cron. */
+/** Keep `feature_access_log` bounded. Called from the daily cron. */
 export async function pruneGateLog(env: Bindings, olderThanDays = 90): Promise<number> {
   const cutoff = Date.now() - olderThanDays * 86_400_000;
   const res = await env.DB.prepare(

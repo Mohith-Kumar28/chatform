@@ -255,7 +255,7 @@
     "binding": "CF_VERSION_METADATA"
   },
   "triggers": {
-    "crons": ["*/5 * * * *"]
+    "crons": ["*/5 * * * *", "10 * * * *", "20 0 * * *"]
   },
   // No `vars` block on purpose. Every value the worker reads — ENVIRONMENT, APP_ORIGIN,
   // WEB_ORIGINS and the secrets — lives in apps/api/.prod.vars and is uploaded with
