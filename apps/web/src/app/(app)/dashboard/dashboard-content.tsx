@@ -68,7 +68,7 @@ import { CreateFormDialog } from "@/components/forms/create-form-dialog";
 import { NoWorkspaceState } from "@/components/dashboard/no-workspace-state";
 import { OverviewTiles } from "@/components/dashboard/overview-tiles";
 import { ExpandingSearch } from "@/components/dashboard/expanding-search";
-import { FormCard, type FormRow } from "@/components/forms/form-card";
+import { FormCard, FormCardSkeleton, type FormRow } from "@/components/forms/form-card";
 import { useDuplicateForm } from "@/components/forms/use-duplicate-form";
 import { ArchiveView, type ArchivedFormRow } from "@/components/forms/archive-view";
 
@@ -173,7 +173,7 @@ export function DashboardContent() {
 
   const moveForm = usePatchApiFormsByIdWorkspace();
 
-  const { data, isLoading, error, refetch } = useGetApiForms(formsParams, {
+  const { data, isPending, error, refetch } = useGetApiForms(formsParams, {
     query: { queryKey: getGetApiFormsQueryKey(formsParams) },
   });
   /*
@@ -187,6 +187,8 @@ export function DashboardContent() {
     query.set("ws", ALL_WORKSPACES);
     router.replace(`${window.location.pathname}?${query}`);
   }, [error, ws, router]);
+  const redirecting =
+    ws !== ALL_WORKSPACES && error instanceof ApiError && error.status === 404;
   // Memoised so it is not a fresh array on every render — the sort below
   // depends on it, and an unstable dependency re-sorts the whole grid whenever
   // anything else in this component changes.
@@ -594,10 +596,19 @@ export function DashboardContent() {
       )}
 
       <div className="mt-6">
-        {isLoading ? (
-          <div className={GRID}>
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="shimmer h-64 rounded-2xl" />
+        {/*
+          `isPending`, not `isLoading`. While the saved cache is read back from
+          disk a query has no data and is not fetching yet, so `isLoading` is
+          false and the grid fell through to "No forms yet" for a second before
+          the real list arrived. Pending means "no answer yet", whatever the
+          reason. A remembered workspace that 404s is about to be swapped for
+          every workspace, so it stays a skeleton too instead of flashing an
+          error.
+        */}
+        {isPending || redirecting ? (
+          <div className={GRID} role="status" aria-label="Loading forms">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <FormCardSkeleton key={i} />
             ))}
           </div>
         ) : noWorkspace ? (

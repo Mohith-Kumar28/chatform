@@ -1237,3 +1237,36 @@ export function relativeTime(ts: number): string {
     day: "numeric",
   });
 }
+
+/**
+ * A form card before its form has arrived.
+ *
+ * The same box as the real card, piece for piece: the chat thumbnail with an
+ * opener on the left and an answer on the right, the status strip under it,
+ * then the title and the meta row. When the rows land nothing moves, the
+ * shapes just fill in.
+ */
+export function FormCardSkeleton() {
+  return (
+    <div
+      aria-hidden
+      className="bg-card border-border flex h-full flex-col overflow-hidden rounded-2xl border shadow-xs"
+    >
+      <div className="bg-muted/40 flex h-36 shrink-0 flex-col gap-2.5 p-3 pb-2">
+        <div className="shimmer h-9 w-3/5 rounded-2xl rounded-bl-md" />
+        <div className="shimmer ml-auto h-7 w-2/5 rounded-2xl rounded-br-md" />
+        <div className="mt-auto flex items-center gap-2">
+          <div className="shimmer h-5 w-14 rounded-full" />
+          <div className="shimmer h-5 w-20 rounded-full" />
+        </div>
+      </div>
+      <div className="flex flex-1 flex-col p-4">
+        <div className="shimmer h-5 w-1/2 rounded-md" />
+        <div className="mt-auto flex items-center gap-3 pt-3">
+          <div className="shimmer h-3.5 w-20 rounded" />
+          <div className="shimmer h-3.5 w-12 rounded" />
+        </div>
+      </div>
+    </div>
+  );
+}
