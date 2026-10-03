@@ -80,7 +80,12 @@ export function LinkSettings({
    */
   const cardParams = new URLSearchParams({ title });
   if (descriptionField.value.trim()) cardParams.set("description", descriptionField.value.trim());
-  if (settings.closeRules.closeAt) cardParams.set("closeAt", settings.closeRules.closeAt);
+  // Only with the countdown on, which is the same rule the public page follows:
+  // an author who keeps the closing date to themselves keeps it off the card too.
+  if (settings.closeRules.closeAt && settings.closeRules.showCountdown) {
+    cardParams.set("closeAt", settings.closeRules.closeAt);
+  }
+  cardParams.set("v", "2");
   const defaultImageUrl = useDebounced(`/og/form?${cardParams}`, 400);
 
   return (

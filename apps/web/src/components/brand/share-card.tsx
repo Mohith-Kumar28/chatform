@@ -69,17 +69,6 @@ const RING =
 const STAR =
   "M12 2.5 L14.9 8.4 L21.4 9.3 L16.7 13.9 L17.8 20.4 L12 17.3 L6.2 20.4 L7.3 13.9 L2.6 9.3 L9.1 8.4 Z";
 
-/** The band spectrum, as a rule across the foot of the form card. */
-const SPECTRUM = [
-  { hue: PINK, w: 3 },
-  { hue: VIOLET, w: 2 },
-  { hue: "#3AA9B1", w: 2 },
-  { hue: AMBER, w: 2 },
-  { hue: "#3BB360", w: 2 },
-  { hue: "#4087DE", w: 2 },
-  { hue: ORANGE, w: 4 },
-] as const;
-
 function decode(b64: string): ArrayBuffer {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
@@ -349,6 +338,62 @@ function ChatWindow() {
   );
 }
 
+/* The hero's `vivid` ground: 115deg, orange holding to 30% and violet from
+   74%, so the middle third is the seam. */
+const VIVID_GROUND = `linear-gradient(115deg, ${ORANGE_VIVID} 0%, ${ORANGE_VIVID} 30%, ${VIOLET_VIVID} 74%, ${VIOLET_VIVID} 100%)`;
+
+/** What sits on that ground, shared by the marketing card and a form's own. */
+function Wash() {
+  return (
+    <>
+      {/* The field's lobes, stopped mid-drift. Satori has no blur, so each
+          is a radial gradient already soft at the edge. Amber is the
+          highlight, pink deepens the seam — the same two the hero adds. */}
+      <div
+        style={{
+          position: "absolute",
+          left: -260,
+          top: -340,
+          width: 900,
+          height: 900,
+          backgroundImage: `radial-gradient(circle, ${AMBER}99 0%, ${AMBER}00 62%)`,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          left: 340,
+          top: 120,
+          width: 820,
+          height: 820,
+          backgroundImage: `radial-gradient(circle, ${PINK}8c 0%, ${PINK}00 62%)`,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          left: 760,
+          top: -420,
+          width: 800,
+          height: 800,
+          backgroundImage: `radial-gradient(circle, #AB7EF1a6 0%, #AB7EF100 62%)`,
+        }}
+      />
+      {/* The dot grid that keeps the wash from reading as a flat panel. */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          opacity: 0.09,
+          backgroundImage: `radial-gradient(circle, ${INK} 1.3px, transparent 1.6px)`,
+          backgroundSize: "24px 24px",
+        }}
+      />
+    </>
+  );
+}
+
 export function renderShareCard({ headline, kicker }: ShareCardInput = {}) {
   // Page headlines step down rather than run under the chat window.
   const size = !headline ? 0 : headline.length > 22 ? 68 : headline.length > 16 ? 78 : 88;
@@ -362,55 +407,10 @@ export function renderShareCard({ headline, kicker }: ShareCardInput = {}) {
           display: "flex",
           position: "relative",
           overflow: "hidden",
-          /* The hero's `vivid` ground: 115deg, orange holding to 30% and
-             violet from 74%, so the middle third is the seam. */
-          backgroundImage: `linear-gradient(115deg, ${ORANGE_VIVID} 0%, ${ORANGE_VIVID} 30%, ${VIOLET_VIVID} 74%, ${VIOLET_VIVID} 100%)`,
+          backgroundImage: VIVID_GROUND,
         }}
       >
-        {/* The field's lobes, stopped mid-drift. Satori has no blur, so each
-            is a radial gradient already soft at the edge. Amber is the
-            highlight, pink deepens the seam — the same two the hero adds. */}
-        <div
-          style={{
-            position: "absolute",
-            left: -260,
-            top: -340,
-            width: 900,
-            height: 900,
-            backgroundImage: `radial-gradient(circle, ${AMBER}99 0%, ${AMBER}00 62%)`,
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: 340,
-            top: 120,
-            width: 820,
-            height: 820,
-            backgroundImage: `radial-gradient(circle, ${PINK}8c 0%, ${PINK}00 62%)`,
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: 760,
-            top: -420,
-            width: 800,
-            height: 800,
-            backgroundImage: `radial-gradient(circle, #AB7EF1a6 0%, #AB7EF100 62%)`,
-          }}
-        />
-        {/* The dot grid that keeps the wash from reading as a flat panel. */}
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            opacity: 0.09,
-            backgroundImage: `radial-gradient(circle, ${INK} 1.3px, transparent 1.6px)`,
-            backgroundSize: "24px 24px",
-          }}
-        />
+        <Wash />
 
         <ChatWindow />
 
@@ -534,79 +534,101 @@ export function renderFormCard({
           width: "100%",
           height: "100%",
           display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          background: CREAM,
-          padding: "72px 76px 0",
+          position: "relative",
+          overflow: "hidden",
+          backgroundImage: VIVID_GROUND,
           fontFamily: TEXT,
         }}
       >
-        <Wordmark size={46} />
+        {/* The same wash the landing page wears. The card was a flat cream
+            panel, which next to any other link in a feed read as unstyled. */}
+        <Wash />
+        {/* The mark, large and pale, running off the corner: it fills the side
+            a short title leaves empty and sits under a long one. */}
+        <svg
+          width={620}
+          height={620}
+          viewBox="0 0 32 32"
+          style={{ position: "absolute", left: 700, top: 150, opacity: 0.2, transform: "rotate(-8deg)" }}
+        >
+          <path d={PLATE_ASK} fill="#FFFFFF" />
+          <path d={PLATE_ANSWER} fill="#FFFFFF" />
+        </svg>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 20, paddingBottom: 8 }}>
-          <div
-            style={{
-              fontFamily: DISPLAY,
-              fontSize: size,
-              fontWeight: 800,
-              color: INK,
-              letterSpacing: -size * 0.04,
-              lineHeight: 1.02,
-              maxWidth: 1000,
-              display: "flex",
-            }}
-          >
-            {title}
-          </div>
-          {description ? (
-            <div style={{ fontSize: 30, fontWeight: 500, color: MUTED, maxWidth: 860, display: "flex" }}>
-              {description}
-            </div>
-          ) : null}
-          {/* The button is the card's call to action and was smaller than the
-              description above it, which read as a caption rather than a thing
-              to click. It carries the row on its own now. */}
-          <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 8 }}>
+        <div
+          style={{
+            position: "relative",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            width: "100%",
+            height: "100%",
+            padding: "64px 76px 68px",
+          }}
+        >
+          <Wordmark size={50} />
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
             <div
               style={{
-                display: "flex",
-                background: ORANGE,
+                fontFamily: DISPLAY,
+                fontSize: size,
+                fontWeight: 800,
                 color: INK,
-                fontSize: 32,
-                fontWeight: 600,
-                letterSpacing: -0.6,
-                padding: "18px 38px",
-                borderRadius: 999,
+                letterSpacing: -size * 0.04,
+                lineHeight: 1.02,
+                maxWidth: 1000,
+                display: "flex",
               }}
             >
-              Answer in a chat
+              {title}
             </div>
-            {/* A deadline is the one fact that makes someone open the link now
-                rather than later, and it was only discoverable by starting the
-                form. */}
-            {deadline ? (
+            {description ? (
+              <div style={{ fontSize: 30, fontWeight: 500, color: INK_MUTED, maxWidth: 860, display: "flex" }}>
+                {description}
+              </div>
+            ) : null}
+            <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 10 }}>
               <div
                 style={{
                   display: "flex",
-                  alignItems: "center",
-                  fontSize: 26,
-                  fontWeight: 500,
-                  color: MUTED,
-                  border: `2px solid ${LINE}`,
-                  padding: "14px 28px",
+                  background: INK,
+                  color: "#FFFFFF",
+                  fontSize: 30,
+                  fontWeight: 600,
+                  letterSpacing: -0.6,
+                  padding: "18px 38px",
                   borderRadius: 999,
                 }}
               >
-                Closes {deadline}
+                Answer in a chat
               </div>
-            ) : null}
+              {/* A deadline is the one fact that makes someone open the link now
+                  rather than later, and it was only discoverable by starting the
+                  form. */}
+              {deadline ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    fontSize: 28,
+                    fontWeight: 600,
+                    color: INK,
+                    background: "rgba(255,255,255,0.62)",
+                    padding: "18px 30px",
+                    borderRadius: 999,
+                  }}
+                >
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="9" stroke={INK} strokeWidth={2.2} />
+                    <path d="M12 7 V12 L15.4 14" stroke={INK} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Closes {deadline}
+                </div>
+              ) : null}
+            </div>
           </div>
-        </div>
-
-        <div style={{ display: "flex", width: "100%", height: 14 }}>
-          {SPECTRUM.map((s) => (
-            <div key={s.hue} style={{ flex: s.w, height: "100%", background: s.hue }} />
-          ))}
         </div>
       </div>
     ),

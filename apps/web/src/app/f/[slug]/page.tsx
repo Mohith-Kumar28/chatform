@@ -78,6 +78,9 @@ export async function generateMetadata({ params }: PageProps<"/f/[slug]">): Prom
   const ogParams = new URLSearchParams({ title });
   if (config.meta?.ogDescription) ogParams.set("description", config.meta.ogDescription);
   if (config.closeAt) ogParams.set("closeAt", config.closeAt);
+  // The card's design version. The image is cached for a day on its URL, so a
+  // redesign needs a new URL to reach links that were already shared.
+  ogParams.set("v", "2");
   const ogImage = config.meta?.ogImageUrl ?? `${SITE_ORIGIN}/og/form?${ogParams}`;
   const favicon = config.meta?.faviconUrl ?? config.theme.logoUrl ?? undefined;
 

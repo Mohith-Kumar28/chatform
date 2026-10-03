@@ -120,11 +120,9 @@ export function SettingsPanel({
         changed — and cap nothing else, so the card still grew past the window
         on "Keyboard shortcuts" and shrank to a strip on "Hidden fields".
       */
-      header={
-        <h1 className="font-display mb-6 text-xl font-semibold">
-          Settings{formTitle ? <span className="text-muted-foreground font-normal"> for {formTitle}</span> : null}
-        </h1>
-      }
+      // No visible heading: the builder's own header already names the form and
+      // the Settings tab, and the line cost the frame its height.
+      header={<h1 className="sr-only">Settings{formTitle ? ` for ${formTitle}` : ""}</h1>}
       paneClassName="space-y-3"
       nav={
         /*
