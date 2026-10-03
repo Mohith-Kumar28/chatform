@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Download, Info, Sparkles, Upload, X } from "lucide-react";
+import { Check, ChevronDown, Download, Info, Sparkles, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { FORM_LANGUAGES, MAX_FORM_LANGUAGES, formLanguage, type FormDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LockedControl } from "@/components/billing/gate";
+import { useEntitlements } from "@/hooks/use-entitlements";
+import { usePlansDialog } from "@/stores/paywall-store";
 import { API_ORIGIN, apiHeaders, customFetch, isPlanDenial } from "@/lib/api/mutator";
 import { useBuilderStore } from "@/stores/builder-store";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,8 @@ interface Status {
   name: string;
   total: number;
   translated: number;
+  /** How many of the translated strings the author wrote by hand. */
+  edited: number;
 }
 
 const label = (code: string) => {
@@ -77,6 +80,11 @@ export function LanguageSettings({
   const [status, setStatus] = useState<Record<string, Status>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const saveState = useBuilderStore((s) => s.saveState);
+  // Until the plan is known the control is the real one, so a paying account
+  // never sees the plans open under its own cursor.
+  const ent = useEntitlements();
+  const canAdd = !ent.ready || ent.can("multi_language");
+  const openPlans = usePlansDialog((s) => s.openPlans);
   const added = settings.languages.filter((code) => code !== settings.language);
   const addedKey = added.join(",");
 
@@ -193,53 +201,66 @@ export function LanguageSettings({
         </p>
       </div>
 
-      <LockedControl feature="multi_language">
-        <div data-setting="form.languages" className="space-y-4 rounded-xl border px-5 py-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium">Add multiple languages</p>
-            <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-              Translations are made from the default language above. Translate each language with AI, or by hand:
-              download the file, fill in its third column and upload it back.
-            </p>
-          </div>
-
-          {added.length < MAX_FORM_LANGUAGES - 1 && (
-            <Select value="" onValueChange={(code) => setLanguages([...added, code])}>
-              <SelectTrigger className="w-full sm:w-64">
-                <SelectValue placeholder="+ Add language" />
-              </SelectTrigger>
-              <SelectContent>
-                {available.map((l) => (
-                  <SelectItem key={l.code} value={l.code}>
-                    <LanguageName code={l.code} />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          <div className="space-y-2">
-            <div className="bg-muted/50 flex items-center justify-between gap-3 rounded-lg px-4 py-3">
-              <p className="min-w-0 truncate text-sm font-medium">
-                <LanguageName code={settings.language} />
-              </p>
-              <Badge variant="secondary">Default</Badge>
-            </div>
-            {added.map((code) => (
-              <LanguageRow
-                key={code}
-                code={code}
-                status={status[code]}
-                busy={busy === code}
-                onAi={() => void translateWithAi(code)}
-                onDownload={() => void download(code)}
-                onUpload={(file) => void upload(code, file)}
-                onRemove={() => setLanguages(added.filter((c) => c !== code))}
-              />
-            ))}
-          </div>
+      <div data-setting="form.languages" className="space-y-4 rounded-xl border px-5 py-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">Add multiple languages</p>
+          <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+            Translations are made from the default language above. Translate each language with AI, or by hand:
+            download the file, fill in its third column and upload it back.
+          </p>
         </div>
-      </LockedControl>
+
+        {/*
+          No lock and no plan chip. On a plan without languages the control
+          looks exactly as it does on one with them, and pressing it opens the
+          plans: the moment somebody reaches for a second language is the
+          moment to say what it takes.
+        */}
+        {!canAdd ? (
+          <button
+            type="button"
+            onClick={() => openPlans()}
+            className="border-input hover:bg-muted/40 text-muted-foreground flex h-9 w-full items-center justify-between rounded-md border bg-transparent px-3 text-sm shadow-xs transition-colors outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:w-64"
+          >
+            + Add language
+            <ChevronDown className="size-4 opacity-50" />
+          </button>
+        ) : added.length < MAX_FORM_LANGUAGES - 1 && (
+          <Select value="" onValueChange={(code) => setLanguages([...added, code])}>
+            <SelectTrigger className="w-full sm:w-64">
+              <SelectValue placeholder="+ Add language" />
+            </SelectTrigger>
+            <SelectContent>
+              {available.map((l) => (
+                <SelectItem key={l.code} value={l.code}>
+                  <LanguageName code={l.code} />
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        <div className="space-y-2">
+          <div className="bg-muted/50 flex items-center justify-between gap-3 rounded-lg px-4 py-3">
+            <p className="min-w-0 truncate text-sm font-medium">
+              <LanguageName code={settings.language} />
+            </p>
+            <Badge variant="secondary">Default</Badge>
+          </div>
+          {added.map((code) => (
+            <LanguageRow
+              key={code}
+              code={code}
+              status={status[code]}
+              busy={busy === code}
+              onAi={() => void translateWithAi(code)}
+              onDownload={() => void download(code)}
+              onUpload={(file) => void upload(code, file)}
+              onRemove={() => setLanguages(added.filter((c) => c !== code))}
+            />
+          ))}
+        </div>
+      </div>
     </>
   );
 }
@@ -291,25 +312,48 @@ function LanguageRow({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const done = status !== undefined && status.total > 0 && status.translated >= status.total;
+  const missing = status ? status.total - status.translated : 0;
+  /*
+    A finished language says who translated it and steps back: the two buttons
+    that got it there have nothing left to do, and leaving them lit read as
+    "this still needs doing". What remains is the one thing an author may still
+    want, which is to correct it.
+  */
+  const state = !status
+    ? "Translation needed"
+    : done
+      ? status.edited === 0
+        ? "Translated by AI"
+        : status.edited >= status.translated
+          ? "Translated by you"
+          : "Translated by AI, with your edits"
+      : status.translated === 0
+        ? "Translation needed"
+        : missing === 1
+          ? "1 new line needs translation"
+          : `${missing} new lines need translation`;
   return (
     <div className="bg-muted/50 flex flex-col justify-between gap-3 rounded-lg px-4 py-3 sm:flex-row sm:items-center">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium">
           <LanguageName code={code} />
         </p>
-        <p className={cn("mt-0.5 text-xs", done ? "text-muted-foreground" : "text-warning")}>
-          {done ? "Translated" : "Translation needed"}
+        <p className={cn("mt-0.5 flex items-center gap-1 text-xs", done ? "text-muted-foreground" : "text-warning")}>
+          {done && <Check className="text-success size-3" aria-hidden />}
+          {state}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <Button size="sm" variant={done ? "outline" : "default"} disabled={busy} onClick={onAi}>
-          {busy ? <Spinner /> : <Sparkles />}
-          AI translation
-        </Button>
+        {!done && (
+          <Button size="sm" disabled={busy} onClick={onAi}>
+            {busy ? <Spinner /> : <Sparkles />}
+            AI translation
+          </Button>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="outline" disabled={busy}>
-              Manual translation
+              {done ? "Edit translation" : "Manual translation"}
               <ChevronDown />
             </Button>
           </DropdownMenuTrigger>

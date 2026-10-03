@@ -84,6 +84,13 @@ export interface BuilderState {
    */
   pickerIndex: number | null;
   designOpen: boolean;
+  /**
+   * Which of the form's languages the builder's previews are showing. Null is
+   * the form's own. Held here so it survives moving between questions and is
+   * the same in the question card and the full preview.
+   */
+  previewLanguage: string | null;
+  setPreviewLanguage: (code: string | null) => void;
   /** A Design sheet field to scroll to and shake once the sheet is open, e.g. `brand`. */
   designReveal: string | null;
   /** AI bar proposals applied since the last save; the next autosave stores them as applied. */
@@ -249,6 +256,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   selectedEndingRef: null,
   attentionPulse: null,
   pickerIndex: null,
+  previewLanguage: null,
   designOpen: false,
   designReveal: null,
   appliedAiTurns: [],
@@ -284,6 +292,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       selectedEndingRef: null,
       pickerIndex: null,
       designOpen: false,
+      // Another form, with other languages.
+      previewLanguage: null,
       appliedAiTurns: [],
     }),
 
@@ -437,6 +447,7 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
     set((s) => ({ pickerIndex: index ?? s.doc?.blocks.length ?? 0, designOpen: false })),
   closePicker: () => set({ pickerIndex: null }),
   markAiTurnApplied: (id) => set((s) => ({ appliedAiTurns: [...s.appliedAiTurns, id] })),
+  setPreviewLanguage: (code) => set({ previewLanguage: code }),
   setDesignOpen: (open, reveal) => set({ designOpen: open, designReveal: open ? (reveal ?? null) : null }),
 
   setShortcuts: (shortcuts) => set({ shortcuts }),

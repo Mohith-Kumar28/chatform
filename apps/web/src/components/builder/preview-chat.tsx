@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, TriangleAlert } from "lucide-react";
-import { FormDoc, toPublicConfig } from "@repo/form-schema";
+import { FormDoc, localizeFormDoc, toPublicConfig } from "@repo/form-schema";
 import { ChatClient } from "@/components/chat/chat-client";
 import { Button } from "@/components/ui/button";
 import { API_ORIGIN, apiHeaders } from "@/lib/api/mutator";
 import { useEntitlements } from "@/hooks/use-entitlements";
+import { useBuilderStore } from "@/stores/builder-store";
 
 
 /**
@@ -30,6 +31,26 @@ export function PreviewChat({
   chromeless?: boolean;
 }) {
   const [session, setSession] = useState<{ sessionId: string; token: string; eventsUrl: string } | null>(null);
+  /**
+   * The language being previewed, and what the server said about it.
+   *
+   * A form offered in several languages is previewed in any of them, from the
+   * same switcher a respondent gets. The session is opened on the translated
+   * draft, and the translations come back with it so the form drawn here from
+   * the draft says the same words the session does.
+   */
+  const language = useBuilderStore((s) => s.previewLanguage);
+  const setPreviewLanguage = useBuilderStore((s) => s.setPreviewLanguage);
+  const setLanguage = useCallback(
+    (code: string) => setPreviewLanguage(code === doc.settings.language ? null : code),
+    [setPreviewLanguage, doc.settings.language],
+  );
+  const [locale, setLocale] = useState<{
+    language: string;
+    languages: string[];
+    messages: Record<string, string>;
+    translations: Record<string, string>;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -54,7 +75,8 @@ export function PreviewChat({
         // the admin's own organization, found no such form there, and answered
         // 404 — so the preview said "Form not found" about the form the builder
         // behind it had just loaded.
-        headers: apiHeaders(),
+        headers: apiHeaders({ "content-type": "application/json" }),
+        body: JSON.stringify(language ? { language } : {}),
       });
       if (!res.ok) {
         throw new Error(
@@ -65,14 +87,27 @@ export function PreviewChat({
               : "Could not start preview",
         );
       }
-      const data = (await res.json()) as { sessionId: string; respondentToken: string; sseUrl: string };
+      const data = (await res.json()) as {
+        sessionId: string;
+        respondentToken: string;
+        sseUrl: string;
+        language?: string;
+        languages?: string[];
+        messages?: Record<string, string>;
+        translations?: Record<string, string>;
+      };
+      setLocale(
+        data.language
+          ? { language: data.language, languages: data.languages ?? [], messages: data.messages ?? {}, translations: data.translations ?? {} }
+          : null,
+      );
       setSession({ sessionId: data.sessionId, token: data.respondentToken, eventsUrl: data.sseUrl });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Preview failed");
     } finally {
       setLoading(false);
     }
-  }, [formId]);
+  }, [formId, language]);
 
   // React strict mode double-mounts effects in dev; guard so we don't open two
   // sessions and then race their SSE streams.
@@ -92,9 +127,11 @@ export function PreviewChat({
   const { can } = useEntitlements();
   const branded = can("brand_logo");
   const config = useMemo(() => {
-    const c = toPublicConfig(doc, {
+    const shown = locale ? localizeFormDoc(doc, locale.language, new Map(Object.entries(locale.translations))) : doc;
+    const c = toPublicConfig(shown, {
       slug: doc.title.toLowerCase().replace(/\s+/g, "-"),
       brandingHidden: true,
+      ...(locale ? { language: locale.language, languages: locale.languages, messages: locale.messages } : {}),
     });
     if (!branded) {
       // Copied rather than assigned into. `toPublicConfig` hands back the
@@ -105,7 +142,7 @@ export function PreviewChat({
       c.theme = { ...c.theme, logoUrl: null, brandName: undefined };
     }
     return c;
-  }, [doc, branded]);
+  }, [doc, branded, locale]);
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -154,6 +191,7 @@ export function PreviewChat({
               config={config}
               existingSession={session}
               previewMode
+              onLanguage={setLanguage}
               // "Start over" inside the conversation needs a new session, and
               // only this component can ask for one — the draft it runs against
               // is not published, so there is no public slug to post to.

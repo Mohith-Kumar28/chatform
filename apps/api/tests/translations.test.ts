@@ -142,7 +142,8 @@ describe("a form in several languages", () => {
       ["Working", ""],
     ]);
     expect(saved.status).toBe(200);
-    expect(await saved.json()).toMatchObject({ saved: 2, skipped: 0 });
+    // Written by hand, and the status says so.
+    expect(await saved.json()).toMatchObject({ saved: 2, skipped: 0, status: { lang: "hi", translated: 2, edited: 2 } });
 
     const hindi = await config(slug, "hi");
     expect(hindi.languages).toEqual(["en", "hi"]);
@@ -218,8 +219,8 @@ describe("a form in several languages", () => {
   });
 });
 
-describe("on the free plan", () => {
-  it("offers a translated language like any other plan", async () => {
+describe("on a plan without languages", () => {
+  it("serves the form as written and refuses to translate", async () => {
     const free = await seedTenant("translatefree");
     const formId = "frm_tr_free";
     const json = JSON.stringify(doc("free", ["hi"]));
@@ -233,16 +234,21 @@ describe("on the free plan", () => {
         `INSERT INTO form_versions (id, form_id, version, schema_json, checksum, published_at, created_by, created_at)
          VALUES ('fv_tr_free', ?1, 1, ?2, 'ck', ?3, ?4, ?3)`,
       ).bind(formId, json, now, free.userId),
+      env.DB.prepare(
+        `INSERT INTO form_translations (form_id, lang, source_hash, source, text, edited, updated_at) VALUES (?1, 'hi', ?2, 'Student', 'छात्र', 1, ?3)`,
+      ).bind(formId, textHash("Student"), now),
     ]);
-    const csv = `id,English,Hindi\r\n${textHash("Student")},Student,छात्र`;
-    const res = await fetchApi(`/api/forms/${formId}/translations/hi/csv`, {
+    const ai = await fetchApi(`/api/forms/${formId}/translations/hi/ai`, { method: "POST", headers: { cookie: free.cookie } });
+    expect(ai.status).toBe(402);
+    const csv = await fetchApi(`/api/forms/${formId}/translations/hi/csv`, {
       method: "PUT",
       headers: { cookie: free.cookie, "content-type": "text/csv" },
-      body: csv,
+      body: "id,English,Hindi",
     });
-    expect(res.status).toBe(200);
+    expect(csv.status).toBe(402);
+    // A language left on the form from a paid plan is not offered.
     const shown = await config("tr-free", "hi");
-    expect(shown.languages).toEqual(["en", "hi"]);
-    expect(shown.blocks[1]!.options![0]!.label).toBe("छात्र");
+    expect(shown.languages).toEqual(["en"]);
+    expect(shown.blocks[1]!.options![0]!.label).toBe("Student");
   });
 });

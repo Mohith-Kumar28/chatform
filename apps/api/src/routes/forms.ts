@@ -25,7 +25,7 @@ import { requireWorkspace, formSlug, ALL_WORKSPACES } from "../lib/workspace.js"
 import { localMidnight } from "../lib/org-analytics.js";
 import { enqueueMail } from "../lib/mail.js";
 import { canOpenWorkspace } from "../lib/workspace-access.js";
-import { aiTranslate, importTranslationsCsv, translationStatus, translationsCsv, deferOn } from "../lib/translations.js";
+import { aiTranslate, importTranslationsCsv, previewLanguage, translationStatus, translationsCsv, deferOn } from "../lib/translations.js";
 import { ARCHIVED_FORM_SELECT, archiveForm, purgeFormNow, restoreForm, type ArchivedFormRow } from "../lib/form-archive.js";
 
 export const formsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
@@ -1068,6 +1068,8 @@ const LanguageStatus = z.object({
   total: z.number(),
   /** How many have a translation. Fewer than `total` is "Translation needed". */
   translated: z.number(),
+  /** How many of those the author wrote by hand. */
+  edited: z.number(),
 });
 
 /** The draft, which is what an author is translating; a respondent reads the same strings once it is published. */
@@ -1094,6 +1096,47 @@ formsRouter.get(
     const doc = await draftDoc(c);
     if (!doc) return c.json(noDraft, 404);
     return c.json({ languages: await translationStatus(c.env, { formId: c.get("form")!.id, doc }) });
+  },
+);
+
+formsRouter.get(
+  "/forms/:id/translations/:lang",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "The draft's text in one of its languages, for the builder's previews",
+    responses: {
+      200: {
+        description: "Translations",
+        content: {
+          "application/json": {
+            schema: resolver(
+              z.object({
+                language: z.string(),
+                languages: z.array(z.string()),
+                messages: z.record(z.string(), z.string()),
+                translations: z.record(z.string(), z.string()),
+              }),
+            ),
+          },
+        },
+      },
+    },
+  }),
+  async (c) => {
+    const doc = await draftDoc(c);
+    if (!doc) return c.json(noDraft, 404);
+    const form = c.get("form")!;
+    // A language the form does not offer comes back as the form's own, with the
+    // list of what it does offer, so the caller can correct itself.
+    const { doc: _shown, ...shown } = await previewLanguage(c.env, {
+      formId: form.id,
+      organizationId: form.organization_id,
+      doc,
+      lang: c.req.param("lang"),
+      defer: deferOn(c),
+    });
+    void _shown;
+    return c.json(shown);
   },
 );
 

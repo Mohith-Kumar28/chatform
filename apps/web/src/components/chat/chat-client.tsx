@@ -65,6 +65,7 @@ export function ChatClient({
   followUpId,
   existingSession,
   previewMode,
+  onLanguage,
   onRestart,
   paymentReturn,
   paymentCancelled,
@@ -77,6 +78,12 @@ export function ChatClient({
   followUpId?: string;
   existingSession?: { sessionId: string; token: string; eventsUrl: string } | null;
   previewMode?: boolean;
+  /**
+   * Preview only: show the form in another of its languages. On the hosted page
+   * a language is a navigation; a preview has no address to navigate to, so
+   * whoever mounted it swaps the session instead.
+   */
+  onLanguage?: (code: string) => void;
   /** Preview only: mint a fresh session, since a draft has no public slug. */
   onRestart?: () => void;
   /** From `?cf_pay=` — the payment record a gateway redirect just returned from. */
@@ -100,7 +107,7 @@ export function ChatClient({
 
   return (
     <I18nProvider messages={config.messages}>
-      <ChatSurface chat={chat} config={config} previewMode={previewMode} />
+      <ChatSurface chat={chat} config={config} previewMode={previewMode} onLanguage={onLanguage} />
     </I18nProvider>
   );
 }
@@ -126,11 +133,13 @@ export function ChatSurface({
   chat,
   config,
   previewMode: previewModeProp,
+  onLanguage,
   replay = false,
 }: {
   chat: ChatState;
   config: PublicFormConfig;
   previewMode?: boolean;
+  onLanguage?: (code: string) => void;
   replay?: boolean;
 }) {
   const t = useT();
@@ -579,7 +588,9 @@ export function ChatSurface({
       inert={replay}
     >
       <ChatHeader
-        languageControl={previewMode || replay ? null : <LanguageSwitcher config={config} />}
+        languageControl={
+          replay || (previewMode && !onLanguage) ? null : <LanguageSwitcher config={config} onChoose={onLanguage} />
+        }
         title={agentName}
         brandName={config.theme.brandName}
         /*

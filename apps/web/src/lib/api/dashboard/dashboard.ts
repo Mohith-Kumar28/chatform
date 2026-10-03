@@ -56,6 +56,7 @@ import type {
   GetApiFormsByIdSubmissions200,
   GetApiFormsByIdSubmissionsParams,
   GetApiFormsByIdTranslations200,
+  GetApiFormsByIdTranslationsByLang200,
   GetApiFormsByIdVersions200Item,
   GetApiFormsByIdVersionsByVersion200,
   GetApiFormsByIdVersionsByVersion404,
@@ -2172,6 +2173,99 @@ export function useGetApiFormsByIdTranslations<TData = Awaited<ReturnType<typeof
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetApiFormsByIdTranslationsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiFormsByIdTranslationsByLangResponse200 = {
+  data: GetApiFormsByIdTranslationsByLang200
+  status: 200
+}
+
+export type getApiFormsByIdTranslationsByLangResponseSuccess = (getApiFormsByIdTranslationsByLangResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiFormsByIdTranslationsByLangResponse = (getApiFormsByIdTranslationsByLangResponseSuccess)
+
+export const getGetApiFormsByIdTranslationsByLangUrl = (id: string,
+    lang: string,) => {
+
+
+
+
+  return `/api/forms/${id}/translations/${lang}`
+}
+
+/**
+ * @summary The draft's text in one of its languages, for the builder's previews
+ */
+export const getApiFormsByIdTranslationsByLang = async (id: string,
+    lang: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdTranslationsByLangResponse> => {
+
+  return customFetch<getApiFormsByIdTranslationsByLangResponse>(getGetApiFormsByIdTranslationsByLangUrl(id,lang),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiFormsByIdTranslationsByLangQueryKey = (id: string,
+    lang: string,) => {
+    return [
+    `/api/forms/${id}/translations/${lang}`
+    ] as const;
+    }
+
+
+export const getGetApiFormsByIdTranslationsByLangQueryOptions = <TData = Awaited<ReturnType<typeof getApiFormsByIdTranslationsByLang>>, TError = unknown>(id: string,
+    lang: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdTranslationsByLang>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsByIdTranslationsByLangQueryKey(id,lang);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFormsByIdTranslationsByLang>>> = ({ signal }) => getApiFormsByIdTranslationsByLang(id,lang, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && lang !== null && lang !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdTranslationsByLang>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiFormsByIdTranslationsByLangQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFormsByIdTranslationsByLang>>>
+export type GetApiFormsByIdTranslationsByLangQueryError = unknown
+
+
+/**
+ * @summary The draft's text in one of its languages, for the builder's previews
+ */
+
+export function useGetApiFormsByIdTranslationsByLang<TData = Awaited<ReturnType<typeof getApiFormsByIdTranslationsByLang>>, TError = unknown>(
+ id: string,
+    lang: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdTranslationsByLang>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiFormsByIdTranslationsByLangQueryOptions(id,lang,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -6,6 +6,7 @@ import type { Bindings } from "../env.js";
 import { SessionDO } from "../do/session-do.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
 import { SESSION_LOCATION } from "../lib/session-location.js";
+import { deferOn, previewLanguage } from "../lib/translations.js";
 
 /**
  * Preview sessions — authenticated, run against the WORKING schema (drafts).
@@ -23,7 +24,25 @@ previewRouter.post(
     tags: ["dashboard"],
     summary: "Start a preview chat session against the working draft",
     responses: {
-      200: { description: "Session", content: { "application/json": { schema: resolver(z.object({ sessionId: z.string(), sseUrl: z.string(), respondentToken: z.string() })) } } },
+      200: {
+        description: "Session",
+        content: {
+          "application/json": {
+            schema: resolver(
+              z.object({
+                sessionId: z.string(),
+                sseUrl: z.string(),
+                respondentToken: z.string(),
+                /** The language the session was opened in, and the ones the draft can be previewed in. */
+                language: z.string(),
+                languages: z.array(z.string()),
+                messages: z.record(z.string(), z.string()),
+                translations: z.record(z.string(), z.string()),
+              }),
+            ),
+          },
+        },
+      },
       404: { description: "Form not found" },
     },
   }),
@@ -35,6 +54,20 @@ previewRouter.post(
       .bind(id)
       .first<{ id: string; slug: string; working_schema: string; organization_id: string }>();
     if (!row) return c.json({ error: { code: "not_found", message: "Form not found" } }, 404);
+
+    // Which language to preview in. No body at all is the form as written,
+    // which is what every preview before languages asked for.
+    const wanted = await c.req
+      .json<{ language?: unknown }>()
+      .then((b) => (typeof b?.language === "string" ? b.language.slice(0, 8) : undefined))
+      .catch(() => undefined);
+    const shown = await previewLanguage(c.env, {
+      formId: row.id,
+      organizationId: row.organization_id,
+      doc: readFormDoc(JSON.parse(row.working_schema)),
+      lang: wanted,
+      defer: deferOn(c),
+    });
 
     const sessionId = `chs_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
     const respondentToken = crypto.randomUUID().replace(/-/g, "");
@@ -54,13 +87,21 @@ previewRouter.post(
       organizationId: row.organization_id,
       slug: row.slug,
       brandingHidden: true,
-      docJson: readFormDoc(JSON.parse(row.working_schema)),
+      docJson: shown.doc,
       respondentToken,
       hiddenFields: {},
       country: null,
       userAgent: "preview",
     });
     if (!init.ok) return c.json({ error: { code: init.code, message: "Preview session failed" } }, 400);
-    return c.json({ sessionId, sseUrl: `/p/sessions/${sessionId}/events`, respondentToken });
+    return c.json({
+      sessionId,
+      sseUrl: `/p/sessions/${sessionId}/events`,
+      respondentToken,
+      language: shown.language,
+      languages: shown.languages,
+      messages: shown.messages,
+      translations: shown.translations,
+    });
   },
 );

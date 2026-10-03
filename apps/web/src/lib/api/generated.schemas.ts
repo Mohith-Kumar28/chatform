@@ -3331,10 +3331,22 @@ export type GetApiFormsByIdTranslations200LanguagesItem = {
   name: string;
   total: number;
   translated: number;
+  edited: number;
 };
 
 export type GetApiFormsByIdTranslations200 = {
   languages: GetApiFormsByIdTranslations200LanguagesItem[];
+};
+
+export type GetApiFormsByIdTranslationsByLang200Messages = {[key: string]: string};
+
+export type GetApiFormsByIdTranslationsByLang200Translations = {[key: string]: string};
+
+export type GetApiFormsByIdTranslationsByLang200 = {
+  language: string;
+  languages: string[];
+  messages: GetApiFormsByIdTranslationsByLang200Messages;
+  translations: GetApiFormsByIdTranslationsByLang200Translations;
 };
 
 export type PostApiFormsByIdTranslationsByLangAi200 = {
@@ -3342,6 +3354,7 @@ export type PostApiFormsByIdTranslationsByLangAi200 = {
   name: string;
   total: number;
   translated: number;
+  edited: number;
 };
 
 export type PostApiFormsByIdTranslationsByLangAi404ErrorIssuesItem = {
@@ -3369,6 +3382,7 @@ export type PutApiFormsByIdTranslationsByLangCsv200Status = {
   name: string;
   total: number;
   translated: number;
+  edited: number;
 };
 
 export type PutApiFormsByIdTranslationsByLangCsv200 = {
@@ -11381,10 +11395,18 @@ export type PostApiBillingPortal200 = {
   url: string;
 };
 
+export type PostApiFormsByIdPreviewSessions200Messages = {[key: string]: string};
+
+export type PostApiFormsByIdPreviewSessions200Translations = {[key: string]: string};
+
 export type PostApiFormsByIdPreviewSessions200 = {
   sessionId: string;
   sseUrl: string;
   respondentToken: string;
+  language: string;
+  languages: string[];
+  messages: PostApiFormsByIdPreviewSessions200Messages;
+  translations: PostApiFormsByIdPreviewSessions200Translations;
 };
 
 export type GetApiTemplates200Item = {

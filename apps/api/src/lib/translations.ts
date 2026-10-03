@@ -236,6 +236,24 @@ export interface LanguageStatus {
   total: number;
   /** How many of them have a translation. Fewer than `total` reads "Translation needed". */
   translated: number;
+  /** How many of those the author wrote or corrected by hand, which is what says who translated it. */
+  edited: number;
+}
+
+/** One language's standing against a list of the form's strings. */
+async function statusOf(env: Bindings, formId: string, lang: string, texts: string[]): Promise<LanguageStatus> {
+  const have = await readTranslations(env, formId, lang);
+  const { results } = await env.DB.prepare(`SELECT source FROM form_translations WHERE form_id = ? AND lang = ? AND edited = 1`)
+    .bind(formId, lang)
+    .all<{ source: string }>();
+  const byHand = new Set(results.map((row) => row.source));
+  return {
+    lang,
+    name: languageName(lang),
+    total: texts.length,
+    translated: texts.filter((text) => have.has(text)).length,
+    edited: texts.filter((text) => byHand.has(text)).length,
+  };
 }
 
 /** Where each of the form's other languages stands against the form as it is now. */
@@ -245,10 +263,7 @@ export async function translationStatus(env: Bindings, opts: { formId: string; d
   return Promise.all(
     formLanguages(opts.doc)
       .filter((lang) => lang !== base)
-      .map(async (lang) => {
-        const have = await readTranslations(env, opts.formId, lang);
-        return { lang, name: languageName(lang), total: texts.length, translated: texts.filter((text) => have.has(text)).length };
-      }),
+      .map((lang) => statusOf(env, opts.formId, lang, texts)),
   );
 }
 
@@ -292,8 +307,7 @@ export async function aiTranslate(
     fillInterface(env, { lang: opts.lang, organizationId: opts.organizationId, formId: opts.formId, have, force: true }),
   ]);
   await store(env, opts.formId, opts.lang, done);
-  for (const [source, text] of done) have.set(source, text);
-  return { lang: opts.lang, name: languageName(opts.lang), total: texts.length, translated: texts.filter((text) => have.has(text)).length };
+  return statusOf(env, opts.formId, opts.lang, texts);
 }
 
 // ─── the spreadsheet ─────────────────────────────────────────────────────────
@@ -387,12 +401,7 @@ export async function importTranslationsCsv(
   const have = await readTranslations(env, opts.formId, opts.lang);
   // The interface text is ours to translate, whichever way the form's was done.
   opts.defer?.(fillInterface(env, { lang: opts.lang, organizationId: opts.organizationId, formId: opts.formId, have }));
-  const texts = formTexts(opts.doc);
-  return {
-    saved: statements.length,
-    skipped,
-    status: { lang: opts.lang, name: languageName(opts.lang), total: texts.length, translated: texts.filter((t) => have.has(t)).length },
-  };
+  return { saved: statements.length, skipped, status: await statusOf(env, opts.formId, opts.lang, formTexts(opts.doc)) };
 }
 
 /** Whether a code is one a form can be offered in. */
@@ -415,4 +424,38 @@ export function deferOn(c: { executionCtx: { waitUntil(work: Promise<unknown>): 
       void work.catch(() => {});
     }
   };
+}
+
+export interface PreviewLanguage {
+  language: string;
+  languages: string[];
+  messages: Record<string, string>;
+  /** The draft's own strings in `language`, for the builder to draw the same form the session holds. */
+  translations: Record<string, string>;
+  doc: FormDoc;
+}
+
+/**
+ * The draft in one of its languages, for the builder's preview.
+ *
+ * The preview draws its form from the draft in the browser, so besides the
+ * translated document for the session it needs the translations themselves to
+ * apply to its own copy.
+ */
+export async function previewLanguage(
+  env: Bindings,
+  opts: { formId: string; organizationId: string; doc: FormDoc; lang?: string; defer?: (work: Promise<unknown>) => void },
+): Promise<PreviewLanguage> {
+  const languages = await offeredLanguages(env, { formId: opts.formId, doc: opts.doc });
+  const language = opts.lang && languages.includes(opts.lang) ? opts.lang : opts.doc.settings.language;
+  const shown = await localizedForm(env, { ...opts, lang: language });
+  const translations: Record<string, string> = {};
+  if (language !== opts.doc.settings.language) {
+    const have = await readTranslations(env, opts.formId, language);
+    for (const text of formTexts(opts.doc)) {
+      const translated = have.get(text);
+      if (translated) translations[text] = translated;
+    }
+  }
+  return { language, languages, messages: shown.messages, translations, doc: shown.doc };
 }

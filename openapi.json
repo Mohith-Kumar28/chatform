@@ -13367,13 +13367,17 @@
                           },
                           "translated": {
                             "type": "number"
+                          },
+                          "edited": {
+                            "type": "number"
                           }
                         },
                         "required": [
                           "lang",
                           "name",
                           "total",
-                          "translated"
+                          "translated",
+                          "edited"
                         ]
                       }
                     }
@@ -13393,6 +13397,86 @@
             },
             "in": "path",
             "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/forms/{id}/translations/{lang}": {
+      "get": {
+        "operationId": "getApiFormsByIdTranslationsByLang",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "The draft's text in one of its languages, for the builder's previews",
+        "responses": {
+          "200": {
+            "description": "Translations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "language": {
+                      "type": "string"
+                    },
+                    "languages": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "messages": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "translations": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "language",
+                    "languages",
+                    "messages",
+                    "translations"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "lang",
             "required": true
           }
         ],
@@ -13430,13 +13514,17 @@
                     },
                     "translated": {
                       "type": "number"
+                    },
+                    "edited": {
+                      "type": "number"
                     }
                   },
                   "required": [
                     "lang",
                     "name",
                     "total",
-                    "translated"
+                    "translated",
+                    "edited"
                   ]
                 }
               }
@@ -13601,13 +13689,17 @@
                         },
                         "translated": {
                           "type": "number"
+                        },
+                        "edited": {
+                          "type": "number"
                         }
                       },
                       "required": [
                         "lang",
                         "name",
                         "total",
-                        "translated"
+                        "translated",
+                        "edited"
                       ]
                     }
                   },
@@ -45279,12 +45371,43 @@
                     },
                     "respondentToken": {
                       "type": "string"
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "languages": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "messages": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "translations": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
                     "sessionId",
                     "sseUrl",
-                    "respondentToken"
+                    "respondentToken",
+                    "language",
+                    "languages",
+                    "messages",
+                    "translations"
                   ]
                 }
               }

@@ -37,6 +37,13 @@ function storedLanguage(slug: string): string | null {
 
 const nativeName = (code: string) => formLanguage(code)?.native ?? code.toUpperCase();
 
+/** In the list: the language in itself, then in English, so it can be found either way. */
+function optionName(code: string): string {
+  const language = formLanguage(code);
+  if (!language) return code.toUpperCase();
+  return language.native === language.name ? language.name : `${language.native} · ${language.name}`;
+}
+
 /**
  * Remember a choice and show the form in it.
  *
@@ -45,7 +52,7 @@ const nativeName = (code: string) => formLanguage(code)?.native ?? code.toUpperC
  * lost: the server recognises the device and the new conversation continues the
  * same draft.
  */
-export function chooseLanguage(config: PublicFormConfig, code: string): void {
+export function chooseLanguage(config: Pick<PublicFormConfig, "slug" | "language" | "languages">, code: string): void {
   const previous = storedLanguage(config.slug) ?? config.languages?.[0];
   try {
     localStorage.setItem(langKey(config.slug), code);
@@ -188,7 +195,14 @@ function LanguagePrompt({ config, languages }: { config: PublicFormConfig; langu
  * type-to-find on a desktop, and the accessibility tree, with no popover to
  * position inside a sticky header.
  */
-export function LanguageSwitcher({ config }: { config: PublicFormConfig }) {
+export function LanguageSwitcher({
+  config,
+  onChoose,
+}: {
+  config: Pick<PublicFormConfig, "slug" | "language" | "languages">;
+  /** Takes the choice instead of navigating. The builder's preview, which has no page to reload. */
+  onChoose?: (code: string) => void;
+}) {
   const t = useT();
   const languages = config.languages ?? [];
   if (languages.length < 2 || !config.language) return null;
@@ -200,12 +214,12 @@ export function LanguageSwitcher({ config }: { config: PublicFormConfig }) {
       <select
         aria-label={t("Language")}
         value={config.language}
-        onChange={(e) => chooseLanguage(config, e.target.value)}
+        onChange={(e) => (onChoose ? onChoose(e.target.value) : chooseLanguage(config, e.target.value))}
         className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent text-base opacity-0"
       >
         {languages.map((code) => (
-          <option key={code} value={code} lang={code}>
-            {nativeName(code)}
+          <option key={code} value={code}>
+            {optionName(code)}
           </option>
         ))}
       </select>

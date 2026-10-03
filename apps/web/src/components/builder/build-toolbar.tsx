@@ -100,14 +100,14 @@ export function BuildToolbar() {
             <TooltipTrigger asChild>
               <Link
                 href={`/forms/${formId}/settings/language`}
+                aria-label="Language"
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
+                  "inline-flex size-7 items-center justify-center rounded-full",
                   "transition-colors duration-[var(--duration-micro)] ease-[var(--ease-out)]",
                   "text-muted-foreground hover:text-foreground hover:bg-muted/60",
                 )}
               >
                 <Languages className="size-3.5" strokeWidth={1.75} />
-                Language
               </Link>
             </TooltipTrigger>
             <TooltipContent side="bottom">

@@ -20,6 +20,9 @@ import { useEntitlements } from "@/hooks/use-entitlements";
 import { usePaymentAccounts } from "@/components/integrations/payment-accounts";
 import { revealInInspector } from "./inspector-reveal";
 import { useBuilderStore } from "@/stores/builder-store";
+import { I18nProvider } from "@/components/chat/i18n";
+import { LanguageSwitcher } from "@/components/chat/language";
+import { usePreviewLanguage } from "./use-preview-language";
 
 
 /**
@@ -33,11 +36,45 @@ import { useBuilderStore } from "@/stores/builder-store";
  * Themed with `chatThemeVars`, the same function the live runtime uses, so
  * what shows here is what ships.
  */
-export function QuestionPreview({
+/**
+ * The question as a respondent will see it, in whichever of the form's
+ * languages the builder is looking at.
+ *
+ * The language is chosen from the card's own header, where a respondent's
+ * switcher sits, and belongs to the builder rather than to this question: it is
+ * still set when another question is selected. Everything below this wrapper is
+ * handed the translated block, so nothing in the card knows there are languages.
+ */
+export function QuestionPreview(props: { doc: FormDoc; block: Block; slug?: string | null }) {
+  const preview = usePreviewLanguage(props.doc);
+  const block = preview.shown.blocks.find((b) => b.id === props.block.id) ?? props.block;
+  return (
+    <I18nProvider messages={preview.messages}>
+      <QuestionCard
+        {...props}
+        doc={preview.shown}
+        block={block}
+        language={
+          preview.languages.length > 1 ? (
+            <LanguageSwitcher
+              config={{ slug: props.slug ?? "", language: preview.language, languages: preview.languages }}
+              onChoose={preview.setLanguage}
+            />
+          ) : null
+        }
+      />
+    </I18nProvider>
+  );
+}
+
+function QuestionCard({
   doc,
   block,
   slug,
+  language,
 }: {
+  /** The header's language control, on a form with more than one. */
+  language: React.ReactNode;
   doc: FormDoc;
   block: Block;
   /**
@@ -100,9 +137,15 @@ export function QuestionPreview({
             <LogoMark className="size-4" />
           </div>
         )}
-        <p className="min-w-0 truncate text-sm font-medium">
+        <p className="min-w-0 flex-1 truncate text-sm font-medium">
           {agentName}
         </p>
+        {/* Not the brand's to open: a click here chooses a language. */}
+        {language && (
+          <div data-inspect="" onClick={(e) => e.stopPropagation()}>
+            {language}
+          </div>
+        )}
       </header>
 
       <div className="min-h-0 overflow-y-auto px-4 pt-2 pb-4">

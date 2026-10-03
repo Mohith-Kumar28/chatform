@@ -200,6 +200,7 @@ const DASHBOARD_ONLY: Record<string, string> = {
   "/api/ai/add-blocks": "deprecated alias of /api/ai/edit-form",
   "/api/forms/{id}/ai-thread": "the builder AI bar's own chat transcript; a key edits through /v1/ai/edit-form and keeps its own history",
   "/api/forms/{id}/translations": "the builder's Languages panel; a key sets the languages through /v1/forms/{id}/settings",
+  "/api/forms/{id}/translations/{lang}": "see /api/forms/{id}/translations",
   "/api/forms/{id}/translations/{lang}/ai": "see /api/forms/{id}/translations",
   "/api/forms/{id}/translations/{lang}/csv": "see /api/forms/{id}/translations",
   "/api/forms/{id}/preview/sessions": "opens a session against the *draft*, for the builder's preview pane",

@@ -213,15 +213,21 @@ export function BlockList() {
   );
 }
 
-/** A thin hover target between rows, so you can add exactly where you mean to. */
+/**
+ * A thin hover target between rows, so you can add exactly where you mean to.
+ *
+ * Lifted above the rows on either side. The button is taller than the gap it
+ * sits in, and the row after it comes later in the document, so without a
+ * layer of its own the lower half of the plus was painted over by that row.
+ */
 function InsertPoint({ onClick }: { onClick: () => void }) {
   return (
-    <div className="group relative h-1.5">
+    <div className="group relative z-10 h-1.5">
       <button
         type="button"
         onClick={onClick}
         aria-label="Insert block here"
-        className="absolute inset-x-2 top-1/2 flex -translate-y-1/2 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+        className="absolute inset-x-2 top-1/2 flex -translate-y-1/2 cursor-pointer items-center opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
       >
         <span className="bg-primary/30 h-px flex-1" />
         <span className="bg-primary text-primary-foreground mx-1 grid size-3.5 place-items-center rounded-full">
