@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BookOpen,
@@ -23,6 +23,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  substringFilter,
 } from "@/components/ui/command";
 import { Kbd } from "@/components/ui/kbd";
 import { APP_NAV } from "@/components/dashboard/app-nav";
@@ -49,6 +50,34 @@ const OPEN_EVENT = "chatform:open-command-palette";
 
 export function openCommandPalette(): void {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT));
+}
+
+/**
+ * What a result is, ahead of how well it matches.
+ *
+ * cmdk ranks every result by match quality alone, so typing "team" put a
+ * "Team retrospective" template above the Team settings page. Somebody in the
+ * palette is almost always heading somewhere in their own account, so the
+ * app's own pages and forms always outrank the docs, and both outrank the
+ * template catalogue. Match quality only orders results within a tier.
+ */
+const TIER = { app: 2, doc: 1, template: 0 } as const;
+
+/**
+ * Every item's `value` is `<tier>:<unique id>` and the words to search go in
+ * `keywords`. The value is cmdk's identity for an item, so two forms with the
+ * same title used to light up together and stop the arrow keys on the first
+ * of them; an id makes each row its own stop.
+ */
+function itemValue(tier: keyof typeof TIER, id: string): string {
+  return `${tier}:${id}`;
+}
+
+function paletteFilter(value: string, search: string, keywords?: string[]): number {
+  const score = substringFilter(keywords?.join(" ") ?? "", search);
+  if (score === 0) return 0;
+  const tier = value.slice(0, value.indexOf(":")) as keyof typeof TIER;
+  return score + (TIER[tier] ?? TIER.app);
 }
 
 /** The form being built, when the palette is open inside the builder. */
@@ -83,6 +112,21 @@ export function CommandPalette() {
   });
   const forms = apiData<FormRow[]>(data) ?? [];
   const { templates } = useTemplates(open);
+
+  /*
+    cmdk highlights its first row once, on mount, and the forms and templates
+    arrive a moment later. They render above that row, so the highlight was
+    left on "Forms" under Go to, halfway down, and the arrow keys walked on
+    from there. Put it back on the top row whenever the lists fill in.
+  */
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [selected, setSelected] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    const first = rootRef.current?.querySelector<HTMLElement>('[cmdk-item]:not([aria-disabled="true"])');
+    const value = first?.getAttribute("data-value");
+    if (value) setSelected(value);
+  }, [open, forms.length, templates.length]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -121,7 +165,11 @@ export function CommandPalette() {
       onClick={() => setOpen(false)}
     >
       <Command
+        ref={rootRef}
         label="Command palette"
+        filter={paletteFilter}
+        value={selected}
+        onValueChange={setSelected}
         onClick={(e) => e.stopPropagation()}
         className="border-border shadow-lg w-full max-w-lg overflow-hidden border"
       >
@@ -134,7 +182,8 @@ export function CommandPalette() {
               {BUILDER_TABS.map((tab, i) => (
                 <CommandItem
                   key={tab.segment}
-                  value={`${tab.label} ${tab.hint}`}
+                  value={itemValue("app", `tab-${tab.segment}`)}
+                  keywords={[tab.label, tab.hint]}
                   onSelect={() => go(`/forms/${builder.formId}/${tab.segment}`)}
                 >
                   <tab.icon className="size-3.5 opacity-60" />
@@ -150,7 +199,8 @@ export function CommandPalette() {
                 because the digit shortcuts are the tab strip's.
               */}
               <CommandItem
-                value="History changes published versions"
+                value={itemValue("app", "history")}
+                keywords={["History changes published versions"]}
                 onSelect={() => {
                   setOpen(false);
                   showHistory();
@@ -166,7 +216,8 @@ export function CommandPalette() {
                 to do something, and stays on ? for everyone who already knows.
               */}
               <CommandItem
-                value="Keyboard shortcuts"
+                value={itemValue("app", "shortcuts")}
+                keywords={["Keyboard shortcuts"]}
                 onSelect={() => {
                   setOpen(false);
                   showShortcuts();
@@ -182,7 +233,11 @@ export function CommandPalette() {
           {forms.length > 0 && (
             <CommandGroup heading="Forms">
               {forms.map((f) => (
-                <CommandItem key={f.id} value={f.title} onSelect={() => go(`/forms/${f.id}/build`)}>
+                <CommandItem
+                  key={f.id}
+                  value={itemValue("app", `form-${f.id}`)}
+                  keywords={[f.title]}
+                  onSelect={() => go(`/forms/${f.id}/build`)}>
                   <span
                     aria-hidden
                     className={cn(
@@ -201,33 +256,15 @@ export function CommandPalette() {
             </CommandGroup>
           )}
 
-          {templates.length > 0 && (
-            <CommandGroup heading="Templates">
-              {/* Searching "nps" should offer the NPS template, not just any
-                  form that happens to be named after it. */}
-              {templates.map((t) => {
-                const accent = templateAccent(t.category, t.accent, t.icon);
-                const Icon = accent.icon;
-                return (
-                  <CommandItem
-                    key={t.slug}
-                    value={`${t.title} ${t.category} ${(t.tags ?? []).join(" ")}`}
-                    onSelect={() => go(`/templates/${t.slug}`)}
-                  >
-                    <Icon className="size-3.5 opacity-60" />
-                    <span className="min-w-0 flex-1 truncate">{t.title}</span>
-                    <span className="text-muted-foreground shrink-0 text-xs">{t.category}</span>
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
-          )}
-
           {/* Derived from APP_NAV rather than retyped, so a nav change cannot
               leave the palette pointing at a route that moved. */}
           <CommandGroup heading="Go to">
             {APP_NAV.map((item) => (
-              <CommandItem key={item.href} value={item.label} onSelect={() => go(item.href)}>
+              <CommandItem
+                key={item.href}
+                value={itemValue("app", `nav-${item.href}`)}
+                keywords={[item.label]}
+                onSelect={() => go(item.href)}>
                 <item.icon className="size-3.5 opacity-60" />
                 {item.label}
               </CommandItem>
@@ -248,7 +285,8 @@ export function CommandPalette() {
             {SETTINGS_SECTIONS.map((s) => (
               <CommandItem
                 key={s.href}
-                value={`${s.label} ${s.keywords}`}
+                value={itemValue("app", `settings-${s.href}`)}
+                keywords={[s.label, s.keywords]}
                 onSelect={() => go(s.href)}
               >
                 <s.icon className="size-3.5 opacity-60" />
@@ -268,7 +306,8 @@ export function CommandPalette() {
             ).map((f) => (
               <CommandItem
                 key={f.kind}
-                value={`${f.label} ${f.keywords}`}
+                value={itemValue("app", `feedback-${f.kind}`)}
+                keywords={[f.label, f.keywords]}
                 onSelect={() => {
                   setOpen(false);
                   openFeedback(f.kind);
@@ -299,7 +338,8 @@ export function CommandPalette() {
             ].map((doc) => (
               <CommandItem
                 key={doc.href}
-                value={`${doc.label} ${doc.hint}`}
+                value={itemValue("doc", doc.href)}
+                keywords={[doc.label, doc.hint]}
                 onSelect={() => {
                   setOpen(false);
                   window.open(doc.href, "_blank", "noopener,noreferrer");
@@ -313,13 +353,18 @@ export function CommandPalette() {
           </CommandGroup>
 
           <CommandGroup heading="Actions">
-            <CommandItem value="New form" onSelect={() => go("/dashboard?new=1")}>
+            <CommandItem
+              value={itemValue("app", "new-form")}
+              keywords={["New form"]}
+              onSelect={() => go("/dashboard?new=1")}
+            >
               <Plus className="size-3.5 opacity-60" />
               <span className="min-w-0 flex-1">New form</span>
               <Kbd>N</Kbd>
             </CommandItem>
             <CommandItem
-              value="Light theme"
+              value={itemValue("app", "light-theme")}
+              keywords={["Light theme"]}
               onSelect={() => {
                 setTheme("light");
                 setOpen(false);
@@ -329,7 +374,8 @@ export function CommandPalette() {
               Light theme
             </CommandItem>
             <CommandItem
-              value="Dark theme"
+              value={itemValue("app", "dark-theme")}
+              keywords={["Dark theme"]}
               onSelect={() => {
                 setTheme("dark");
                 setOpen(false);
@@ -339,6 +385,30 @@ export function CommandPalette() {
               Dark theme
             </CommandItem>
           </CommandGroup>
+          {templates.length > 0 && (
+            <CommandGroup heading="Templates">
+              {/* Last, and last in search too (see TIER): the catalogue is
+                  long enough to bury everything below it. */}
+              {/* Searching "nps" should offer the NPS template, not just any
+                  form that happens to be named after it. */}
+              {templates.map((t) => {
+                const accent = templateAccent(t.category, t.accent, t.icon);
+                const Icon = accent.icon;
+                return (
+                  <CommandItem
+                    key={t.slug}
+                    value={itemValue("template", t.slug)}
+                    keywords={[t.title, t.category, ...(t.tags ?? [])]}
+                    onSelect={() => go(`/templates/${t.slug}`)}
+                  >
+                    <Icon className="size-3.5 opacity-60" />
+                    <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                    <span className="text-muted-foreground shrink-0 text-xs">{t.category}</span>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          )}
         </CommandList>
 
         {/* The palette is where people end up when they are looking for a

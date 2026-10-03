@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils"
  * the positional fallback only covers words typed out of order, which
  * command-score scores at zero.
  */
-function substringFilter(value: string, search: string, keywords?: string[]): number {
+export function substringFilter(value: string, search: string, keywords?: string[]): number {
   const haystack = (keywords?.length ? `${value} ${keywords.join(" ")}` : value).toLowerCase()
   const terms = search.toLowerCase().split(/\s+/).filter(Boolean)
   if (terms.length === 0) return 1
