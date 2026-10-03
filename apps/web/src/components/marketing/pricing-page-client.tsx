@@ -10,6 +10,7 @@ import { PLAN_HIGHLIGHTS } from "@/components/marketing/plan-card";
 import { QUESTION_TYPE_COUNT } from "@/components/marketing/question-types";
 import { PricingCalculator } from "@/components/marketing/pricing-calculator";
 import { PRICING_FAQ } from "@/components/marketing/pricing-faq";
+import { GradientBand } from "@/components/marketing/cta-band";
 import { InkCta, PrimaryCta, TextLink } from "@/components/marketing/kit";
 import { cn } from "@/lib/utils";
 
@@ -209,9 +210,9 @@ function formatLimit(value: number | null, unit: string): string {
 }
 
 export function PricingPageClient({ initial }: { initial: Catalogue }) {
-  // Monthly first, as Youform shows it: the yearly figure is one click away
-  // and the card says what it would be either way.
-  const [cycle, setCycle] = useState<"yearly" | "monthly">("monthly");
+  // Yearly first and selected, the owner's call: it is the lower figure, and
+  // the card still says what monthly billing would be.
+  const [cycle, setCycle] = useState<"yearly" | "monthly">("yearly");
   const annual = cycle === "yearly";
   /**
    * A plain fetch rather than the generated react-query hook.
@@ -258,7 +259,7 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
   const free = plans.find((p) => p.id === "free");
   const pro = plans.find((p) => p.id === "pro");
   const saving = Math.max(...plans.map((p) => p.yearlySavingPercent));
-  const cell = "px-4 py-[1.125rem] text-center";
+  const cell = "px-1 py-[1.125rem] text-center sm:px-4";
 
   return (
     <>
@@ -321,7 +322,7 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
         </div>
 
         <div role="radiogroup" aria-label="Billing period" className="border-border bg-card/60 mx-auto mt-9 flex w-fit rounded-xl border p-1.5">
-          {(["monthly", "yearly"] as const).map((value) => (
+          {(["yearly", "monthly"] as const).map((value) => (
             <button
               key={value}
               type="button"
@@ -378,18 +379,30 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
 
       {/* The full matrix, built from the API payload so it can never claim
           something the gates do not honour. */}
-      <Band id="everything">
+      <Band id="everything" className="overflow-visible">
         <Eyebrow>The little details</Eyebrow>
         <h2 className="font-display mt-5 text-[clamp(2rem,1.2rem+2.6vw,3rem)] leading-[1.1] font-semibold tracking-[-0.04em]">Find your kind of fit.</h2>
         <p className="text-muted-foreground mt-5 text-[1.0625rem]">A clear look at what comes with each plan.</p>
 
-        <div className="border-border mt-9 overflow-x-auto rounded-[14px] border">
-          <table className="w-full min-w-[42rem] border-collapse text-[0.9375rem]">
+        {/* No sideways scroller round the table: a scroll container would
+            capture `position: sticky`, and the header has to hold to the top
+            of the window for as long as the table is on screen. So the table
+            fits the phone instead, with tighter cells. */}
+        <div className="border-border mt-9 rounded-[14px] border">
+          <table className="w-full table-fixed border-separate border-spacing-0 text-[0.8125rem] sm:text-[0.9375rem]">
             <thead>
-              <tr className="bg-foreground text-background">
-                <th className="px-6 py-6 text-left text-base font-medium">What&apos;s included</th>
-                {plans.map((p) => (
-                  <th key={p.id} className="w-[18%] px-4 py-6 text-center text-base font-medium">
+              <tr>
+                <th className="bg-foreground text-background sticky top-0 z-10 rounded-tl-[13px] px-3 py-4 text-left text-sm font-medium sm:px-6 sm:py-6 sm:text-base">
+                  What&apos;s included
+                </th>
+                {plans.map((p, i) => (
+                  <th
+                    key={p.id}
+                    className={cn(
+                      "bg-foreground text-background sticky top-0 z-10 w-[19%] px-0.5 py-4 text-center text-xs font-medium sm:w-[18%] sm:px-4 sm:py-6 sm:text-base",
+                      i === plans.length - 1 && "rounded-tr-[13px]",
+                    )}
+                  >
                     {p.name}
                   </th>
                 ))}
@@ -398,8 +411,8 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
             <tbody>
               {GROUPS.map((group) => (
                 <Fragment key={group.title}>
-                  <tr className="border-border bg-muted/60 border-t">
-                    <th colSpan={plans.length + 1} className="px-6 py-4 text-left text-sm font-bold text-[var(--family-choice-ink)]">
+                  <tr>
+                    <th colSpan={plans.length + 1} className="border-border bg-muted/60 border-t px-3 py-4 text-left text-sm font-bold text-[var(--family-choice-ink)] sm:px-6">
                       {group.title}
                     </th>
                   </tr>
@@ -444,10 +457,10 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
                       cells = plans.map((p) => (p.features.includes(row.feature) ? <Included key="i" /> : <NotIncluded key="n" />));
                     }
                     return (
-                      <tr key={key} className="border-border border-t">
-                        <td className="px-6 py-[1.125rem]">{label}</td>
+                      <tr key={key}>
+                        <td className="border-border border-t px-3 py-[1.125rem] sm:px-6">{label}</td>
                         {cells.map((value, i) => (
-                          <td key={i} className={cn("tabular", cell, plans[i]?.id === "pro" && TINT)}>
+                          <td key={i} className={cn("tabular border-border border-t", cell, plans[i]?.id === "pro" && TINT)}>
                             {value}
                           </td>
                         ))}
@@ -498,8 +511,8 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
         </div>
       </Band>
 
-      {/* The close, centred on the brand colour, after Youform's yellow one. */}
-      <section className="bg-primary px-6 py-20 text-center sm:py-24" style={{ color: "var(--on-primary)" }}>
+      {/* The close, centred on the hero's moving gradient. */}
+      <GradientBand className="text-center">
         <p className="text-xs font-bold tracking-[0.09em] uppercase opacity-75">Start with what you need today.</p>
         <h2 className="font-display mt-6 text-[clamp(2.5rem,1.4rem+3.6vw,4.25rem)] leading-[1.02] font-bold tracking-[-0.045em]">
           A little ask.
@@ -512,7 +525,7 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
           </InkCta>
         </div>
         <p className="mt-5 text-sm opacity-80">No credit card. No response limits.</p>
-      </section>
+      </GradientBand>
     </>
   );
 }

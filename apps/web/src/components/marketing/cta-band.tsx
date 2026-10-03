@@ -2,25 +2,38 @@ import dynamic from "next/dynamic";
 import { LogoMark } from "@/components/brand/logo";
 import { InkCta } from "./kit";
 import { LazySection } from "./lazy-section";
+import { cn } from "@/lib/utils";
 
 /** The hero's moving brand gradient, loaded only when the close is near. */
 const GradientField = dynamic(() => import("@/components/brand/gradient-field").then((m) => m.GradientField));
 
 /**
- * The close: a full-bleed band on the hero's moving brand gradient, the last thing on the page and the
- * loudest, after Youform's yellow one. One heading, one dark button, one line
- * of reassurance, and the mark saying something from the side.
+ * A full-bleed band on the hero's moving brand gradient: the ground every
+ * closing ask on the marketing site sits on. The gradient is fetched only
+ * when the band is near, and the flat brand colour is under it until then.
  *
  * Ink is `--on-primary`, which clears AA on the orange in both themes; white
  * would not.
  */
-export function CtaBand() {
+export function GradientBand({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className="bg-primary relative overflow-hidden px-6 py-20 sm:py-24" style={{ color: "var(--on-primary)" }}>
+    <section className={cn("bg-primary relative overflow-hidden px-6 py-20 sm:py-24", className)} style={{ color: "var(--on-primary)" }}>
       <LazySection rootMargin="300px">
         <GradientField tier="full" />
       </LazySection>
-      <div className="relative mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-[auto_1fr]">
+      <div className="relative">{children}</div>
+    </section>
+  );
+}
+
+/**
+ * The home page's close, after Youform's yellow one: one heading, one dark
+ * button, one line of reassurance, and the mark saying something from the side.
+ */
+export function CtaBand() {
+  return (
+    <GradientBand>
+      <div className="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-[auto_1fr]">
         <div aria-hidden className="relative hidden w-56 lg:block">
           <span className="font-hand bg-card text-foreground absolute -top-4 left-6 rounded-[16px_16px_16px_3px] px-4 py-2 text-2xl whitespace-nowrap shadow-md">
             Go on. Ask away.
@@ -46,6 +59,6 @@ export function CtaBand() {
           </div>
         </div>
       </div>
-    </section>
+    </GradientBand>
   );
 }

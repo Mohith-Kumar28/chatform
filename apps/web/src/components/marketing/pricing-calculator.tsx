@@ -20,6 +20,14 @@ const TYPEFORM = [
   { plan: "Business", upTo: 10_000, price: 129 },
 ] as const;
 const MAX = 10_000;
+/* Typeform's face, getting worse as the count (and the bill) climbs. */
+const FACES = [
+  { upTo: 100, face: "\u{1F642}" },
+  { upTo: 1_000, face: "\u{1F615}" },
+  { upTo: 4_000, face: "\u{1F61F}" },
+  { upTo: 7_000, face: "\u{1F630}" },
+  { upTo: MAX, face: "\u{1F631}" },
+] as const;
 const INK = "var(--family-choice-ink)";
 
 export function PricingCalculator({ proPrice }: { proPrice: number }) {
@@ -32,6 +40,7 @@ export function PricingCalculator({ proPrice }: { proPrice: number }) {
   const byVolume = TYPEFORM.find((t) => count <= t.upTo) ?? TYPEFORM[TYPEFORM.length - 1]!;
   const theirs = needsPro && byVolume.plan === "Basic" ? TYPEFORM[1]! : byVolume;
   const ours = needsPro ? proPrice : 0;
+  const theirFace = (FACES.find((f) => count <= f.upTo) ?? FACES[FACES.length - 1]!).face;
 
   return (
     <>
@@ -82,12 +91,13 @@ export function PricingCalculator({ proPrice }: { proPrice: number }) {
         <div className="mt-8 grid sm:grid-cols-2">
           {[
             { name: "chatform", face: "\u{1F601}", price: ours, note: `${needsPro ? "Pro" : "Free"} plan · unlimited responses*` },
-            { name: "Typeform", face: "\u{1F630}", price: theirs.price, note: `${theirs.plan} published base plan` },
+            { name: "Typeform", face: theirFace, price: theirs.price, note: `${theirs.plan} published base plan` },
           ].map((side, i) => (
             <div key={side.name} className={i === 1 ? "max-sm:mt-8 max-sm:border-t max-sm:pt-8 sm:border-l sm:pl-8" : "sm:pr-8"} style={{ borderColor: INK }}>
               <p className="font-display flex items-center gap-3 text-2xl font-semibold tracking-tight">
                 {side.name}
-                <span aria-hidden className="text-[2.75rem] leading-none">
+                {/* Keyed, so a new face pops in instead of swapping silently. */}
+                <span key={side.face} aria-hidden className="animate-message-in inline-block text-[2.75rem] leading-none">
                   {side.face}
                 </span>
               </p>
