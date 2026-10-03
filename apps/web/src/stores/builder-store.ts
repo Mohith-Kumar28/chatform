@@ -91,6 +91,20 @@ export interface BuilderState {
    */
   previewLanguage: string | null;
   setPreviewLanguage: (code: string | null) => void;
+  /**
+   * What the server last said about the form's languages: which can be shown,
+   * and the text of each one already looked at.
+   *
+   * Kept here rather than in the preview that asked, because a preview is
+   * unmounted whenever the builder shows something else. Held in the component
+   * it was forgotten on every return, and the switcher vanished for the second
+   * it took to ask again.
+   */
+  previewLanguages: string[] | null;
+  previewLocales: Record<string, { messages: Record<string, string>; translations: Record<string, string> }>;
+  setPreviewLocale: (
+    locale: { language: string; languages: string[]; messages: Record<string, string>; translations: Record<string, string> },
+  ) => void;
   /** A Design sheet field to scroll to and shake once the sheet is open, e.g. `brand`. */
   designReveal: string | null;
   /** AI bar proposals applied since the last save; the next autosave stores them as applied. */
@@ -256,6 +270,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   selectedEndingRef: null,
   attentionPulse: null,
   pickerIndex: null,
+  previewLanguages: null,
+  previewLocales: {},
   previewLanguage: null,
   designOpen: false,
   designReveal: null,
@@ -294,6 +310,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       designOpen: false,
       // Another form, with other languages.
       previewLanguage: null,
+      previewLanguages: null,
+      previewLocales: {},
       appliedAiTurns: [],
     }),
 
@@ -448,6 +466,14 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
   closePicker: () => set({ pickerIndex: null }),
   markAiTurnApplied: (id) => set((s) => ({ appliedAiTurns: [...s.appliedAiTurns, id] })),
   setPreviewLanguage: (code) => set({ previewLanguage: code }),
+  setPreviewLocale: (locale) =>
+    set((s) => ({
+      previewLanguages: locale.languages,
+      previewLocales: {
+        ...s.previewLocales,
+        [locale.language]: { messages: locale.messages, translations: locale.translations },
+      },
+    })),
   setDesignOpen: (open, reveal) => set({ designOpen: open, designReveal: open ? (reveal ?? null) : null }),
 
   setShortcuts: (shortcuts) => set({ shortcuts }),

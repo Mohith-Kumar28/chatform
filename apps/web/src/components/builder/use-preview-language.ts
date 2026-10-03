@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { localizeFormDoc, type FormDoc } from "@repo/form-schema";
 import { customFetch } from "@/lib/api/mutator";
 import { useBuilderStore } from "@/stores/builder-store";
@@ -39,8 +39,10 @@ export function usePreviewLanguage(doc: FormDoc): {
   const formId = useBuilderStore((s) => s.formId);
   const chosen = useBuilderStore((s) => s.previewLanguage);
   const setPreviewLanguage = useBuilderStore((s) => s.setPreviewLanguage);
+  const known = useBuilderStore((s) => s.previewLanguages);
+  const locales = useBuilderStore((s) => s.previewLocales);
+  const setPreviewLocale = useBuilderStore((s) => s.setPreviewLocale);
   const saveState = useBuilderStore((s) => s.saveState);
-  const [locale, setLocale] = useState<Locale | null>(null);
 
   const base = doc.settings.language;
   const offered = doc.settings.languages.length > 0;
@@ -53,25 +55,51 @@ export function usePreviewLanguage(doc: FormDoc): {
     let live = true;
     customFetch<Locale>(`/api/forms/${formId}/translations/${wanted}`)
       .then((next) => {
-        if (live) setLocale(next);
+        if (live) setPreviewLocale(next);
       })
       .catch(() => {});
     return () => {
       live = false;
     };
-  }, [formId, offered, wanted, saveState]);
+  }, [formId, offered, wanted, saveState, setPreviewLocale]);
 
-  const active = offered && locale && locale.language === wanted ? locale : null;
+  // The other languages too, ahead of anyone asking, so choosing one changes
+  // the card at once instead of after a request. A handful of small reads, once.
+  useEffect(() => {
+    if (!formId || !offered || saveState !== "saved" || !known) return;
+    let live = true;
+    for (const code of known) {
+      if (code === base || code === wanted || locales[code]) continue;
+      customFetch<Locale>(`/api/forms/${formId}/translations/${code}`)
+        .then((next) => {
+          if (live) setPreviewLocale(next);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      live = false;
+    };
+    // `locales` is read, not watched: each arrival would otherwise start the round again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formId, offered, known, base, wanted, saveState, setPreviewLocale]);
+
+  /*
+    Drawn from what is already known, and corrected when the answer lands. The
+    list of languages and any language looked at before are in the store, so
+    coming back to a preview shows the switcher and the translated text at once
+    rather than after the request.
+  */
+  const active = offered && wanted !== base ? locales[wanted] : undefined;
   const shown = useMemo(
-    () => (active ? localizeFormDoc(doc, active.language, new Map(Object.entries(active.translations))) : doc),
-    [doc, active],
+    () => (active ? localizeFormDoc(doc, wanted, new Map(Object.entries(active.translations))) : doc),
+    [doc, active, wanted],
   );
 
   return {
-    language: active?.language ?? base,
-    languages: offered ? (locale?.languages ?? [base]) : [base],
+    language: active ? wanted : base,
+    languages: offered ? (known ?? [base]) : [base],
     setLanguage: (code) => setPreviewLanguage(code === base ? null : code),
     shown,
-    messages: active?.messages ?? {},
+    messages: (offered ? locales[active ? wanted : base]?.messages : undefined) ?? {},
   };
 }

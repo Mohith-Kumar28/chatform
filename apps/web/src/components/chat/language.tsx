@@ -207,8 +207,11 @@ export function LanguageSwitcher({
   const languages = config.languages ?? [];
   if (languages.length < 2 || !config.language) return null;
   return (
-    <div className="relative flex h-9 shrink-0 items-center gap-1.5 rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-2.5 text-xs font-medium has-[select:focus-visible]:ring-2 has-[select:focus-visible]:ring-[var(--cf-accent)]">
-      <Globe className="size-3.5 opacity-60" aria-hidden />
+    // Plain text with a globe, not a button: it is a quiet setting in the
+    // corner of a conversation, and a bordered pill beside the title competed
+    // with it. The ring only appears for keyboard focus.
+    <div className="relative flex h-7 shrink-0 items-center gap-1 rounded-md px-1 text-xs font-medium opacity-70 transition-opacity hover:opacity-100 has-[select:focus-visible]:opacity-100 has-[select:focus-visible]:ring-2 has-[select:focus-visible]:ring-[var(--cf-accent)]">
+      <Globe className="size-3.5" aria-hidden />
       <span lang={config.language}>{nativeName(config.language)}</span>
       <ChevronDown className="size-3 opacity-45" aria-hidden />
       <select
