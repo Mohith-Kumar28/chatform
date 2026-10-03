@@ -43,12 +43,12 @@ const LINKS = MARKETING_LINKS;
 export function MarketingNav() {
   const [scrolled, setScrolled] = useState(false);
   /**
-   * Out of the way while reading, back the moment you scroll up.
+   * Out of the way once you are reading, and back only at the top.
    *
-   * Hidden only once the page is past the first screen's top and the last
-   * movement was downward; any upward scroll brings it straight back, and so
-   * does returning to the top. The bottom CTA (`StickyCta`) carries the one
-   * action that matters while the bar is away.
+   * It used to return on any upward scroll. The owner's call, after Youform:
+   * past the first stretch the bottom bar (`StickyCta`) is the page's one
+   * control and this bar stays away in both directions, so nothing slides in
+   * over the content every time somebody scrolls back a line.
    */
   const [hidden, setHidden] = useState(false);
   /**
@@ -61,12 +61,6 @@ export function MarketingNav() {
    */
   const pathname = usePathname();
   const overWash = pathname === "/";
-  /**
-   * The template gallery pins its own search bar to the top of the viewport,
-   * so a nav sliding back in on scroll-up lands on top of it. There the bar
-   * stays away until you are back at the top of the page.
-   */
-  const staysHidden = pathname.startsWith("/form-templates");
   const ctaVariant = overWash && !scrolled ? ("on-brand" as const) : ("default" as const);
   /**
    * These pages are static, so the session is only knowable in the browser.
@@ -78,23 +72,15 @@ export function MarketingNav() {
   const signedIn = useSignedIn();
 
   useEffect(() => {
-    let last = window.scrollY;
     const onScroll = () => {
       const y = window.scrollY;
       setScrolled(y > 8);
-      /* At the very bottom an overscroll bounce reads as a scroll up and
-         brought the bar back over the footer. The bottom of the page is not
-         an intent to navigate, so it never un-hides the bar. */
-      const atBottom = y + window.innerHeight >= document.documentElement.scrollHeight - 4;
-      if (Math.abs(y - last) > 6) {
-        if (!atBottom) setHidden(y > 120 && (staysHidden || y > last));
-        last = y;
-      }
+      setHidden(y > 120);
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [staysHidden]);
+  }, []);
 
   return (
     <header

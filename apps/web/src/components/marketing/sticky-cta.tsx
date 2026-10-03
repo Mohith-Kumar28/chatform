@@ -10,8 +10,8 @@ import { cn } from "@/lib/utils";
 /**
  * One action, always in reach: a bar that rises from the bottom once you are
  * past the first screen, and sinks again at the top and near the footer
- * (which carries the same ask). Hidden for anyone signed in; they are not the
- * audience for "start free".
+ * (which carries the same ask). Someone signed in gets the same bar with the
+ * way back to their forms on it, since "start free" is not their button.
  *
  * Below 1280px it shares the bottom edge with the contact launcher, where the
  * two used to overlap. So while the bar is up it carries Contact itself and
@@ -39,14 +39,15 @@ export function StickyCta() {
     };
   }, []);
 
-  const merged = signedIn === false && show && hasLauncher;
+  const merged = signedIn !== null && show && hasLauncher;
   useEffect(() => {
     if (!merged) return;
     document.documentElement.setAttribute("data-cta-bar", "");
     return () => document.documentElement.removeAttribute("data-cta-bar");
   }, [merged]);
 
-  if (signedIn !== false) return null;
+  // Nothing until the session is known: one button must not swap for the other.
+  if (signedIn === null) return null;
 
   return (
     <div
@@ -65,7 +66,9 @@ export function StickyCta() {
           <p className="font-display text-foreground truncate text-base font-semibold">
             Forms people finish. <span className="text-primary">Unlimited responses.</span>
           </p>
-          <p className="text-foreground/70 hidden truncate text-sm sm:block">Free forever. No credit card needed.</p>
+          <p className="text-foreground/70 hidden truncate text-sm sm:block">
+            {signedIn ? "Your forms are a click away." : "Free forever. No credit card needed."}
+          </p>
         </div>
         {hasLauncher ? (
           <button
@@ -78,14 +81,14 @@ export function StickyCta() {
           </button>
         ) : null}
         <Link
-          href="/signin?mode=signup"
+          href={signedIn ? "/dashboard" : "/signin?mode=signup"}
           tabIndex={show ? 0 : -1}
           className={cn(
             "bg-foreground text-background hover:bg-foreground/90 inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors duration-[var(--duration-micro)]",
             hasLauncher && "max-sm:flex-1",
           )}
         >
-          Start for free
+          {signedIn ? "Go to dashboard" : "Start for free"}
           <ArrowRight className="size-4" />
         </Link>
       </div>

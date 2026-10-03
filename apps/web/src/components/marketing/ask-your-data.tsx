@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { McpMark } from "@/components/integrations/provider-logo";
+import { LogoMark } from "@/components/brand/logo";
 import { Band } from "./band";
 import { PrimaryCta, SectionLede, SectionTitle, TextLink } from "./kit";
 import { cn } from "@/lib/utils";
@@ -188,6 +188,32 @@ const ASKS: { q: string; tool: string; intro: string; body: (look: Look) => Reac
     ),
     takeaways: ["Post the link on a weekday before 10am.", "Send follow-up emails in the morning too."],
   },
+  {
+    q: "Do people on phones finish as often as people on computers?",
+    tool: "get_form_analytics",
+    intro: "More often, in fact. Half your visitors are on a phone, and they finish at a higher rate.",
+    body: (look) => (
+      <div className="grid gap-4 md:grid-cols-2">
+        {[
+          { device: "Phone", rate: 74, started: "937 started", time: "2m 10s to finish" },
+          { device: "Computer", rate: 66, started: "937 started", time: "3m 05s to finish" },
+        ].map((d) => (
+          <Card key={d.device} title={d.device} panel={look.panel}>
+            <p className="mt-3 text-3xl font-semibold tracking-tight">
+              {d.rate}%<span className="ml-2 text-sm font-normal text-white/70">finish</span>
+            </p>
+            <div className="mt-3 h-2.5 rounded-full bg-white/10">
+              <div className="h-full rounded-full" style={{ width: `${d.rate}%`, background: look.accent === "#ffffff" ? "#65c7a1" : look.accent }} />
+            </div>
+            <p className="mt-3 text-xs text-white/70">
+              {d.started} · {d.time}
+            </p>
+          </Card>
+        ))}
+      </div>
+    ),
+    takeaways: ["Keep sharing it where people are on their phones.", "On computers, the file upload question is where most people stop."],
+  },
 ];
 
 export function AskYourData() {
@@ -222,13 +248,21 @@ export function AskYourData() {
                 aria-pressed={pick === i}
                 onClick={() => setPick(i)}
                 className={cn(
-                  "font-hand rounded-2xl border px-4 py-2 text-left text-[1.4rem] leading-tight transition-[background-color,border-color,color,transform] duration-150 ease-out active:scale-[0.98]",
+                  "font-hand flex items-center gap-3 rounded-2xl border px-4 py-2 text-left text-[1.4rem] leading-tight transition-[background-color,border-color,color,transform] duration-150 ease-out active:scale-[0.98]",
                   pick === i
-                    ? "bg-primary-soft text-primary-soft-foreground border-[color-mix(in_oklch,var(--primary)_30%,transparent)]"
+                    ? "bg-primary-soft text-primary-soft-foreground border-primary shadow-[0_3px_0_color-mix(in_oklch,var(--primary)_35%,transparent)]"
                     : "border-border text-muted-foreground hover:text-foreground hover:bg-card",
                 )}
               >
-                &ldquo;{a.q}&rdquo;
+                {/* The dot says which question the answer below belongs to. */}
+                <span
+                  aria-hidden
+                  className={cn(
+                    "size-2.5 shrink-0 rounded-full border-2 transition-[background-color,border-color,transform] duration-150 ease-out",
+                    pick === i ? "bg-primary border-primary scale-110" : "border-border",
+                  )}
+                />
+                <span>&ldquo;{a.q}&rdquo;</span>
               </button>
             ))}
           </div>
@@ -260,7 +294,7 @@ export function AskYourData() {
           </div>
           <span className="flex items-center gap-2 text-xs font-medium text-white/70">
             <span className="size-1.5 rounded-full bg-[#65c7a1]" />
-            <McpMark className="size-3.5" />
+            <LogoMark className="size-4" />
             chatform connected (MCP)
           </span>
         </div>
@@ -277,7 +311,7 @@ export function AskYourData() {
             <div className="min-w-0 flex-1">
               {/* The tool call, the way the assistant shows a connector at work. */}
               <span className="inline-flex items-center gap-2 rounded-lg border border-white/12 px-2.5 py-1.5 text-xs text-white/70">
-                <McpMark className="size-3.5" />
+                <LogoMark className="size-4" />
                 <span>
                   Used <span className="font-semibold text-white">chatform</span>
                 </span>
