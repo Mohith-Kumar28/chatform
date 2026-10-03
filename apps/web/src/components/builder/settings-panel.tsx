@@ -53,13 +53,13 @@ interface SettingsPanelProps {
 // last section here now, drawn apart in the nav so it is not lost in the list.
 const SECTIONS = [
   { id: "general", label: "General" },
-  { id: "language", label: "Language" },
   { id: "access", label: "Access & closing" },
   { id: "hidden", label: "Hidden fields & variables" },
   { id: "link", label: "Link & social" },
   { id: "completion", label: "On completion" },
   { id: "followup", label: "Follow-ups" },
   { id: "shortcuts", label: "Keyboard shortcuts" },
+  { id: "language", label: "Language" },
   { id: "agent", label: "Agent" },
 ] as const;
 
@@ -228,7 +228,7 @@ export function SettingsPanel({
       )}
 
       {section === "language" && (
-        <SettingSection title="Language">
+        <SettingSection title="Language settings">
           <LanguageSettings formId={params.id} settings={settings} onChange={onChange} />
         </SettingSection>
       )}

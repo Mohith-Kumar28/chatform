@@ -719,13 +719,11 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
     format: "languages",
     maxItems: MAX_FORM_LANGUAGES - 1,
     hint: "the other languages respondents can read the form in, as two-letter codes or names, one per line; the author then translates each one from Settings → Languages",
-    feature: "multi_language",
     get: (doc) => doc.settings.languages,
     // The form's own language is not one of its others.
     set: (doc, v) => {
       doc.settings.languages = (Array.isArray(v) ? v : []).filter((code) => code !== doc.settings.language);
     },
-    gate: (v) => (Array.isArray(v) && v.length > 0 ? "multi_language" : null),
   }),
 ];
 

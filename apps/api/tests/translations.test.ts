@@ -218,8 +218,8 @@ describe("a form in several languages", () => {
   });
 });
 
-describe("on a plan without languages", () => {
-  it("serves the form as written and refuses the translate button", async () => {
+describe("on the free plan", () => {
+  it("offers a translated language like any other plan", async () => {
     const free = await seedTenant("translatefree");
     const formId = "frm_tr_free";
     const json = JSON.stringify(doc("free", ["hi"]));
@@ -233,14 +233,16 @@ describe("on a plan without languages", () => {
         `INSERT INTO form_versions (id, form_id, version, schema_json, checksum, published_at, created_by, created_at)
          VALUES ('fv_tr_free', ?1, 1, ?2, 'ck', ?3, ?4, ?3)`,
       ).bind(formId, json, now, free.userId),
-      env.DB.prepare(
-        `INSERT INTO form_translations (form_id, lang, source_hash, source, text, edited, updated_at) VALUES (?1, 'hi', ?2, 'Student', 'छात्र', 1, ?3)`,
-      ).bind(formId, textHash("Student"), now),
     ]);
-    const res = await fetchApi(`/api/forms/${formId}/translations/hi/ai`, { method: "POST", headers: { cookie: free.cookie } });
-    expect(res.status).toBe(402);
+    const csv = `id,English,Hindi\r\n${textHash("Student")},Student,छात्र`;
+    const res = await fetchApi(`/api/forms/${formId}/translations/hi/csv`, {
+      method: "PUT",
+      headers: { cookie: free.cookie, "content-type": "text/csv" },
+      body: csv,
+    });
+    expect(res.status).toBe(200);
     const shown = await config("tr-free", "hi");
-    expect(shown.languages).toEqual(["en"]);
-    expect(shown.blocks[1]!.options![0]!.label).toBe("Student");
+    expect(shown.languages).toEqual(["en", "hi"]);
+    expect(shown.blocks[1]!.options![0]!.label).toBe("छात्र");
   });
 });

@@ -54,7 +54,9 @@ const FREE: Plan = {
   // Knowledge is how a form answers "what does this cost?" mid-conversation,
   // which is the conversational part of a conversational form, so Free gets a
   // small one rather than none.
-  features: ["agent_knowledge"],
+  // And a form in several languages, because who can read a form is input,
+  // which is the half of the product Free is generous with.
+  features: ["agent_knowledge", "multi_language"],
   limits: {
     responses_per_month: null,
     responses_ceiling_per_month: 10_000,

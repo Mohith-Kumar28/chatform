@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Download, Sparkles, Upload, X } from "lucide-react";
+import { ChevronDown, Download, Info, Sparkles, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { FORM_LANGUAGES, MAX_FORM_LANGUAGES, formLanguage, type FormDoc } from "@repo/form-schema";
 import { Button } from "@/components/ui/button";
-import { InfoHint } from "@/components/ui/info-hint";
+import { Badge } from "@/components/ui/badge";
+import { flagOf } from "@/components/chat/composers/phone-value";
 import { Spinner } from "@/components/ui/spinner";
 import {
   DropdownMenu,
@@ -153,46 +154,77 @@ export function LanguageSettings({
 
   return (
     <>
-      <div className="divide-border/60 divide-y rounded-xl border">
-        <div data-setting="form.language" className="flex flex-col justify-between gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4">
-          <p className="text-sm font-medium">Form language</p>
-          <Select
-            value={settings.language}
-            onValueChange={(code) =>
-              onChange({
-                ...settings,
-                language: code,
-                agent: { ...settings.agent, language: code },
-                languages: settings.languages.filter((c) => c !== code),
-              })
-            }
-          >
-            <SelectTrigger className="w-full sm:w-80">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {FORM_LANGUAGES.map((l) => (
-                <SelectItem key={l.code} value={l.code}>
-                  {label(l.code)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div data-setting="form.language" className="flex flex-col justify-between gap-3 rounded-xl border px-5 py-4 sm:flex-row sm:items-center sm:gap-6">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">Form&apos;s default language</p>
+          <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+            The form&apos;s own messages, like buttons and errors, use this language.
+          </p>
         </div>
+        <Select
+          value={settings.language}
+          onValueChange={(code) =>
+            onChange({
+              ...settings,
+              language: code,
+              agent: { ...settings.agent, language: code },
+              languages: settings.languages.filter((c) => c !== code),
+            })
+          }
+        >
+          <SelectTrigger className="w-full shrink-0 sm:w-64">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FORM_LANGUAGES.map((l) => (
+              <SelectItem key={l.code} value={l.code}>
+                <LanguageName code={l.code} />
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-0.5">
-          <p className="text-muted-foreground text-caption font-medium tracking-wide uppercase">Also available in</p>
-          <InfoHint label="About translating a form" align="start">
-            <p>
-              Translate each language with AI, or by hand: download the file, fill in its third column, and upload it
-              back. Do both to correct what the AI got wrong.
+      <div className="bg-info-soft text-info-soft-foreground flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm leading-relaxed">
+        <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <p>
+          Changing the default language does not change the text you wrote in the builder, like question titles and
+          button labels. Write those in the language you choose.
+        </p>
+      </div>
+
+      <LockedControl feature="multi_language">
+        <div data-setting="form.languages" className="space-y-4 rounded-xl border px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Add multiple languages</p>
+            <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+              Translations are made from the default language above. Translate each language with AI, or by hand:
+              download the file, fill in its third column and upload it back.
             </p>
-          </InfoHint>
-        </div>
-        <LockedControl feature="multi_language">
-          <div data-setting="form.languages" className="divide-border/60 divide-y rounded-xl border">
+          </div>
+
+          {added.length < MAX_FORM_LANGUAGES - 1 && (
+            <Select value="" onValueChange={(code) => setLanguages([...added, code])}>
+              <SelectTrigger className="w-full sm:w-64">
+                <SelectValue placeholder="+ Add language" />
+              </SelectTrigger>
+              <SelectContent>
+                {available.map((l) => (
+                  <SelectItem key={l.code} value={l.code}>
+                    <LanguageName code={l.code} />
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          <div className="space-y-2">
+            <div className="bg-muted/50 flex items-center justify-between gap-3 rounded-lg px-4 py-3">
+              <p className="min-w-0 truncate text-sm font-medium">
+                <LanguageName code={settings.language} />
+              </p>
+              <Badge variant="secondary">Default</Badge>
+            </div>
             {added.map((code) => (
               <LanguageRow
                 key={code}
@@ -205,26 +237,38 @@ export function LanguageSettings({
                 onRemove={() => setLanguages(added.filter((c) => c !== code))}
               />
             ))}
-            {added.length < MAX_FORM_LANGUAGES - 1 && (
-              <div className="px-4 py-3.5">
-                <Select value="" onValueChange={(code) => setLanguages([...added, code])}>
-                  <SelectTrigger className="w-full sm:w-80">
-                    <SelectValue placeholder="Add a language" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {available.map((l) => (
-                      <SelectItem key={l.code} value={l.code}>
-                        {label(l.code)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
           </div>
-        </LockedControl>
-      </div>
+        </div>
+      </LockedControl>
     </>
+  );
+}
+
+/**
+ * A flag beside each language, as a way to find one in a long list by eye.
+ *
+ * A language is not a country, so this is a hint and nothing more: the name
+ * beside it is what says which language it is.
+ */
+const FLAG: Record<string, string> = {
+  en: "US", hi: "IN", bn: "BD", te: "IN", mr: "IN", ta: "IN", gu: "IN", kn: "IN", ml: "IN", pa: "IN", or: "IN",
+  as: "IN", ur: "PK", ne: "NP", si: "LK", es: "ES", fr: "FR", de: "DE", pt: "PT", it: "IT", nl: "NL", pl: "PL",
+  ru: "RU", uk: "UA", tr: "TR", ar: "SA", he: "IL", fa: "IR", zh: "CN", ja: "JP", ko: "KR", id: "ID", ms: "MY",
+  th: "TH", vi: "VN", tl: "PH", sw: "KE", sv: "SE", da: "DK", nb: "NO", fi: "FI", el: "GR", cs: "CZ", hu: "HU",
+  ro: "RO",
+};
+
+function LanguageName({ code }: { code: string }) {
+  const country = FLAG[code];
+  return (
+    <span className="inline-flex items-center gap-2">
+      {country && (
+        <span aria-hidden className="text-base leading-none">
+          {flagOf(country)}
+        </span>
+      )}
+      {label(code)}
+    </span>
   );
 }
 
@@ -248,9 +292,11 @@ function LanguageRow({
   const fileRef = useRef<HTMLInputElement>(null);
   const done = status !== undefined && status.total > 0 && status.translated >= status.total;
   return (
-    <div className="flex flex-col justify-between gap-3 px-4 py-3.5 sm:flex-row sm:items-center">
+    <div className="bg-muted/50 flex flex-col justify-between gap-3 rounded-lg px-4 py-3 sm:flex-row sm:items-center">
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium">{label(code)}</p>
+        <p className="truncate text-sm font-medium">
+          <LanguageName code={code} />
+        </p>
         <p className={cn("mt-0.5 text-xs", done ? "text-muted-foreground" : "text-warning")}>
           {done ? "Translated" : "Translation needed"}
         </p>
