@@ -12,7 +12,7 @@ const n = (value: number | null) => (value ?? 0).toLocaleString("en-US");
 export const PRICING_FAQ = [
   {
     question: "Is the free plan actually free forever?",
-    answer: `Yes. Free has unlimited responses, up to ${n(free.limits.forms_count)} forms and ${n(free.limits.ai_conversations_per_month)} AI conversations a month. You do not need a credit card and there is no trial countdown. Paid plans add capabilities; you do not need one to collect more responses. Fair use is a stated number, not small print: ${n(free.limits.responses_ceiling_per_month)} responses a month on Free and ${n(pro.limits.responses_ceiling_per_month)} on paid plans.`,
+    answer: `Yes. Free includes unlimited responses and ${n(free.limits.ai_conversations_per_month)} AI conversations a month, within fair use. You do not need a credit card and there is no trial countdown. Paid plans add capabilities; you do not need one to collect more responses.`,
   },
   {
     question: "What changes when I choose yearly billing?",

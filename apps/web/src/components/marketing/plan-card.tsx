@@ -55,7 +55,7 @@ export interface PlanCardPlan {
 export const PLAN_HIGHLIGHTS: Record<string, readonly string[]> = {
   free: [
     "Unlimited responses",
-    `100 forms and all ${QUESTION_TYPE_COUNT} question types`,
+    `All ${QUESTION_TYPE_COUNT} question types`,
     "Logic, scoring and multiple endings",
     "200 AI conversations a month",
     "Google Sheets, webhooks and file uploads",

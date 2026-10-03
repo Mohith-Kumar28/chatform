@@ -2,7 +2,7 @@
 
 import { MARKETING_LINKS } from "./nav-links";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -41,27 +41,23 @@ const MarketingAccountButton = dynamic(
 const LINKS = MARKETING_LINKS;
 
 export function MarketingNav() {
-  const [scrolled, setScrolled] = useState(false);
   /**
-   * Out of the way once you are reading, and back only at the top.
-   *
-   * It used to return on any upward scroll. The owner's call, after Youform:
-   * past the first stretch the bottom bar (`StickyCta`) is the page's one
-   * control and this bar stays away in both directions, so nothing slides in
-   * over the content every time somebody scrolls back a line.
+   * Not sticky. It sits at the top of the page and scrolls away with it, the
+   * owner's call: a bar that first changed its background and then slid out
+   * read as a glitch, and the bottom bar (`StickyCta`) is the page's one
+   * control once you are reading.
    */
-  const [hidden, setHidden] = useState(false);
   /**
    * The landing hero is a full-strength brand wash that now runs up behind
    * this bar, and the nav's own colours assume a page-coloured ground: muted
    * grey links and an orange CTA, which on an orange wash is an invisible
    * button on unreadable text. While the bar is transparent over that wash it
    * borrows the band ink instead — the same near-black the hero sets on
-   * itself. Once scrolled, the backdrop is back and so are the normal colours.
+   * itself. Every other page has a page-coloured ground and keeps the normal colours.
    */
   const pathname = usePathname();
   const overWash = pathname === "/";
-  const ctaVariant = overWash && !scrolled ? ("on-brand" as const) : ("default" as const);
+  const ctaVariant = overWash ? ("on-brand" as const) : ("default" as const);
   /**
    * These pages are static, so the session is only knowable in the browser.
    * Until the fetch settles the CTA is a placeholder rather than the
@@ -71,27 +67,10 @@ export function MarketingNav() {
    */
   const signedIn = useSignedIn();
 
-  useEffect(() => {
-    const onScroll = () => {
-      const y = window.scrollY;
-      setScrolled(y > 8);
-      setHidden(y > 120);
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
   return (
     <header
-      className={cn(
-        // The border is always there and only changes colour, so turning the
-        // backdrop on never adds a pixel to the bar's height.
-        "sticky top-0 z-[var(--z-sticky)] border-b border-transparent transition-[transform,background-color,border-color] duration-[var(--duration-standard)] ease-[var(--ease-out)] motion-reduce:transition-none",
-        scrolled && "bg-background/90 border-border/60 backdrop-blur-md",
-        hidden && "-translate-y-full",
-      )}
-      style={overWash && !scrolled ? { color: "var(--on-band-vivid)" } : undefined}
+      className="relative z-[var(--z-sticky)]"
+      style={overWash ? { color: "var(--on-band-vivid)" } : undefined}
     >
       <nav
         aria-label="Main"
@@ -112,7 +91,7 @@ export function MarketingNav() {
           href="/"
           className="rounded-md focus-visible:ring-ring/50 focus-visible:ring-[3px]"
         >
-          <Logo variant={overWash && !scrolled ? "mono" : "duo"} />
+          <Logo variant={overWash ? "mono" : "duo"} />
           <span className="sr-only">chatform home</span>
         </Link>
 
@@ -126,7 +105,7 @@ export function MarketingNav() {
                 // `text-muted-foreground`, so the links grew 2px on scroll.
                 className={`text-body ${cn(
                   "rounded-full px-3 py-1.5 transition-colors duration-[var(--duration-micro)]",
-                  overWash && !scrolled
+                  overWash
                     ? "font-medium hover:bg-black/5"
                     : "text-foreground/80 hover:text-foreground hover:bg-accent/60",
                 )}`}
