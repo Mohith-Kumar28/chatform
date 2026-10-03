@@ -754,11 +754,13 @@ export async function sweepWebhookDeliveries(env: Bindings): Promise<number> {
 /**
  * Forgets finished deliveries past the retention window, 500 a run.
  *
- * Hourly rather than with the sweep above: nobody waits on a row disappearing,
- * and the lookup reads the table on every run.
+ * Hourly rather than with the sweep above: nobody waits on a row disappearing.
+ * Oldest first on the `created_at` index, so a run with nothing due reads
+ * nothing. The `+` on `status` keeps the planner off the retry index, whose
+ * status prefix matches nearly every row.
  */
 export async function pruneWebhookDeliveries(env: Bindings): Promise<void> {
-  const expired = `SELECT id FROM webhook_deliveries WHERE created_at < ? AND status IN ('success', 'dead') ORDER BY id LIMIT 500`;
+  const expired = `SELECT id FROM webhook_deliveries WHERE created_at < ? AND +status IN ('success', 'dead') ORDER BY created_at LIMIT 500`;
   const cutoff = Date.now() - RETENTION_MS;
   await env.DB.batch([
     env.DB.prepare(`DELETE FROM webhook_attempts WHERE delivery_id IN (${expired})`).bind(cutoff),

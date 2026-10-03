@@ -476,7 +476,7 @@ export async function loadFormHistory(
 export async function backfillVersionActivity(env: Bindings, formId: string, orgId: string): Promise<number> {
   const res = await env.DB.prepare(
     `SELECT v.id, v.version, v.schema_json, v.published_at, v.created_at, v.created_by,
-            (SELECT COUNT(*) FROM form_activity a WHERE a.form_version_id = v.id) AS entries
+            (SELECT COUNT(*) FROM form_activity a WHERE a.form_id = v.form_id AND a.form_version_id = v.id) AS entries
        FROM form_versions v
       WHERE v.form_id = ?
       ORDER BY v.version ASC`,
