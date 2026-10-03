@@ -181,12 +181,21 @@ export function OrganizationInvitationRow({
 
       {showStatus && (
         <TableCell className="text-sm">
-          <Badge
-            variant="secondary"
-            className={cn(statusBadgeClasses[effectiveStatus])}
-          >
-            {String(statusLabel)}
-          </Badge>
+          <div className="flex flex-col items-start gap-1">
+            <Badge
+              variant="secondary"
+              className={cn(statusBadgeClasses[effectiveStatus])}
+            >
+              {String(statusLabel)}
+            </Badge>
+            <span className="text-muted-foreground text-xs whitespace-nowrap">
+              {expired ? "Expired" : "Expires"}{" "}
+              {new Date(invitation.expiresAt).toLocaleDateString(undefined, {
+                day: "numeric",
+                month: "short"
+              })}
+            </span>
+          </div>
         </TableCell>
       )}
 
@@ -194,9 +203,8 @@ export function OrganizationInvitationRow({
         <div className="flex justify-end gap-2">
           {inviteMemberPermission?.success && isPending && (
             <Button
-              size="icon"
+              size="sm"
               variant="outline"
-              className="size-8"
               disabled={resendPending}
               onClick={() =>
                 resendInvitation({
@@ -216,22 +224,22 @@ export function OrganizationInvitationRow({
                   resend: true
                 })
               }
-              aria-label={organizationLocalization.resendInvitation}
             >
               {resendPending ? <Spinner /> : <Send />}
+              Resend
             </Button>
           )}
 
           {cancelInvitationPermission?.success && isPending && (
             <Button
-              size="icon"
-              variant="outline"
-              className="size-8 text-destructive"
+              size="sm"
+              variant="ghost"
+              className="text-destructive"
               disabled={cancelPending}
               onClick={() => cancelInvitation({ invitationId: invitation.id })}
-              aria-label={organizationLocalization.cancelInvitation}
             >
               {cancelPending ? <Spinner /> : <X />}
+              Revoke
             </Button>
           )}
         </div>

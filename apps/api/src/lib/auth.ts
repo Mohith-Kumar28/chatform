@@ -487,6 +487,33 @@ export function createAuth(env: Bindings) {
             await enqueueMail(env, { kind: "invitation_accepted", invitationId: invitation.id, memberId: member.id });
           },
           /**
+           * One invitation per person. Better Auth's resend only reuses a row
+           * that is still pending and unexpired, so re-inviting someone whose
+           * invite lapsed or was cancelled adds a second row beside the dead
+           * one. Clear those out. Accepted rows stay: the "accepted" mail reads
+           * its invitation when it sends.
+           *
+           * Resending a lapsed invite lands here too, as a new row, so the
+           * workspaces the lapsed one named move across before it goes.
+           */
+          afterCreateInvitation: async ({ invitation }) => {
+            const stale = `organization_id = ? AND lower(email) = lower(?) AND id != ?`;
+            const keys = [invitation.organizationId, invitation.email, invitation.id];
+            await env.DB.batch([
+              env.DB.prepare(
+                `INSERT OR IGNORE INTO invitation_workspaces (invitation_id, workspace_id, role)
+                 SELECT ?, workspace_id, role FROM invitation_workspaces
+                 WHERE invitation_id = (SELECT id FROM invitations WHERE ${stale} AND status = 'pending'
+                                        ORDER BY created_at DESC LIMIT 1)`,
+              ).bind(invitation.id, ...keys),
+              env.DB.prepare(`DELETE FROM invitations WHERE ${stale} AND status != 'accepted'`).bind(...keys),
+            ]);
+          },
+          /** A cancelled invitation is gone, not kept as a row to explain. */
+          afterCancelInvitation: async ({ invitation }) => {
+            await env.DB.prepare(`DELETE FROM invitations WHERE id = ?`).bind(invitation.id).run();
+          },
+          /**
            * Seat limit, enforced where invitations are actually created.
            *
            * Better Auth owns the invite endpoint, so this cannot be a Hono

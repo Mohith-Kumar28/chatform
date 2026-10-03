@@ -52,13 +52,9 @@ const buttonVariants = cva(
         // interpolate, so a straight swap of two gradients snaps. The overlay
         // is a `::before` at negative z-index inside the button's own stacking
         // context, which paints over the resting sweep and under the label.
-        gradient: [
-          "relative isolate bg-brand-gradient text-on-primary shadow-xs",
-          "before:absolute before:inset-0 before:-z-10 before:rounded-[inherit]",
-          "before:bg-brand-gradient-hover before:opacity-0 before:transition-opacity",
-          "before:duration-[var(--duration-micro)] before:ease-[var(--ease-out)]",
-          "hover:before:opacity-100",
-        ].join(" "),
+        // The look lives in `bg-brand-ask` (globals.css): a light ground with
+        // the brand hues turning around the rim, so the label stays plain ink.
+        gradient: "bg-brand-ask shadow-xs",
         // Controls that sit ON a full-strength brand ground — the hero wash,
         // the closing band. Every other variant assumes a page-coloured
         // surface underneath it, so `default` puts orange on orange and

@@ -53,6 +53,7 @@ import { OrganizationMemberRowSkeleton } from "./organization-member-row-skeleto
 import { OrganizationSortableTableHead } from "./organization-sortable-table-head"
 import {
   createOrganizationColumnHelper,
+  ORGANIZATION_TABLE_CLASS,
   ORGANIZATION_TABLE_PAGE_SIZE,
   useOrganizationTable
 } from "./organization-table"
@@ -527,7 +528,7 @@ export function OrganizationMembers({
         )}
 
         <Card className="p-0">
-          <Table aria-label={organizationLocalization.members}>
+          <Table className={ORGANIZATION_TABLE_CLASS} aria-label={organizationLocalization.members}>
             <TableHeader>
               <TableRow>
                 {showSelection && (

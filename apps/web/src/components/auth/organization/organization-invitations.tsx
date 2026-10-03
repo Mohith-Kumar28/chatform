@@ -2,8 +2,7 @@
 
 import {
   hasMemberRole,
-  type OrganizationAuthClient,
-  type OrganizationLocalization
+  type OrganizationAuthClient
 } from "@better-auth-ui/core/plugins/organization"
 import { useAuth, useAuthPlugin } from "@better-auth-ui/react"
 import {
@@ -13,7 +12,7 @@ import {
 } from "@better-auth-ui/react/plugins/organization"
 import type { Invitation } from "better-auth/client"
 import { Filter, Search, X } from "lucide-react"
-import { type ComponentProps, useState } from "react"
+import { type ComponentProps, useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -48,6 +47,7 @@ import { OrganizationInvitationsEmpty } from "./organization-invitations-empty"
 import { OrganizationSortableTableHead } from "./organization-sortable-table-head"
 import {
   createOrganizationColumnHelper,
+  ORGANIZATION_TABLE_CLASS,
   ORGANIZATION_TABLE_PAGE_SIZE,
   useOrganizationTable
 } from "./organization-table"
@@ -81,7 +81,6 @@ const invitationColumns = invitationColumnHelper.columns([
   })
 ])
 const INVITATION_COLUMN_IDS = ["email", "createdAt", "role", "status"] as const
-const EMPTY_INVITATIONS: Invitation[] = []
 
 /** Props for the `OrganizationInvitations` component. */
 export type OrganizationInvitationsProps = {
@@ -98,8 +97,27 @@ export function OrganizationInvitations({
   const { authClient, localization } = useAuth<OrganizationAuthClient>()
   const { localization: organizationLocalization, roles } =
     useAuthPlugin(organizationPlugin)
-  const { data: invitations, isPending: invitationsPending } =
+  const { data: allInvitations, isPending: invitationsPending } =
     useListOrganizationInvitations(authClient)
+
+  /**
+   * Only invitations still waiting on someone. An accepted one is a row in the
+   * members table above; a cancelled or declined one decides nothing. Older
+   * rows for the same address (from before the server started clearing them)
+   * collapse into the newest.
+   */
+  const invitations = useMemo(() => {
+    const newest = new Map<string, Invitation>()
+    for (const invitation of allInvitations ?? []) {
+      if (invitation.status !== "pending") continue
+      const key = invitation.email.toLowerCase()
+      const seen = newest.get(key)
+      if (!seen || new Date(invitation.createdAt) > new Date(seen.createdAt)) {
+        newest.set(key, invitation)
+      }
+    }
+    return [...newest.values()]
+  }, [allInvitations])
 
   const canInvite = useHasPermission(authClient, {
     permissions: { invitation: ["create"] }
@@ -133,9 +151,8 @@ export function OrganizationInvitations({
     {
       atoms: tableState.atoms,
       columns: invitationColumns,
-      data: invitations ?? EMPTY_INVITATIONS,
-      enableRowSelection: (row) =>
-        canCancel.data?.success === true && row.original.status === "pending",
+      data: invitations,
+      enableRowSelection: () => canCancel.data?.success === true,
       globalFilterFn: "includesString",
       getRowId: (invitation) => invitation.id
     },
@@ -144,11 +161,7 @@ export function OrganizationInvitations({
 
   const cancelInvitations = useCancelInvitation(authClient)
   const roleFilter = String(table.getColumn("role")?.getFilterValue() ?? "all")
-  const statusFilter = String(
-    table.getColumn("status")?.getFilterValue() ?? "all"
-  )
   const roleFacetRows = table.getColumn("role")?.getFacetedRowModel().flatRows
-  const statusCounts = table.getColumn("status")?.getFacetedUniqueValues()
   const selectedInvitations = table.getSelectedRowModel().rows
   const showSelection = canCancel.data?.success === true
   const visibleColumnCount = table.getVisibleLeafColumns().length
@@ -184,7 +197,7 @@ export function OrganizationInvitations({
 
   const [inviteOpen, setInviteOpen] = useState(false)
 
-  const invitationCount = invitations?.length ?? 0
+  const invitationCount = invitations.length
 
   /**
    * Nothing at all when nobody has been invited.
@@ -260,42 +273,6 @@ export function OrganizationInvitations({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
-              disabled={isPending}
-            >
-              <Filter />
-
-              {organizationLocalization.status}
-            </DropdownMenuTrigger>
-
-            <DropdownMenuContent align="start">
-              <DropdownMenuRadioGroup
-                value={statusFilter}
-                onValueChange={(value) =>
-                  table
-                    .getColumn("status")
-                    ?.setFilterValue(value === "all" ? undefined : value)
-                }
-              >
-                <DropdownMenuRadioItem value="all">
-                  {organizationLocalization.all}
-                </DropdownMenuRadioItem>
-
-                {(["pending", "accepted", "rejected", "canceled"] as const).map(
-                  (status) => (
-                    <DropdownMenuRadioItem key={status} value={status}>
-                      {organizationLocalization[
-                        status as keyof OrganizationLocalization
-                      ] ?? status}{" "}
-                      ({statusCounts?.get(status) ?? 0})
-                    </DropdownMenuRadioItem>
-                  )
-                )}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
 
           <div className="ms-auto">
             <OrganizationTableViewOptions
@@ -329,7 +306,7 @@ export function OrganizationInvitations({
         </div>
         )}
 
-        {(roleFilter !== "all" || statusFilter !== "all") && (
+        {roleFilter !== "all" && (
           <div className="flex flex-wrap gap-2">
             {roleFilter !== "all" && (
               <Badge variant="secondary" className="gap-1">
@@ -342,27 +319,6 @@ export function OrganizationInvitations({
                   className="size-4 rounded-sm text-muted-foreground"
                   onClick={() =>
                     table.getColumn("role")?.setFilterValue(undefined)
-                  }
-                  size="icon-xs"
-                  type="button"
-                  variant="ghost"
-                >
-                  <X className="size-3" />
-                </Button>
-              </Badge>
-            )}
-
-            {statusFilter !== "all" && (
-              <Badge variant="secondary" className="gap-1">
-                {organizationLocalization.status}:{" "}
-                {organizationLocalization[
-                  statusFilter as keyof OrganizationLocalization
-                ] ?? statusFilter}
-                <Button
-                  aria-label={organizationLocalization.clear}
-                  className="size-4 rounded-sm text-muted-foreground"
-                  onClick={() =>
-                    table.getColumn("status")?.setFilterValue(undefined)
                   }
                   size="icon-xs"
                   type="button"
@@ -390,7 +346,7 @@ export function OrganizationInvitations({
         )}
 
         <Card className="p-0">
-          <Table aria-label={organizationLocalization.invitations}>
+          <Table className={ORGANIZATION_TABLE_CLASS} aria-label={organizationLocalization.invitations}>
             <TableHeader>
               <TableRow>
                 {showSelection && (
@@ -477,18 +433,13 @@ export function OrganizationInvitations({
                         .getColumn("createdAt")
                         ?.getIsVisible()}
                       showRole={!accessMap && table.getColumn("role")?.getIsVisible()}
-                      // Only a pending invitation still decides anything; once
-                      // accepted or cancelled its grants are history, and the
-                      // People table above says what that person can open now.
                       access={
-                        accessMap && row.original.status === "pending"
+                        accessMap
                           ? accessSummary(
                               row.original.role ?? "",
                               accessMap.invitations[row.original.id]
                             )
-                          : accessMap
-                            ? { title: "", detail: "" }
-                            : undefined
+                          : undefined
                       }
                       showStatus={table.getColumn("status")?.getIsVisible()}
                     />

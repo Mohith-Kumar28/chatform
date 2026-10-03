@@ -20,6 +20,15 @@ import {
 
 export const ORGANIZATION_TABLE_PAGE_SIZE = 10
 
+/**
+ * Breathing room for the people tables. The base cell is `h-10 px-3`, sized for
+ * one line of text; a member row is an avatar over two lines, so it touched the
+ * borders. Rows get vertical padding and the outer columns clear the card's
+ * rounded edge.
+ */
+export const ORGANIZATION_TABLE_CLASS =
+  "[&_td]:py-3 [&_td:first-child]:pl-5 [&_th:first-child]:pl-5 [&_td:last-child]:pr-5 [&_th:last-child]:pr-5 [&_th]:h-11"
+
 export const organizationTableFeatures = tableFeatures({
   columnFilteringFeature,
   globalFilteringFeature,

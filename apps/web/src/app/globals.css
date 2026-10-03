@@ -718,6 +718,71 @@
   background-image: var(--brand-gradient-hover);
 }
 
+/* The commercial ask: a light button with the brand hues turning slowly around
+   its rim, the launch video's halo at button size. The ground is the card with
+   a faint wash of both hues, so the label stays plain foreground ink. A solid
+   orange-to-violet fill under dark type read as generated, not designed.
+   `::before` is the turning rim, `::after` the wash laid 1.5px inside it; both
+   sit below the label in the button's own stacking context. */
+@property --cf-ask-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes cf-ask-turn {
+  to { --cf-ask-angle: 360deg; }
+}
+@utility bg-brand-ask {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+  color: var(--foreground);
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  &::before {
+    inset: 0;
+    z-index: -2;
+    background: conic-gradient(
+      from var(--cf-ask-angle),
+      var(--brand-orange),
+      var(--family-content),
+      var(--brand-violet),
+      var(--family-number),
+      var(--brand-orange)
+    );
+    animation: cf-ask-turn 5s linear infinite;
+  }
+  &::after {
+    inset: 1.5px;
+    z-index: -1;
+    background:
+      linear-gradient(
+        100deg,
+        color-mix(in oklab, var(--brand-orange) 10%, transparent),
+        color-mix(in oklab, var(--brand-violet) 12%, transparent)
+      ),
+      var(--card);
+    transition: background-color var(--duration-micro) var(--ease-out);
+  }
+  &:hover::after {
+    background:
+      linear-gradient(
+        100deg,
+        color-mix(in oklab, var(--brand-orange) 18%, transparent),
+        color-mix(in oklab, var(--brand-violet) 20%, transparent)
+      ),
+      var(--card);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &::before { animation: none; }
+  }
+}
+
 /* Numeric columns and metrics: keep digits from jittering as values change. */
 @utility tabular {
   font-variant-numeric: tabular-nums;

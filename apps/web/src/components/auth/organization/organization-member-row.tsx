@@ -128,7 +128,7 @@ export function OrganizationMemberRow({
 
       <TableCell>
         <div className="flex flex-col gap-1">
-          <UserView user={member.user} />
+          <UserView className="gap-3" user={member.user} />
           {memberFields.map((field) => {
             const value = formatAdditionalFieldValue(
               (member as unknown as Record<string, unknown>)[field.name]
