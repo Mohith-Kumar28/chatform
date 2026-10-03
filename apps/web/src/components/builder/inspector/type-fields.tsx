@@ -20,7 +20,6 @@ import {
 } from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
 import { Button } from "@/components/ui/button";
-import { InfoHint } from "@/components/ui/info-hint";
 import {
   accountDisplay,
   INR_ONLY_PROVIDERS,
@@ -183,15 +182,6 @@ export function TypeFields({
     case "phone":
       return (
         <>
-          <TextField
-            label="Country code"
-            placeholder="IN"
-            value={block.countryHint ?? ""}
-            onChange={(v) =>
-              patch({ countryHint: v.toUpperCase().slice(0, 2) || undefined } as Partial<Block>, key("countryHint"))
-            }
-            maxLength={2}
-          />
           <VerifyField
             label="Verify by SMS code"
             checked={block.verify}
@@ -620,26 +610,6 @@ export function TypeFields({
                   key("emailRules"),
                 )
               }
-            />
-          )}
-          {block.fields.includes("phone") && (
-            <TextField
-              label="Country code"
-              placeholder="IN"
-              value={options?.phone?.countryHint ?? ""}
-              onChange={(v) =>
-                patch(
-                  {
-                    fieldOptions: {
-                      ...options,
-                      phone: { countryHint: v.toUpperCase().slice(0, 2) || undefined },
-                    },
-                  } as Partial<Block>,
-                  key("countryHint"),
-                )
-              }
-              maxLength={2}
-              help={<CountryCodeHelp />}
             />
           )}
         </>
@@ -1344,17 +1314,6 @@ function AmountFields({
  * author who knows the domain reaches for the box, and one who only knows "not
  * gmail" reaches for the switch above it.
  */
-function CountryCodeHelp() {
-  return (
-    <InfoHint label="About the country code">
-      <p>
-        Lets someone type a national number — <code className="text-foreground">9876543210</code> —
-        without the dialling code, and stores it in full.
-      </p>
-    </InfoHint>
-  );
-}
-
 function EmailRuleFields({
   businessOnly,
   allowedDomains,
