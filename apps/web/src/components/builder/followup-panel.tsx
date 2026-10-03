@@ -245,7 +245,17 @@ export function FollowUpPanel({
 
         <BlockedUntilOn blocked={off} message={OFF_MESSAGE}>
           <div className="flex items-center justify-between gap-4 border-t px-4 py-3">
-            <p className="text-sm">Send replies to</p>
+            <div className="flex items-center gap-1">
+              <p className="text-sm">Send replies to</p>
+              <InfoHint label="About send replies to">
+                <p>
+                  When someone replies to a follow-up email, their reply goes to this address.
+                </p>
+                <p className="mt-2">
+                  Leave it empty and replies come to chatform instead of you, so you will not see them.
+                </p>
+              </InfoHint>
+            </div>
             <BufferedInput
               className="h-8 max-w-56"
               value={followUp.replyTo ?? ""}
