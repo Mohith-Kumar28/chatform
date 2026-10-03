@@ -17,6 +17,7 @@ import { FollowUpAddressDialog } from "./followup-address-dialog";
 import { FollowUpEmailPreview } from "./followup-email-preview";
 import { BufferedInput, BufferedTextarea } from "@/components/ui/buffered-input";
 import { InfoHint } from "@/components/ui/info-hint";
+import { BlockedUntilOn } from "@/components/ui/blocked-until-on";
 import { useBuilderStore } from "@/stores/builder-store";
 import { VariablePalette, insertAtCaret, type VariableOption } from "./followup-variables";
 
@@ -213,6 +214,9 @@ export function FollowUpPanel({
   // A form switched on before the address was required would otherwise sit here
   // looking armed while the server quietly refuses to schedule anything.
   const stalled = followUp.enabled && !hasAddress;
+  // Everything under the switch stays on screen while it is off, out of reach.
+  const off = !(followUp.enabled && hasAddress);
+  const OFF_MESSAGE = "Turn on Send follow-up emails first";
 
   return (
     <div className="space-y-3">
@@ -239,7 +243,7 @@ export function FollowUpPanel({
           <Switch checked={followUp.enabled} onCheckedChange={onToggle} />
         </div>
 
-        {followUp.enabled && hasAddress && (
+        <BlockedUntilOn blocked={off} message={OFF_MESSAGE}>
           <div className="flex items-center justify-between gap-4 border-t px-4 py-3">
             <p className="text-sm">Send replies to</p>
             <BufferedInput
@@ -249,11 +253,10 @@ export function FollowUpPanel({
               onCommit={(v) => patch({ replyTo: v || undefined })}
             />
           </div>
-        )}
+        </BlockedUntilOn>
       </div>
 
-      {followUp.enabled && hasAddress && (
-        <>
+      <BlockedUntilOn blocked={off} message={OFF_MESSAGE} className="space-y-3">
           <div className="rounded-xl border">
             {followUp.steps.map((step, i) => (
               <div key={i}>
@@ -437,8 +440,7 @@ export function FollowUpPanel({
               )}
             </div>
           )}
-        </>
-      )}
+      </BlockedUntilOn>
 
       {/*
         The next channel, named but not promised.
@@ -450,12 +452,10 @@ export function FollowUpPanel({
         The blocker is not the code: WhatsApp template messages need business
         verification and per-template approval, which is not ours to schedule.
       */}
-      {followUp.enabled && hasAddress && (
-        <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-          <MessageCircle className="size-3.5 shrink-0" />
-          WhatsApp follow-ups coming soon.
-        </p>
-      )}
+      <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+        <MessageCircle className="size-3.5 shrink-0" />
+        WhatsApp follow-ups coming soon.
+      </p>
 
       {org?.id && (
         <FollowUpAddressDialog

@@ -35,6 +35,7 @@ import { ShortcutsList } from "@/components/ui/shortcuts-dialog";
 import { useBuilderStore } from "@/stores/builder-store";
 import { SettingsShell } from "@/components/settings/settings-shell";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { BlockedUntilOn } from "@/components/ui/blocked-until-on";
 
 interface SettingsPanelProps {
   settings: FormDoc["settings"];
@@ -60,8 +61,8 @@ const SECTIONS = [
   { id: "hidden", label: "Hidden fields & variables" },
   { id: "link", label: "Link & social" },
   { id: "followup", label: "Follow-ups" },
-  { id: "shortcuts", label: "Keyboard shortcuts" },
   { id: "language", label: "Language" },
+  { id: "shortcuts", label: "Keyboard shortcuts" },
   { id: "agent", label: "Agent" },
 ] as const;
 
@@ -635,6 +636,11 @@ function EmailNotificationSettings({
               checked={onComplete.notifyOwner}
               onCheckedChange={(notifyOwner) => patch({ notifyOwner })}
             />
+          <BlockedUntilOn
+            blocked={!onComplete.notifyOwner}
+            message="Turn on Receive email notifications first"
+            className="space-y-1"
+          >
             <SettingRow
               setting="settings.onComplete.notificationEmails" label="To"
               description={`Up to ${MAX_NOTIFICATION_EMAILS} addresses.`}
@@ -667,6 +673,7 @@ function EmailNotificationSettings({
                 onCommit={(v) => patch({ notificationSubject: v.trim() })}
               />
             </SettingRow>
+          </BlockedUntilOn>
         </>
       ) : (
         <>
@@ -676,6 +683,11 @@ function EmailNotificationSettings({
               checked={confirmation.enabled}
               onCheckedChange={(enabled) => patchConfirmation({ enabled })}
             />
+          <BlockedUntilOn
+            blocked={!confirmation.enabled}
+            message="Turn on Send email to respondent first"
+            className="space-y-1"
+          >
             <SettingRow
               setting="settings.onComplete.autoReplyEmail.toField" label="To"
               description={
@@ -760,6 +772,7 @@ function EmailNotificationSettings({
               checked={confirmation.includeAnswers}
               onCheckedChange={(includeAnswers) => patchConfirmation({ includeAnswers })}
             />
+          </BlockedUntilOn>
         </>
       )}
     </div>
