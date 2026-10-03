@@ -129,11 +129,13 @@ export function Capabilities() {
 
       <div className="mt-14 grid gap-5 md:grid-cols-2">
         {CARDS.map((c) => (
+          /* A tall card's picture takes the spare height, so the two titles
+             in a row sit on the same line. */
           <article
             key={c.title}
-            className={`bg-card/60 border-border overflow-hidden rounded-[18px] border ${"wide" in c ? "md:col-span-2 md:grid md:grid-cols-[1.2fr_1fr] md:items-center" : ""}`}
+            className={`bg-card/60 border-border overflow-hidden rounded-[18px] border ${"wide" in c ? "md:col-span-2 md:grid md:grid-cols-[1.2fr_1fr] md:items-center" : "flex flex-col"}`}
           >
-            <div className={`bg-muted/40 relative overflow-hidden ${"wide" in c ? "h-60 md:h-full md:min-h-60" : "md:min-h-80 py-4"}`}>{c.art}</div>
+            <div className={`bg-muted/40 relative overflow-hidden ${"wide" in c ? "h-60 md:h-full md:min-h-60" : "flex-1 py-4 md:min-h-80 [&>*]:h-full"}`}>{c.art}</div>
             <div className="p-7 sm:p-8">
               <h3 className="font-display text-xl font-semibold tracking-tight">{c.title}</h3>
               <p className="text-muted-foreground mt-2 leading-relaxed">{c.body}</p>
