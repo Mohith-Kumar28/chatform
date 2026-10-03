@@ -82,8 +82,12 @@ export function MarketingNav() {
     const onScroll = () => {
       const y = window.scrollY;
       setScrolled(y > 8);
+      /* At the very bottom an overscroll bounce reads as a scroll up and
+         brought the bar back over the footer. The bottom of the page is not
+         an intent to navigate, so it never un-hides the bar. */
+      const atBottom = y + window.innerHeight >= document.documentElement.scrollHeight - 4;
       if (Math.abs(y - last) > 6) {
-        setHidden(y > 120 && (staysHidden || y > last));
+        if (!atBottom) setHidden(y > 120 && (staysHidden || y > last));
         last = y;
       }
     };

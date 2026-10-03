@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, ExternalLink, X } from "lucide-react";
-import { LogoMark } from "@/components/brand/logo";
+import { ChatBubble } from "@/components/chat/chat-bubble";
+
+/** The demo form's first question, as its author wrote it (tooling/demo-form). */
+const PREVIEW_CHOICES = [
+  { label: "A page of fields", image: "/demo/page-of-fields.svg" },
+  { label: "One per screen", image: "/demo/one-question-at-a-time.svg" },
+  { label: "A sheet or inbox", image: "/demo/sheet-or-inbox.svg" },
+  { label: "A chat, like this", image: "/demo/a-chat.svg" },
+];
 
 /**
  * The hero's demo: the real demo form, behind a Start button.
@@ -80,7 +88,7 @@ export function HeroDemo({ slug }: { slug: string }) {
           </a>
         </div>
 
-        <div className="relative h-[28rem] sm:h-[36rem]">
+        <div className="relative h-[30rem] sm:h-[32rem]">
           {playing ? (
             <iframe
               src={src}
@@ -89,25 +97,50 @@ export function HeroDemo({ slug }: { slug: string }) {
               className="absolute inset-0 block size-full border-0"
             />
           ) : (
-            <div className="absolute inset-0 grid place-items-center px-6 text-center">
-              <div className="flex max-w-xs flex-col items-center">
-                <LogoMark className="size-14" />
-                <p className="font-display mt-5 text-2xl font-semibold tracking-tight text-balance">
+            <>
+              {/* The form's real opening, faded, so the window shows what is
+                  waiting rather than an empty page. Nothing here is live. */}
+              <div aria-hidden className="pointer-events-none absolute inset-0 flex flex-col gap-2.5 p-5 sm:p-8">
+                <div className="flex">
+                  <ChatBubble from="bot">
+                    Hi, I&apos;m the chatform agent. This is a real chatform form, so you&apos;re seeing exactly what
+                    your own respondents would.
+                  </ChatBubble>
+                </div>
+                <div className="flex">
+                  <ChatBubble from="bot">Which of these is closest to how you collect answers today?</ChatBubble>
+                </div>
+                <div className="mt-1 grid max-w-xl grid-cols-2 gap-2.5 sm:grid-cols-4">
+                  {PREVIEW_CHOICES.map((c) => (
+                    <div key={c.label} className="bg-card overflow-hidden rounded-xl border">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- a static drawing */}
+                      <img src={c.image} alt="" className="aspect-[4/3] w-full object-cover" />
+                      <p className="truncate px-2.5 py-1.5 text-xs font-medium">{c.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-[color-mix(in_oklch,var(--cf-bg)_88%,transparent)] via-55% to-[var(--cf-bg)]"
+              />
+              <div className="absolute inset-x-0 bottom-0 flex flex-col items-center px-6 pb-10 text-center sm:pb-14">
+                <p className="font-display text-2xl font-semibold tracking-tight text-balance">
                   Hi! This is a real chatform.
                 </p>
-                <p className="text-caption text-muted-foreground mt-2 text-balance">
+                <p className="text-caption text-muted-foreground mt-1.5 text-balance">
                   Eight quick questions, under three minutes.
                 </p>
                 <button
                   type="button"
                   onClick={start}
-                  className="bg-primary text-primary-foreground mt-6 inline-flex h-11 items-center gap-2 rounded-full px-6 font-medium shadow-md transition-transform hover:-translate-y-0.5 active:translate-y-0"
+                  className="bg-primary text-primary-foreground mt-5 inline-flex h-11 items-center gap-2 rounded-full px-6 font-medium shadow-md transition-transform hover:-translate-y-0.5 active:translate-y-0"
                 >
                   Start the demo
                   <ArrowRight className="size-4" strokeWidth={2.25} />
                 </button>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>

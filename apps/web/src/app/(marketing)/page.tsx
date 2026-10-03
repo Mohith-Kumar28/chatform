@@ -21,7 +21,6 @@ import { TrustSection } from "@/components/marketing/trust-section";
 import { TemplatesTeaser } from "@/components/marketing/templates-teaser";
 import { ReviewsCarousel } from "@/components/marketing/reviews-carousel";
 import { HOME_FAQ, HomeFaq } from "@/components/marketing/home-faq";
-import { AskAi } from "@/components/marketing/ask-ai";
 import { SpectrumStrip } from "@/components/marketing/spectrum-strip";
 import { HowItConverts } from "@/components/marketing/how-it-converts";
 import { TheMoment } from "@/components/marketing/the-moment";
@@ -155,7 +154,6 @@ export default function LandingPage() {
       <ReviewsCarousel />
       <HomeFaq />
       <CtaBand />
-      <AskAi />
 
       {/* The contact form as a corner button; the share band's "Try the popup" opens it too. */}
       <ChatformEmbed form="contact-us-673e52" />

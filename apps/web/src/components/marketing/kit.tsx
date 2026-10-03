@@ -144,22 +144,6 @@ export function Panel({
 /** The soft shadow under a raised picture. */
 export const PANEL_SHADOW = "shadow-[0_18px_55px_-28px_oklch(0.25_0.02_65/0.35)]";
 
-/** Marks a Pro feature in copy, so a free visitor is never surprised later. */
-export function ProPill({ className }: { className?: string }) {
-  return (
-    <Link
-      href="/pricing"
-      prefetch={false}
-      className={cn(
-        "bg-brand-violet-soft text-brand-violet-soft-foreground ml-2 inline-flex translate-y-[-0.15em] items-center rounded-full px-2 py-0.5 align-middle text-[0.6875rem] font-bold tracking-wide uppercase",
-        className,
-      )}
-    >
-      Pro
-    </Link>
-  );
-}
-
 export function CheckItem({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <li className={cn("flex items-start gap-2.5", className)}>

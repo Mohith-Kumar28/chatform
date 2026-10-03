@@ -113,7 +113,7 @@ const ORDINARY = [
   { label: "Tell your other tools", detail: "New answers can be pushed anywhere you like" },
   { label: "See where people stop", detail: "Drop-off along the path each person actually took" },
   { label: "Download it all", detail: "A spreadsheet, one column per question" },
-  { label: "Your brand, not ours", detail: "Fonts, logo, colours; drop the badge on Pro" },
+  { label: "Your brand, not ours", detail: "Your fonts, logo and colours on every form" },
 ];
 
 const CHIPS = ["File uploads", "Signatures", "Payments", "Scheduling links", "Quizzes and scores", "Custom endings", "Email alerts"];

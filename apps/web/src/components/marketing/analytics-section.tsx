@@ -1,5 +1,5 @@
 import { Band } from "./band";
-import { CheckItem, PANEL_SHADOW, ProPill, SectionLede, SectionTitle, Split, TextLink } from "./kit";
+import { CheckItem, PANEL_SHADOW, SectionLede, SectionTitle, Split, TextLink } from "./kit";
 
 /**
  * Form analytics, shown as the real results screen
@@ -21,7 +21,6 @@ export function AnalyticsSection() {
             <CheckItem>Responses over time, and the hours people actually answer</CheckItem>
             <CheckItem>
               The drop-off funnel and answer rate for every question
-              <ProPill />
             </CheckItem>
           </ul>
           <div className="mt-8">

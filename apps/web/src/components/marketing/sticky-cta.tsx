@@ -57,14 +57,13 @@ export function StickyCta() {
         show ? "translate-y-0 opacity-100" : "translate-y-[140%] opacity-0",
       )}
     >
-      <div className="bg-background/80 border-border/70 pointer-events-auto flex w-full max-w-3xl items-center gap-4 rounded-[20px] border px-4 py-3 shadow-[0_18px_55px_-20px_oklch(0.25_0.02_65/0.35)] backdrop-blur-[18px] sm:px-5">
+      <div className="bg-card/95 border-border/70 pointer-events-auto flex w-full max-w-3xl items-center gap-4 rounded-2xl border px-4 py-3 shadow-lg backdrop-blur-md sm:px-5">
         <span className="hidden shrink-0 sm:block">
           <LogoMark className="size-9" />
         </span>
         <div className={cn("min-w-0 flex-1", hasLauncher && "max-sm:hidden")}>
           <p className="font-display text-foreground truncate text-base font-semibold">
-            Forms people finish.{" "}
-            <span className="font-hand text-primary text-[1.25em] font-normal">Unlimited responses.</span>
+            Forms people finish. <span className="text-primary">Unlimited responses.</span>
           </p>
           <p className="text-foreground/70 hidden truncate text-sm sm:block">Free forever. No credit card needed.</p>
         </div>
@@ -82,7 +81,7 @@ export function StickyCta() {
           href="/signin?mode=signup"
           tabIndex={show ? 0 : -1}
           className={cn(
-            "bg-foreground text-background hover:bg-foreground/90 inline-flex shrink-0 items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold shadow-[0_3px_0_oklch(0.25_0.02_65/0.16)] transition-colors duration-[var(--duration-micro)]",
+            "bg-foreground text-background hover:bg-foreground/90 inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors duration-[var(--duration-micro)]",
             hasLauncher && "max-sm:flex-1",
           )}
         >

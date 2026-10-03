@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type AnchorHTMLAttributes, type MouseEvent } from "react";
 import { Volume2 } from "lucide-react";
+import { Eyebrow } from "./band";
 
 /**
  * The launch video, in its own band directly under the hero.
@@ -150,7 +151,7 @@ export function LaunchVideo() {
     <section
       id={LAUNCH_VIDEO_ID}
       aria-label="Launch video"
-      className="relative scroll-mt-16 overflow-x-clip px-6 pt-4 pb-16 sm:pt-8 sm:pb-24"
+      className="relative scroll-mt-16 overflow-x-clip px-6 pt-10 pb-16 sm:pt-14 sm:pb-24"
     >
       {/* The dot grid from the hero, carried down so the band reads as the
           hero's continuation rather than a new section. */}
@@ -160,6 +161,17 @@ export function LaunchVideo() {
       />
 
       <div className="relative mx-auto max-w-5xl">
+        {/* A heading, so the tour reads as its own section rather than as
+            something that started playing under the demo. */}
+        <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-14">
+          <Eyebrow>Product tour</Eyebrow>
+          <h2 className="font-display mt-4 text-[2.25rem] leading-[1.03] font-bold tracking-[-0.04em] text-balance sm:text-[clamp(2.25rem,1.3rem+2.4vw,3.25rem)]">
+            See chatform in action.
+            <span className="font-hand text-primary block text-[1.12em] leading-[1.05] font-normal tracking-normal">
+              in eighty seconds.
+            </span>
+          </h2>
+        </div>
 
         <div className="relative">
           {/* The halo: the mark's hues on a slow turn, blurred into light

@@ -1,5 +1,5 @@
 import { Band } from "./band";
-import { ProPill, SectionTitle, TextLink } from "./kit";
+import { SectionTitle, TextLink } from "./kit";
 
 /**
  * Partial submissions, in a tinted panel: the story in three numbered beats.
@@ -27,11 +27,7 @@ export function PartialsSection() {
       <div className="grid gap-10 rounded-[18px] border border-[color-mix(in_oklch,var(--family-text)_24%,transparent)] bg-[var(--family-text-soft)] px-7 py-12 sm:px-12 lg:grid-cols-[1.15fr_1fr] lg:gap-16">
         <div>
           <SectionTitle
-            eyebrow={
-              <>
-                Partial submissions <ProPill className="ml-1" />
-              </>
-            }
+            eyebrow="Partial submissions"
             accent="Even before they submit."
           >
             Keep every answer.
@@ -41,7 +37,7 @@ export function PartialsSection() {
             still a lead.
           </p>
           <div className="mt-7">
-            <TextLink href="/pricing">See what Pro includes</TextLink>
+            <TextLink href="/pricing">See the plans</TextLink>
           </div>
         </div>
 

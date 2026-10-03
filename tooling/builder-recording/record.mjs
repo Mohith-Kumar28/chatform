@@ -8,7 +8,7 @@
  * because a headless recording has none.
  *
  *   PLAYWRIGHT=/path/to/playwright/index.mjs STATE=/tmp/state.json node tooling/builder-recording/record.mjs
- *   then: tooling/builder-recording/encode.sh <the .webm it prints>
+ *   then: node tooling/builder-recording/encode.mjs <the .webm it prints>
  *
  * Playwright is not a dependency of this repo; point PLAYWRIGHT at any install.
  */
@@ -52,6 +52,11 @@ await ctx.addInitScript(() => {
 });
 
 const page = await ctx.newPage();
+// The video starts with the page; every event is stamped against that, so
+// encode.mjs can speed up the waits, zoom on typing and lay the sounds in sync.
+const t0 = Date.now();
+const events = [];
+const mark = (type, extra = {}) => events.push({ t: (Date.now() - t0) / 1000, type, ...extra });
 const pause = (ms) => page.waitForTimeout(ms);
 let at = { x: SIZE.width / 2, y: SIZE.height / 2 };
 
@@ -67,6 +72,7 @@ async function moveTo(locator) {
 async function click(locator) {
   await moveTo(locator);
   await pause(180);
+  mark("click", { x: at.x, y: at.y });
   await page.mouse.down();
   await pause(70);
   await page.mouse.up();
@@ -79,12 +85,18 @@ await pause(1200);
 // 1. Describe it, and the AI builds it.
 await click(page.getByRole("button", { name: /New form/ }));
 await pause(900);
-await click(page.getByPlaceholder(/Describe the form/));
-await page.keyboard.type(PROMPT, { delay: 11 });
+const promptBox = page.getByPlaceholder(/Describe the form/);
+await click(promptBox);
+const pb = await promptBox.boundingBox();
+mark("type-start", { x: pb.x + pb.width / 2, y: pb.y + pb.height / 2 });
+await page.keyboard.type(PROMPT, { delay: 30 });
+mark("type-end");
 await pause(500);
 await click(page.getByRole("button", { name: /Generate/ }));
+mark("wait-start");
 await page.waitForURL(/\/forms\/[^/]+\/build/, { timeout: 120_000 });
 await page.waitForLoadState("networkidle");
+mark("wait-end");
 await pause(1800);
 
 // 2. Walk the questions.
@@ -97,7 +109,9 @@ for (let i = 0; i < Math.min(3, await questions.count()); i++) {
 // 3. Add a rating question.
 await click(page.getByRole("button", { name: "Add a question" }));
 await pause(500);
+mark("keys-start");
 await page.keyboard.type("rat", { delay: 90 });
+mark("keys-end");
 await pause(400);
 await click(page.getByRole("option", { name: /Rating/ }).or(page.getByRole("button", { name: /^Rating/ })).first());
 await pause(1800);
@@ -122,5 +136,8 @@ await pause(3000);
 
 const video = page.video();
 await ctx.close();
-console.log(await video.path());
+const path = await video.path();
+const { writeFileSync } = await import("node:fs");
+writeFileSync(path.replace(/\.webm$/, ".events.json"), JSON.stringify(events, null, 2));
+console.log(path);
 await browser.close();

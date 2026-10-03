@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Blocks, Palette, Pause, Play, RotateCcw, Send } from "lucide-react";
+import { Blocks, Maximize2, Palette, Pause, Play, RotateCcw, Send, Volume2, VolumeX } from "lucide-react";
 import { TESTIMONIALS } from "@/content/social-proof";
 import { Band } from "./band";
 import { Doodle } from "./doodles";
@@ -10,7 +10,7 @@ import { TestimonialQuote } from "./social-proof";
 
 /**
  * A silent screen recording of the real builder, under 1 MB, served as a static
- * asset. Re-record with `tooling/builder-recording/record.mjs` and `encode.sh`
+ * asset. Re-record with `tooling/builder-recording/record.mjs` and `encode.mjs`
  * when the builder changes enough that this stops matching it.
  */
 const VIDEO = "/marketing/builder-demo.mp4";
@@ -26,6 +26,7 @@ function Recording() {
   const video = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
   const [userPaused, setUserPaused] = useState(false);
+  const [muted, setMuted] = useState(true);
 
   useEffect(() => {
     const el = video.current;
@@ -62,6 +63,25 @@ function Recording() {
     el.play().catch(() => {});
   };
 
+  /* It has to start muted to autoplay; the clicks and typing are one tap away. */
+  const toggleSound = () => {
+    const el = video.current;
+    if (!el) return;
+    el.muted = !el.muted;
+    setMuted(el.muted);
+    if (!el.muted && el.paused) el.play().catch(() => {});
+  };
+
+  /* Full screen, mostly for phones, where the builder is too small to read
+     inline. iOS Safari only full-screens a video through its own API. */
+  const maximize = () => {
+    const el = video.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+    if (!el) return;
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => el.webkitEnterFullscreen?.());
+    else el.webkitEnterFullscreen?.();
+    el.play().catch(() => {});
+  };
+
   const pill =
     "bg-card/95 text-foreground hover:bg-primary hover:text-on-primary inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold shadow-md backdrop-blur transition-colors";
 
@@ -77,15 +97,23 @@ function Recording() {
         preload="none"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        aria-label="Screen recording: a form is built from a sentence, questions are added and reordered, the design is changed and the share link is copied."
+        aria-label="Screen recording: a form is built from a sentence, the questions are walked through, a rating question is added, the design is changed and the share page is opened."
         className="block aspect-[1600/900] w-full bg-[var(--muted)]"
       />
-      <div className="absolute right-3 bottom-3 flex gap-2 opacity-100 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:opacity-0">
+      <button type="button" onClick={toggleSound} className={`${pill} absolute bottom-3 left-3`} aria-pressed={!muted}>
+        {muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
+        {muted ? "Sound off" : "Sound on"}
+      </button>
+      <div className="absolute right-3 bottom-3 flex gap-2">
+        <button type="button" onClick={maximize} className={pill} aria-label="Full screen">
+          <Maximize2 className="size-3.5" />
+          <span className="hidden sm:inline">Full screen</span>
+        </button>
         <button type="button" onClick={toggle} className={pill}>
           {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
           {playing ? "Pause" : "Play"}
         </button>
-        <button type="button" onClick={restart} className={pill}>
+        <button type="button" onClick={restart} className={`${pill} max-sm:hidden`}>
           <RotateCcw className="size-3.5" />
           Restart
         </button>

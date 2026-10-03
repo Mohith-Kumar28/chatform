@@ -1,7 +1,7 @@
 import { Band } from "./band";
 import { InView } from "./in-view";
 import { AgentPanelPreview } from "./agent-panel-preview";
-import { CheckItem, PANEL_SHADOW, ProPill, SectionLede, SectionTitle, Split, TextLink } from "./kit";
+import { CheckItem, PANEL_SHADOW, SectionLede, SectionTitle, Split, TextLink } from "./kit";
 
 /**
  * The interviewer's brief: a goal, a knowledge base it can quote, and the
@@ -23,11 +23,9 @@ export function AgentBrief() {
             <CheckItem>A knowledge base it can quote: your docs, pages and notes</CheckItem>
             <CheckItem>
               A persona and a goal, like &ldquo;qualify the lead, then book a demo&rdquo;
-              <ProPill />
             </CheckItem>
             <CheckItem>
               Guardrails for what it won&apos;t discuss, and how it declines
-              <ProPill />
             </CheckItem>
             <CheckItem>A switch to ask every question word for word</CheckItem>
           </ul>

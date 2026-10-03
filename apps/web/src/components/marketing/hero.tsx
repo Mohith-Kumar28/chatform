@@ -51,7 +51,7 @@ export function Hero() {
         <div style={{ color: "var(--on-band-vivid)" }} className="mx-auto flex max-w-4xl flex-col items-center text-center">
           <Eyebrow className="text-(--on-band-vivid) flex items-center gap-2">
             <span className="bg-(--on-band-vivid) size-1.5 rounded-full" />
-            A free conversational form builder
+            A free online form builder
           </Eyebrow>
 
           <h1 className="font-display mt-6 text-[clamp(2.6rem,1rem+5vw,5rem)] leading-[1.02] font-bold tracking-[-0.045em] text-balance">
@@ -98,14 +98,12 @@ export function Hero() {
           </ul>
         </div>
 
-        <div id="try-it" className="relative mx-auto mt-16 max-w-[61rem] scroll-mt-24">
+        <div id="try-it" className="relative mx-auto mt-14 max-w-[52rem] scroll-mt-24">
           <p className="mb-4 text-center">
             <HandNote tilt={-2} className="text-foreground/80">
               A real chatform. Go on, answer it.
             </HandNote>
           </p>
-          <Doodle name="envelope" tilt={-12} className="top-24 -left-20" tone="violet" />
-          <Doodle name="plane" tilt={6} className="-right-20 bottom-24" />
           {DEMO_SLUG ? <HeroDemo slug={DEMO_SLUG} /> : <ChatDemo script={HERO_SCRIPT} variant="hero" />}
         </div>
       </div>
