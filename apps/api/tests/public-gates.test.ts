@@ -450,7 +450,9 @@ describe("duplicate responses", () => {
 });
 
 describe("on completion", () => {
-  it("applies the form-level redirect to endings that have none", async () => {
+  // Both documents below are stored at an old schema version, which is what a
+  // form published before the redirect moved onto the endings looks like.
+  it("still redirects a form published with a form-level redirect", async () => {
     const slug = await publish("redir", {
       onComplete: { redirectUrl: "https://example.com/thanks", delaySec: 3 },
     });

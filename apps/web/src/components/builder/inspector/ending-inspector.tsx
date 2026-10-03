@@ -187,14 +187,11 @@ export function EndingInspector({
 
       {/*
         Per ending, because that is how authors describe it: accepted teams go
-        to the WhatsApp group, everyone else back to the site. The form-level
-        setting in Settings stays as the default beneath every success ending —
-        `toPublicEnding` prefers this one — so a form that wants a single
-        destination still sets it once.
+        to the WhatsApp group, everyone else back to the site. This is the only
+        place a redirect is set; the form-level one in Settings is gone.
 
         Offered on a screen-out too, and deliberately: a refusal that sends
-        somebody to the eligibility rules is a real thing to want. It just is
-        not inherited from the completion setting, which is about finishing.
+        somebody to the eligibility rules is a real thing to want.
       */}
       <LockedControl feature="completion_redirect">
         <Field
@@ -205,11 +202,7 @@ export function EndingInspector({
                 Where someone goes once they reach this ending, so different
                 outcomes can send people to different places.
               </p>
-              <p className="mt-2">
-                {screenOut
-                  ? "Leave it empty to show this screen and stay put — a screen-out never inherits the form's completion redirect."
-                  : "Leave it empty to fall back to the form's completion redirect in Settings, if it has one."}
-              </p>
+              <p className="mt-2">Leave it empty to show this screen and stay put.</p>
             </InfoHint>
           }
         >

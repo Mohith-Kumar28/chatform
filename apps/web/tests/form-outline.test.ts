@@ -91,10 +91,10 @@ describe("outlineForm", () => {
     expect(outline.overview.map((g) => g.title)).toEqual([
       "Conversation",
       "Who can answer",
-      "On completion",
+      "Email notifications",
       "Automated follow-ups",
     ]);
-    const done = outline.overview.find((g) => g.title === "On completion")!;
+    const done = outline.overview.find((g) => g.title === "Email notifications")!;
     expect(done.facts).toContainEqual({ label: "New responses emailed to", value: "Nobody" });
   });
 

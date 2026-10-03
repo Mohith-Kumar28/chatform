@@ -24,6 +24,7 @@ export * from "./display";
 export * from "./location";
 export * from "./rich-text";
 export * from "./form-doc";
+export * from "./email-fields";
 export * from "./engine/index";
 export * from "./fixtures";
 export { SCHEMA_VERSION } from "./form-doc";

@@ -50,6 +50,11 @@ export interface MailMessage {
    */
   text: string;
   replyTo?: string;
+  /**
+   * The sender's display name, in place of ours. The address stays our own:
+   * it is the one the sending domain is authenticated for.
+   */
+  fromName?: string;
   /** Defaults to `transactional`. See `MailClass`. */
   class?: MailClass;
   /**
@@ -174,6 +179,19 @@ export function marketingFrom(env: Bindings): string {
 }
 
 /**
+ * Swap the display name on a From value, keeping its address.
+ *
+ * The name is written by a form's author and lands in a header, so anything
+ * that could close the quoted name or start a new header is dropped first.
+ */
+export function withFromName(from: string, name: string | undefined): string {
+  const clean = (name ?? "").replace(/[\r\n"<>\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+  if (!clean) return from;
+  const address = /<([^>]+)>/.exec(from)?.[1] ?? from.trim();
+  return `"${clean}" <${address}>`;
+}
+
+/**
  * Send one message.
  *
  * Throws on failure — every caller is a queue consumer, and a thrown error is
@@ -182,7 +200,7 @@ export function marketingFrom(env: Bindings): string {
  */
 export async function sendMail(env: Bindings, msg: MailMessage): Promise<MailResult> {
   const marketing = msg.class === "marketing";
-  const from = marketing ? marketingFrom(env) : mailFrom(env);
+  const from = withFromName(marketing ? marketingFrom(env) : mailFrom(env), msg.fromName);
   const replyTo = msg.replyTo ?? env.EMAIL_REPLY_TO;
   const preference = transportPreference(env);
 

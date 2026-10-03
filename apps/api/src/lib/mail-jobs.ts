@@ -15,7 +15,7 @@ import {
   type Block,
   type FormDoc,
 } from "@repo/form-schema";
-import { interpolate } from "@repo/form-schema";
+import { emailAnswer, interpolate, replyToChoice } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import {
   mailTally,
@@ -1191,7 +1191,8 @@ async function runSubmissionJob(
    * shrug at: it is what a form whose author typed an address into the *draft*
    * and never published looks like from here.
    */
-  if (recipients.length === 0 && !autoReply?.enabled) return NO_MAIL;
+  const notify = onComplete.notifyOwner && recipients.length > 0;
+  if (!notify && !autoReply?.enabled) return NO_MAIL;
 
   const answers = await env.DB.prepare(
     `SELECT block_ref, value_json FROM submission_answers WHERE submission_id = ?1`,
@@ -1222,8 +1223,21 @@ async function runSubmissionJob(
   const errors: unknown[] = [];
   const tally = mailTally();
 
-  if (recipients.length > 0) {
-    const msg = submissionNotificationEmail({
+  // Who the respondent is, as far as the form knows: a verified sign-in, else
+  // the address they typed. The owner's Reply-To and the confirmation both
+  // start from it.
+  const respondent = resolveRespondentAddress(doc, { respondentEmail: sub.respondent_email, byRef })?.address;
+  const vars = interpolationVars(doc, byRef, form.form_title, sub);
+  /** An author's Reply-To setting, as an address: a named question's answer, one typed out, or the default. */
+  const replyToFor = (setting: string, fallback: string | undefined): string | undefined => {
+    const choice = replyToChoice(setting, doc);
+    if (choice.kind === "custom") return choice.email;
+    if (choice.kind === "field") return emailAnswer(doc, byRef, choice.ref) ?? fallback;
+    return fallback;
+  };
+
+  if (notify) {
+    const standard = submissionNotificationEmail({
       formTitle: form.form_title,
       responseUrl,
       answers: lines,
@@ -1231,16 +1245,17 @@ async function runSubmissionJob(
       submittedAt: sub.completed_at ?? Date.now(),
       isTest: job.isTest,
     });
+    const subject = onComplete.notificationSubject.trim()
+      ? `${job.isTest ? "[test] " : ""}${interpolate(onComplete.notificationSubject, vars)}`
+      : standard.subject;
+    const msg = { ...standard, subject };
+    // Reply-To is the respondent unless the author chose otherwise, so
+    // answering the notification answers the person — the single most useful
+    // thing this email can do beyond existing.
+    const replyTo = replyToFor(onComplete.notificationReplyTo, respondent);
     for (const to of recipients) {
       try {
-        // Reply-To is the respondent where we know it, so answering the
-        // notification answers the person — the single most useful thing this
-        // email can do beyond existing.
-        const res = await sendMail(env, {
-          to,
-          ...msg,
-          ...(sub.respondent_email ? { replyTo: sub.respondent_email } : {}),
-        });
+        const res = await sendMail(env, { to, ...msg, ...(replyTo ? { replyTo } : {}) });
         tally.record(to, res);
       } catch (err) {
         console.error("mail_notification_failed", job.responseId, to, err);
@@ -1256,9 +1271,9 @@ async function runSubmissionJob(
      * auto-reply switched on is a misconfiguration to surface in the builder,
      * not a queue failure.
      */
-    const to = resolveRespondentAddress(doc, { respondentEmail: sub.respondent_email, byRef })?.address;
+    // The question the author named, when they named one and it was answered.
+    const to = (autoReply.toField && emailAnswer(doc, byRef, autoReply.toField)) || respondent;
     if (to) {
-      const vars = interpolationVars(doc, byRef, form.form_title, sub);
       // Escaped for the markdown pass, raw for the text part — see the note
       // on the follow-up body above.
       const bodyMd = interpolate(autoReply.bodyMd || DEFAULT_CONFIRMATION_BODY, vars);
@@ -1287,8 +1302,13 @@ async function runSubmissionJob(
       });
       try {
         // Replies reach the form's owner, where they gave us an address to use.
-        const ownerReply = recipients[0];
-        const res = await sendMail(env, { to, ...msg, ...(ownerReply ? { replyTo: ownerReply } : {}) });
+        const replyTo = replyToFor(autoReply.replyTo, recipients[0]);
+        const res = await sendMail(env, {
+          to,
+          ...msg,
+          ...(replyTo ? { replyTo } : {}),
+          ...(autoReply.fromName.trim() ? { fromName: autoReply.fromName } : {}),
+        });
         tally.record(to, res);
       } catch (err) {
         console.error("mail_autoreply_failed", job.responseId, err);

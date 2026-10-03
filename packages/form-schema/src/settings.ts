@@ -1,8 +1,7 @@
 import { z } from "zod";
-import { boundedString, safeUrl, storedUrl, storedUrlOptional } from "@repo/guard";
+import { boundedString, safeUrl, storedUrl } from "@repo/guard";
 import { NanoId } from "./ids";
 import { RespondentAuthMethod } from "./respondent";
-import { DEFAULT_REDIRECT_DELAY_SEC } from "./defaults";
 
 /**
  * The confirmation email's copy when the author has not written their own.
@@ -221,15 +220,28 @@ export const SettingsDoc = z.object({
        * something before it counts as a completed response.
        */
       requireSubmit: z.boolean().default(true),
-      // Cleaned on read, not rejected — see the note on `Ending.ctaUrl`.
-      redirectUrl: storedUrlOptional(1000),
-      delaySec: z.number().int().min(0).max(120).default(DEFAULT_REDIRECT_DELAY_SEC),
+      /**
+       * The switch for the owner's notification, apart from the list of who
+       * gets it, so turning it off keeps the addresses for turning it back on.
+       * A document from before this existed parses as on, and its list decides
+       * as it always did: nobody on it, nothing sent.
+       */
+      notifyOwner: z.boolean().default(true),
       /**
        * Who hears about each new response, one address per box in the builder.
        * Three, not ten: the builder draws a box per address, and no stored
        * document held more than one when this came down (2026-09-29).
        */
       notificationEmails: z.array(z.string().email()).max(MAX_NOTIFICATION_EMAILS).default([]),
+      /**
+       * Where a reply to the notification goes: empty for the respondent's own
+       * address, the ref of an email question, or an address typed out. One
+       * string for all three, read by `replyToChoice`, so a ref that no longer
+       * names a question degrades to the default rather than failing a parse.
+       */
+      notificationReplyTo: boundedString(320).default(""),
+      /** Empty for the standard subject. May use `{{form.title}}` and question refs. */
+      notificationSubject: boundedString(300).default(""),
       /**
        * The receipt the respondent gets, and the only email in this product
        * that defaults to on.
@@ -263,12 +275,25 @@ export const SettingsDoc = z.object({
            * confirmation off.
            */
           includeAnswers: z.boolean().default(true),
+          /**
+           * The ref of the email question whose answer receives this. Empty
+           * picks for the author: a verified sign-in first, then the first
+           * email question in the form (`respondent-address.ts` on the API).
+           */
+          toField: boundedString(100).default(""),
+          /** The sender's name the respondent sees. Empty for chatform's own. */
+          fromName: boundedString(100).default(""),
+          /** Same three shapes as `notificationReplyTo`; empty is the form's owner. */
+          replyTo: boundedString(320).default(""),
         })
         .default({
           enabled: true,
           subject: DEFAULT_CONFIRMATION_SUBJECT,
           bodyMd: DEFAULT_CONFIRMATION_BODY,
           includeAnswers: true,
+          toField: "",
+          fromName: "",
+          replyTo: "",
         }),
     })
     .prefault({}),

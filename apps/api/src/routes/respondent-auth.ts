@@ -293,7 +293,7 @@ async function assessIdentity(
         completedAt: history.finished.completedAt,
         outcome: screenedOut ? "screened_out" : "completed",
         ending: ending
-          ? toPublicEnding(ending, settings.onComplete, (when: ConditionGroup) =>
+          ? toPublicEnding(ending, (when: ConditionGroup) =>
               isRequirementUnmet(when, state),
             )
           : null,

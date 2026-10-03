@@ -73,7 +73,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 25;
+export const DEMO_REVISION = 26;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -94,6 +94,27 @@ export const DEMO_REVISION = 25;
  * the Cloudflare deploy runs as.
  */
 export const DEMO_OWNER_EMAIL = "mohithkumar808@gmail.com";
+
+/**
+ * Finish the demo, land on pricing.
+ *
+ * Someone who has just answered eight questions has spent three minutes
+ * inside the product and is as warm as they will ever be. The ending
+ * already offers "start a free form", but a link is a thing you have to
+ * decide to click; the redirect makes the next step the default and still
+ * leaves them somewhere they can read rather than a signup wall.
+ *
+ * Set on both endings, which is right: "we'll be in touch" and "thanks,
+ * that's useful" are both people who just finished.
+ *
+ * Eight seconds, not the default five. The ending is two short paragraphs
+ * and a CTA, and five is enough to notice the page changed but not enough
+ * to read why. The cost is real and worth stating: an auto-redirect
+ * overrides "Submit another response" for anyone who wanted to go again,
+ * so if that ever matters more than the pricing click, this is the line to
+ * remove.
+ */
+const PRICING_REDIRECT = { url: "https://chatform.in/pricing", delaySec: 8 };
 
 export const DEMO_FORM = buildAuthoredDoc({
   slug: DEMO_SLUG,
@@ -326,6 +347,7 @@ export const DEMO_FORM = buildAuthoredDoc({
       "Everything you said goes into deciding what gets built next.\n\n" +
       "If you want to see the other side of this, the builder, the flow canvas, the results table with this conversation in it: " +
       "[start a free form](https://chatform.in/signin). No card, and the free plan doesn't expire.",
+    redirect: PRICING_REDIRECT,
   },
   endings: [
     {
@@ -334,6 +356,7 @@ export const DEMO_FORM = buildAuthoredDoc({
       body:
         "The invite goes to the address you signed in with, so there's nothing else to fill in.\n\n" +
         "Have a poke around before we talk, though: [build one yourself](https://chatform.in/signin) and you'll have a form like this in about two minutes.",
+      redirect: PRICING_REDIRECT,
     },
   ],
 
@@ -437,30 +460,8 @@ export const DEMO_FORM = buildAuthoredDoc({
     },
 
     /** Deliberately empty: 2000 responses would be 2000 emails. Read the results tab. */
-    /**
-     * Finish the demo, land on pricing.
-     *
-     * Someone who has just answered eight questions has spent three minutes
-     * inside the product and is as warm as they will ever be. The ending
-     * already offers "start a free form", but a link is a thing you have to
-     * decide to click; the redirect makes the next step the default and still
-     * leaves them somewhere they can read rather than a signup wall.
-     *
-     * It applies to both endings — `toPublicEnding` falls back to this for any
-     * ending that does not name its own target — which is right: "we'll be in
-     * touch" and "thanks, that's useful" are both people who just finished.
-     *
-     * Eight seconds, not the default five. The ending is two short paragraphs
-     * and a CTA, and five is enough to notice the page changed but not enough
-     * to read why. The cost is real and worth stating: an auto-redirect
-     * overrides "Submit another response" for anyone who wanted to go again,
-     * so if that ever matters more than the pricing click, this is the line to
-     * remove.
-     */
     onComplete: {
       requireSubmit: true,
-      redirectUrl: "https://chatform.in/pricing",
-      delaySec: 8,
       notificationEmails: [],
     },
 

@@ -674,6 +674,115 @@ describe("auto-reply", () => {
   });
 
   /**
+   * The Youform-shaped options on both mails: who a reply reaches, what the
+   * subject says, which question's answer is written to, and whose name is on
+   * the envelope.
+   */
+  it("sends the owner's notification with the author's subject and reply-to", async () => {
+    await publish({
+      ...DOC,
+      settings: {
+        onComplete: {
+          notificationEmails: ["owner@example.com"],
+          notificationSubject: "{{q_name}} answered {{form.title}}",
+          notificationReplyTo: "sales@example.com",
+          autoReplyEmail: { enabled: false },
+        },
+      },
+    });
+    await seedResponse("sbm_mail_opts_owner", { respondentEmail: null });
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_opts_owner",
+      isTest: false,
+    });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.to).toBe("owner@example.com");
+    expect(sent[0]!.subject).toBe("Ada answered Feedback");
+    expect(sent[0]!.replyTo).toBe("sales@example.com");
+  });
+
+  it("replies to the address they typed when nobody signed in", async () => {
+    await publish({
+      ...DOC,
+      settings: {
+        onComplete: { notificationEmails: ["owner@example.com"], autoReplyEmail: { enabled: false } },
+      },
+    });
+    await seedResponse("sbm_mail_opts_typed", { respondentEmail: null });
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_opts_typed",
+      isTest: false,
+    });
+    expect(sent[0]!.replyTo).toBe("ada@example.com");
+  });
+
+  it("keeps the addresses and sends the owner nothing once notifications are off", async () => {
+    await publish({
+      ...DOC,
+      settings: {
+        onComplete: {
+          notifyOwner: false,
+          notificationEmails: ["owner@example.com"],
+          autoReplyEmail: { enabled: false },
+        },
+      },
+    });
+    await seedResponse("sbm_mail_opts_off", { respondentEmail: "ada@example.com" });
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_opts_off",
+      isTest: false,
+    });
+    expect(sent).toHaveLength(0);
+  });
+
+  it("sends the confirmation to the chosen question, under the author's name and reply-to", async () => {
+    await publish({
+      ...DOC,
+      settings: {
+        onComplete: {
+          notifyOwner: false,
+          notificationEmails: ["owner@example.com"],
+          autoReplyEmail: {
+            enabled: true,
+            subject: "Thanks",
+            bodyMd: "Got it.",
+            toField: "q_email",
+            fromName: 'Acme "Support" <x>',
+            replyTo: "help@example.com",
+          },
+        },
+      },
+    });
+    // Signed in as one address, typed another: the author asked for the typed one.
+    await seedResponse("sbm_mail_opts_conf", { respondentEmail: "verified@example.com" });
+    const { sent, binding } = captureBinding();
+    await runMailJob(withMail({ EMAIL: binding }), {
+      kind: "submission",
+      organizationId: t.orgId,
+      formId: t.formId,
+      responseId: "sbm_mail_opts_conf",
+      isTest: false,
+    });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.to).toBe("ada@example.com");
+    expect(sent[0]!.replyTo).toBe("help@example.com");
+    // Our address, their name, and nothing that could close the quoted name.
+    expect(sent[0]!.from).toMatch(/^"Acme Support x" <[^<>"]+@[^<>"]+>$/);
+  });
+
+  /**
    * The body is written by the form's owner, but it is delivered to respondents
    * over our domain and our reputation. An owner who pastes in something they
    * were sent must not be able to turn that into markup.

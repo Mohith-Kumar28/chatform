@@ -5,6 +5,7 @@ import {
   evalGroup,
   FormDoc,
   lintFormDoc,
+  readFormDoc,
   resolveEnding,
   resolveNext,
   toPublicBlock,
@@ -167,33 +168,46 @@ describe("the screen-out ending", () => {
   });
 
   /**
-   * The completion redirect is a completion redirect.
+   * The form-level redirect is folded onto the endings on read.
    *
-   * `settings.onComplete.redirectUrl` is where an author sends somebody who
-   * succeeded — a thank-you page, a payment link, the WhatsApp group the
-   * accepted teams join. Inheriting it on a refusal walked the respondent the
-   * form had just turned away straight into the place reserved for the ones it
-   * accepted, and did it on a five-second timer, over the top of the one
-   * screen they needed to read.
+   * `settings.onComplete.redirectUrl` was where an author sent somebody who
+   * succeeded: a thank-you page, a payment link, the WhatsApp group the
+   * accepted teams join. It lives on each ending now, and a document written
+   * before that must go on doing what it did. That includes not handing the
+   * redirect to a refusal, which would walk the respondent the form had just
+   * turned away into the place reserved for the ones it accepted.
    */
-  it("does not inherit the completion redirect", () => {
-    const doc = shell([success, screenOut()]);
-    const onComplete = { redirectUrl: "https://example.com/welcome", delaySec: 5 };
+  it("moves a form-level redirect onto the endings that inherited it", () => {
+    const stored = {
+      ...shell([success, screenOut()]),
+      schemaVersion: 9,
+      settings: { onComplete: { redirectUrl: "https://example.com/welcome", delaySec: 7 } },
+    };
+    const doc = readFormDoc(stored);
 
-    expect(toPublicEnding(doc.endings[0]!, onComplete).redirectUrl).toBe("https://example.com/welcome");
-    expect(toPublicEnding(doc.endings[1]!, onComplete).redirectUrl).toBeUndefined();
+    expect(toPublicEnding(doc.endings[0]!).redirectUrl).toBe("https://example.com/welcome");
+    expect(toPublicEnding(doc.endings[0]!).redirectDelaySec).toBe(7);
+    expect(toPublicEnding(doc.endings[1]!).redirectUrl).toBeUndefined();
+    expect(doc.settings.onComplete).not.toHaveProperty("redirectUrl");
   });
 
-  it("still honours a redirect the author put on the refusal itself", () => {
-    // Naming one here is the author saying where a refusal goes, which is a
-    // different decision from where a completion goes.
-    const doc = shell([
-      success,
-      screenOut({ redirectUrl: "https://example.com/eligibility", redirectDelaySec: 12 }),
-    ]);
-    const pub = toPublicEnding(doc.endings[1]!, { redirectUrl: "https://example.com/welcome", delaySec: 5 });
-    expect(pub.redirectUrl).toBe("https://example.com/eligibility");
-    expect(pub.redirectDelaySec).toBe(12);
+  it("keeps an ending's own redirect over the form-level one", () => {
+    // Naming one on a refusal is the author saying where a refusal goes, which
+    // is a different decision from where a completion goes.
+    const stored = {
+      ...shell([
+        { ...success, redirectUrl: "https://example.com/own", redirectDelaySec: 3 },
+        screenOut({ redirectUrl: "https://example.com/eligibility", redirectDelaySec: 12 }),
+      ]),
+      schemaVersion: 9,
+      settings: { onComplete: { redirectUrl: "https://example.com/welcome", delaySec: 7 } },
+    };
+    const doc = readFormDoc(stored);
+
+    expect(toPublicEnding(doc.endings[0]!).redirectUrl).toBe("https://example.com/own");
+    expect(toPublicEnding(doc.endings[0]!).redirectDelaySec).toBe(3);
+    expect(toPublicEnding(doc.endings[1]!).redirectUrl).toBe("https://example.com/eligibility");
+    expect(toPublicEnding(doc.endings[1]!).redirectDelaySec).toBe(12);
   });
 
   it("shows only the requirements this response actually missed", () => {
@@ -208,7 +222,7 @@ describe("the screen-out ending", () => {
       }),
     ]);
     const answers = state({ q_size: 9, q_age: 30 });
-    const pub = toPublicEnding(doc.endings[1]!, undefined, (when) => evalGroup(when, answers));
+    const pub = toPublicEnding(doc.endings[1]!, (when) => evalGroup(when, answers));
     // The size line fired, the age line did not, and the unconditional line
     // always shows. Being told you failed a requirement you met is the reason
     // this is not just prose in the body.

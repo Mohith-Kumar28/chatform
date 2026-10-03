@@ -59,7 +59,7 @@ export const ROUTE_CASES: {
 
   // completion and sharing
   { request: "email me at sam@acme.com when someone responds", sections: ["completion"] },
-  { request: "redirect to our website after they finish", sections: ["completion"] },
+  { request: "reply to the notification should go to ops@acme.com", sections: ["completion"] },
   { request: "don't send the confirmation email", sections: ["completion"] },
   { request: "don't include their answers in the receipt", sections: ["completion"] },
   { request: "change the link preview title for whatsapp", sections: ["sharing"] },

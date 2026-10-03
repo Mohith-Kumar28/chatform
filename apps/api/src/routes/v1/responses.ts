@@ -233,7 +233,7 @@ function projectResponse(row: ResponseRow, doc: FormDoc, answers: AnswerMap, inc
               // same way the conversation narrows it — otherwise the headless
               // caller is handed every requirement on the ending and has to
               // work out which apply, which is the job this does.
-              ending: toPublicEnding(cursor.ending, doc.settings.onComplete, (when) =>
+              ending: toPublicEnding(cursor.ending, (when) =>
                 isRequirementUnmet(when, state),
               ),
             }
@@ -690,7 +690,7 @@ responsesRouter.post(
     const fresh = (await loadResponse(c.env, row.id, orgId))!;
     return c.json({
       ...projectResponse(fresh, form.doc, answers, new Set(["answers"])),
-      ending: toPublicEnding(ending, form.doc.settings.onComplete, (when) =>
+      ending: toPublicEnding(ending, (when) =>
         isRequirementUnmet(when, state),
       ),
     });

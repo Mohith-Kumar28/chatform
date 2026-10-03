@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Bot, CircleX, Plus } from "lucide-react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BufferedInput, BufferedTextarea } from "@/components/ui/buffered-input";
@@ -22,6 +22,7 @@ import {
   DEFAULT_CONFIRMATION_BODY,
   DEFAULT_CONFIRMATION_SUBJECT,
   MAX_NOTIFICATION_EMAILS,
+  emailQuestions,
   type FormDoc,
 } from "@repo/form-schema";
 import { LockedControl } from "@/components/billing/gate";
@@ -33,6 +34,7 @@ import { AgentSettings } from "./agent-settings";
 import { ShortcutsList } from "@/components/ui/shortcuts-dialog";
 import { useBuilderStore } from "@/stores/builder-store";
 import { SettingsShell } from "@/components/settings/settings-shell";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 
 interface SettingsPanelProps {
   settings: FormDoc["settings"];
@@ -56,7 +58,7 @@ const SECTIONS = [
   { id: "access", label: "Access & closing" },
   { id: "hidden", label: "Hidden fields & variables" },
   { id: "link", label: "Link & social" },
-  { id: "completion", label: "On completion" },
+  { id: "completion", label: "Email notifications" },
   { id: "followup", label: "Follow-ups" },
   { id: "shortcuts", label: "Keyboard shortcuts" },
   { id: "language", label: "Language" },
@@ -475,44 +477,8 @@ export function SettingsPanel({
       )}
 
       {section === "completion" && (
-        <SettingSection title="On completion">
-          <SettingGroup>
-          <SettingRow
-            setting="settings.onComplete.notificationEmails" label="Notification emails"
-            description="We email you each new response. Leave it empty to stop."
-            issuePath="settings.onComplete.notificationEmails"
-          >
-            <NotificationEmailsInput
-              emails={settings.onComplete.notificationEmails}
-              onChange={(notificationEmails) =>
-                patch({ onComplete: { ...settings.onComplete, notificationEmails } })
-              }
-            />
-          </SettingRow>
-          <LockedControl feature="completion_redirect">
-          <SettingRow
-            setting="settings.onComplete.redirectUrl" label="Redirect after finishing"
-            description="Where people go after finishing."
-            issuePath="settings.onComplete.redirectUrl"
-          >
-            <BufferedInput
-              className={CONTROL_WIDTH}
-              value={settings.onComplete.redirectUrl ?? ""}
-              placeholder="https://yoursite.com/thanks"
-              onCommit={(v) =>
-                patch({
-                  onComplete: {
-                    ...settings.onComplete,
-                    redirectUrl: v || undefined,
-                  },
-                })
-              }
-            />
-          </SettingRow>
-          </LockedControl>
-          </SettingGroup>
-
-          <ConfirmationEmailSettings settings={settings} onChange={onChange} />
+        <SettingSection title="Email notifications">
+          <EmailNotificationSettings settings={settings} formTitle={formTitle ?? ""} onChange={onChange} />
         </SettingSection>
       )}
 
@@ -603,76 +569,294 @@ function FormNameField({ title, onChange }: { title: string; onChange: (title: s
 
 // ── building blocks ──────────────────────────────────────────────────
 
+type EmailTab = "me" | "respondent";
+
+const EMAIL_TABS = [
+  { value: "me", label: "Email to me" },
+  { value: "respondent", label: "Email to respondent" },
+] as const;
+
 /**
- * The receipt the respondent gets, and the switch for it.
+ * The two emails a finished response sends, one tab each.
  *
- * A group of its own rather than two more rows in "On completion", because the
- * rows above it are about the *owner* — where their notification goes, where
- * their respondent lands — and this one is the only thing on the page that
- * sends mail to the person who filled the form in. Reading them as one list
- * made the notification address look like it might be the recipient of this
- * too.
+ * They were one list: the owner's addresses, then a group headed "To the
+ * respondent", and the notification address read as if it might receive the
+ * confirmation too. Each mail now has its own page with the same rows in the
+ * same order (the switch, who it goes to, where a reply lands, the subject),
+ * and every row is a card of its own so none of them reads as belonging to
+ * the one above it.
  *
- * The copy fields are behind the paywall and the switch is not: everybody sends
- * the receipt, Pro writes its words. They stay visible while locked so the
- * author can see what they would be buying, which is the whole reason
- * `LockedControl` renders its children rather than hiding them.
+ * Where someone goes after finishing is not here. It is on each ending, since
+ * a form with several endings sends each one somewhere different.
  */
-function ConfirmationEmailSettings({
+function EmailNotificationSettings({
   settings,
+  formTitle,
   onChange,
 }: {
   settings: FormDoc["settings"];
+  formTitle: string;
   onChange: (next: FormDoc["settings"]) => void;
 }) {
   const onComplete = settings.onComplete;
   const confirmation = onComplete.autoReplyEmail;
-  const patch = (p: Partial<typeof confirmation>) =>
-    onChange({
-      ...settings,
-      onComplete: { ...onComplete, autoReplyEmail: { ...confirmation, ...p } },
-    });
+  const patch = (p: Partial<typeof onComplete>) => onChange({ ...settings, onComplete: { ...onComplete, ...p } });
+  const patchConfirmation = (p: Partial<typeof confirmation>) => patch({ autoReplyEmail: { ...confirmation, ...p } });
+
+  const blocks = useBuilderStore((s) => s.doc?.blocks);
+  const questions = useMemo(() => emailQuestions({ blocks: blocks ?? [] }), [blocks]);
+
+  // A link to one of these settings opens the tab that holds it.
+  const reveal = useSearchParams().get("reveal");
+  const [tab, setTab] = useState<EmailTab>("me");
+  const [revealed, setRevealed] = useState<string | null>(null);
+  if (reveal && reveal !== revealed) {
+    setRevealed(reveal);
+    setTab(reveal.includes("autoReplyEmail") ? "respondent" : "me");
+  }
+
+  const owner = onComplete.notificationEmails[0];
+  // Signing in with Google or an email code gives an address without asking for one.
+  const hasAddress =
+    questions.length > 0 || (settings.requireAuth.enabled && settings.requireAuth.method !== "phone");
 
   return (
-    <SettingGroup label="To the respondent">
-      <SettingRow
-        setting="settings.onComplete.autoReplyEmail.enabled" label="Confirmation email"
-        description="Sent to the email they gave you."
-        checked={confirmation.enabled}
-        onCheckedChange={(enabled) => patch({ enabled })}
-      />
-      {confirmation.enabled && (
+    <div className="space-y-3">
+      <div className="flex justify-center pb-2">
+        <SegmentedControl options={EMAIL_TABS} value={tab} onChange={setTab} ariaLabel="Which email" />
+      </div>
+
+      {tab === "me" ? (
         <>
-          <SettingRow
-            setting="settings.onComplete.autoReplyEmail.includeAnswers" label="Include their answers"
-            checked={confirmation.includeAnswers}
-            onCheckedChange={(includeAnswers) => patch({ includeAnswers })}
-          />
-          <LockedControl feature="auto_reply_email">
-            <SettingRow setting="settings.onComplete.autoReplyEmail.subject" label="Subject">
-              <BufferedInput
-                className={CONTROL_WIDTH}
-                value={confirmation.subject}
-                placeholder={DEFAULT_CONFIRMATION_SUBJECT}
-                onCommit={(v) => patch({ subject: v })}
+          <SettingGroup>
+            <SettingRow
+              setting="settings.onComplete.notifyOwner" label="Receive email notifications"
+              description="Get an email when someone submits your form."
+              checked={onComplete.notifyOwner}
+              onCheckedChange={(notifyOwner) => patch({ notifyOwner })}
+            />
+          </SettingGroup>
+          <SettingGroup>
+            <SettingRow
+              setting="settings.onComplete.notificationEmails" label="To"
+              description={`Up to ${MAX_NOTIFICATION_EMAILS} addresses.`}
+              issuePath="settings.onComplete.notificationEmails"
+            >
+              <NotificationEmailsInput
+                emails={onComplete.notificationEmails}
+                onChange={(notificationEmails) => patch({ notificationEmails })}
               />
             </SettingRow>
+          </SettingGroup>
+          <SettingGroup>
             <SettingRow
-              setting="settings.onComplete.autoReplyEmail.bodyMd" label="Message"
+              setting="settings.onComplete.notificationReplyTo" label="Reply to"
+              description="Where your reply to the notification goes."
+            >
+              <ReplyToField
+                value={onComplete.notificationReplyTo}
+                defaultLabel="The respondent"
+                questions={questions}
+                onChange={(notificationReplyTo) => patch({ notificationReplyTo })}
+              />
+            </SettingRow>
+          </SettingGroup>
+          <SettingGroup>
+            <SettingRow
+              setting="settings.onComplete.notificationSubject" label="Email subject"
               description="Write {{form.title}} to include the form name."
               stacked
             >
-              <BufferedTextarea
-                rows={3}
-                value={confirmation.bodyMd}
-                placeholder={DEFAULT_CONFIRMATION_BODY}
-                onCommit={(v) => patch({ bodyMd: v })}
+              <BufferedInput
+                value={onComplete.notificationSubject}
+                placeholder={`New response to ${formTitle || "your form"}`}
+                onCommit={(v) => patch({ notificationSubject: v.trim() })}
               />
             </SettingRow>
+          </SettingGroup>
+        </>
+      ) : (
+        <>
+          <SettingGroup>
+            <SettingRow
+              setting="settings.onComplete.autoReplyEmail.enabled" label="Send email to respondent"
+              description="Sent when they submit the form."
+              checked={confirmation.enabled}
+              onCheckedChange={(enabled) => patchConfirmation({ enabled })}
+            />
+          </SettingGroup>
+          <SettingGroup>
+            <SettingRow
+              setting="settings.onComplete.autoReplyEmail.toField" label="To"
+              description={
+                hasAddress
+                  ? "The email question it is sent to."
+                  : "Add an email question so there is an address to send to."
+              }
+            >
+              <Select
+                value={questions.some((q) => q.ref === confirmation.toField) ? confirmation.toField : DEFAULT_CHOICE}
+                onValueChange={(v) => patchConfirmation({ toField: v === DEFAULT_CHOICE ? "" : v })}
+              >
+                <SelectTrigger className={CONTROL_WIDTH} aria-label="Send to">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={DEFAULT_CHOICE}>First email question</SelectItem>
+                  {questions.map((q) => (
+                    <SelectItem key={q.ref} value={q.ref}>
+                      {q.title || q.ref}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </SettingRow>
+          </SettingGroup>
+          <LockedControl feature="auto_reply_email">
+            <SettingGroup>
+              <SettingRow
+                setting="settings.onComplete.autoReplyEmail.fromName" label="From name"
+                description="The sender name they see."
+              >
+                <BufferedInput
+                  className={CONTROL_WIDTH}
+                  value={confirmation.fromName}
+                  placeholder="chatform"
+                  maxLength={100}
+                  onCommit={(v) => patchConfirmation({ fromName: v.trim() })}
+                />
+              </SettingRow>
+            </SettingGroup>
           </LockedControl>
+          <SettingGroup>
+            <SettingRow
+              setting="settings.onComplete.autoReplyEmail.replyTo" label="Reply to"
+              description="Where their reply goes."
+            >
+              <ReplyToField
+                value={confirmation.replyTo}
+                defaultLabel={owner ? `Form owner (${owner})` : "Form owner"}
+                questions={questions}
+                onChange={(replyTo) => patchConfirmation({ replyTo })}
+              />
+            </SettingRow>
+          </SettingGroup>
+          {/*
+            The copy is behind the paywall and the switch is not: everybody
+            sends the receipt, Pro writes its words. It stays visible while
+            locked so the author can see what they would be buying.
+          */}
+          <LockedControl feature="auto_reply_email">
+            <SettingGroup>
+              <SettingRow setting="settings.onComplete.autoReplyEmail.subject" label="Email subject" stacked>
+                <BufferedInput
+                  value={confirmation.subject}
+                  placeholder={DEFAULT_CONFIRMATION_SUBJECT}
+                  onCommit={(v) => patchConfirmation({ subject: v })}
+                />
+              </SettingRow>
+            </SettingGroup>
+          </LockedControl>
+          <LockedControl feature="auto_reply_email">
+            <SettingGroup>
+              <SettingRow
+                setting="settings.onComplete.autoReplyEmail.bodyMd" label="Email body"
+                description="Write {{form.title}} to include the form name."
+                stacked
+              >
+                <BufferedTextarea
+                  rows={5}
+                  value={confirmation.bodyMd}
+                  placeholder={DEFAULT_CONFIRMATION_BODY}
+                  onCommit={(v) => patchConfirmation({ bodyMd: v })}
+                />
+              </SettingRow>
+            </SettingGroup>
+          </LockedControl>
+          <SettingGroup>
+            <SettingRow
+              setting="settings.onComplete.autoReplyEmail.includeAnswers" label="Include their answers"
+              description="Adds a copy of what they sent under the body."
+              checked={confirmation.includeAnswers}
+              onCheckedChange={(includeAnswers) => patchConfirmation({ includeAnswers })}
+            />
+          </SettingGroup>
         </>
       )}
-    </SettingGroup>
+    </div>
+  );
+}
+
+/** Select values that are not a question's ref. A ref is a slug, so neither can collide with one. */
+const DEFAULT_CHOICE = "__default";
+const CUSTOM_CHOICE = "__custom";
+
+/**
+ * Where a reply goes: the default, an email question, or an address typed out.
+ *
+ * The setting is one string (see `replyToChoice` in form-schema), so the
+ * custom box only writes once it holds an address; until then the menu sitting
+ * on "Custom email" is this component's own state.
+ */
+function ReplyToField({
+  value,
+  defaultLabel,
+  questions,
+  onChange,
+}: {
+  value: string;
+  defaultLabel: string;
+  questions: { ref: string; title: string }[];
+  onChange: (next: string) => void;
+}) {
+  const [typing, setTyping] = useState(false);
+  const stored = value.includes("@")
+    ? CUSTOM_CHOICE
+    : questions.some((q) => q.ref === value)
+      ? value
+      : DEFAULT_CHOICE;
+  const selected = stored === DEFAULT_CHOICE && typing ? CUSTOM_CHOICE : stored;
+
+  return (
+    <div className={cn(CONTROL_WIDTH, "space-y-2")}>
+      <Select
+        value={selected}
+        onValueChange={(v) => {
+          setTyping(v === CUSTOM_CHOICE);
+          if (v === CUSTOM_CHOICE) {
+            if (stored !== CUSTOM_CHOICE) onChange("");
+          } else {
+            onChange(v === DEFAULT_CHOICE ? "" : v);
+          }
+        }}
+      >
+        <SelectTrigger className="w-full" aria-label="Reply to">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={DEFAULT_CHOICE}>{defaultLabel}</SelectItem>
+          {questions.map((q) => (
+            <SelectItem key={q.ref} value={q.ref}>
+              {q.title || q.ref}
+            </SelectItem>
+          ))}
+          <SelectItem value={CUSTOM_CHOICE}>Custom email</SelectItem>
+        </SelectContent>
+      </Select>
+      {selected === CUSTOM_CHOICE && (
+        <BufferedInput
+          type="email"
+          aria-label="Custom reply-to email"
+          value={stored === CUSTOM_CHOICE ? value : ""}
+          placeholder="you@company.com"
+          autoFocus={typing}
+          onCommit={(v) => {
+            const next = v.trim();
+            if (!next || next.includes("@")) onChange(next);
+          }}
+        />
+      )}
+    </div>
   );
 }
 

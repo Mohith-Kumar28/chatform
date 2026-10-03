@@ -24,7 +24,7 @@ function proDoc(label: string): FormDoc {
   const doc = readFormDoc(minimalDoc(label));
   doc.theme.logoUrl = "https://example.com/logo.png";
   doc.theme.fontHeading = "Lora";
-  doc.settings.onComplete = { ...doc.settings.onComplete, redirectUrl: "https://example.com/thanks" };
+  doc.endings[0]!.redirectUrl = "https://example.com/thanks";
   doc.settings.agent = { ...doc.settings.agent!, personaPrompt: "You are Ada." };
   return doc;
 }
@@ -100,7 +100,7 @@ describe("a live form after the plan ends", () => {
     const doc = clampForRuntime(proDoc("sample"), freeEntitlements(Date.now()));
     expect(doc.theme.logoUrl).toBeNull();
     expect(doc.theme.fontHeading).toBe("Bricolage Grotesque");
-    expect(doc.settings.onComplete?.redirectUrl).toBeUndefined();
+    expect(doc.endings[0]!.redirectUrl).toBeUndefined();
     expect(doc.settings.agent?.personaPrompt).toBeUndefined();
   });
 

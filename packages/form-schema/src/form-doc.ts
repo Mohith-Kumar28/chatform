@@ -10,7 +10,7 @@ import { SettingsDoc, ThemeDoc } from "./settings";
 import { isRtlLanguage } from "./languages";
 import { buildUpiUri, type PaymentProviderName } from "./payment-link";
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 /**
  * How the form sits on someone else's site: the embed studio's choices.
@@ -429,26 +429,15 @@ export interface PublicEnding {
 }
 
 /**
- * `fallback` carries `settings.onComplete`, which is the form-level "redirect
- * after completion" the builder offers. It was parsed and stored and never
- * reached the respondent, because the client only ever reads the ending's own
- * redirect — so setting it did nothing. A per-ending value still wins; this is
- * the default beneath it.
+ * An ending as the respondent sees it.
  *
- * It is a *completion* redirect, so a screen-out does not inherit it. The
- * setting is where an author puts the page that follows a successful response
- * — a thank-you, a payment link, the WhatsApp group the accepted teams join —
- * and handing it to somebody the form has just turned away sends them
- * somewhere the author explicitly decided they do not belong. It also gave a
- * refusal a five-second fuse: the one screen a screened-out respondent needs
- * to read, and the one they most often reach by mis-tapping a single answer,
- * navigated itself away before they could do anything about it. A screen-out
- * ending with a redirect of its own still redirects — that is the author
- * saying where a refusal goes, which is a different decision.
+ * Its redirect is its own. There used to be a form-level "redirect after
+ * finishing" beneath it in `settings.onComplete`; that is gone, folded onto
+ * each ending by the v9 → v10 migration, because a form with several endings
+ * sends each outcome somewhere different and one setting could not say that.
  */
 export function toPublicEnding(
   e: Ending,
-  fallback?: { redirectUrl?: string; delaySec: number },
   /**
    * Decides whether a conditional requirement is unmet for THIS response.
    *
@@ -466,11 +455,8 @@ export function toPublicEnding(
     bodyMd: e.bodyMd,
     ctaLabel: e.ctaLabel,
     ctaUrl: e.ctaUrl,
-    redirectUrl: e.redirectUrl ?? (e.kind === "screen_out" ? undefined : fallback?.redirectUrl),
-    redirectDelaySec:
-      e.redirectUrl || e.kind === "screen_out"
-        ? e.redirectDelaySec
-        : (fallback?.delaySec ?? e.redirectDelaySec),
+    redirectUrl: e.redirectUrl,
+    redirectDelaySec: e.redirectDelaySec,
     showSummary: e.showSummary,
     kind: e.kind,
     requirements: e.requirements
@@ -640,7 +626,7 @@ export function toPublicConfig(
     title: doc.title,
     description: doc.description,
     blocks: doc.blocks.map(toPublicBlock),
-    endings: doc.endings.map((e) => toPublicEnding(e, doc.settings.onComplete)),
+    endings: doc.endings.map((e) => toPublicEnding(e)),
     hiddenFieldNames: doc.hiddenFields.map((h) => h.name),
     progressBar: doc.settings.progressBar,
     allowBack: doc.settings.navigation.allowBack,

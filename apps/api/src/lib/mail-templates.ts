@@ -724,7 +724,7 @@ export function submissionNotificationEmail(a: {
 
   return {
     // The form title first, so a person filtering their inbox by form can.
-    subject: `${a.isTest ? "[test] " : ""}New response — ${a.formTitle}`,
+    subject: `${a.isTest ? "[test] " : ""}New response to ${a.formTitle}`,
     html: layout({
       preheader: a.answers[0] ? `${a.answers[0].question}: ${a.answers[0].answer}` : "A new response came in.",
       body,

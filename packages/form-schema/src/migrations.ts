@@ -205,6 +205,38 @@ const MIGRATIONS: ((doc: AnyDoc) => AnyDoc)[] = [
       },
     };
   },
+
+  // ── v9 → v10 ───────────────────────────────────────────────────────────
+  // The form-level "redirect after finishing" moves onto the endings.
+  //
+  // `settings.onComplete.redirectUrl` was a default beneath every ending that
+  // was not a screen-out and had no redirect of its own. A form with several
+  // endings sends each outcome somewhere different, so the redirect belongs to
+  // the ending, and the setting is gone from the builder and the schema.
+  //
+  // What a published form does must not change: every ending the default used
+  // to reach gets the address and its delay written onto it, which is exactly
+  // what the respondent was already being served. A screen-out never inherited
+  // it and still does not.
+  (doc) => {
+    const settings = (doc.settings ?? {}) as Record<string, unknown>;
+    const onComplete = (settings.onComplete ?? {}) as Record<string, unknown>;
+    const { redirectUrl, delaySec, ...rest } = onComplete;
+    const next = { ...doc, schemaVersion: 10, settings: { ...settings, onComplete: rest } };
+    if (typeof redirectUrl !== "string" || !redirectUrl.trim() || !Array.isArray(doc.endings)) return next;
+    return {
+      ...next,
+      endings: doc.endings.map((raw) => {
+        const ending = raw as Record<string, unknown>;
+        if (ending.kind === "screen_out" || (typeof ending.redirectUrl === "string" && ending.redirectUrl)) return raw;
+        return {
+          ...ending,
+          redirectUrl,
+          ...(typeof delaySec === "number" ? { redirectDelaySec: delaySec } : {}),
+        };
+      }),
+    };
+  },
 ];
 
 export function migrateFormDoc(raw: unknown): unknown {

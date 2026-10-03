@@ -113,21 +113,9 @@ export function stripForPublish(input: FormDoc, ent: Entitlements): StripResult 
       note(stripped, "settings.meta", "form_metadata");
     }
   }
-  /**
-   * Both places a redirect can be set, not just the settings one.
-   *
-   * `Ending.redirectUrl` has always existed and `toPublicEnding` has always
-   * preferred it over the form-level setting, so the paid feature was reachable
-   * by writing it onto an ending — through the API, or through any builder
-   * control that offers it. Only the settings field was stripped, which made
-   * this a paywall with a door beside it. Gate the capability, wherever it is
-   * expressed.
-   */
+  // The ending is the only place a redirect lives now; the form-level one was
+  // folded onto the endings by the v9 → v10 migration.
   if (!can(ent, "completion_redirect")) {
-    if (s.onComplete?.redirectUrl) {
-      s.onComplete.redirectUrl = undefined;
-      note(stripped, "settings.onComplete.redirectUrl", "completion_redirect");
-    }
     for (const [i, ending] of doc.endings.entries()) {
       if (!ending.redirectUrl) continue;
       ending.redirectUrl = undefined;
@@ -146,11 +134,15 @@ export function stripForPublish(input: FormDoc, ent: Entitlements): StripResult 
    */
   const autoReply = s.onComplete?.autoReplyEmail;
   if (autoReply?.enabled && !can(ent, "auto_reply_email")) {
+    // The sender's name is copy too: it is the first thing the respondent reads.
     const customised =
-      autoReply.subject !== DEFAULT_CONFIRMATION_SUBJECT || autoReply.bodyMd !== DEFAULT_CONFIRMATION_BODY;
+      autoReply.subject !== DEFAULT_CONFIRMATION_SUBJECT ||
+      autoReply.bodyMd !== DEFAULT_CONFIRMATION_BODY ||
+      Boolean(autoReply.fromName);
     if (customised) {
       autoReply.subject = DEFAULT_CONFIRMATION_SUBJECT;
       autoReply.bodyMd = DEFAULT_CONFIRMATION_BODY;
+      autoReply.fromName = "";
       note(stripped, "settings.onComplete.autoReplyEmail", "auto_reply_email");
     }
   }

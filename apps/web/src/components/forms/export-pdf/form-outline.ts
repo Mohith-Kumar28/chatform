@@ -363,18 +363,17 @@ export function overviewOf(doc: FormDoc, extras: OutlineExtras = {}): OverviewGr
 
   const done: Fact[] = [];
   done.push({
-    label: "After the last question",
-    value: s.onComplete.redirectUrl ? `Redirects to ${s.onComplete.redirectUrl}` : "Shows the ending screen",
-  });
-  done.push({
     label: "Confirmation to respondent",
     value: s.onComplete.autoReplyEmail.enabled ? (s.onComplete.autoReplyEmail.includeAnswers ? "Emailed, with their answers" : "Emailed") : "Off",
   });
   done.push({
     label: "New responses emailed to",
-    value: s.onComplete.notificationEmails.length > 0 ? s.onComplete.notificationEmails.join(", ") : "Nobody",
+    value:
+      s.onComplete.notifyOwner && s.onComplete.notificationEmails.length > 0
+        ? s.onComplete.notificationEmails.join(", ")
+        : "Nobody",
   });
-  groups.push({ title: "On completion", facts: done });
+  groups.push({ title: "Email notifications", facts: done });
 
   const follow = s.followUp;
   groups.push({

@@ -245,11 +245,11 @@ describe("agent layer", () => {
       const migrated = migrateFormDoc({
         ...v1Doc,
         schemaVersion: 7,
-        settings: { onComplete: { notificationEmails: ["owner@example.com"], delaySec: 9 } },
+        settings: { onComplete: { notificationEmails: ["owner@example.com"], requireSubmit: false } },
       }) as Migrated & { settings: { onComplete: Record<string, unknown> } };
 
       expect(migrated.settings.onComplete.notificationEmails).toEqual(["owner@example.com"]);
-      expect(migrated.settings.onComplete.delaySec).toBe(9);
+      expect(migrated.settings.onComplete.requireSubmit).toBe(false);
     });
 
     /**
@@ -668,7 +668,7 @@ describe("a hostile stored document", () => {
     expect(ending.ctaUrl).toBeUndefined();
     expect(ending.redirectUrl).toBeUndefined();
     expect(ending.imageUrl).toBeNull();
-    expect(doc.settings.onComplete.redirectUrl).toBeUndefined();
+    expect(doc.settings.onComplete).not.toHaveProperty("redirectUrl");
     expect(doc.theme.logoUrl).toBeNull();
     expect(doc.blocks[0]!.media?.url).toBeNull();
     // A required URL falls back to empty rather than missing, so the field's

@@ -135,7 +135,7 @@ export interface AuthoredForm {
   greeting: string;
   questions: Question[];
   /** The default sign-off, reached when nothing routes elsewhere. Ref `end_thanks`. */
-  ending: { title: string; body?: string };
+  ending: { title: string; body?: string; redirect?: EndingRedirect };
   /**
    * Further sign-offs, for the outcomes that deserve their own.
    *
@@ -143,7 +143,7 @@ export interface AuthoredForm {
    * order, and a qualification form that hands a lead to sales should say so.
    * Refs must start `end_`.
    */
-  endings?: { ref: string; title: string; body?: string }[];
+  endings?: { ref: string; title: string; body?: string; redirect?: EndingRedirect }[];
   /** Conditional routing. Every arm of a decision, including the shared ones. */
   branches?: TemplateBranch[];
   /**
@@ -409,12 +409,14 @@ export function buildAuthoredDoc(input: AuthoredForm): AuthoredDoc {
       ref: "end_thanks",
       title: input.ending.title,
       bodyMd: input.ending.body ?? "",
+      ...redirectFields(input.ending.redirect),
     },
     ...(input.endings ?? []).map((e, i) => ({
       id: `end_${code}${String(i + 2).padStart(2, "0")}`,
       ref: e.ref,
       title: e.title,
       bodyMd: e.body ?? "",
+      ...redirectFields(e.redirect),
     })),
   ];
 
@@ -721,4 +723,15 @@ export function defineTemplate(input: TemplateInput): TemplateSeed {
 /** A template's theme: the tweakcn theme with the background shapes on. */
 export function templateTheme(id: string) {
   return applyFormTheme(ThemeDoc.parse({ backgroundPattern: "auto", backgroundShape: "auto" }), id);
+}
+
+/** Where an ending sends people once they reach it, and after how long. */
+export interface EndingRedirect {
+  url: string;
+  delaySec?: number;
+}
+
+function redirectFields(r: EndingRedirect | undefined) {
+  if (!r) return {};
+  return { redirectUrl: r.url, ...(r.delaySec !== undefined ? { redirectDelaySec: r.delaySec } : {}) };
 }

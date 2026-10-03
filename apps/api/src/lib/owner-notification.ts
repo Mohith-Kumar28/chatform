@@ -5,7 +5,7 @@ import type { FormDoc } from "@repo/form-schema";
  *
  * A fresh form used to start with an empty notification list, so nobody heard
  * about a response until they thought to look. Now the creator's address goes
- * in when the form is created, where they can see it in On completion and
+ * in when the form is created, where they can see it in Email notifications and
  * clear it. Only at creation: an empty list on an existing form may be one
  * somebody emptied on purpose, and that has to stay off.
  *

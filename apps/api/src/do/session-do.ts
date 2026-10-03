@@ -5185,7 +5185,7 @@ export class SessionDO extends DurableObject<Bindings> {
 
   /** The ending as the respondent sees it, with its requirements narrowed. */
   private projectEnding(ending: Ending): PublicEnding {
-    return toPublicEnding(ending, this.doc!.settings.onComplete, this.isRequirementUnmet);
+    return toPublicEnding(ending, this.isRequirementUnmet);
   }
 
   /** The ending this conversation ended on, projected — or null while it is still going. */
@@ -5234,8 +5234,7 @@ export class SessionDO extends DurableObject<Bindings> {
     this.pendingEndingRef = null;
     await this.emitMessage(closingText(ending.title));
     // Project rather than emitting the stored ending: the raw object carries
-    // internal ids, and only the projection applies the form-level redirect
-    // default that `settings.onComplete` is supposed to provide.
+    // internal ids, and the projection narrows its requirements to this response.
     await this.emit("ending", { ending: this.projectEnding(ending), canUndo: this.canUndoScreenOut() });
     const submissionId = await this.finalizeDurably(screenedOut ? "disqualified" : "completed", ending.ref);
     /**

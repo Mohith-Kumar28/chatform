@@ -40,7 +40,7 @@ export const BUILDER_MAP = `Where things are in the builder (tabs along the top)
 - Results: responses, analytics and exports.
 - Share: the link, QR code, social sharing, a PDF of the questions.
 - Integrate: embed on a website, webhooks, a live spreadsheet feed, payment accounts.
-- Settings: Form name, Display, Access & closing (sign-in, password, captcha, closing date, response limit), Hidden fields & variables, Link & social (preview title, description, image, favicon), On completion (notification and confirmation emails, redirect), Follow-ups (reminder emails).
+- Settings: Form name, Display, Access & closing (sign-in, password, captcha, closing date, response limit), Hidden fields & variables, Link & social (preview title, description, image, favicon), Email notifications (the email to the owner and the email to the respondent), Follow-ups (reminder emails).
 - Top right: Publish sends changes live; the ... menu has Version history.
 Only the author can upload files (a logo, an image, a document), set a password, connect webhooks, spreadsheets or payment accounts, or publish.`;
 

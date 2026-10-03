@@ -565,16 +565,17 @@ describe("stripForPublish", () => {
         branding: { hidePoweredBy: true },
         allowResubmissions: false,
         onComplete: {
-          redirectUrl: "https://example.com/thanks",
           // Custom copy is what Pro buys here; the send itself survives on Free,
           // so only a subject the author wrote gets reported as stripped.
-          autoReplyEmail: { enabled: true, subject: "A subject of my own", bodyMd: "In my own words." },
+          autoReplyEmail: { enabled: true, subject: "A subject of my own", bodyMd: "In my own words.", fromName: "Acme" },
         },
         meta: { ogTitle: "Custom", noIndex: true },
         agent: { personaPrompt: "Be terse", goal: "Qualify the lead" },
       },
       theme: { brandName: "Acme", logoUrl: "https://cdn/x.png", fontHeading: "Playfair Display" },
     });
+    // A redirect lives on the ending; the form-level one is gone.
+    doc.endings[0]!.redirectUrl = "https://example.com/thanks";
     const { doc: out, stripped } = stripForPublish(doc, entFor("free"));
     const features = new Set(stripped.map((s) => s.feature));
     // `agent_knowledge` is absent on purpose: knowledge left the document, so
@@ -584,7 +585,8 @@ describe("stripForPublish", () => {
     }
     expect(out.settings.branding.hidePoweredBy).toBe(false);
     expect(out.theme.logoUrl).toBeNull();
-    expect(out.settings.onComplete.redirectUrl).toBeUndefined();
+    expect(out.endings[0]!.redirectUrl).toBeUndefined();
+    expect(out.settings.onComplete.autoReplyEmail.fromName).toBe("");
     // The confirmation email is not a Pro feature — a respondent to a free form
     // still gets their receipt. Only the words are reset.
     expect(out.settings.onComplete.autoReplyEmail.enabled).toBe(true);
@@ -601,9 +603,10 @@ describe("stripForPublish", () => {
 
   it("strips nothing a Pro plan includes", () => {
     const doc = docWith({
-      settings: { branding: { hidePoweredBy: true }, onComplete: { redirectUrl: "https://example.com" } },
+      settings: { branding: { hidePoweredBy: true }, onComplete: { autoReplyEmail: { fromName: "Acme" } } },
       theme: { brandName: "Acme" },
     });
+    doc.endings[0]!.redirectUrl = "https://example.com";
     expect(stripForPublish(doc, entFor("pro")).stripped).toEqual([]);
   });
 
