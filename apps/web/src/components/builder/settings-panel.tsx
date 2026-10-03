@@ -55,10 +55,10 @@ interface SettingsPanelProps {
 // last section here now, drawn apart in the nav so it is not lost in the list.
 const SECTIONS = [
   { id: "general", label: "General" },
+  { id: "completion", label: "Email notifications" },
   { id: "access", label: "Access & closing" },
   { id: "hidden", label: "Hidden fields & variables" },
   { id: "link", label: "Link & social" },
-  { id: "completion", label: "Email notifications" },
   { id: "followup", label: "Follow-ups" },
   { id: "shortcuts", label: "Keyboard shortcuts" },
   { id: "language", label: "Language" },
@@ -582,9 +582,8 @@ const EMAIL_TABS = [
  * They were one list: the owner's addresses, then a group headed "To the
  * respondent", and the notification address read as if it might receive the
  * confirmation too. Each mail now has its own page with the same rows in the
- * same order (the switch, who it goes to, where a reply lands, the subject),
- * and every row is a card of its own so none of them reads as belonging to
- * the one above it.
+ * same order (the switch, who it goes to, where a reply lands, the subject).
+ * The rows are plain: no card and no rule between them, only space.
  *
  * Where someone goes after finishing is not here. It is on each ending, since
  * a form with several endings sends each one somewhere different.
@@ -621,22 +620,21 @@ function EmailNotificationSettings({
     questions.length > 0 || (settings.requireAuth.enabled && settings.requireAuth.method !== "phone");
 
   return (
-    <div className="space-y-3">
-      <div className="flex justify-center pb-2">
+    // No card per row: the rows sit flush with the heading and spacing alone
+    // separates them.
+    <div className="space-y-1 [&_[data-setting]]:px-0">
+      <div className="flex pb-2">
         <SegmentedControl options={EMAIL_TABS} value={tab} onChange={setTab} ariaLabel="Which email" />
       </div>
 
       {tab === "me" ? (
         <>
-          <SettingGroup>
             <SettingRow
               setting="settings.onComplete.notifyOwner" label="Receive email notifications"
               description="Get an email when someone submits your form."
               checked={onComplete.notifyOwner}
               onCheckedChange={(notifyOwner) => patch({ notifyOwner })}
             />
-          </SettingGroup>
-          <SettingGroup>
             <SettingRow
               setting="settings.onComplete.notificationEmails" label="To"
               description={`Up to ${MAX_NOTIFICATION_EMAILS} addresses.`}
@@ -647,8 +645,6 @@ function EmailNotificationSettings({
                 onChange={(notificationEmails) => patch({ notificationEmails })}
               />
             </SettingRow>
-          </SettingGroup>
-          <SettingGroup>
             <SettingRow
               setting="settings.onComplete.notificationReplyTo" label="Reply to"
               description="Where your reply to the notification goes."
@@ -660,8 +656,6 @@ function EmailNotificationSettings({
                 onChange={(notificationReplyTo) => patch({ notificationReplyTo })}
               />
             </SettingRow>
-          </SettingGroup>
-          <SettingGroup>
             <SettingRow
               setting="settings.onComplete.notificationSubject" label="Email subject"
               description="Write {{form.title}} to include the form name."
@@ -673,19 +667,15 @@ function EmailNotificationSettings({
                 onCommit={(v) => patch({ notificationSubject: v.trim() })}
               />
             </SettingRow>
-          </SettingGroup>
         </>
       ) : (
         <>
-          <SettingGroup>
             <SettingRow
               setting="settings.onComplete.autoReplyEmail.enabled" label="Send email to respondent"
               description="Sent when they submit the form."
               checked={confirmation.enabled}
               onCheckedChange={(enabled) => patchConfirmation({ enabled })}
             />
-          </SettingGroup>
-          <SettingGroup>
             <SettingRow
               setting="settings.onComplete.autoReplyEmail.toField" label="To"
               description={
@@ -711,9 +701,7 @@ function EmailNotificationSettings({
                 </SelectContent>
               </Select>
             </SettingRow>
-          </SettingGroup>
           <LockedControl feature="auto_reply_email">
-            <SettingGroup>
               <SettingRow
                 setting="settings.onComplete.autoReplyEmail.fromName" label="From name"
                 description="The sender name they see."
@@ -726,9 +714,7 @@ function EmailNotificationSettings({
                   onCommit={(v) => patchConfirmation({ fromName: v.trim() })}
                 />
               </SettingRow>
-            </SettingGroup>
           </LockedControl>
-          <SettingGroup>
             <SettingRow
               setting="settings.onComplete.autoReplyEmail.replyTo" label="Reply to"
               description="Where their reply goes."
@@ -740,14 +726,12 @@ function EmailNotificationSettings({
                 onChange={(replyTo) => patchConfirmation({ replyTo })}
               />
             </SettingRow>
-          </SettingGroup>
           {/*
             The copy is behind the paywall and the switch is not: everybody
             sends the receipt, Pro writes its words. It stays visible while
             locked so the author can see what they would be buying.
           */}
           <LockedControl feature="auto_reply_email">
-            <SettingGroup>
               <SettingRow setting="settings.onComplete.autoReplyEmail.subject" label="Email subject" stacked>
                 <BufferedInput
                   value={confirmation.subject}
@@ -755,10 +739,8 @@ function EmailNotificationSettings({
                   onCommit={(v) => patchConfirmation({ subject: v })}
                 />
               </SettingRow>
-            </SettingGroup>
           </LockedControl>
           <LockedControl feature="auto_reply_email">
-            <SettingGroup>
               <SettingRow
                 setting="settings.onComplete.autoReplyEmail.bodyMd" label="Email body"
                 description="Write {{form.title}} to include the form name."
@@ -771,16 +753,13 @@ function EmailNotificationSettings({
                   onCommit={(v) => patchConfirmation({ bodyMd: v })}
                 />
               </SettingRow>
-            </SettingGroup>
           </LockedControl>
-          <SettingGroup>
             <SettingRow
               setting="settings.onComplete.autoReplyEmail.includeAnswers" label="Include their answers"
               description="Adds a copy of what they sent under the body."
               checked={confirmation.includeAnswers}
               onCheckedChange={(includeAnswers) => patchConfirmation({ includeAnswers })}
             />
-          </SettingGroup>
         </>
       )}
     </div>
