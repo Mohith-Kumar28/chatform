@@ -2574,6 +2574,8 @@ export type PostPFormsBySlugSessionsBody = {
   deviceSignal?: string;
   /** @maxLength 64 */
   timezone?: string;
+  /** @maxLength 8 */
+  language?: string;
   fresh?: boolean;
   /** @maxLength 60 */
   followUpId?: string;
@@ -3322,6 +3324,97 @@ export type GetApiFormsByIdAiThread200TurnsItem = {
 export type GetApiFormsByIdAiThread200 = {
   /** @maxItems 40 */
   turns: GetApiFormsByIdAiThread200TurnsItem[];
+};
+
+export type GetApiFormsByIdTranslations200LanguagesItem = {
+  lang: string;
+  name: string;
+  total: number;
+  translated: number;
+};
+
+export type GetApiFormsByIdTranslations200 = {
+  languages: GetApiFormsByIdTranslations200LanguagesItem[];
+};
+
+export type PostApiFormsByIdTranslationsByLangAi200 = {
+  lang: string;
+  name: string;
+  total: number;
+  translated: number;
+};
+
+export type PostApiFormsByIdTranslationsByLangAi404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdTranslationsByLangAi404Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdTranslationsByLangAi404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdTranslationsByLangAi404 = {
+  error: PostApiFormsByIdTranslationsByLangAi404Error;
+};
+
+export type PutApiFormsByIdTranslationsByLangCsv200Status = {
+  lang: string;
+  name: string;
+  total: number;
+  translated: number;
+};
+
+export type PutApiFormsByIdTranslationsByLangCsv200 = {
+  saved: number;
+  skipped: number;
+  status: PutApiFormsByIdTranslationsByLangCsv200Status;
+};
+
+export type PutApiFormsByIdTranslationsByLangCsv404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PutApiFormsByIdTranslationsByLangCsv404Error = {
+  code: string;
+  message: string;
+  issues?: PutApiFormsByIdTranslationsByLangCsv404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PutApiFormsByIdTranslationsByLangCsv404 = {
+  error: PutApiFormsByIdTranslationsByLangCsv404Error;
+};
+
+export type PutApiFormsByIdTranslationsByLangCsv413ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PutApiFormsByIdTranslationsByLangCsv413Error = {
+  code: string;
+  message: string;
+  issues?: PutApiFormsByIdTranslationsByLangCsv413ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PutApiFormsByIdTranslationsByLangCsv413 = {
+  error: PutApiFormsByIdTranslationsByLangCsv413Error;
 };
 
 export type GetApiFormsByIdKnowledge200SourcesItem = {

@@ -11,6 +11,7 @@ import {
   setCredentialSink,
   type GsiId,
 } from "./google-signin";
+import { useT } from "./i18n";
 
 /**
  * Sign-in, rendered as a card inside the conversation.
@@ -44,6 +45,7 @@ export function AuthCard({
   onEmailCode: (code: string) => void;
   onForgetHint: () => void;
 }) {
+  const t = useT();
   const showGoogle = auth.method === "google";
   const showPhone = auth.method === "phone";
   const showEmail = auth.method === "email";
@@ -71,9 +73,9 @@ export function AuthCard({
           <Icon className="size-4" />
         </span>
         <div className="min-w-0">
-          <p className="text-sm font-semibold">Verify it&apos;s you</p>
+          <p className="text-sm font-semibold">{t("Verify it's you")}</p>
           <p className="text-xs opacity-60">
-            {showEmail ? "We'll email you a 6-digit code." : showPhone ? "We'll text you a 6-digit code." : "Continue with your Google account."}
+            {showEmail ? t("We'll email you a 6-digit code.") : showPhone ? t("We'll text you a 6-digit code.") : t("Continue with your Google account.")}
           </p>
         </div>
       </div>
@@ -106,14 +108,14 @@ export function AuthCard({
 
         {auth.error && (
           <p role="alert" className="text-destructive text-xs">
-            {auth.error}
+            {t(auth.error)}
           </p>
         )}
       </div>
 
       <p className="flex items-center gap-1.5 border-t border-[var(--cf-chip-border)] px-4 py-2.5 text-[0.6875rem] opacity-50">
         <Lock className="size-3" />
-        Only used to confirm who&apos;s answering.
+        {t("Only used to confirm who's answering.")}
       </p>
     </div>
   );
@@ -139,6 +141,7 @@ function EmailFlow({
   onStart: (email: string) => Promise<EmailStartResult>;
   onCode: (code: string) => void;
 }) {
+  const t = useT();
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [sentAt, setSentAt] = useState<number | null>(null);
   const [devCode, setDevCode] = useState<string | undefined>(undefined);
@@ -175,14 +178,14 @@ function EmailFlow({
             setDevCode(undefined);
             setError(null);
           }}
-          changeLabel="Use a different email"
+          changeLabel={t("Use a different email")}
         />
       ) : (
         <EmailForm pending={auth.pending} initialEmail={hint?.label} onSubmit={(e) => void send(e)} />
       )}
       {error && (
         <p role="alert" className="text-destructive text-xs">
-          {error}
+          {t(error)}
         </p>
       )}
     </div>
@@ -199,6 +202,7 @@ function EmailForm({
   initialEmail?: string;
   onSubmit: (email: string) => void;
 }) {
+  const t = useT();
   const [email, setEmail] = useState(initialEmail ?? "");
   const emailId = useId();
   const ready = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
@@ -212,7 +216,7 @@ function EmailForm({
       className="space-y-2"
     >
       <label htmlFor={emailId} className="sr-only">
-        Email address
+        {t("Email address")}
       </label>
       <div className="relative">
         <Mail className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 opacity-40" />
@@ -233,7 +237,7 @@ function EmailForm({
         />
       </div>
       <PrimaryButton pending={pending} disabled={!ready}>
-        Send code
+        {t("Send code")}
       </PrimaryButton>
     </form>
   );
@@ -327,6 +331,7 @@ function GoogleSignIn({
   onUseAnother: () => void;
   disabled: boolean;
 }) {
+  const t = useT();
   const host = useRef<HTMLDivElement>(null);
   const idRef = useRef<GsiId | null>(null);
   const fallbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -462,7 +467,7 @@ function GoogleSignIn({
   if (failed) {
     return (
       <p className="text-xs opacity-60">
-        Google sign-in isn&apos;t available right now.
+        {t("Google sign-in isn't available right now.")}
       </p>
     );
   }
@@ -480,7 +485,7 @@ function GoogleSignIn({
             <HintAvatar hint={hint} />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium">
-                {prompting ? "Signing you in…" : `Continue as ${hint.name ?? hint.label}`}
+                {prompting ? t("Signing you in…") : t("Continue as {name}", { name: hint.name ?? hint.label })}
               </span>
               <span className="block truncate text-[0.6875rem] opacity-55">{hint.label}</span>
             </span>
@@ -495,7 +500,7 @@ function GoogleSignIn({
             onClick={onUseAnother}
             className="text-[0.6875rem] underline opacity-55 hover:opacity-100"
           >
-            Use a different account
+            {t("Use a different account")}
           </button>
         </>
       )}
@@ -507,7 +512,7 @@ function GoogleSignIn({
       */}
       {fellBack && hint && (
         <p className="text-[0.6875rem] opacity-55">
-          Pick your account to continue.
+          {t("Pick your account to continue.")}
         </p>
       )}
 
@@ -578,6 +583,7 @@ function NumberForm({
   initialPhone?: string;
   onSubmit: (phone: string) => void;
 }) {
+  const t = useT();
   const [phone, setPhone] = useState(initialPhone ?? "");
   const phoneId = useId();
 
@@ -590,7 +596,7 @@ function NumberForm({
       className="space-y-2"
     >
       <label htmlFor={phoneId} className="sr-only">
-        Phone number
+        {t("Phone number")}
       </label>
       <div className="relative">
         <Phone className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 opacity-40" />
@@ -610,9 +616,9 @@ function NumberForm({
         />
       </div>
       <PrimaryButton pending={pending} disabled={!phone.trim()}>
-        Send code
+        {t("Send code")}
       </PrimaryButton>
-      <p className="text-[0.6875rem] opacity-45">Include your country code.</p>
+      <p className="text-[0.6875rem] opacity-45">{t("Include your country code.")}</p>
     </form>
   );
 }
@@ -670,7 +676,7 @@ export function CodeForm({
   onSubmit,
   onResend,
   onChangeNumber,
-  changeLabel = "Use a different number",
+  changeLabel,
 }: {
   sentTo: string;
   sentAt: number | null;
@@ -682,6 +688,7 @@ export function CodeForm({
   /** An emailed code is not a number; the way back has to say so. */
   changeLabel?: string;
 }) {
+  const t = useT();
   const secondsLeft = useResendCountdown(sentAt);
   const [code, setCode] = useState("");
   const codeId = useId();
@@ -699,6 +706,8 @@ export function CodeForm({
   );
 
   const [focused, setFocused] = useState(false);
+  // The address sits inside the sentence, wherever the language puts it.
+  const [beforeSentTo, afterSentTo] = t("Enter the code sent to {target}").split("{target}");
 
   return (
     <form
@@ -709,7 +718,7 @@ export function CodeForm({
       className="space-y-3"
     >
       <label htmlFor={codeId} className="block text-xs opacity-60">
-        Enter the code sent to <span className="font-medium opacity-100">{sentTo}</span>
+        {beforeSentTo}<span className="font-medium opacity-100">{sentTo}</span>{afterSentTo}
       </label>
       {/*
         One real input under six drawn boxes. The boxes are only paint: the
@@ -766,7 +775,7 @@ export function CodeForm({
         />
       </div>
       <PrimaryButton pending={pending} disabled={code.length < 4}>
-        Verify
+        {t("Verify")}
       </PrimaryButton>
       <div className="flex flex-wrap items-center justify-between gap-2 text-[0.6875rem]">
         {secondsLeft > 0 ? (
@@ -774,7 +783,7 @@ export function CodeForm({
           // and the number is the useful part — it says the wait is finite
           // rather than leaving someone wondering if the tap registered.
           <span className="opacity-45" aria-live="polite">
-            Resend in {secondsLeft}s
+            {t("Resend in {seconds}s", { seconds: secondsLeft })}
           </span>
         ) : (
           <button
@@ -784,11 +793,11 @@ export function CodeForm({
             disabled={pending}
             className="underline opacity-55 hover:opacity-100 disabled:opacity-30"
           >
-            Resend code
+            {t("Resend code")}
           </button>
         )}
         <button type="button" onClick={onChangeNumber} className="underline opacity-55 hover:opacity-100">
-          {changeLabel}
+          {changeLabel ?? t("Use a different number")}
         </button>
       </div>
       {devCode && <p className="font-mono text-[0.6875rem] opacity-40">dev code: {devCode}</p>}
@@ -804,13 +813,14 @@ export function CodeForm({
  * one who can fix it, and the console line is addressed to them.
  */
 function PhoneUnavailable() {
+  const t = useT();
   useEffect(() => {
     console.error(
       "[chatform] Phone verification is unavailable: NEXT_PUBLIC_FIREBASE_API_KEY, " +
         "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN and NEXT_PUBLIC_FIREBASE_PROJECT_ID must all be set.",
     );
   }, []);
-  return <p className="text-xs opacity-60">Phone verification isn&apos;t available right now.</p>;
+  return <p className="text-xs opacity-60">{t("Phone verification isn't available right now.")}</p>;
 }
 
 /**
@@ -829,6 +839,7 @@ function FirebasePhoneFlow({
   hint: RespondentHint | null;
   onPhoneToken: (idToken: string) => void;
 }) {
+  const t = useT();
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [sentAt, setSentAt] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -909,7 +920,7 @@ function FirebasePhoneFlow({
       <div ref={recaptchaHost} />
       {error && (
         <p role="alert" className="text-destructive text-xs">
-          {error}
+          {t(error)}
         </p>
       )}
       <RecaptchaNotice />
@@ -924,27 +935,36 @@ function FirebasePhoneFlow({
  * not something a respondent needs to read to get on with the form.
  */
 function RecaptchaNotice() {
+  const t = useT();
   return (
     <p className="text-[0.625rem] leading-relaxed opacity-40">
-      Protected by reCAPTCHA. Google&apos;s{" "}
-      <a
-        href="https://policies.google.com/privacy"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="underline hover:opacity-80"
-      >
-        Privacy Policy
-      </a>{" "}
-      and{" "}
-      <a
-        href="https://policies.google.com/terms"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="underline hover:opacity-80"
-      >
-        Terms
-      </a>{" "}
-      apply.
+      {t("Protected by reCAPTCHA. Google's {privacy} and {terms} apply.")
+        .split(/(\{privacy\}|\{terms\})/)
+        .map((part) =>
+          part === "{privacy}" ? (
+            <a
+              key="privacy"
+              href="https://policies.google.com/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:opacity-80"
+            >
+              {t("Privacy Policy")}
+            </a>
+          ) : part === "{terms}" ? (
+            <a
+              key="terms"
+              href="https://policies.google.com/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:opacity-80"
+            >
+              {t("Terms")}
+            </a>
+          ) : (
+            part
+          ),
+        )}
     </p>
   );
 }

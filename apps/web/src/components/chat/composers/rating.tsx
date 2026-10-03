@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Heart, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "../i18n";
 
 /**
  * Rating composer.
@@ -22,11 +23,12 @@ export function RatingComposer({
   shape: "star" | "heart" | "number";
   onPick: (value: number, display: string) => void;
 }) {
+  const t = useT();
   const [hover, setHover] = useState(0);
 
   if (shape === "number") {
     return (
-      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Rating">
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t("Rating")}>
         {Array.from({ length: scale }, (_, i) => i + 1).map((n) => (
           <button
             key={n}
@@ -53,7 +55,7 @@ export function RatingComposer({
     <div
       className="flex items-center gap-1"
       role="radiogroup"
-      aria-label="Rating"
+      aria-label={t("Rating")}
       onMouseLeave={() => setHover(0)}
     >
       {Array.from({ length: scale }, (_, i) => i + 1).map((n) => {
@@ -64,7 +66,7 @@ export function RatingComposer({
             type="button"
             role="radio"
             aria-checked={false}
-            aria-label={`${n} of ${scale}`}
+            aria-label={t("{value} of {scale}", { value: n, scale })}
             onMouseEnter={() => setHover(n)}
             onFocus={() => setHover(n)}
             onClick={() => onPick(n, `${n}/${scale}`)}
@@ -102,13 +104,14 @@ export function ScaleComposer({
   labelHigh?: string;
   onPick: (value: number, display: string) => void;
 }) {
+  const t = useT();
   const values = Array.from({ length: max - min + 1 }, (_, i) => min + i);
   return (
     // `w-fit`: the anchor labels are justified against the scale, so the row
     // has to be the width of the scale. Stretched to the column, "Extremely
     // likely" floated off on its own, hundreds of pixels from the 10.
     <div className="w-fit max-w-full space-y-2">
-      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Scale">
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t("Scale")}>
         {values.map((n) => (
           <button
             key={n}

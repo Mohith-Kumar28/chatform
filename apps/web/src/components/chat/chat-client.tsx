@@ -54,6 +54,8 @@ import { Confetti } from "./confetti";
 import { PaymentReceiptCard } from "./payment-receipt";
 import { cn } from "@/lib/utils";
 import { API_ORIGIN } from "@/lib/api/mutator";
+import { I18nProvider, useT, type Translate } from "./i18n";
+import { LanguageSwitcher } from "./language";
 
 
 export function ChatClient({
@@ -91,11 +93,16 @@ export function ChatClient({
     existingSession,
     onRestart,
     captcha: config.captchaEnabled === true,
+    ...(config.language ? { language: config.language } : {}),
     ...(paymentReturn ? { paymentReturn } : {}),
     ...(paymentCancelled ? { paymentCancelled } : {}),
   });
 
-  return <ChatSurface chat={chat} config={config} previewMode={previewMode} />;
+  return (
+    <I18nProvider messages={config.messages}>
+      <ChatSurface chat={chat} config={config} previewMode={previewMode} />
+    </I18nProvider>
+  );
 }
 
 /** Everything the chat screen reads, whether it came from a live session or a snapshot. */
@@ -126,6 +133,7 @@ export function ChatSurface({
   previewMode?: boolean;
   replay?: boolean;
 }) {
+  const t = useT();
   // A replay is contained like the builder preview: no viewport lock, no redirect.
   const previewMode = previewModeProp || replay;
 
@@ -542,6 +550,9 @@ export function ChatSurface({
   // header name used to override it from Settings; that field is gone, and an
   // old value left on a form would otherwise pin a name nobody can edit.
   const agentName = config.title;
+  // One sentence with the brand inside it, split at render, so a language that
+  // puts the name first can.
+  const poweredBy = t("Powered by {brand}").split("{brand}");
   // Review and the ending both mean every question is answered; without this
   // the bar dropped to zero at the last step because there is no current
   // question to read progress from.
@@ -568,6 +579,7 @@ export function ChatSurface({
       inert={replay}
     >
       <ChatHeader
+        languageControl={previewMode || replay ? null : <LanguageSwitcher config={config} />}
         title={agentName}
         brandName={config.theme.brandName}
         /*
@@ -894,7 +906,7 @@ export function ChatSurface({
             className="sticky bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3 py-1.5 text-xs shadow-md"
           >
             <ArrowDown className="size-3" />
-            Jump to latest
+            {t("Jump to latest")}
           </button>
         )}
       </div>
@@ -903,10 +915,10 @@ export function ChatSurface({
         <div className="mx-auto w-full max-w-2xl px-4 pb-2">
           <div className="text-destructive flex items-center gap-2 rounded-xl border border-current/20 px-3 py-2 text-sm">
             <TriangleAlert className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1">{chat.error}</span>
+            <span className="min-w-0 flex-1">{t(chat.error)}</span>
             {/* Reconnects the stream rather than reloading the whole page. */}
             <button type="button" onClick={chat.retry} className="shrink-0 font-medium underline">
-              Retry
+              {t("Retry")}
             </button>
           </div>
         </div>
@@ -915,7 +927,7 @@ export function ChatSurface({
       {chat.rateLimited && (
         <div className="mx-auto w-full max-w-2xl px-4 pb-2">
           <p className="rounded-xl bg-[var(--cf-chip-bg)] px-3 py-2 text-sm opacity-70">
-            {chat.rateLimited}
+            {t(chat.rateLimited)}
           </p>
         </div>
       )}
@@ -988,10 +1000,11 @@ export function ChatSurface({
                 {!config.brandingHidden && (
                   <>
                     <span className="opacity-40">
-                      Powered by{" "}
+                      {poweredBy[0]}
                       <a href="https://chatform.in" target="_blank" rel="noreferrer" className="underline">
                         chatform
                       </a>
+                      {poweredBy[1]}
                     </span>
                     {!previewMode && (
                       <span className="opacity-25" aria-hidden>
@@ -1006,7 +1019,7 @@ export function ChatSurface({
                     onClick={() => setFeedbackOpen(true)}
                     className="underline opacity-40 transition-opacity hover:opacity-90"
                   >
-                    Report a bug
+                    {t("Report a bug")}
                   </button>
                 )}
               </p>
@@ -1044,7 +1057,10 @@ function ChatHeader({
   status,
   onStartOver,
   onClose,
+  languageControl,
 }: {
+  /** Top right: the switcher, on a form offered in more than one language. */
+  languageControl?: React.ReactNode;
   title: string;
   brandName?: string;
   logoUrl?: string | null;
@@ -1057,6 +1073,7 @@ function ChatHeader({
   /** Embedded only: collapse the panel back to the host page's launcher. */
   onClose?: () => void;
 }) {
+  const t = useT();
   return (
     <header className="sticky top-0 z-10 bg-[var(--cf-bg)]/95 backdrop-blur">
       {/*
@@ -1099,11 +1116,11 @@ function ChatHeader({
           </p>
           <div className="flex min-w-0 items-center gap-1.5 text-xs">
             {status === "reconnecting" ? (
-              <span className="truncate opacity-60">Reconnecting…</span>
+              <span className="truncate opacity-60">{t("Reconnecting…")}</span>
             ) : (
               mode !== "none" && (
                 <span className="truncate opacity-60">
-                  {mode === "steps" && total > 0 ? `Question ${answered + 1} of ${total}` : `${pct}% complete`}
+                  {mode === "steps" && total > 0 ? t("Question {n} of {total}", { n: answered + 1, total }) : t("{pct}% complete", { pct })}
                 </span>
               )
             )}
@@ -1129,11 +1146,12 @@ function ChatHeader({
           takes the form's own control corners, so it matches the buttons
           below it.
         */}
+        {languageControl}
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close the form"
+            aria-label={t("Close the form")}
             className="grid size-9 shrink-0 place-items-center rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] shadow-sm transition-[transform,filter] hover:brightness-95 focus-visible:ring-2 focus-visible:ring-[var(--cf-accent)] focus-visible:outline-none active:scale-95 motion-reduce:active:scale-100"
           >
             <X className="size-[18px]" strokeWidth={2.25} />
@@ -1182,6 +1200,7 @@ const Bubble = memo(function Bubble({
   /** Present only beside the "verified as" note, and only on a gated form. */
   onSwitchAccount?: (() => void) | undefined;
 }) {
+  const t = useT();
   // A note about the conversation, not a turn in it: quiet, unbubbled, and
   // left in place in the thread.
   if (message.role === "system") {
@@ -1204,7 +1223,7 @@ const Bubble = memo(function Bubble({
             onClick={onSwitchAccount}
             className="underline underline-offset-2 transition-opacity hover:opacity-100"
           >
-            Switch account
+            {t("Switch account")}
           </button>
         )}
       </p>
@@ -1221,8 +1240,8 @@ const Bubble = memo(function Bubble({
         <button
           type="button"
           onClick={() => onEdit(message.answeredRef!)}
-          aria-label="Change this answer"
-          title="Change this answer"
+          aria-label={t("Change this answer")}
+          title={t("Change this answer")}
           className={cn("chat-edit-affordance order-first shrink-0 rounded-full p-1.5", latest && "chat-edit-latest")}
         >
           <Pencil className="size-3.5" />
@@ -1276,12 +1295,13 @@ const LiveRegion = memo(function LiveRegion({ messages }: { messages: ChatMessag
 });
 
 function TypingDots() {
+  const t = useT();
   return (
     <div className="flex justify-start">
       <div
         className="bubble-bot flex items-center gap-1 border px-4 py-3"
         style={{ background: "var(--cf-bot-bubble)", borderColor: "var(--cf-bot-bubble-border)" }}
-        aria-label="Typing"
+        aria-label={t("Typing")}
       >
         {[0, 1, 2].map((i) => (
           <span
@@ -1325,6 +1345,7 @@ function AlreadySubmittedCard({
   onResubmit: () => void;
   hasTranscript: boolean;
 }) {
+  const t = useT();
   const answers = submitted.answers;
   const screenedOut = submitted.outcome === "screened_out";
 
@@ -1442,11 +1463,11 @@ function AlreadySubmittedCard({
                 not — the form stopped them — and the sentence has to leave them
                 in no doubt that the answers above are still on file.
               */}
-              {screenedOut ? "This wasn't accepted" : "You've already answered this"}
+              {screenedOut ? t("This wasn't accepted") : t("You've already answered this")}
             </p>
             <p className="mt-0.5 text-xs leading-snug break-words opacity-80">
-              {title} · {relativeDay(submitted.at)}
-              {screenedOut && " · your answers are saved"}
+              {title} · {relativeDay(submitted.at, t)}
+              {screenedOut && ` · ${t("your answers are saved")}`}
             </p>
           </div>
         </div>
@@ -1464,12 +1485,12 @@ function AlreadySubmittedCard({
   );
 }
 
-function relativeDay(ts: number): string {
-  if (!ts) return "earlier";
+function relativeDay(ts: number, t: Translate): string {
+  if (!ts) return t("earlier");
   const days = Math.floor((Date.now() - ts) / 86_400_000);
-  if (days === 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 30) return `${days} days ago`;
+  if (days === 0) return t("today");
+  if (days === 1) return t("yesterday");
+  if (days < 30) return t("{days} days ago", { days });
   return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
@@ -1498,6 +1519,7 @@ function ReviewCard({
   autoSubmitOff: boolean;
   onCancelAutoSubmit: () => void;
 }) {
+  const t = useT();
   const actionRef = useRef<HTMLDivElement>(null);
   /** When the countdown started, or null while it has not been armed. */
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -1608,8 +1630,8 @@ function ReviewCard({
       */}
       <p className="text-sm font-medium">
         {counting
-          ? "That’s everything. Tap any answer to change it, or hold it with Cancel below."
-          : "That’s everything. Tap any answer to change it before you send."}
+          ? t("That’s everything. Tap any answer to change it, or hold it with Cancel below.")
+          : t("That’s everything. Tap any answer to change it before you send.")}
       </p>
 
       <ul className="space-y-0.5">
@@ -1624,7 +1646,7 @@ function ReviewCard({
             <button
               type="button"
               onClick={() => onEdit(a.ref)}
-              aria-label={`Change your answer to ${a.title}`}
+              aria-label={t("Change your answer to {title}", { title: a.title })}
               className="group -mx-2 flex w-[calc(100%+1rem)] items-start gap-2 rounded-xl px-2 py-1.5 text-left text-sm transition-colors hover:bg-[var(--cf-chip-border)]/25 focus-visible:bg-[var(--cf-chip-border)]/25"
             >
               <span className="min-w-0 flex-1">
@@ -1677,7 +1699,7 @@ function ReviewCard({
               />
               <span className="relative flex items-center gap-1.5">
                 <X className="size-3.5" />
-                Cancel auto-submit · {secondsLeft}
+                {t("Cancel auto-submit · {seconds}", { seconds: secondsLeft })}
                 {/*
                   Escape has stopped this countdown since it was added, and
                   nothing on screen said so — a shortcut nobody can see is one
@@ -1697,14 +1719,14 @@ function ReviewCard({
               tab order.
             */}
             <p role="status" className="sr-only">
-              Sending automatically in {AUTO_SUBMIT_MS / 1000} seconds unless you cancel.
+              {t("Sending automatically in {seconds} seconds unless you cancel.", { seconds: AUTO_SUBMIT_MS / 1000 })}
             </p>
             <button
               type="button"
               onClick={onSubmit}
               className="block w-full py-1 text-center text-xs underline underline-offset-2 opacity-60"
             >
-              Send it now
+              {t("Send it now")}
             </button>
           </div>
         ) : (
@@ -1715,7 +1737,7 @@ function ReviewCard({
             className="flex h-11 w-full items-center justify-center gap-2 rounded-[var(--cf-radius-control)] text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-60"
             style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
           >
-            {busy ? "Submitting…" : "Submit form"}
+            {busy ? t("Submitting…") : t("Submit form")}
             {/* Shown, not just bound. A shortcut nobody can see is a shortcut
                 nobody uses — and it is the one key press that ends the form, so
                 it is worth teaching at the moment it applies.
@@ -1750,6 +1772,7 @@ function ReviewCard({
  * so it cannot sit there waiting to be triggered by a stray tap much later.
  */
 function StartOverButton({ onConfirm }: { onConfirm: () => void }) {
+  const t = useT();
   const [armed, setArmed] = useState(false);
 
   useEffect(() => {
@@ -1770,7 +1793,7 @@ function StartOverButton({ onConfirm }: { onConfirm: () => void }) {
         }
       }}
       onBlur={() => setArmed(false)}
-      aria-label={armed ? "Confirm starting over. This clears your answers" : "Start over"}
+      aria-label={armed ? t("Confirm starting over. This clears your answers") : t("Start over")}
       className={cn(
         "-my-1 flex shrink-0 items-center gap-1 rounded-full py-1 text-xs font-medium transition-opacity",
         armed
@@ -1784,7 +1807,7 @@ function StartOverButton({ onConfirm }: { onConfirm: () => void }) {
         entire problem with the menu, so it is never dropped, not even on a
         phone. On the second line it costs the title nothing.
       */}
-      <span>{armed ? "Tap again to clear" : "Start over"}</span>
+      <span>{armed ? t("Tap again to clear") : t("Start over")}</span>
     </button>
   );
 }
@@ -1842,6 +1865,7 @@ function EndingCard({
   /** A redirect really is scheduled — a preview has a URL and fires nothing. */
   redirectArmed?: boolean;
 }) {
+  const t = useT();
   const screenedOut = ending.kind === "screen_out";
   const requirements = ending.requirements ?? [];
 
@@ -1915,7 +1939,7 @@ function EndingCard({
         {screenedOut && requirements.length > 0 && (
           <div className="mt-6 w-full max-w-sm rounded-2xl border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-4 py-3.5 text-left">
             {/* Not "so far": this screen is the end of the road, not a step in it. */}
-            <p className="text-xs font-semibold tracking-wide uppercase opacity-55">What&apos;s missing</p>
+            <p className="text-xs font-semibold tracking-wide uppercase opacity-55">{t("What's missing")}</p>
             <ul className="mt-2 space-y-1.5">
               {requirements.map((r) => (
                 <li key={r} className="flex gap-2.5 text-[0.9375rem] leading-snug">
@@ -1952,10 +1976,10 @@ function EndingCard({
               style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
             >
               <Undo2 className="size-4" strokeWidth={2} />
-              I answered that by mistake
+              {t("I answered that by mistake")}
             </button>
             <p className="mt-2 max-w-xs text-xs opacity-50">
-              Takes you back to that one question. Everything else you have answered is kept.
+              {t("Takes you back to that one question. Everything else you have answered is kept.")}
             </p>
           </>
         )}
@@ -1993,11 +2017,11 @@ function EndingCard({
               className="mt-6 inline-flex h-11 items-center gap-2 rounded-[var(--cf-radius-control)] px-6 text-sm font-medium transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
               style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
             >
-              Continue to the next step
+              {t("Continue to the next step")}
               <ArrowUpRight className="size-4" strokeWidth={2} />
             </a>
           ) : redirecting ? (
-            <p className="mt-4 text-xs opacity-50">Opening the next step…</p>
+            <p className="mt-4 text-xs opacity-50">{t("Opening the next step…")}</p>
           ) : (
             /*
               A redirect on the ending, but nothing armed to fire it — which is
@@ -2055,6 +2079,7 @@ function SubmitAnotherButton({
   screenedOut: boolean;
   className?: string;
 }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -2072,7 +2097,7 @@ function SubmitAnotherButton({
         one answer, sometimes a mis-tap, so starting over is the right
         escape hatch; it just has to be named honestly.
       */}
-      {screenedOut ? "Start over" : "Submit another response"}
+      {screenedOut ? t("Start over") : t("Submit another response")}
     </button>
   );
 }
@@ -2117,6 +2142,7 @@ function ReviewComposer({
   disabled: boolean;
   onTyping: () => void;
 }) {
+  const t = useT();
   const [text, setText] = useState("");
   function submit() {
     const value = text.trim();
@@ -2133,7 +2159,7 @@ function ReviewComposer({
           if (v.trim()) onTyping();
         }}
         onSubmit={submit}
-        placeholder="Want to change something? Just tell me…"
+        placeholder={t("Want to change something? Just tell me…")}
         semantics={FREE_TEXT}
       />
     </SendRow>
@@ -2155,6 +2181,7 @@ const Composer = memo(function Composer({
   sendAction: (action: "skip" | "restart" | "stop" | "submit") => Promise<void>;
   config: PublicFormConfig;
 }) {
+  const t = useT();
   /*
     Opens on what they last used, from the first paint.
 
@@ -2384,8 +2411,8 @@ const Composer = memo(function Composer({
       {block.verify && (
         <p className="px-1 text-xs opacity-50">
           {block.type === "phone"
-            ? "We'll text a 6-digit code to confirm this number."
-            : "We'll email a 6-digit code to confirm this address."}
+            ? t("We'll text a 6-digit code to confirm this number.")
+            : t("We'll email a 6-digit code to confirm this address.")}
         </p>
       )}
 
@@ -2408,7 +2435,7 @@ const Composer = memo(function Composer({
           className="flex flex-wrap items-center gap-1 px-1"
           onMouseDown={keepFocus}
           role="listbox"
-          aria-label="Saved answers"
+          aria-label={t("Saved answers")}
         >
           {alternatives.map((s, i) => (
             <span
@@ -2441,7 +2468,7 @@ const Composer = memo(function Composer({
                   forgetValue(identityField, s);
                   setSuggestions((prev) => prev.filter((v) => v !== s));
                 }}
-                aria-label={`Forget ${s}`}
+                aria-label={t("Forget {value}", { value: s })}
                 className="shrink-0 py-1.5 pl-1 pr-2 opacity-40 transition-opacity hover:opacity-90"
               >
                 <X className="size-3" />
@@ -2463,7 +2490,7 @@ const Composer = memo(function Composer({
             onChange={setText}
             onSubmit={submit}
             countryHint={block.countryHint}
-            placeholder="Your number"
+            placeholder={t("Your number")}
             autoFocus
           />
         ) : isUrl ? (
@@ -2482,7 +2509,7 @@ const Composer = memo(function Composer({
             onSubmit={submit}
             autoFocus
             multiline={block.type === "long_text"}
-            placeholder={block.placeholder || placeholderFor(block.type)}
+            placeholder={block.placeholder || placeholderFor(block.type, t)}
             /*
               The box declares what the question is asking for — keyboard,
               capitalisation, and the autofill token that lets a browser offer the
@@ -2516,29 +2543,29 @@ const Composer = memo(function Composer({
 });
 
 /** Nudges people that typing is allowed even when chips are on offer. */
-function placeholderFor(type: PublicBlock["type"]): string {
+function placeholderFor(type: PublicBlock["type"], t: Translate): string {
   switch (type) {
     case "single_select":
     case "multi_select":
     case "dropdown":
     case "picture_choice":
     case "yes_no":
-      return "Pick one above, or just tell me…";
+      return t("Pick one above, or just tell me…");
     case "rating":
     case "nps":
     case "opinion_scale":
-      return "Tap a number, or type it…";
+      return t("Tap a number, or type it…");
     case "date":
-      return "Pick a date, or type one…";
+      return t("Pick a date, or type one…");
     case "file_upload":
     case "signature":
-      return "Use the box above, or say something…";
+      return t("Use the box above, or say something…");
     case "contact_info":
     case "address":
     case "field_group":
-      return "Fill it in above, or type it out…";
+      return t("Fill it in above, or type it out…");
     default:
-      return "Type your answer…";
+      return t("Type your answer…");
   }
 }
 

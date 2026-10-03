@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "./i18n";
 
 const KINDS: [RegExp, LucideIcon][] = [
   [/^(pdf|docx?|rtf|odt|txt|md|pages|epub)$/, FileText],
@@ -80,8 +81,9 @@ export function FileCard({
   actions?: React.ReactNode;
   className?: string;
 }) {
+  const t = useT();
   const { Icon, label } = fileKind(filename, ext);
-  const meta = [label, sizeBytes != null ? formatBytes(sizeBytes) : null].filter(Boolean).join(" · ");
+  const meta = [label === "File" ? t("File") : label, sizeBytes != null ? formatBytes(sizeBytes) : null].filter(Boolean).join(" · ");
 
   return (
     <div
@@ -122,8 +124,8 @@ export function FileCard({
           href={downloadHref}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label={`Download ${filename}`}
-          title="Download"
+          aria-label={t("Download {name}", { name: filename })}
+          title={t("Download")}
           className="grid size-8 shrink-0 place-items-center rounded-full transition-opacity hover:opacity-80"
           style={{
             background: "var(--cf-accent, var(--primary))",

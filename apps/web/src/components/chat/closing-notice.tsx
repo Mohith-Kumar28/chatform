@@ -4,6 +4,7 @@ import { useCallback, useRef, useSyncExternalStore } from "react";
 import { Clock, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { describeCapacity, describeClosing, isUrgent } from "./closing-time";
+import { useT } from "./i18n";
 
 /**
  * When this form stops accepting responses, said before anybody starts.
@@ -43,6 +44,7 @@ export function ClosingNotice({
    * server's — cannot tear during hydration.
    */
   const nowRef = useRef(0);
+  const t = useT();
 
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
@@ -91,7 +93,7 @@ export function ClosingNotice({
     () => 0,
   );
 
-  const desc = now === 0 ? null : describeClosing(closeAt, now, { started });
+  const desc = now === 0 ? null : describeClosing(closeAt, now, { started, t });
   /**
    * Places left stops being a fact the moment the deadline passes.
    *
@@ -100,7 +102,7 @@ export function ClosingNotice({
    * contradictory sentences stapled together. The count survives only while it
    * still describes something somebody could do.
    */
-  const spots = desc?.tier === "passed" ? null : describeCapacity(capacity);
+  const spots = desc?.tier === "passed" ? null : describeCapacity(capacity, t);
   if (!desc && !spots) return null;
 
   const timeUrgent = desc ? isUrgent(desc.tier) : false;

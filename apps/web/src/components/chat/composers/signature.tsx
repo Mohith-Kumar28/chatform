@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Eraser, Loader2 } from "lucide-react";
 import { uploadToSession, type UploadedFile } from "../upload-transport";
 import { cn } from "@/lib/utils";
+import { useT } from "../i18n";
 
 /**
  * Signature pad.
@@ -32,6 +33,7 @@ export function SignatureComposer({
   respondentToken: string | null;
   onSubmit: (value: UploadedFile & { signedName?: string }, display: string) => void;
 }) {
+  const t = useT();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const [hasInk, setHasInk] = useState(false);
@@ -104,18 +106,18 @@ export function SignatureComposer({
           onPointerLeave={up}
           // touch-none stops the browser scrolling the page while signing.
           className="h-36 w-full touch-none rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)]"
-          aria-label="Signature pad"
+          aria-label={t("Signature pad")}
         />
         {!hasInk && (
           <span className="pointer-events-none absolute inset-0 grid place-items-center text-sm opacity-40">
-            Sign here
+            {t("Sign here")}
           </span>
         )}
         {hasInk && (
           <button
             type="button"
             onClick={clear}
-            aria-label="Clear signature"
+            aria-label={t("Clear signature")}
             className="absolute top-2 right-2 grid size-8 place-items-center rounded-full bg-[var(--cf-chip-bg)] opacity-70 transition-opacity hover:opacity-100"
           >
             <Eraser className="size-3.5" />
@@ -127,7 +129,7 @@ export function SignatureComposer({
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Type your full name"
+          placeholder={t("Type your full name")}
           className="h-11 w-full rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-4 text-[0.9375rem] outline-none focus:border-[var(--cf-accent)]"
         />
       )}
@@ -145,7 +147,7 @@ export function SignatureComposer({
         )}
       >
         {busy && <Loader2 className="size-3.5 animate-spin" />}
-        {busy ? "Saving…" : "Confirm signature"}
+        {busy ? t("Saving…") : t("Confirm signature")}
       </button>
     </div>
   );
@@ -157,15 +159,15 @@ export function SignatureComposer({
     setError(null);
     try {
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-      if (!blob) throw new Error("Could not read the signature.");
+      if (!blob) throw new Error(t("Could not read the signature."));
       const file = new File([blob], "signature.png", { type: "image/png" });
       const stored = await uploadToSession({ file, blockRef, uploadBase, respondentToken });
       const signedName = requireName ? name.trim() : undefined;
-      onSubmit({ ...stored, signedName }, signedName ? `Signed by ${signedName}` : "Signed");
+      onSubmit({ ...stored, signedName }, signedName ? t("Signed by {name}", { name: signedName }) : t("Signed"));
     } catch (err) {
       // Stay on the pad with the ink intact: re-drawing a signature because a
       // network call failed is the kind of thing people abandon a form over.
-      setError(err instanceof Error ? err.message : "That didn't save. Try once more.");
+      setError(err instanceof Error ? err.message : t("That didn't save. Try once more."));
       setBusy(false);
     }
   }

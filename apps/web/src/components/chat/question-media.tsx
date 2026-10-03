@@ -4,6 +4,7 @@ import { safeMediaSrc } from "@repo/guard";
 import { fileDownloadUrl, type BlockMedia } from "@repo/form-schema";
 import { assetUrl } from "@/lib/assets";
 import { FileCard } from "./file-card";
+import { useT } from "./i18n";
 
 /**
  * The image, clip or download a question carries.
@@ -26,6 +27,7 @@ export function QuestionMedia({
   media?: BlockMedia | null;
   imageKey?: string | null;
 }) {
+  const t = useT();
   // `image_key` predates `media` and is still what the builder writes for a
   // plain question image, so both are honoured.
   const fallback = !media && imageKey ? assetUrl(imageKey) : null;
@@ -76,6 +78,6 @@ export function QuestionMedia({
     );
   }
 
-  const name = media.filename ?? "Download";
+  const name = media.filename ?? t("Download");
   return <FileCard filename={name} sizeBytes={media.sizeBytes} downloadHref={fileDownloadUrl(url, name)} />;
 }

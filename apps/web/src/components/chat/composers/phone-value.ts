@@ -8,6 +8,7 @@ import {
   validatePhoneNumberLength,
   type CountryCode,
 } from "libphonenumber-js";
+import type { Translate } from "../i18n";
 
 /**
  * The value layer under the phone composer.
@@ -354,21 +355,25 @@ export function looksInternational(typed: string): boolean {
  * the empty box: Send is already unavailable, and a form that scolds you for
  * not having answered yet is worse than one that waits.
  */
-export function phoneProblem(value: string, country: CountryCode): string | null {
+/** The sentence as written, for a caller with no dictionary to look it up in. */
+const asWritten: Translate = (text, vars) =>
+  vars ? text.replace(/\{([a-zA-Z]+)\}/g, (whole, name: string) => (name in vars ? String(vars[name]) : whole)) : text;
+
+export function phoneProblem(value: string, country: CountryCode, t: Translate = asWritten): string | null {
   if (!value.trim()) return null;
   if (isSendablePhone(value)) return null;
   const where = countryName(country);
   try {
     switch (validatePhoneNumberLength(value)) {
       case "TOO_SHORT":
-        return `That’s a few digits short for a number in ${where}.`;
+        return t("That’s a few digits short for a number in {where}.", { where });
       case "TOO_LONG":
-        return `That’s a few digits too many for a number in ${where}.`;
+        return t("That’s a few digits too many for a number in {where}.", { where });
       default:
-        return `That doesn’t look like a number in ${where}.`;
+        return t("That doesn’t look like a number in {where}.", { where });
     }
   } catch {
-    return `That doesn’t look like a number in ${where}.`;
+    return t("That doesn’t look like a number in {where}.", { where });
   }
 }
 

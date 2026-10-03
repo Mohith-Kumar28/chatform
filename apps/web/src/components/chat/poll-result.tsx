@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BarChart3, Check, Crown } from "lucide-react";
 import { KeyHint } from "./composers/primitives";
 import type { PollResult } from "./use-chat";
+import { useT } from "./i18n";
 
 /**
  * The poll before anybody votes: the same card the results arrive in, with
@@ -24,6 +25,7 @@ export function PollBallot({
   disabled?: boolean;
   onVote: (id: string, label: string) => void;
 }) {
+  const t = useT();
   return (
     <div
       className="w-full max-w-[85%] rounded-2xl border p-3.5 shadow-sm sm:max-w-sm"
@@ -36,9 +38,9 @@ export function PollBallot({
       <div className="mb-3 flex items-center justify-between gap-3 px-0.5 text-xs">
         <span className="flex items-center gap-1.5 font-medium">
           <BarChart3 className="size-3.5" style={{ color: "var(--cf-accent)" }} aria-hidden />
-          Poll
+          {t("Poll")}
         </span>
-        <span className="opacity-55">Vote to see results</span>
+        <span className="opacity-55">{t("Vote to see results")}</span>
       </div>
 
       <ul className="space-y-2">
@@ -81,6 +83,7 @@ export function PollBallot({
  * not replay it. Reduced motion lands on the final numbers at once.
  */
 export function PollResultCard({ result }: { result: PollResult }) {
+  const t = useT();
   const { total, options, picked } = result;
 
   /*
@@ -104,10 +107,10 @@ export function PollResultCard({ result }: { result: PollResult }) {
           claiming they were first would be a small lie about a real number.
         */}
         {total === 0
-          ? "No answers yet."
+          ? t("No answers yet.")
           : total === 1
-            ? "You're the first to answer this one."
-            : `${total} answers so far. Results open up shortly.`}
+            ? t("You're the first to answer this one.")
+            : t("{count} answers so far. Results open up shortly.", { count: total })}
       </div>
     );
   }
@@ -132,10 +135,10 @@ export function PollResultCard({ result }: { result: PollResult }) {
             />
             <span className="relative size-2 rounded-full" style={{ background: "var(--cf-accent)" }} />
           </span>
-          Results
+          {t("Results")}
         </span>
         <span className="tabular-nums opacity-55">
-          {total} {total === 1 ? "vote" : "votes"}
+          {total === 1 ? t("{count} vote", { count: total }) : t("{count} votes", { count: total })}
         </span>
       </div>
 
@@ -169,6 +172,7 @@ function PollRow({
   leader: boolean;
   index: number;
 }) {
+  const t = useT();
   const delay = 120 + index * STAGGER_MS;
   const shown = useCountUp(share, GROW_MS, delay);
 
@@ -213,7 +217,7 @@ function PollRow({
           <Crown
             className="poll-crown size-3.5 shrink-0"
             style={{ color: "var(--cf-accent)", animationDelay: `${delay + GROW_MS - 150}ms` }}
-            aria-label="Most picked"
+            aria-label={t("Most picked")}
           />
         )}
         <span className={mine || leader ? "shrink-0 font-semibold tabular-nums" : "shrink-0 tabular-nums opacity-70"}>

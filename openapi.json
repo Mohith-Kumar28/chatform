@@ -10462,6 +10462,10 @@
                     "type": "string",
                     "maxLength": 64
                   },
+                  "language": {
+                    "type": "string",
+                    "maxLength": 8
+                  },
                   "fresh": {
                     "type": "boolean"
                   },
@@ -13321,6 +13325,439 @@
             },
             "in": "path",
             "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/forms/{id}/translations": {
+      "get": {
+        "operationId": "getApiFormsByIdTranslations",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Where each of the form's languages stands",
+        "responses": {
+          "200": {
+            "description": "Languages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "languages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "lang": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "total": {
+                            "type": "number"
+                          },
+                          "translated": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "lang",
+                          "name",
+                          "total",
+                          "translated"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "languages"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/forms/{id}/translations/{lang}/ai": {
+      "post": {
+        "operationId": "postApiFormsByIdTranslationsByLangAi",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Translate the form into one of its languages with AI",
+        "responses": {
+          "200": {
+            "description": "Translated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "lang": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "translated": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "lang",
+                    "name",
+                    "total",
+                    "translated"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The form does not offer this language",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "lang",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/forms/{id}/translations/{lang}/csv": {
+      "get": {
+        "operationId": "getApiFormsByIdTranslationsByLangCsv",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Download a language's translations as a spreadsheet to fill in",
+        "responses": {
+          "200": {
+            "description": "CSV: id, original, translation"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "lang",
+            "required": true
+          }
+        ],
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "putApiFormsByIdTranslationsByLangCsv",
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Upload a filled-in translations spreadsheet",
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "saved": {
+                      "type": "number"
+                    },
+                    "skipped": {
+                      "type": "number"
+                    },
+                    "status": {
+                      "type": "object",
+                      "properties": {
+                        "lang": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "total": {
+                          "type": "number"
+                        },
+                        "translated": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "lang",
+                        "name",
+                        "total",
+                        "translated"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "saved",
+                    "skipped",
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The form does not offer this language",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The file is too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "issues": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ref": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message"
+                            ]
+                          }
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "doc_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "lang",
             "required": true
           }
         ],

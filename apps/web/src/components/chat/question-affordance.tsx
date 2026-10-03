@@ -15,6 +15,7 @@ import { BookingCard } from "./booking-card";
 import { FileUploadControl } from "./file-upload";
 import { PaymentAffordance, type GatewayPaymentActions } from "./payment-affordance";
 import { PollBallot } from "./poll-result";
+import { useT, type Translate } from "./i18n";
 import type { PaymentState } from "./use-chat";
 import { assetUrl } from "@/lib/assets";
 import { cn } from "@/lib/utils";
@@ -142,7 +143,7 @@ function keepComposerFocus(e: React.MouseEvent<HTMLElement>) {
  * `block.options`, and a `yes_no` block has no options: its chips advertised
  * "1" and "2" and pressing 1 typed a literal "1" into the message box.
  */
-function choicesFor(block: PublicBlock): Choice[] {
+function choicesFor(block: PublicBlock, t: Translate): Choice[] {
   const numbered = (list: { id: string; label: string }[]): Choice[] =>
     list.map((o, i) => ({ id: o.id, label: o.label, value: o.id, key: i < 9 ? String(i + 1) : undefined }));
 
@@ -165,8 +166,8 @@ function choicesFor(block: PublicBlock): Choice[] {
   switch (block.type) {
     case "yes_no":
       return [
-        { id: "yes", label: block.yesLabel ?? "Yes", value: true, key: "1" },
-        { id: "no", label: block.noLabel ?? "No", value: false, key: "2" },
+        { id: "yes", label: block.yesLabel ?? t("Yes"), value: true, key: "1" },
+        { id: "no", label: block.noLabel ?? t("No"), value: false, key: "2" },
       ];
     case "single_select":
     case "poll":
@@ -177,10 +178,10 @@ function choicesFor(block: PublicBlock): Choice[] {
     case "legal_consent":
       return block.allowDecline
         ? [
-            { id: "agree", label: block.agreeLabel ?? "I agree", value: true, key: "1" },
-            { id: "decline", label: block.declineLabel ?? "I do not agree", value: false, key: "2" },
+            { id: "agree", label: block.agreeLabel ?? t("I agree"), value: true, key: "1" },
+            { id: "decline", label: block.declineLabel ?? t("I do not agree"), value: false, key: "2" },
           ]
-        : [{ id: "agree", label: block.agreeLabel ?? "I agree", value: true, key: "1" }];
+        : [{ id: "agree", label: block.agreeLabel ?? t("I agree"), value: true, key: "1" }];
     case "rating":
       return scale(1, block.scale ?? 5);
     case "nps":
@@ -215,6 +216,7 @@ function AffordanceControls({
   onStructured: (value: unknown, display: string) => void;
   onSkip: () => void;
 }) {
+  const t = useT();
   const [multi, setMulti] = useState<string[]>([]);
   // The respondent's own "Other" answer while its box is open; null when closed.
   const [other, setOther] = useState<string | null>(null);
@@ -223,7 +225,7 @@ function AffordanceControls({
   // makes a new array on every render — which would rebuild the callback on
   // every streamed token.
   const options = useMemo(() => block.options ?? [], [block.options]);
-  const choices = choicesFor(block);
+  const choices = choicesFor(block, t);
   const isMulti = block.type === "multi_select";
 
   // How many may be picked, honoured *before* the answer is sent. The server
@@ -276,7 +278,7 @@ function AffordanceControls({
             onClick={() => onStructured(true, "")}
             className="h-10 rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] px-5 text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100"
           >
-            {block.buttonLabel || "Continue"}
+            {block.buttonLabel || t("Continue")}
           </button>
         </Affordance>
       );
@@ -380,16 +382,16 @@ function AffordanceControls({
               onClick={submitMulti}
               className="inline-flex h-9 items-center gap-2 rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] px-4 text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
             >
-              Continue{picked > 0 ? ` · ${picked}` : ""}
+              {t("Continue")}{picked > 0 ? ` · ${picked}` : ""}
               {/* The shortcut was already live and completely invisible. */}
               <CornerDownLeft className="hidden size-3.5 opacity-70 sm:block" aria-hidden />
             </button>
             <p className="text-xs opacity-55">
               {picked >= maxSelections
-                ? `That's the most you can pick (${maxSelections}).`
+                ? t("That's the most you can pick ({max}).", { max: maxSelections })
                 : minSelections > 1 && picked < minSelections
-                  ? `Pick at least ${minSelections}.`
-                  : `Pick up to ${maxSelections}.`}
+                  ? t("Pick at least {min}.", { min: minSelections })
+                  : t("Pick up to {max}.", { max: maxSelections })}
             </p>
           </div>
         </div>
@@ -473,7 +475,7 @@ function AffordanceControls({
       return (
         <GroupComposer
           fields={block.groupFields ?? []}
-          itemLabel={block.itemLabel ?? "Entry"}
+          itemLabel={block.itemLabel ?? t("Entry")}
           minEntries={block.minEntries ?? 1}
           maxEntries={block.maxEntries ?? 5}
           required={block.required}
@@ -482,8 +484,8 @@ function AffordanceControls({
       );
 
     case "legal_consent": {
-      const agree = block.agreeLabel ?? "I agree";
-      const decline = block.declineLabel ?? "I do not agree";
+      const agree = block.agreeLabel ?? t("I agree");
+      const decline = block.declineLabel ?? t("I do not agree");
       return (
         <div className="space-y-2">
           {block.consentText && (
@@ -549,7 +551,7 @@ function AffordanceControls({
           onOpen={(room) =>
             onStructured(
               { provider: "external", url, confirmedAt: Date.now() },
-              room ? "Opened the call link" : "Opened the booking page",
+              room ? t("Opened the call link") : t("Opened the booking page"),
             )
           }
         />

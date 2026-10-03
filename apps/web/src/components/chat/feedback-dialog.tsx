@@ -6,6 +6,7 @@ import { FEEDBACK_NOTE_MAX } from "@repo/form-schema";
 import { FaceRating } from "@/components/feedback/face-rating";
 import { KeyHint, modKeyLabel } from "./composers/primitives";
 import { cn } from "@/lib/utils";
+import { useT } from "./i18n";
 
 /**
  * The respondent's one line back to us.
@@ -59,6 +60,7 @@ export function FeedbackDialog({
    */
   named?: boolean;
 }) {
+  const t = useT();
   const [rating, setRating] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -85,11 +87,11 @@ export function FeedbackDialog({
     const result = await onSubmit(rating, message);
     setSending(false);
     if (!result.ok) {
-      setError(result.error ?? "That didn't send. Try again in a moment.");
+      setError(result.error ? t(result.error) : t("That didn't send. Try again in a moment."));
       return;
     }
     setSent(true);
-  }, [rating, message, sending, onSubmit]);
+  }, [rating, message, sending, onSubmit, t]);
 
   /**
    * The panel's two keys, taken before anything else sees them.
@@ -150,7 +152,7 @@ export function FeedbackDialog({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={named ? "Report a problem with chatform" : "Report a problem with this form\u2019s software"}
+        aria-label={named ? t("Report a problem with chatform") : t("Report a problem with this form’s software")}
         tabIndex={-1}
         className={cn(
           "animate-message-in relative m-0 w-full max-w-md outline-none sm:m-4",
@@ -164,7 +166,7 @@ export function FeedbackDialog({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close"
+          aria-label={t("Close")}
           className="absolute top-3 right-3 grid size-8 place-items-center rounded-full opacity-50 transition-opacity hover:opacity-100"
         >
           <X className="size-4" />
@@ -186,16 +188,15 @@ export function FeedbackDialog({
             >
               <Check className="size-6" strokeWidth={2.5} />
             </div>
-            <p className="text-base font-medium">Thank you. That reached us.</p>
+            <p className="text-base font-medium">{t("Thank you. That reached us.")}</p>
             <p className="max-w-xs text-sm opacity-60">
-              A real person reads these. It goes to the team who build the software, not to whoever
-              made this form.
+              {t("A real person reads these. It goes to the team who build the software, not to whoever made this form.")}
             </p>
           </div>
         ) : (
           <div className="overflow-y-auto px-5 pt-5 pb-5 sm:px-6 sm:pt-6">
             <h2 className="pr-8 text-lg font-semibold" style={{ fontFamily: "var(--cf-font-heading)" }}>
-              How is this going?
+              {t("How is this going?")}
             </h2>
             {/*
               Said plainly and said first. The person reading it is a stranger
@@ -204,8 +205,8 @@ export function FeedbackDialog({
             */}
             <p className="mt-1 text-sm opacity-60">
               {named
-                ? "This goes to chatform, the software running this form, not to the people who made this form."
-                : "This goes to the team who build the software running this form, not to the people who made this form."}
+                ? t("This goes to chatform, the software running this form, not to the people who made this form.")
+                : t("This goes to the team who build the software running this form, not to the people who made this form.")}
             </p>
 
             {/* Themed from the form's own ramp, so the scale arrives in its palette. */}
@@ -222,7 +223,7 @@ export function FeedbackDialog({
               onChange={(e) => setMessage(e.target.value)}
               rows={4}
               maxLength={FEEDBACK_NOTE_MAX}
-              placeholder="What happened? A bug, something confusing, anything missing…"
+              placeholder={t("What happened? A bug, something confusing, anything missing…")}
               className={cn(
                 "mt-3 w-full resize-none rounded-xl border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-3.5 py-2.5 text-[0.9375rem]",
                 "placeholder:opacity-45 focus:border-[var(--cf-accent)] focus:outline-none",
@@ -252,7 +253,7 @@ export function FeedbackDialog({
               out later.
             */}
             <p className="mt-2 text-xs opacity-50">
-              A copy of this conversation is attached so we can see what you saw.
+              {t("A copy of this conversation is attached so we can see what you saw.")}
             </p>
 
             {error && (
@@ -278,7 +279,7 @@ export function FeedbackDialog({
               )}
               style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
             >
-              {sending ? "Sending…" : "Send"}
+              {sending ? t("Sending…") : t("Send")}
               {/*
                 The same key chip the composer draws under this panel, so the
                 shortcut is taught in the one vocabulary the form already uses.

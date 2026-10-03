@@ -17,6 +17,7 @@
  */
 
 import type { Auth, ConfirmationResult } from "firebase/auth";
+import { msg } from "./i18n";
 
 const config = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "",
@@ -93,26 +94,26 @@ function messageFor(err: unknown): string {
     );
     // Never "try again": retrying cannot work until someone changes a setting,
     // and inviting it just burns the respondent's patience.
-    return "Phone verification isn't available right now. Please use another sign-in option.";
+    return msg("Phone verification isn't available right now. Please use another sign-in option.");
   }
 
   switch (code) {
     case "auth/invalid-phone-number":
     case "auth/missing-phone-number":
-      return "That doesn't look like a valid number. Include your country code.";
+      return msg("That doesn't look like a valid number. Include your country code.");
     case "auth/invalid-verification-code":
-      return "That code didn't match. Please try again.";
+      return msg("That code didn't match. Please try again.");
     case "auth/code-expired":
-      return "That code expired. Ask for a new one.";
+      return msg("That code expired. Ask for a new one.");
     case "auth/too-many-requests":
       // Firebase counts this per number *and* per IP, and clears it on its own
       // schedule — minutes sometimes, considerably longer under sustained
       // traffic. "Wait a few minutes" was a guess dressed as a fact, and being
       // wrong about it means someone sits there re-tapping a dead button.
       // Point at the door that is still open instead.
-      return "Too many attempts from this device. Please try again later, or use another sign-in option.";
+      return msg("Too many attempts from this device. Please try again later, or use another sign-in option.");
     case "auth/captcha-check-failed":
-      return "We couldn't confirm you're human. Please try again.";
+      return msg("We couldn't confirm you're human. Please try again.");
     default:
       // Everything that reaches here is a code this file has never seen, and
       // until now it vanished into a generic sentence that named nothing —
@@ -123,7 +124,7 @@ function messageFor(err: unknown): string {
       // `customData`/`serverResponse` rather than the message, and that detail
       // is the difference between a guess and a diagnosis.
       console.error("[chatform] Unhandled phone verification error:", code || "(no code)", err);
-      return "We couldn't send that code. Please try again.";
+      return msg("We couldn't send that code. Please try again.");
   }
 }
 

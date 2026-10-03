@@ -4,6 +4,7 @@ import type { AnswerValue } from "../answers";
 import { fromMinorUnits, type PaymentProviderName } from "../payment-link";
 import { normalizeLocation } from "../location";
 import { appointmentIso, clockTimeIn, parseAppointment, usableZone, wallTimeIn, zoneName, zonedToUtc } from "../datetime";
+import { untranslated, type Translate } from "../languages";
 
 /**
  * Every reason an answer can be refused.
@@ -156,6 +157,8 @@ export interface ValidateOptions {
    * on this clock. Without it, such an answer is read as UTC.
    */
   timeZone?: string | null;
+  /** Puts the messages in the respondent's language. Absent is English. */
+  t?: Translate;
 }
 
 const ok = (value?: AnswerValue): ValidationResult => ({ ok: true, value });
@@ -175,9 +178,9 @@ const PHONE_HINT =
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 /** "a, b or c" — for telling a respondent which domains are acceptable. */
-function orList(items: string[]): string {
+function orList(items: string[], t: Translate): string {
   if (items.length <= 1) return items[0] ?? "";
-  return `${items.slice(0, -1).join(", ")} or ${items[items.length - 1]}`;
+  return t("{list} or {last}", { list: items.slice(0, -1).join(", "), last: items[items.length - 1]! });
 }
 
 /**
@@ -207,12 +210,13 @@ function windowHint(
   host: string | null,
   hostDate: string,
   respondentZone: string | null | undefined,
+  t: Translate,
 ): string {
-  if (!host) return `Please pick a time between ${clock(block.timeMin)} and ${clock(block.timeMax)}.`;
+  if (!host) return t("Please pick a time between {start} and {end}.", { start: clock(block.timeMin), end: clock(block.timeMax) });
   const reader = usableZone(respondentZone) ?? host;
   const start = zonedToUtc({ date: hostDate, time: block.timeMin }, host);
   const end = zonedToUtc({ date: hostDate, time: block.timeMax }, host);
-  return `Please pick a time between ${clockTimeIn(start, reader)} and ${clockTimeIn(end, reader)} ${zoneName(start, reader)}.`;
+  return t("Please pick a time between {start} and {end} {zone}.", { start: clockTimeIn(start, reader), end: clockTimeIn(end, reader), zone: zoneName(start, reader) });
 }
 
 /** "14:30" as "2:30 pm", for telling a respondent the window they can pick from. */
@@ -252,6 +256,7 @@ function otherText(raw: unknown): string | null {
  * LLM-extracted values for free text. Returns canonical value on success.
  */
 export function validateAnswer(block: Block, input: unknown, opts: ValidateOptions = {}): ValidationResult {
+  const t = opts.t ?? untranslated;
   /*
    * A verified payment, before anything looks at `raw`.
    *
@@ -287,7 +292,7 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
      */
     const empty = input === undefined || input === null || (typeof input === "string" && input.trim() === "");
     if (empty && !block.required) return ok(undefined);
-    return fail("payment_unverified", "Use the Pay button to complete payment.");
+    return fail("payment_unverified", t("Use the Pay button to complete payment."));
   }
 
   /*
@@ -319,7 +324,7 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
   const raw = typeof input === "string" ? cleanText(input) : input;
   const given = typeof raw === "string" ? raw.trim() : raw;
   if (given === undefined || given === null || given === "") {
-    return block.required ? fail("required", "This question needs an answer.") : ok(undefined);
+    return block.required ? fail("required", t("This question needs an answer.")) : ok(undefined);
   }
 
   switch (block.type) {
@@ -328,10 +333,10 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
       return ok(undefined);
 
     case "short_text": {
-      if (typeof raw !== "string") return fail("type", "Please answer with text.");
+      if (typeof raw !== "string") return fail("type", t("Please answer with text."));
       const v = raw.trim();
-      if (v.length < block.minLength) return fail("too_short", `Answer must be at least ${block.minLength} characters.`);
-      if (v.length > block.maxLength) return fail("too_long", `Answer must be at most ${block.maxLength} characters.`);
+      if (v.length < block.minLength) return fail("too_short", t("Answer must be at least {min} characters.", { min: block.minLength }));
+      if (v.length > block.maxLength) return fail("too_long", t("Answer must be at most {max} characters.", { max: block.maxLength }));
       /**
        * The author's regex, run against a stranger's text — through
        * `safePattern` first.
@@ -353,7 +358,7 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
       const pattern = safePattern(block.pattern ?? undefined);
       if (pattern) {
         try {
-          if (!new RegExp(pattern).test(v)) return fail("pattern", "That doesn't match the expected format.");
+          if (!new RegExp(pattern).test(v)) return fail("pattern", t("That doesn't match the expected format."));
         } catch {
           // Unreachable: `safePattern` compiled it. Kept so a future change to
           // either side cannot turn a bad pattern into a 500.
@@ -363,17 +368,17 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
     }
 
     case "long_text": {
-      if (typeof raw !== "string") return fail("type", "Please answer with text.");
+      if (typeof raw !== "string") return fail("type", t("Please answer with text."));
       const v = raw.trim();
-      if (v.length < block.minLength) return fail("too_short", `Answer must be at least ${block.minLength} characters.`);
-      if (v.length > block.maxLength) return fail("too_long", `Answer must be at most ${block.maxLength} characters.`);
+      if (v.length < block.minLength) return fail("too_short", t("Answer must be at least {min} characters.", { min: block.minLength }));
+      if (v.length > block.maxLength) return fail("too_long", t("Answer must be at most {max} characters.", { max: block.maxLength }));
       return ok(v);
     }
 
     case "email": {
-      if (typeof raw !== "string") return fail("type", "Please enter an email address.");
+      if (typeof raw !== "string") return fail("type", t("Please enter an email address."));
       const v = raw.trim().toLowerCase();
-      if (!EMAIL_RE.test(v)) return fail("invalid_email", "That doesn't look like a valid email address.");
+      if (!EMAIL_RE.test(v)) return fail("invalid_email", t("That doesn't look like a valid email address."));
       const domain = v.split("@")[1] ?? "";
       // Domains first: they are the narrower statement, so when an author has
       // named them "use your work email" would be misleading advice — the
@@ -382,82 +387,82 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
         return fail(
           "wrong_domain",
           block.allowedDomains.length === 1
-            ? `Please use your @${block.allowedDomains[0]} email address.`
-            : `Please use an email address from ${orList(block.allowedDomains.map((d) => `@${d}`))}.`,
+            ? t("Please use your @{domain} email address.", { domain: block.allowedDomains[0]! })
+            : t("Please use an email address from {domains}.", { domains: orList(block.allowedDomains.map((d) => `@${d}`), t) }),
         );
       }
       if (block.businessOnly && FREEMAIL.includes(domain)) {
-        return fail("freemail", "Please use your work email address.");
+        return fail("freemail", t("Please use your work email address."));
       }
       return ok(v);
     }
 
     case "phone": {
-      if (typeof raw !== "string") return fail("type", "Please enter a phone number.");
+      if (typeof raw !== "string") return fail("type", t("Please enter a phone number."));
       let v = raw.trim().replace(/[\s\-().]/g, "");
       if (/^\d+$/.test(v) && block.countryHint) v = `+${countryDial(block.countryHint)}${v}`;
-      if (!E164_RE.test(v)) return fail("invalid_phone", PHONE_HINT);
+      if (!E164_RE.test(v)) return fail("invalid_phone", t("That number needs its country code — for example +91 98765 43210."));
       return ok(v);
     }
 
     case "url": {
-      if (typeof raw !== "string") return fail("type", "Please enter a URL.");
+      if (typeof raw !== "string") return fail("type", t("Please enter a URL."));
       let v = raw.trim();
       if (!/^https?:\/\//i.test(v)) v = `https://${v}`;
-      if (!URL_RE.test(v)) return fail("invalid_url", "That doesn't look like a valid URL.");
+      if (!URL_RE.test(v)) return fail("invalid_url", t("That doesn't look like a valid URL."));
       if (block.httpsOnly && !/^https:\/\//i.test(v)) {
-        return fail("invalid_url", "Please use a secure link that starts with https://.");
+        return fail("invalid_url", t("Please use a secure link that starts with https://."));
       }
       return ok(v);
     }
 
     case "number": {
       const n = typeof raw === "string" ? Number(raw.trim().replace(/,/g, "")) : raw;
-      if (typeof n !== "number" || !Number.isFinite(n)) return fail("type", "Please enter a number.");
-      if (block.integerOnly && !Number.isInteger(n)) return fail("not_integer", "Please enter a whole number.");
-      if (block.min !== undefined && n < block.min) return fail("too_small", `Please enter a number ≥ ${block.min}.`);
-      if (block.max !== undefined && n > block.max) return fail("too_large", `Please enter a number ≤ ${block.max}.`);
+      if (typeof n !== "number" || !Number.isFinite(n)) return fail("type", t("Please enter a number."));
+      if (block.integerOnly && !Number.isInteger(n)) return fail("not_integer", t("Please enter a whole number."));
+      if (block.min !== undefined && n < block.min) return fail("too_small", t("Please enter a number ≥ {min}.", { min: block.min }));
+      if (block.max !== undefined && n > block.max) return fail("too_large", t("Please enter a number ≤ {max}.", { max: block.max }));
       return ok(n);
     }
 
     case "date": {
-      if (typeof raw !== "string") return fail("type", "Please provide a date.");
+      if (typeof raw !== "string") return fail("type", t("Please provide a date."));
       const v = raw.trim();
       // `includeTime` turns the answer into an appointment, stored as the UTC
       // moment it names (see `datetime.ts`). The date bounds and the time
       // window are checked on the respondent's own clock, which is the clock
       // they were offered, so a block that gains a time keeps every rule it had.
       if (block.includeTime) {
-        if (DATE_RE.test(v)) return fail("invalid_time", "Please include a time as well.");
+        if (DATE_RE.test(v)) return fail("invalid_time", t("Please include a time as well."));
         const appt = parseAppointment(v, opts.timeZone);
         if (!appt) {
           return v.includes("T")
-            ? fail("invalid_time", "That time doesn't look right. Please give a date and a time.")
-            : fail("invalid_date", "Please give a date and a time.");
+            ? fail("invalid_time", t("That time doesn't look right. Please give a date and a time."))
+            : fail("invalid_date", t("Please give a date and a time."));
         }
         // With an author's zone the window and the date bounds are theirs:
         // "10:00 to 18:00" is their working day, whoever is booking into it.
         const host = usableZone(block.timeZone);
         const { date, time } = host ? wallTimeIn(appt.ms, host) : appt.wall;
         if (time < block.timeMin || time > block.timeMax) {
-          return fail("time_out_of_range", windowHint(block, host, date, opts.timeZone));
+          return fail("time_out_of_range", windowHint(block, host, date, opts.timeZone, t));
         }
         // A few minutes' grace: a slot picked as it began is not in the past.
         if (block.disablePast && appt.ms < Date.now() - 5 * 60000) {
-          return fail("past_date", "That time has already passed. Please pick a later one.");
+          return fail("past_date", t("That time has already passed. Please pick a later one."));
         }
-        if (block.min && date < block.min) return fail("too_early", `Date must be on or after ${block.min}.`);
-        if (block.max && date > block.max) return fail("too_late", `Date must be on or before ${block.max}.`);
+        if (block.min && date < block.min) return fail("too_early", t("Date must be on or after {min}.", { min: block.min }));
+        if (block.max && date > block.max) return fail("too_late", t("Date must be on or before {max}.", { max: block.max }));
         return ok(appointmentIso(appt.ms));
       }
       if (!DATE_RE.test(v) || Number.isNaN(Date.parse(v))) {
-        return fail("invalid_date", "Please provide a date in YYYY-MM-DD format.");
+        return fail("invalid_date", t("Please provide a date in YYYY-MM-DD format."));
       }
       if (block.disablePast && Date.parse(v) < Date.now() - 86400000) {
-        return fail("past_date", "Please pick a future date.");
+        return fail("past_date", t("Please pick a future date."));
       }
-      if (block.min && v < block.min) return fail("too_early", `Date must be on or after ${block.min}.`);
-      if (block.max && v > block.max) return fail("too_late", `Date must be on or before ${block.max}.`);
+      if (block.min && v < block.min) return fail("too_early", t("Date must be on or after {min}.", { min: block.min }));
+      if (block.max && v > block.max) return fail("too_late", t("Date must be on or before {max}.", { max: block.max }));
       return ok(v);
     }
 
@@ -465,7 +470,7 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
       if (typeof raw === "boolean") return ok(raw);
       if (raw === "true" || raw === "yes" || raw === 1) return ok(true);
       if (raw === "false" || raw === "no" || raw === 0) return ok(false);
-      return fail("type", "Please answer yes or no.");
+      return fail("type", t("Please answer yes or no."));
     }
 
     case "single_select":
@@ -485,13 +490,13 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
        */
       const other = block.type === "single_select" && block.allowOther ? otherText(raw) : null;
       if (other !== null) return ok(other);
-      return fail("invalid_option", "Please pick one of the available options.");
+      return fail("invalid_option", t("Please pick one of the available options."));
     }
 
     case "multi_select":
     case "picture_choice": {
       const arr = Array.isArray(raw) ? raw : [raw];
-      if (arr.length === 0) return block.required ? fail("required", "Please pick at least one option.") : ok(undefined);
+      if (arr.length === 0) return block.required ? fail("required", t("Please pick at least one option.")) : ok(undefined);
       const ids: string[] = [];
       // At most one entry of their own, and only where the author allowed it.
       let other: string | null = null;
@@ -502,17 +507,17 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
           continue;
         }
         const own: string | null = block.type === "multi_select" && block.allowOther && other === null ? otherText(r) : null;
-        if (own === null) return fail("invalid_option", `"${String(r)}" is not one of the available options.`);
+        if (own === null) return fail("invalid_option", t(`"{answer}" is not one of the available options.`, { answer: String(r) }));
         other = own;
       }
       if (other !== null) ids.push(other);
       if (block.type === "picture_choice") {
         if (!block.multiSelect && ids.length > 1) {
-          return fail("too_many", "Please select only one option.");
+          return fail("too_many", t("Please select only one option."));
         }
       } else {
-        if (ids.length < block.minSelections) return fail("too_few", `Please select at least ${block.minSelections} option(s).`);
-        if (ids.length > block.maxSelections) return fail("too_many", `Please select at most ${block.maxSelections} option(s).`);
+        if (ids.length < block.minSelections) return fail("too_few", t("Please select at least {min} option(s).", { min: block.minSelections }));
+        if (ids.length > block.maxSelections) return fail("too_many", t("Please select at most {max} option(s).", { max: block.maxSelections }));
       }
       return ok(ids);
     }
@@ -521,22 +526,22 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
     case "nps":
     case "opinion_scale": {
       const n = typeof raw === "string" ? Number(raw.trim()) : raw;
-      if (typeof n !== "number" || !Number.isInteger(n)) return fail("type", "Please pick a number.");
+      if (typeof n !== "number" || !Number.isInteger(n)) return fail("type", t("Please pick a number."));
       const min = block.type === "rating" ? 1 : block.type === "nps" ? 0 : block.startAt;
       const max = block.type === "rating" ? block.scale : block.type === "nps" ? 10 : block.startAt + block.steps - 1;
-      if (n < (min ?? 0) || n > (max ?? 10)) return fail("out_of_range", `Please pick a number between ${min} and ${max}.`);
+      if (n < (min ?? 0) || n > (max ?? 10)) return fail("out_of_range", t("Please pick a number between {min} and {max}.", { min: String(min), max: String(max) }));
       return ok(n);
     }
 
     case "ranking": {
       if (!Array.isArray(raw) || raw.length !== block.items.length) {
-        return fail("incomplete_ranking", "Please rank all the items.");
+        return fail("incomplete_ranking", t("Please rank all the items."));
       }
       const itemIds = new Set(block.items.map((i) => i.id));
       const seen = new Set<string>();
       for (const r of raw) {
         if (typeof r !== "string" || !itemIds.has(r) || seen.has(r)) {
-          return fail("invalid_ranking", "Each item can only be ranked once.");
+          return fail("invalid_ranking", t("Each item can only be ranked once."));
         }
         seen.add(r);
       }
@@ -545,39 +550,39 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
 
     case "matrix": {
       if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-        return fail("type", "Please answer each row.");
+        return fail("type", t("Please answer each row."));
       }
       const rec = raw as Record<string, unknown>;
       const rowIds = new Set(block.rows.map((r) => r.id));
       const colIds = new Set(block.columns.map((c) => c.id));
       const out: Record<string, string | string[]> = {};
       for (const [rowId, val] of Object.entries(rec)) {
-        if (!rowIds.has(rowId)) return fail("invalid_row", "Unknown row.");
+        if (!rowIds.has(rowId)) return fail("invalid_row", t("Unknown row."));
         if (block.multiplePerRow) {
           const arr = Array.isArray(val) ? val : [val];
           if (!arr.every((c) => typeof c === "string" && colIds.has(c))) {
-            return fail("invalid_column", "Unknown column selection.");
+            return fail("invalid_column", t("Unknown column selection."));
           }
           out[rowId] = arr as string[];
         } else {
           if (typeof val !== "string" || !colIds.has(val)) {
-            return fail("invalid_column", "Unknown column selection.");
+            return fail("invalid_column", t("Unknown column selection."));
           }
           out[rowId] = val;
         }
       }
       if (block.required && Object.keys(out).length !== block.rows.length) {
-        return fail("incomplete_matrix", "Please answer every row.");
+        return fail("incomplete_matrix", t("Please answer every row."));
       }
       return ok(out);
     }
 
     case "file_upload": {
-      if (!isFileDescriptorArray(raw)) return fail("type", "Please upload a file.");
-      if (raw.length > block.maxFiles) return fail("too_many_files", `You can upload up to ${block.maxFiles} file(s).`);
+      if (!isFileDescriptorArray(raw)) return fail("type", t("Please upload a file."));
+      if (raw.length > block.maxFiles) return fail("too_many_files", t("You can upload up to {max} file(s).", { max: block.maxFiles }));
       for (const f of raw) {
         if (f.size > block.maxSizeMB * 1024 * 1024) {
-          return fail("file_too_large", `"${f.filename}" exceeds the ${block.maxSizeMB}MB limit.`);
+          return fail("file_too_large", t(`"{filename}" exceeds the {size}MB limit.`, { filename: f.filename, size: block.maxSizeMB }));
         }
       }
       return ok(raw);
@@ -585,14 +590,14 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
 
     case "signature": {
       if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-        return fail("type", "Please provide a signature.");
+        return fail("type", t("Please provide a signature."));
       }
       const sig = raw as { fileId?: unknown; r2Key?: unknown; signedName?: unknown };
       if (typeof sig.fileId !== "string" || typeof sig.r2Key !== "string") {
-        return fail("type", "Please provide a signature.");
+        return fail("type", t("Please provide a signature."));
       }
       if (block.drawnNameRequired && typeof sig.signedName !== "string") {
-        return fail("name_required", "Please type your name to sign.");
+        return fail("name_required", t("Please type your name to sign."));
       }
       // The typed name is free text and had no cap. Cleaned and bounded like a
       // name anywhere else; the two ids are checked against the `files` table
@@ -607,7 +612,7 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
     }
 
     case "payment": {
-      if (typeof raw !== "object" || raw === null) return fail("type", "Payment required.");
+      if (typeof raw !== "object" || raw === null) return fail("type", t("Payment required."));
       const p = raw as {
         status?: unknown;
         method?: unknown;
@@ -617,7 +622,7 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
         paymentId?: unknown;
       };
       if (p.status !== "paid" && p.status !== "pending") {
-        return fail("payment_pending", "Payment has not been completed yet.");
+        return fail("payment_pending", t("Payment has not been completed yet."));
       }
       return ok({
         status: p.status,
@@ -636,10 +641,10 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
     }
 
     case "scheduling": {
-      if (typeof raw !== "object" || raw === null) return fail("type", "Please book a time slot.");
+      if (typeof raw !== "object" || raw === null) return fail("type", t("Please book a time slot."));
       const s = raw as { provider?: unknown; url?: unknown; slotIso?: unknown; confirmedAt?: unknown };
       if (typeof s.provider !== "string" || typeof s.url !== "string") {
-        return fail("type", "Please book a time slot.");
+        return fail("type", t("Please book a time slot."));
       }
       /**
        * The provider and the booking URL come back from the respondent's side
@@ -674,7 +679,7 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
     case "contact_info":
     case "address": {
       if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-        return fail("type", "Please fill in the details.");
+        return fail("type", t("Please fill in the details."));
       }
       const rec = raw as Record<string, unknown>;
       const out: Record<string, string> = {};
@@ -730,7 +735,7 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
         for (const field of ["email", "phone"] as const) {
           const given = out[field];
           if (given === undefined) continue;
-          const res = validateAnswer(contactFieldBlock(block, field), given);
+          const res = validateAnswer(contactFieldBlock(block, field), given, { t });
           if (!res.ok) {
             // Dropped from `out` rather than kept: `out` becomes the prefill,
             // and a box handed back the value that was just refused reads as
@@ -750,7 +755,7 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
       }
 
       if (badLocation) {
-        bad = { field: "location", code: "invalid_url", hint: "That location link doesn't look right. Paste a maps link, or share your location instead." };
+        bad = { field: "location", code: "invalid_url", hint: t("That location link doesn't look right. Paste a maps link, or share your location instead.") };
       }
 
       if (bad) {
@@ -785,15 +790,15 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
      * export.
      */
     case "field_group": {
-      if (!Array.isArray(raw)) return fail("type", `Please fill in the ${block.itemLabel.toLowerCase()} details.`);
+      if (!Array.isArray(raw)) return fail("type", t("Please fill in the {item} details.", { item: block.itemLabel.toLowerCase() }));
       if (raw.length === 0) {
-        return block.required ? fail("required", "This question needs an answer.") : ok(undefined);
+        return block.required ? fail("required", t("This question needs an answer.")) : ok(undefined);
       }
       if (raw.length > block.maxEntries) {
-        return fail("too_many", `You can add up to ${block.maxEntries} ${plural(block.itemLabel, block.maxEntries)}.`);
+        return fail("too_many", t("You can add up to {max} {items}.", { max: block.maxEntries, items: plural(block.itemLabel, block.maxEntries) }));
       }
       if (raw.length < block.minEntries) {
-        return fail("too_few", `Please give at least ${block.minEntries} ${plural(block.itemLabel, block.minEntries)}.`);
+        return fail("too_few", t("Please give at least {min} {items}.", { min: block.minEntries, items: plural(block.itemLabel, block.minEntries) }));
       }
       // Built once for the whole answer rather than per entry: five fields
       // across five entries is one parse each, not twenty-five.
@@ -801,12 +806,12 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
       const entries: Record<string, string | number | boolean>[] = [];
       for (const [i, entry] of raw.entries()) {
         if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
-          return fail("type", `Please fill in ${block.itemLabel.toLowerCase()} ${i + 1}.`);
+          return fail("type", t("Please fill in {item} {number}.", { item: block.itemLabel.toLowerCase(), number: i + 1 }));
         }
         const rec = entry as Record<string, unknown>;
         const out: Record<string, string | number | boolean> = {};
         for (const [field, sub] of subs) {
-          const result = validateAnswer(sub, rec[field.key]);
+          const result = validateAnswer(sub, rec[field.key], { t });
           if (!result.ok) {
             // Which row and which column, said before the reason. "Please
             // enter a valid email address", arriving on a form with four
@@ -818,15 +823,15 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
               code: result.code,
               hint:
                 result.code === "required"
-                  ? `${where} is missing.`
-                  : `${where} — ${lowerFirst(result.hint ?? "that isn't valid.")}`,
+                  ? t("{where} is missing.", { where })
+                  : t("{where} — {reason}", { where, reason: lowerFirst(result.hint ?? t("that isn't valid.")) }),
             };
           }
           const v = result.value;
           if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") out[field.key] = v;
         }
         if (Object.keys(out).length === 0) {
-          return fail("incomplete", `${block.itemLabel} ${i + 1} is empty — fill it in or remove it.`);
+          return fail("incomplete", t("{item} {number} is empty — fill it in or remove it.", { item: block.itemLabel, number: i + 1 }));
         }
         entries.push(out);
       }
@@ -852,20 +857,20 @@ export function validateAnswer(block: Block, input: unknown, opts: ValidateOptio
        * answer and the flow decides what happens next.
        */
       if (declined) {
-        if (!block.allowDecline) return fail("consent_required", "Please accept to continue.");
+        if (!block.allowDecline) return fail("consent_required", t("Please accept to continue."));
         return ok(stamp(false));
       }
       if (raw !== true && raw !== "true") {
         return fail(
           "consent_required",
-          block.allowDecline ? "Please choose whether you agree." : "Please accept to continue.",
+          block.allowDecline ? t("Please choose whether you agree.") : t("Please accept to continue."),
         );
       }
       return ok(stamp(true));
     }
 
     default:
-      return fail("unsupported", "Unsupported block type.");
+      return fail("unsupported", t("Unsupported block type."));
   }
 }
 

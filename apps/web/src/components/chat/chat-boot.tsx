@@ -1,6 +1,7 @@
 "use client";
 
 import { LogoMark } from "@/components/brand/logo";
+import { useT } from "./i18n";
 
 /**
  * What fills the screen while we work out which screen this is.
@@ -25,6 +26,7 @@ import { LogoMark } from "@/components/brand/logo";
  * a bar that lies is worse than a shape that waits.
  */
 export function ChatBoot({ title, logoUrl }: { title?: string; logoUrl?: string | null }) {
+  const t = useT();
   return (
     <div className="flex h-full min-h-0 flex-col items-center justify-center px-6">
       {logoUrl ? (
@@ -53,7 +55,7 @@ export function ChatBoot({ title, logoUrl }: { title?: string; logoUrl?: string 
 
       {/* The only text, and it is a status rather than a promise of speed. */}
       <p className="mt-3.5 text-sm opacity-50" role="status">
-        Getting the conversation ready…
+        {t("Getting the conversation ready…")}
       </p>
     </div>
   );

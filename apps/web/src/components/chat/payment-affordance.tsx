@@ -15,6 +15,7 @@ import { Chip } from "./composers/primitives";
 import type { PaymentState } from "./use-chat";
 import { qrSvg } from "@/lib/qr";
 import { ProviderMark } from "@/components/integrations/provider-logo";
+import { useT } from "./i18n";
 
 /**
  * What the gateway card can ask the session to do. Absent where there is no
@@ -99,6 +100,7 @@ export function GatewayPaymentAffordance({
   actions?: GatewayPaymentActions;
   onSkip: () => void;
 }) {
+  const t = useT();
   const [checking, setChecking] = useState(false);
   /** E.164 from the phone field, for the `phone` phase. */
   const [phone, setPhone] = useState("");
@@ -113,22 +115,22 @@ export function GatewayPaymentAffordance({
   const provider = payment?.provider ?? block.paymentProvider ?? null;
   const secureLine = provider ? (
     <>
-      <span className="opacity-60">Secure checkout by</span>
+      <span className="opacity-60">{t("Secure checkout by")}</span>
       <ProviderMark provider={provider} className="ml-0.5" />
       <span className="font-medium opacity-80">{PAYMENT_PROVIDER_LABELS[provider]}</span>
     </>
   ) : (
-    <span className="opacity-60">Secure checkout</span>
+    <span className="opacity-60">{t("Secure checkout")}</span>
   );
   const phase = payment?.phase ?? "idle";
   const canAct = Boolean(actions) && !disabled;
   const skip = block.required ? null : (
     <button type="button" onClick={onSkip} disabled={disabled} className="text-xs underline opacity-60 hover:opacity-100">
-      Skip
+      {t("Skip")}
     </button>
   );
   // The amount is the card's headline, so the button does not repeat it.
-  const payLabel = "Pay";
+  const payLabel = t("Pay");
 
   async function check() {
     if (!actions) return;
@@ -138,7 +140,7 @@ export function GatewayPaymentAffordance({
     setChecking(false);
     // "paid" needs no line: the card is about to go. Anything else is said
     // plainly, so the button does not look like it did nothing.
-    setChecked(status === "paid" ? null : "Not confirmed yet. If you've just paid, give it a moment.");
+    setChecked(status === "paid" ? null : t("Not confirmed yet. If you've just paid, give it a moment."));
   }
 
   if (phase === "phone") {
@@ -151,7 +153,7 @@ export function GatewayPaymentAffordance({
             if (phone && canAct) actions?.start(block.ref, { phone });
           }}
         >
-          <p className="text-sm">{payment?.message ?? "What number should the payment receipt go to?"}</p>
+          <p className="text-sm">{payment?.message ? t(payment.message) : t("What number should the payment receipt go to?")}</p>
           <PhoneInput value={phone} onChange={setPhone} variant="field" autoFocus name="payment-phone" />
           <PayButton type="submit" disabled={!canAct || !phone}>
             {payLabel}
@@ -164,7 +166,7 @@ export function GatewayPaymentAffordance({
                 disabled={!canAct}
                 className="text-xs underline opacity-60 hover:opacity-100"
               >
-                Simulate instead
+                {t("Simulate instead")}
               </button>
             </div>
           ) : null}
@@ -176,9 +178,9 @@ export function GatewayPaymentAffordance({
 
   if (phase === "awaiting" && payment?.preview) {
     return (
-      <PaymentCard price={price} breakdown={block.amountBreakdown} note="Preview · no real payment is taken">
+      <PaymentCard price={price} breakdown={block.amountBreakdown} note={t("Preview · no real payment is taken")}>
         <PayButton disabled={!canAct} onClick={() => actions?.simulate()}>
-          Simulate payment
+          {t("Simulate payment")}
         </PayButton>
         <div className="text-center">
           <button
@@ -187,7 +189,7 @@ export function GatewayPaymentAffordance({
             disabled={!canAct}
             className="text-xs underline opacity-60 hover:opacity-100"
           >
-            Cancel
+            {t("Cancel")}
           </button>
         </div>
       </PaymentCard>
@@ -206,9 +208,9 @@ export function GatewayPaymentAffordance({
         <div className="flex gap-2 rounded-xl bg-[var(--cf-bg)] px-3 py-2.5 text-sm">
           <CircleAlert className="mt-0.5 size-4 shrink-0 opacity-60" aria-hidden />
           <div className="min-w-0 space-y-0.5">
-            <p className="font-medium">Payment not completed</p>
+            <p className="font-medium">{t("Payment not completed")}</p>
             <p className="text-xs opacity-70">
-              The checkout closed before the payment went through. If you did pay, this updates on its own.
+              {t("The checkout closed before the payment went through. If you did pay, this updates on its own.")}
             </p>
           </div>
         </div>
@@ -222,7 +224,7 @@ export function GatewayPaymentAffordance({
             disabled={!canAct || checking}
             className="underline opacity-60 hover:opacity-100"
           >
-            {checking ? "Checking…" : "I've paid, check again"}
+            {checking ? t("Checking…") : t("I've paid, check again")}
           </button>
           <button
             type="button"
@@ -230,7 +232,7 @@ export function GatewayPaymentAffordance({
             disabled={!canAct}
             className="underline opacity-60 hover:opacity-100"
           >
-            Cancel
+            {t("Cancel")}
           </button>
         </div>
         {checked && <p className="text-center text-xs opacity-70">{checked}</p>}
@@ -244,15 +246,15 @@ export function GatewayPaymentAffordance({
     return (
       <PaymentCard price={price} breakdown={block.amountBreakdown}>
         {blocked ? (
-          <p className="text-sm">Your browser didn&apos;t open the checkout. Tap below to open it.</p>
+          <p className="text-sm">{t("Your browser didn't open the checkout. Tap below to open it.")}</p>
         ) : (
           <div className="flex items-center gap-2.5 rounded-xl bg-[var(--cf-bg)] px-3 py-2.5 text-sm">
             <Loader2 className="size-4 shrink-0 animate-spin opacity-70" aria-hidden />
-            <span>Complete the payment in the checkout window. This updates on its own.</span>
+            <span>{t("Complete the payment in the checkout window. This updates on its own.")}</span>
           </div>
         )}
         <PayButton disabled={!canAct} onClick={() => actions?.reopen()}>
-          {blocked ? "Open checkout" : "Open checkout again"}
+          {blocked ? t("Open checkout") : t("Open checkout again")}
         </PayButton>
         <div className="flex items-center justify-center gap-4 text-xs">
           <button
@@ -261,7 +263,7 @@ export function GatewayPaymentAffordance({
             disabled={!canAct || checking}
             className="underline opacity-60 hover:opacity-100"
           >
-            {checking ? "Checking…" : "I've paid, check now"}
+            {checking ? t("Checking…") : t("I've paid, check now")}
           </button>
           <button
             type="button"
@@ -269,7 +271,7 @@ export function GatewayPaymentAffordance({
             disabled={!canAct}
             className="underline opacity-60 hover:opacity-100"
           >
-            Cancel
+            {t("Cancel")}
           </button>
         </div>
         {checked && <p className="text-center text-xs opacity-70">{checked}</p>}
@@ -288,18 +290,18 @@ export function GatewayPaymentAffordance({
     return (
       <PaymentCard
         price={price}
-        note={previewRefusal ? "Preview · no real payment is taken" : undefined}
+        note={previewRefusal ? t("Preview · no real payment is taken") : undefined}
       >
         <p role="alert" className={previewRefusal ? "text-sm opacity-70" : "text-destructive text-sm"}>
-          {payment?.message ?? "That payment didn't go through."}
+          {payment?.message ? t(payment.message) : t("That payment didn't go through.")}
         </p>
         {payment?.preview ? (
           <PayButton disabled={!canAct} onClick={() => actions?.simulate()}>
-            Simulate payment
+            {t("Simulate payment")}
           </PayButton>
         ) : (
           <PayButton disabled={!canAct} onClick={() => actions?.start(block.ref)}>
-            Try again
+            {t("Try again")}
           </PayButton>
         )}
         <CardFooter secureLine={secureLine} skip={skip} />
@@ -316,7 +318,7 @@ export function GatewayPaymentAffordance({
         {starting ? (
           <>
             <Loader2 className="size-4 animate-spin" aria-hidden />
-            Opening checkout…
+            {t("Opening checkout…")}
           </>
         ) : (
           payLabel
@@ -414,10 +416,15 @@ export function ManualPaymentAffordance({
   onStructured: (value: unknown, display: string) => void;
   onSkip: () => void;
 }) {
+  const t = useT();
   // Generated once per mount, not per render: the code shown in the QR must be
   // the same one recorded on the answer, or reconciliation matches nothing.
   const [reference] = useState(paymentReference);
   const [opened, setOpened] = useState(false);
+  // The code sits inside the sentence, wherever the language puts it.
+  const [beforeReference, afterReference] = t(
+    "Use reference {reference} in the payment note so it can be matched to your response.",
+  ).split("{reference}");
 
   const currency = block.currency ?? "INR";
   const amount = typeof block.amount === "number" && block.amount > 0 ? block.amount : undefined;
@@ -449,7 +456,7 @@ export function ManualPaymentAffordance({
         reference,
         amount,
       },
-      priceLabel ? `Paid ${priceLabel}` : "Paid",
+      priceLabel ? t("Paid {amount}", { amount: priceLabel }) : t("Paid"),
     );
   }
 
@@ -466,9 +473,9 @@ export function ManualPaymentAffordance({
   if (!target) {
     return (
       <div className="rounded-[var(--cf-radius-card)] border border-dashed border-[var(--cf-chip-border)] px-4 py-4 text-center text-sm">
-        <p>This payment step isn&apos;t set up yet.</p>
+        <p>{t("This payment step isn't set up yet.")}</p>
         <button type="button" onClick={onSkip} className="mt-1.5 text-xs underline opacity-60">
-          Continue without paying
+          {t("Continue without paying")}
         </button>
       </div>
     );
@@ -482,11 +489,11 @@ export function ManualPaymentAffordance({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={qrDataUrl}
-            alt={`UPI QR code to pay ${block.upiId}`}
+            alt={t("UPI QR code to pay {id}", { id: block.upiId ?? "" })}
             className="size-44 rounded-lg bg-white p-2"
           />
           <p className="text-center text-xs opacity-70">
-            Scan with any UPI app, or tap below on your phone.
+            {t("Scan with any UPI app, or tap below on your phone.")}
           </p>
           <p className="font-mono text-xs opacity-70">{block.upiId}</p>
         </div>
@@ -503,26 +510,25 @@ export function ManualPaymentAffordance({
           className="flex h-10 items-center rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] px-5 text-sm font-medium text-[var(--cf-accent-text)]"
         >
           {block.paymentMethod === "upi"
-            ? "Pay with a UPI app"
+            ? t("Pay with a UPI app")
             : priceLabel
-              ? `Pay ${priceLabel}`
-              : "Open the payment page"}
+              ? t("Pay {amount}", { amount: priceLabel })
+              : t("Open the payment page")}
         </a>
 
         <Chip disabled={disabled} onClick={confirm}>
-          {opened ? "I’ve paid" : "I’ve already paid"}
+          {opened ? t("I’ve paid") : t("I’ve already paid")}
         </Chip>
 
         {block.required ? null : (
           <button type="button" onClick={onSkip} className="text-xs underline opacity-60">
-            Skip
+            {t("Skip")}
           </button>
         )}
       </div>
 
       <p className="text-xs opacity-60">
-        Use reference <span className="font-mono font-medium">{reference}</span> in the payment note
-        so it can be matched to your response.
+        {beforeReference}<span className="font-mono font-medium">{reference}</span>{afterReference}
       </p>
     </div>
   );

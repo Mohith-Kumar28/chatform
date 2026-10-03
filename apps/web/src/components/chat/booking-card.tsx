@@ -2,6 +2,7 @@
 
 import { ArrowUpRight, CalendarDays, Video } from "lucide-react";
 import { detectSchedulingProvider, isMeetingRoom, schedulingLabel, type SchedulingProvider } from "@repo/form-schema";
+import { useT } from "./i18n";
 
 const PROVIDER_NAME: Record<SchedulingProvider, string | null> = {
   cal: "Cal.com",
@@ -53,6 +54,7 @@ export function BookingCard({
   disabled?: boolean;
   onOpen: (room: boolean) => void;
 }) {
+  const t = useT();
   // A bare Zoom or Meet room has no slot to pick: it is joined, not booked.
   const room = url ? isMeetingRoom(url) : false;
   const Icon = room ? Video : CalendarDays;
@@ -69,7 +71,7 @@ export function BookingCard({
           </div>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">{provider ?? (room ? "Video call" : "Booking page")}</p>
+          <p className="text-sm font-semibold">{provider ?? (room ? t("Video call") : t("Booking page"))}</p>
           {url && <p className="truncate text-xs opacity-60">{shortLink(url)}</p>}
         </div>
       </div>

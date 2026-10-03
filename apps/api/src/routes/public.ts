@@ -5,7 +5,7 @@ import { validator } from "../lib/validator.js";
 import { afterResponse } from "../lib/form-activity.js";
 import { emitWebhookEvent } from "../lib/webhooks.js";
 import { z } from "zod";
-import { sha256Hex, toPublicConfig, RefString, type FormDoc, readFormDoc } from "@repo/form-schema";
+import { sha256Hex, toPublicConfig, pickFormLanguage, RefString, type FormDoc, readFormDoc } from "@repo/form-schema";
 import { EmbedInput, HiddenFieldsInput, ProviderToken } from "../lib/inputs.js";
 import { respondentToken, hashToken } from "./helpers.js";
 import type { Bindings } from "../env.js";
@@ -13,6 +13,7 @@ import { timingSafeEqual, isHashedPassword, verifyPassword } from "../lib/crypto
 import { SessionDO } from "../do/session-do.js";
 import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
 import { completedSubmissions, openSession, type FormRow } from "../lib/open-session.js";
+import { localizedForm, offeredLanguages, deferOn } from "../lib/translations.js";
 import { respondentKey, type RespondentKey } from "../lib/respondent-key.js";
 import { resolveRespondent } from "../lib/respondents.js";
 import { recordFeedback, FEEDBACK_DAILY_CAP, SNAPSHOT_MAX_BYTES, snapshotKeyFor } from "../lib/feedback.js";
@@ -88,6 +89,8 @@ const createSessionSchema = z.object({
    * nothing is the same as absent.
    */
   timezone: z.string().max(64).optional(),
+  /** The language the respondent chose, of the ones the form offers. Absent is the form as written. */
+  language: z.string().max(8).optional(),
   /**
    * Start this response from nothing, whatever the device key matches.
    *
@@ -318,8 +321,27 @@ sessionsRouter.get(
     capacityClosed ||
     gatewayPaymentsLapsed(stored, ent) ||
     (await ceilingReached(c.env, formRow.organization_id, ent));
-  const config = toPublicConfig(doc, {
+  /**
+   * Which language this respondent reads the form in.
+   *
+   * Only ever one they asked for by name (`?lang=`, which the page's language
+   * prompt and switcher set). With no choice made it is the form as written,
+   * and a form offered in one language never reaches the lookup at all.
+   */
+  const languages = await offeredLanguages(c.env, { formId: formRow.id, doc });
+  const language = pickFormLanguage(languages, [c.req.query("lang")]);
+  const shown = await localizedForm(c.env, {
+    formId: formRow.id,
+    organizationId: formRow.organization_id,
+    doc,
+    lang: language,
+    defer: deferOn(c),
+  });
+  const config = toPublicConfig(shown.doc, {
     slug: formRow.slug,
+    language,
+    languages,
+    messages: shown.messages,
     submissionsTaken,
     /**
      * The watermark decision, made here and nowhere else.
@@ -332,7 +354,7 @@ sessionsRouter.get(
      */
     brandingHidden: brandingHiddenFor(doc, ent),
     closed,
-    closedMessage: closed ? doc.settings.closeRules.closedMessageMd : undefined,
+    closedMessage: closed ? shown.doc.settings.closeRules.closedMessageMd : undefined,
     closedReason: closed ? closedReason : undefined,
     // Without this the social preview image was parsed, stored, and never
     // turned into a URL, so every share card came out blank.
@@ -564,6 +586,29 @@ sessionsRouter.post(
     });
     mark("respondent");
 
+    /**
+     * The session is opened on the form in the respondent's language and keeps
+     * it: the document a session holds is the one it was opened with, so the
+     * interviewer, the questions and the endings all agree for its whole life.
+     * Ids and refs are the same in every language, which is why the answers
+     * land where they always did.
+     */
+    let sessionDoc = opened.runtimeDoc;
+    if (body.language && body.language !== sessionDoc.settings.language) {
+      const offered = await offeredLanguages(c.env, { formId: formRow.id, doc: sessionDoc });
+      if (offered.includes(body.language)) {
+        sessionDoc = (
+          await localizedForm(c.env, {
+            formId: formRow.id,
+            organizationId: formRow.organization_id,
+            doc: sessionDoc,
+            lang: body.language,
+          })
+        ).doc;
+      }
+    }
+    mark("language");
+
     const result = await stub(c.env, opened.sessionId).init({
       sessionId: opened.sessionId,
       formId: formRow.id,
@@ -572,7 +617,7 @@ sessionsRouter.post(
       slug: formRow.slug,
       brandingHidden: opened.brandingHidden,
       aiDegraded: opened.aiDegraded,
-      docJson: opened.runtimeDoc,
+      docJson: sessionDoc,
       respondentToken: opened.respondentToken,
       hiddenFields: body.hiddenFields ?? {},
       fingerprint: opened.device.value || null,

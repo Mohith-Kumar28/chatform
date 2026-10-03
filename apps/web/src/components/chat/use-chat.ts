@@ -26,6 +26,7 @@ import {
 import { rememberEmbedQuery, storageKey, submittedKey } from "./session-store";
 import { respondentContext } from "./respondent-context";
 import { getTurnstileToken, TURNSTILE_TOKEN_TTL_MS } from "./turnstile";
+import { msg } from "./i18n";
 
 export interface ChatMessage {
   /**
@@ -326,25 +327,25 @@ function paymentRefusalMessage(
 ): string {
   switch (code) {
     case "too_many_attempts":
-      return "That's too many attempts to pay here. Please contact whoever sent you this form.";
+      return msg("That's too many attempts to pay here. Please contact whoever sent you this form.");
     case "payment_unavailable":
       // The server's words when it has them: "unavailable" covers both a form that cannot take
       // payments and a total the respondent's own answers put outside the form's limits, and
       // only the second is theirs to fix.
-      return serverMessage || "Payment isn't available on this form right now. Please try again later.";
+      return serverMessage || msg("Payment isn't available on this form right now. Please try again later.");
     case "plan_required":
       // The server's sentence, for the same reason as `payment_unavailable`: it knows
       // whether this is the owner's plan or the author's own preview, and saying
       // something different here left two explanations for one refusal.
-      return serverMessage || "Payment isn't available on this form right now. Please try again later.";
+      return serverMessage || msg("Payment isn't available on this form right now. Please try again later.");
     case "preview_live_account":
-      return "This form takes payments on a live account, which a preview never charges. Simulate the payment instead, or connect a test account to try real checkout.";
+      return msg("This form takes payments on a live account, which a preview never charges. Simulate the payment instead, or connect a test account to try real checkout.");
     case "live_account_in_test_mode":
-      return "This is a test session, which never charges a live account.";
+      return msg("This is a test session, which never charges a live account.");
     default:
       return status === 429
-        ? "You're going a bit fast. Give it a moment, then try again."
-        : "Checkout couldn't start. Please try again.";
+        ? msg("You're going a bit fast. Give it a moment, then try again.")
+        : msg("Checkout couldn't start. Please try again.");
   }
 }
 
@@ -382,6 +383,8 @@ interface UseChatOptions {
   onRestart?: () => void;
   /** The form's `captchaEnabled`: run Cloudflare's background bot check before opening a session. */
   captcha?: boolean;
+  /** The language the page is in, so the conversation is opened in the same one. */
+  language?: string;
   /**
    * From `?cf_pay=`: the payment record a gateway redirect has just sent this
    * respondent back from.
@@ -565,6 +568,7 @@ export function useChat({
   paymentReturn,
   paymentCancelled,
   captcha = false,
+  language,
 }: UseChatOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pollResults, setPollResults] = useState<Record<string, PollResult>>({});
@@ -921,7 +925,7 @@ export function useChat({
               prev.some((m) => m.id === "sys_verified")
                 ? prev
                 : [
-                    { id: "sys_verified", role: "system", text: `Verified as ${who.label}` },
+                    { id: "sys_verified", role: "system", text: msg("Verified as {name}").replace("{name}", who.label) },
                     ...prev,
                   ],
             );
@@ -1138,13 +1142,13 @@ export function useChat({
       // and never listened for here.
       on("error_event", (e) => {
         const { message } = JSON.parse((e as MessageEvent).data) as { message?: string };
-        setError(message ?? "Something went wrong");
+        setError(message ?? msg("Something went wrong"));
         settleTurn();
       });
 
       on("rate_limited", (e) => {
         const { message } = JSON.parse((e as MessageEvent).data) as { message?: string };
-        setRateLimited(message ?? "You're going a bit fast. Give it a moment.");
+        setRateLimited(message ?? msg("You're going a bit fast. Give it a moment."));
         settleTurn();
       });
 
@@ -1174,7 +1178,7 @@ export function useChat({
           // Replay re-delivers this event, and it must not stack up.
           prev.some((m) => m.id === "sys_verified")
             ? prev
-            : [...prev, { id: "sys_verified", role: "system", text: `Verified as ${who.label}` }],
+            : [...prev, { id: "sys_verified", role: "system", text: msg("Verified as {name}").replace("{name}", who.label) }],
         );
       });
 
@@ -1382,7 +1386,7 @@ export function useChat({
           );
         } else {
           setStatus("error");
-          setError("We lost the connection and couldn't get it back.");
+          setError(msg("We lost the connection and couldn't get it back."));
         }
       };
     },
@@ -1612,6 +1616,7 @@ export function useChat({
            */
           ...respondentContext(),
           ...(freshRef.current ? { fresh: true } : {}),
+          ...(language ? { language } : {}),
         };
         const openWith = (token: string | undefined) =>
           fetch(`${apiOrigin}/p/forms/${slug}/sessions`, {
@@ -1630,7 +1635,7 @@ export function useChat({
           const code = ((await res.clone().json().catch(() => null)) as { error?: { code?: string } } | null)?.error?.code;
           if (code === "captcha_required") {
             const proof = await getTurnstileToken(undefined, { interactive: true });
-            if (!proof) throw new Error("We couldn't load the check that you're not a bot. Check your connection and tap Retry.");
+            if (!proof) throw new Error(msg("We couldn't load the check that you're not a bot. Check your connection and tap Retry."));
             res = await openWith(proof);
           }
         }
@@ -1679,11 +1684,14 @@ export function useChat({
           if (res.status === 429) {
             const secs = Number(res.headers.get("retry-after")) || 60;
             throw new Error(
-              `This form is being opened a lot from your network right now. ` +
-                `Try again in about ${secs < 90 ? "a minute" : `${Math.ceil(secs / 60)} minutes`}.`,
+              secs < 90
+                ? msg("This form is being opened a lot from your network right now. Try again in about a minute.")
+                : msg(
+                    "This form is being opened a lot from your network right now. Try again in about {minutes} minutes.",
+                  ).replace("{minutes}", String(Math.ceil(secs / 60))),
             );
           }
-          throw new Error(body?.error?.message ?? "Could not start session");
+          throw new Error(body?.error?.message ?? msg("Could not start session"));
         }
         // Spent. A later reload is an ordinary visit and should resume again.
         freshRef.current = false;
@@ -1715,14 +1723,14 @@ export function useChat({
         connectStream(data.sessionId, data.respondentToken, 0);
       } catch (err) {
         setStatus("error");
-        setError(err instanceof Error ? err.message : "Connection failed");
+        setError(err instanceof Error ? err.message : msg("Connection failed"));
         setResolving(false);
       } finally {
         pendingRef.current = null;
       }
     })();
     await pendingRef.current;
-  }, [slug, apiOrigin, hiddenFields, resumeToken, followUpId, connectStream, existingSession, captcha]);
+  }, [slug, apiOrigin, hiddenFields, resumeToken, followUpId, connectStream, existingSession, captcha, language]);
 
   /** Manual retry after a hard failure — replaces a full page reload. */
   const retry = useCallback(() => {
@@ -1796,14 +1804,14 @@ export function useChat({
           if (attempt < attempts - 1) continue;
           settleTurn();
           settleEcho();
-          setError("That didn't send. Check your connection and try again.");
+          setError(msg("That didn't send. Check your connection and try again."));
           return;
         }
 
         if (res.ok) return;
 
         if (res.status === 429) {
-          setRateLimited("You're going a bit fast. Give it a moment.");
+          setRateLimited(msg("You're going a bit fast. Give it a moment."));
           settleTurn();
           settleEcho();
           return;
@@ -1815,7 +1823,7 @@ export function useChat({
           if (attempt < attempts - 1) continue;
           settleTurn();
           settleEcho();
-          setError("We couldn't reach the form just now. Tap retry to send that again.");
+          setError(msg("We couldn't reach the form just now. Tap retry to send that again."));
           return;
         }
 
@@ -1826,7 +1834,7 @@ export function useChat({
         if (code === "session_closed" || code === "session_not_found" || code === "unauthorized") {
           // Reconnecting cannot revive this one; the way back is a new session.
           sessionDeadRef.current = true;
-          setError("This conversation has expired. Tap retry to start a fresh one.");
+          setError(msg("This conversation has expired. Tap retry to start a fresh one."));
         } else if (
           code === "auth_required" ||
           code === "stale_ref" ||
@@ -1843,7 +1851,7 @@ export function useChat({
         } else if (code !== "turn_failed") {
           // `turn_failed` already announced itself on the stream as an
           // `error_event`; anything else has said nothing at all until now.
-          setError("That answer didn't go through. Tap retry, or send it again.");
+          setError(msg("That answer didn't go through. Tap retry, or send it again."));
         }
         return;
       }
@@ -2100,7 +2108,7 @@ export function useChat({
             signal: AbortSignal.timeout(POST_TIMEOUT_MS),
           });
         } catch {
-          fail("That didn't reach the form. Check your connection and try again.");
+          fail(msg("That didn't reach the form. Check your connection and try again."));
           return;
         }
 
@@ -2123,7 +2131,7 @@ export function useChat({
             preopened?.close();
             setPendingPayment(null);
             sessionDeadRef.current = true;
-            setError("This conversation has expired. Tap retry to start a fresh one.");
+            setError(msg("This conversation has expired. Tap retry to start a fresh one."));
             return;
           }
           // Asked for, not failed: the card turns into a phone field, and its
@@ -2359,7 +2367,7 @@ export function useChat({
         const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
         return { ok: res.ok, data };
       } catch {
-        return { ok: false, data: { error: { message: "Check your connection and try again." } } };
+        return { ok: false, data: { error: { message: msg("Check your connection and try again.") } } };
       }
     },
     [apiOrigin],
@@ -2375,9 +2383,9 @@ export function useChat({
      * spending the window they are waiting on.
      */
     if (err?.code === "rate_limited") {
-      return "Too many sign-in attempts from your network. Wait about a minute and try again.";
+      return msg("Too many sign-in attempts from your network. Wait about a minute and try again.");
     }
-    return err?.message ?? "That didn't work. Please try again.";
+    return err?.message ?? msg("That didn't work. Please try again.");
   };
 
   /**
@@ -2656,7 +2664,7 @@ export function useChat({
         return { ok: true };
       }
       const err = data.error as { message?: string } | undefined;
-      return { ok: false, error: err?.message ?? "That didn't send. Check your connection and try again." };
+      return { ok: false, error: err?.message ?? msg("That didn't send. Check your connection and try again.") };
     },
     [sessionPost, apiOrigin],
   );
@@ -2783,7 +2791,7 @@ export function useChat({
       }
       if (step === "giveUp") {
         settleTurn();
-        setError("That took longer than it should have. Tap retry to pick up where you left off.");
+        setError(msg("That took longer than it should have. Tap retry to pick up where you left off."));
         return;
       }
       lastAttemptAt = now;

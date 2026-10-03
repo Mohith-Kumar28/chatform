@@ -7,6 +7,7 @@ import type { ConditionGroup } from "./conditions";
 import { identityFieldForBlock, type IdentityField } from "./identity-fields";
 import { Ending, HiddenField, LogicRule, Variable } from "./logic";
 import { SettingsDoc, ThemeDoc } from "./settings";
+import { isRtlLanguage } from "./languages";
 import { buildUpiUri, type PaymentProviderName } from "./payment-link";
 
 export const SCHEMA_VERSION = 9;
@@ -564,6 +565,17 @@ export interface PublicFormConfig {
   };
   /** The agent's display name, when the builder set one. */
   agentName?: string;
+  /** The language this config is in. Absent on a config built before languages. */
+  language?: string;
+  /**
+   * Every language a respondent may choose, the form's own first. One entry
+   * means there is no choice to offer, so no prompt and no switcher.
+   */
+  languages?: string[];
+  /** chatform's interface text in `language`, keyed by the English. Empty for English. */
+  messages?: Record<string, string>;
+  /** Lay the page out right to left. */
+  rtl?: boolean;
   /** Whether one person may answer more than once. */
   allowResubmissions: boolean;
   /** Whether the form asks for an explicit submit once everything is answered. */
@@ -587,6 +599,10 @@ export function toPublicConfig(
     closed?: boolean;
     closedMessage?: string;
     closedReason?: "schedule" | "capacity";
+    /** The language `doc` is already in, and the ones on offer. See `localizeFormDoc`. */
+    language?: string;
+    languages?: string[];
+    messages?: Record<string, string>;
     /** Resolves `settings.meta.ogImageKey` to a public URL. */
     assetUrl?: (key: string) => string;
     /**
@@ -613,6 +629,10 @@ export function toPublicConfig(
       noIndex: metaSettings.noIndex,
     },
     agentName: doc.settings.agent.displayName,
+    language: opts.language ?? doc.settings.language,
+    languages: opts.languages ?? [doc.settings.language],
+    messages: opts.messages ?? {},
+    rtl: doc.settings.rtl || isRtlLanguage(opts.language ?? doc.settings.language),
     allowResubmissions: doc.settings.allowResubmissions,
     requireSubmit: doc.settings.onComplete.requireSubmit,
     followUpEnabled: doc.settings.followUp.enabled,

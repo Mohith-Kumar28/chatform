@@ -37,6 +37,8 @@ function sample(d: SettingDef): string {
       return "Lora";
     case "language":
       return "hi";
+    case "languages":
+      return "hi";
     case "date":
       return "2026-10-30T18:00";
   }

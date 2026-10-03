@@ -55,6 +55,7 @@ import type {
   GetApiFormsByIdPaymentsParams,
   GetApiFormsByIdSubmissions200,
   GetApiFormsByIdSubmissionsParams,
+  GetApiFormsByIdTranslations200,
   GetApiFormsByIdVersions200Item,
   GetApiFormsByIdVersionsByVersion200,
   GetApiFormsByIdVersionsByVersion404,
@@ -119,6 +120,8 @@ import type {
   PostApiFormsByIdPublish200,
   PostApiFormsByIdPublish402,
   PostApiFormsByIdPublish422,
+  PostApiFormsByIdTranslationsByLangAi200,
+  PostApiFormsByIdTranslationsByLangAi404,
   PostApiFormsByIdUnpublish200,
   PostApiFormsByIdUnpublish404,
   PostApiFormsByIdUnpublish409,
@@ -176,6 +179,9 @@ import type {
   PutApiFormsByIdDoc409,
   PutApiFormsByIdDoc429,
   PutApiFormsByIdDocBody,
+  PutApiFormsByIdTranslationsByLangCsv200,
+  PutApiFormsByIdTranslationsByLangCsv404,
+  PutApiFormsByIdTranslationsByLangCsv413,
   PutApiMembersByMemberIdAccess200,
   PutApiMembersByMemberIdAccess404,
   PutApiMembersByMemberIdAccess409,
@@ -2089,7 +2095,377 @@ export function useGetApiFormsByIdAiThread<TData = Awaited<ReturnType<typeof get
 
 
 
-export type getApiFormsByIdKnowledgeResponse200 = {
+export type getApiFormsByIdTranslationsResponse200 = {
+  data: GetApiFormsByIdTranslations200
+  status: 200
+}
+
+export type getApiFormsByIdTranslationsResponseSuccess = (getApiFormsByIdTranslationsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiFormsByIdTranslationsResponse = (getApiFormsByIdTranslationsResponseSuccess)
+
+export const getGetApiFormsByIdTranslationsUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/translations`
+}
+
+/**
+ * @summary Where each of the form's languages stands
+ */
+export const getApiFormsByIdTranslations = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdTranslationsResponse> => {
+
+  return customFetch<getApiFormsByIdTranslationsResponse>(getGetApiFormsByIdTranslationsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiFormsByIdTranslationsQueryKey = (id: string,) => {
+    return [
+    `/api/forms/${id}/translations`
+    ] as const;
+    }
+
+
+export const getGetApiFormsByIdTranslationsQueryOptions = <TData = Awaited<ReturnType<typeof getApiFormsByIdTranslations>>, TError = unknown>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdTranslations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsByIdTranslationsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFormsByIdTranslations>>> = ({ signal }) => getApiFormsByIdTranslations(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdTranslations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiFormsByIdTranslationsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFormsByIdTranslations>>>
+export type GetApiFormsByIdTranslationsQueryError = unknown
+
+
+/**
+ * @summary Where each of the form's languages stands
+ */
+
+export function useGetApiFormsByIdTranslations<TData = Awaited<ReturnType<typeof getApiFormsByIdTranslations>>, TError = unknown>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdTranslations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiFormsByIdTranslationsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type postApiFormsByIdTranslationsByLangAiResponse200 = {
+  data: PostApiFormsByIdTranslationsByLangAi200
+  status: 200
+}
+
+export type postApiFormsByIdTranslationsByLangAiResponse404 = {
+  data: PostApiFormsByIdTranslationsByLangAi404
+  status: 404
+}
+
+export type postApiFormsByIdTranslationsByLangAiResponseSuccess = (postApiFormsByIdTranslationsByLangAiResponse200) & {
+  headers: Headers;
+};
+export type postApiFormsByIdTranslationsByLangAiResponseError = (postApiFormsByIdTranslationsByLangAiResponse404) & {
+  headers: Headers;
+};
+
+export type postApiFormsByIdTranslationsByLangAiResponse = (postApiFormsByIdTranslationsByLangAiResponseSuccess | postApiFormsByIdTranslationsByLangAiResponseError)
+
+export const getPostApiFormsByIdTranslationsByLangAiUrl = (id: string,
+    lang: string,) => {
+
+
+
+
+  return `/api/forms/${id}/translations/${lang}/ai`
+}
+
+/**
+ * @summary Translate the form into one of its languages with AI
+ */
+export const postApiFormsByIdTranslationsByLangAi = async (id: string,
+    lang: string, options?: Parameters<typeof customFetch>[1]): Promise<postApiFormsByIdTranslationsByLangAiResponse> => {
+
+  return customFetch<postApiFormsByIdTranslationsByLangAiResponse>(getPostApiFormsByIdTranslationsByLangAiUrl(id,lang),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiFormsByIdTranslationsByLangAiMutationOptions = <TError = PostApiFormsByIdTranslationsByLangAi404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdTranslationsByLangAi>>, TError,PostApiFormsByIdTranslationsByLangAiMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdTranslationsByLangAi>>, TError,PostApiFormsByIdTranslationsByLangAiMutationVariables, TContext> => {
+
+const mutationKey = ['postApiFormsByIdTranslationsByLangAi'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFormsByIdTranslationsByLangAi>>, PostApiFormsByIdTranslationsByLangAiMutationVariables> = (props) => {
+          const {id,lang} = props ?? {};
+
+          return  postApiFormsByIdTranslationsByLangAi(id,lang,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFormsByIdTranslationsByLangAiMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFormsByIdTranslationsByLangAi>>>
+
+    export type PostApiFormsByIdTranslationsByLangAiMutationError = PostApiFormsByIdTranslationsByLangAi404
+    export type PostApiFormsByIdTranslationsByLangAiMutationVariables = {id: string;lang: string}
+
+    /**
+ * @summary Translate the form into one of its languages with AI
+ */
+export const usePostApiFormsByIdTranslationsByLangAi = <TError = PostApiFormsByIdTranslationsByLangAi404,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdTranslationsByLangAi>>, TError,PostApiFormsByIdTranslationsByLangAiMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFormsByIdTranslationsByLangAi>>,
+        TError,
+        PostApiFormsByIdTranslationsByLangAiMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFormsByIdTranslationsByLangAiMutationOptions(options));
+    }
+    export type getApiFormsByIdTranslationsByLangCsvResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getApiFormsByIdTranslationsByLangCsvResponseSuccess = (getApiFormsByIdTranslationsByLangCsvResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiFormsByIdTranslationsByLangCsvResponse = (getApiFormsByIdTranslationsByLangCsvResponseSuccess)
+
+export const getGetApiFormsByIdTranslationsByLangCsvUrl = (id: string,
+    lang: string,) => {
+
+
+
+
+  return `/api/forms/${id}/translations/${lang}/csv`
+}
+
+/**
+ * @summary Download a language's translations as a spreadsheet to fill in
+ */
+export const getApiFormsByIdTranslationsByLangCsv = async (id: string,
+    lang: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiFormsByIdTranslationsByLangCsvResponse> => {
+
+  return customFetch<getApiFormsByIdTranslationsByLangCsvResponse>(getGetApiFormsByIdTranslationsByLangCsvUrl(id,lang),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiFormsByIdTranslationsByLangCsvQueryKey = (id: string,
+    lang: string,) => {
+    return [
+    `/api/forms/${id}/translations/${lang}/csv`
+    ] as const;
+    }
+
+
+export const getGetApiFormsByIdTranslationsByLangCsvQueryOptions = <TData = Awaited<ReturnType<typeof getApiFormsByIdTranslationsByLangCsv>>, TError = unknown>(id: string,
+    lang: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdTranslationsByLangCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFormsByIdTranslationsByLangCsvQueryKey(id,lang);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFormsByIdTranslationsByLangCsv>>> = ({ signal }) => getApiFormsByIdTranslationsByLangCsv(id,lang, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && lang !== null && lang !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdTranslationsByLangCsv>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiFormsByIdTranslationsByLangCsvQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFormsByIdTranslationsByLangCsv>>>
+export type GetApiFormsByIdTranslationsByLangCsvQueryError = unknown
+
+
+/**
+ * @summary Download a language's translations as a spreadsheet to fill in
+ */
+
+export function useGetApiFormsByIdTranslationsByLangCsv<TData = Awaited<ReturnType<typeof getApiFormsByIdTranslationsByLangCsv>>, TError = unknown>(
+ id: string,
+    lang: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiFormsByIdTranslationsByLangCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiFormsByIdTranslationsByLangCsvQueryOptions(id,lang,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type putApiFormsByIdTranslationsByLangCsvResponse200 = {
+  data: PutApiFormsByIdTranslationsByLangCsv200
+  status: 200
+}
+
+export type putApiFormsByIdTranslationsByLangCsvResponse404 = {
+  data: PutApiFormsByIdTranslationsByLangCsv404
+  status: 404
+}
+
+export type putApiFormsByIdTranslationsByLangCsvResponse413 = {
+  data: PutApiFormsByIdTranslationsByLangCsv413
+  status: 413
+}
+
+export type putApiFormsByIdTranslationsByLangCsvResponseSuccess = (putApiFormsByIdTranslationsByLangCsvResponse200) & {
+  headers: Headers;
+};
+export type putApiFormsByIdTranslationsByLangCsvResponseError = (putApiFormsByIdTranslationsByLangCsvResponse404 | putApiFormsByIdTranslationsByLangCsvResponse413) & {
+  headers: Headers;
+};
+
+export type putApiFormsByIdTranslationsByLangCsvResponse = (putApiFormsByIdTranslationsByLangCsvResponseSuccess | putApiFormsByIdTranslationsByLangCsvResponseError)
+
+export const getPutApiFormsByIdTranslationsByLangCsvUrl = (id: string,
+    lang: string,) => {
+
+
+
+
+  return `/api/forms/${id}/translations/${lang}/csv`
+}
+
+/**
+ * @summary Upload a filled-in translations spreadsheet
+ */
+export const putApiFormsByIdTranslationsByLangCsv = async (id: string,
+    lang: string, options?: Parameters<typeof customFetch>[1]): Promise<putApiFormsByIdTranslationsByLangCsvResponse> => {
+
+  return customFetch<putApiFormsByIdTranslationsByLangCsvResponse>(getPutApiFormsByIdTranslationsByLangCsvUrl(id,lang),
+  {
+    ...options,
+    method: 'PUT'
+
+
+  }
+);}
+
+
+
+
+
+export const getPutApiFormsByIdTranslationsByLangCsvMutationOptions = <TError = PutApiFormsByIdTranslationsByLangCsv404 | PutApiFormsByIdTranslationsByLangCsv413,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdTranslationsByLangCsv>>, TError,PutApiFormsByIdTranslationsByLangCsvMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdTranslationsByLangCsv>>, TError,PutApiFormsByIdTranslationsByLangCsvMutationVariables, TContext> => {
+
+const mutationKey = ['putApiFormsByIdTranslationsByLangCsv'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiFormsByIdTranslationsByLangCsv>>, PutApiFormsByIdTranslationsByLangCsvMutationVariables> = (props) => {
+          const {id,lang} = props ?? {};
+
+          return  putApiFormsByIdTranslationsByLangCsv(id,lang,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiFormsByIdTranslationsByLangCsvMutationResult = NonNullable<Awaited<ReturnType<typeof putApiFormsByIdTranslationsByLangCsv>>>
+
+    export type PutApiFormsByIdTranslationsByLangCsvMutationError = PutApiFormsByIdTranslationsByLangCsv404 | PutApiFormsByIdTranslationsByLangCsv413
+    export type PutApiFormsByIdTranslationsByLangCsvMutationVariables = {id: string;lang: string}
+
+    /**
+ * @summary Upload a filled-in translations spreadsheet
+ */
+export const usePutApiFormsByIdTranslationsByLangCsv = <TError = PutApiFormsByIdTranslationsByLangCsv404 | PutApiFormsByIdTranslationsByLangCsv413,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiFormsByIdTranslationsByLangCsv>>, TError,PutApiFormsByIdTranslationsByLangCsvMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof putApiFormsByIdTranslationsByLangCsv>>,
+        TError,
+        PutApiFormsByIdTranslationsByLangCsvMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiFormsByIdTranslationsByLangCsvMutationOptions(options));
+    }
+    export type getApiFormsByIdKnowledgeResponse200 = {
   data: GetApiFormsByIdKnowledge200
   status: 200
 }

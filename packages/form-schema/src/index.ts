@@ -10,6 +10,8 @@ export * from "./respondent";
 export * from "./feedback-scale";
 export * from "./builder-feedback";
 export * from "./settings";
+export * from "./languages";
+export * from "./interface-text.generated";
 export * from "./settings-registry";
 export * from "./google-fonts.generated";
 export * from "./answers";

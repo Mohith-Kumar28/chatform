@@ -32,6 +32,7 @@ import { FIELD_SEMANTICS, inputSemanticsFor } from "./input-semantics";
 import { useChoiceKeys } from "./choice-keys";
 import { PhoneInput } from "./phone";
 import { isSendablePhone } from "./phone-value";
+import { msg, useT, type Translate } from "../i18n";
 
 /**
  * Composers for the record-shaped block types.
@@ -86,6 +87,29 @@ function enterSubmits(canSubmit: boolean, submit: () => void) {
   };
 }
 
+/*
+  The contact and address labels, as chatform writes them. `contactFieldLabel`
+  stays the source of the words; they are listed here so the interface-text
+  extractor finds them. A field that is not on the list is shown as it comes.
+*/
+const CONTACT_LABELS = new Set([
+  msg("First name"),
+  msg("Last name"),
+  msg("Email"),
+  msg("Phone"),
+  msg("Street"),
+  msg("City"),
+  msg("State / region"),
+  msg("Postal code"),
+  msg("Country"),
+  msg("Location"),
+]);
+
+function fieldLabel(field: string, t: Translate): string {
+  const label = contactFieldLabel(field);
+  return CONTACT_LABELS.has(label) ? t(label) : label;
+}
+
 /**
  * The contact card, and the address card.
  *
@@ -120,6 +144,7 @@ export function FieldsComposer({
   prefill?: Record<string, string>;
   onSubmit: (value: Record<string, string>, display: string) => void;
 }) {
+  const t = useT();
   /*
     Mirrored rather than seeded once.
 
@@ -166,7 +191,7 @@ export function FieldsComposer({
         .map(([k, v]) => [k, v.trim()]),
     );
     const { location: shared, ...lines } = clean;
-    const display = [...Object.values(lines), shared ? "Location shared" : ""].filter(Boolean).join(", ");
+    const display = [...Object.values(lines), shared ? t("Location shared") : ""].filter(Boolean).join(", ");
     onSubmit(clean, display);
   };
   const onKeyDown = enterSubmits(canSubmit, submit);
@@ -177,7 +202,7 @@ export function FieldsComposer({
         {fields.map((f) =>
           f === "phone" ? (
             <div key={f} className="space-y-1">
-              <span className="block text-xs opacity-60">{contactFieldLabel(f)}</span>
+              <span className="block text-xs opacity-60">{fieldLabel(f, t)}</span>
               <PhoneInput
                 variant="field"
                 value={values[f] ?? ""}
@@ -205,7 +230,7 @@ export function FieldsComposer({
       )}
       {missing.length > 0 && (filled.length > 0 || locationGiven) && (
         <p className="px-1 text-xs opacity-55">
-          Still needed: {missing.map((f) => contactFieldLabel(f).toLowerCase()).join(", ")}.
+          {t("Still needed: {fields}.", { fields: missing.map((f) => fieldLabel(f, t).toLowerCase()).join(", ") })}
         </p>
       )}
       <button
@@ -214,7 +239,7 @@ export function FieldsComposer({
         onClick={submit}
         className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
       >
-        Continue
+        {t("Continue")}
         <KeyHint tone="inverse">↵</KeyHint>
       </button>
     </div>
@@ -240,6 +265,7 @@ function LocationField({
   invalid: boolean;
   onChange: (v: string) => void;
 }) {
+  const t = useT();
   const [status, setStatus] = useState<"idle" | "locating" | "failed">("idle");
   const [typing, setTyping] = useState(false);
   const shared = value !== "" && !typing;
@@ -284,21 +310,21 @@ function LocationField({
   return (
     <div className="space-y-1">
       <span className="block text-xs opacity-60">
-        {contactFieldLabel("location")}
-        {!required && " (optional)"}
+        {fieldLabel("location", t)}
+        {!required && ` ${t("(optional)")}`}
       </span>
       {shared ? (
         <div className="flex h-11 items-center gap-2 rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] px-3 text-sm">
           <Check className="size-4 shrink-0 text-[var(--cf-accent)]" />
           <a href={value} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate underline-offset-2 hover:underline">
-            Location shared
+            {t("Location shared")}
           </a>
           <button
             type="button"
             onClick={() => onChange("")}
             className="text-xs opacity-60 transition-opacity hover:opacity-100"
           >
-            Remove
+            {t("Remove")}
           </button>
         </div>
       ) : typing ? (
@@ -310,7 +336,7 @@ function LocationField({
             inputMode="url"
             autoComplete="off"
             autoCapitalize="none"
-            placeholder="Paste a Google Maps link"
+            placeholder={t("Paste a Google Maps link")}
             onChange={(e) => onChange(e.target.value)}
             className={cn(
               "h-11 w-full rounded-[var(--cf-radius-card)] border border-[var(--cf-chip-border)] bg-[var(--cf-composer-bg)] px-3 text-[0.9375rem] outline-none focus:border-[var(--cf-accent)]",
@@ -318,15 +344,15 @@ function LocationField({
           />
           <p className="px-1 text-xs opacity-55">
             {invalid
-              ? "Paste a maps link or coordinates. "
+              ? `${t("Paste a maps link or coordinates.")} `
               : status === "failed"
-                ? "Couldn't get your location. "
+                ? `${t("Couldn't get your location.")} `
                 : status === "locating"
-                  ? "Waiting for your browser to share it… "
+                  ? `${t("Waiting for your browser to share it…")} `
                   : ""}
             {status !== "locating" && (
               <button type="button" onClick={locate} className="underline underline-offset-2">
-                {status === "failed" ? "Try again" : "Use my current location"}
+                {status === "failed" ? t("Try again") : t("Use my current location")}
               </button>
             )}
           </p>
@@ -340,14 +366,14 @@ function LocationField({
             className="inline-flex h-11 items-center gap-1.5 rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] px-4 text-sm font-medium transition-colors hover:border-[var(--cf-accent)] disabled:opacity-60"
           >
             {status === "locating" ? <Loader2 className="size-4 animate-spin" /> : <MapPin className="size-4" />}
-            {status === "locating" ? "Locating…" : "Share my location"}
+            {status === "locating" ? t("Locating…") : t("Share my location")}
           </button>
           <button
             type="button"
             onClick={() => setTyping(true)}
             className="text-xs opacity-60 underline-offset-2 transition-opacity hover:underline hover:opacity-100"
           >
-            Paste a link
+            {t("Paste a link")}
           </button>
         </div>
       )}
@@ -365,6 +391,7 @@ function FieldCell({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const t = useT();
   /*
     The autofill token is the whole point of naming these fields. A browser
     holding somebody's address will fill all five of these in one tap — but
@@ -374,7 +401,7 @@ function FieldCell({
   const meta = FIELD_SEMANTICS[field];
   return (
     <label className="space-y-1">
-      <span className="block text-xs opacity-60">{contactFieldLabel(field)}</span>
+      <span className="block text-xs opacity-60">{fieldLabel(field, t)}</span>
       <input
         value={value}
         name={field}
@@ -413,6 +440,7 @@ export function RankingComposer({
   onSubmit: (order: string[], display: string) => void;
   disabled?: boolean;
 }) {
+  const t = useT();
   const [order, setOrder] = useState<string[]>([]);
   // Keys come from the item's position in the *question*, not in what is left
   // to rank: a shortcut that renumbers itself after every pick is one nobody
@@ -504,9 +532,9 @@ export function RankingComposer({
       <p className="text-xs opacity-50">
         {remaining.length > 0
           ? order.length > 1
-            ? "Tap in order, best first · drag a handle to rearrange."
-            : "Tap in order, best first."
-          : "All ranked. Drag a handle to rearrange."}
+            ? t("Tap in order, best first · drag a handle to rearrange.")
+            : t("Tap in order, best first.")
+          : t("All ranked. Drag a handle to rearrange.")}
       </p>
 
       <button
@@ -515,7 +543,7 @@ export function RankingComposer({
         onClick={submit}
         className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
       >
-        Confirm ranking
+        {t("Confirm ranking")}
         <KeyHint tone="inverse">↵</KeyHint>
       </button>
     </div>
@@ -537,6 +565,7 @@ function RankedRow({
   draggable: boolean;
   onRemove: () => void;
 }) {
+  const t = useT();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     disabled: !draggable,
@@ -556,7 +585,7 @@ function RankedRow({
           type="button"
           {...attributes}
           {...listeners}
-          aria-label={`Reorder ${label}`}
+          aria-label={t("Reorder {label}", { label })}
           className="shrink-0 cursor-grab touch-none rounded-md p-1 opacity-35 transition-opacity hover:opacity-90 focus-visible:opacity-90 active:cursor-grabbing"
         >
           <GripVertical className="size-3.5" />
@@ -573,7 +602,7 @@ function RankedRow({
         onClick={onRemove}
         className="shrink-0 text-xs opacity-50 transition-opacity hover:opacity-100"
       >
-        Remove
+        {t("Remove")}
       </button>
     </li>
   );
@@ -590,6 +619,7 @@ export function MatrixComposer({
   multiple: boolean;
   onSubmit: (value: Record<string, string | string[]>, display: string) => void;
 }) {
+  const t = useT();
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
 
   function toggle(rowId: string, colId: string) {
@@ -659,7 +689,7 @@ export function MatrixComposer({
         }
         className="h-11 w-full rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
       >
-        Continue
+        {t("Continue")}
       </button>
     </div>
   );
@@ -704,6 +734,7 @@ export function GroupComposer({
   required?: boolean;
   onSubmit: (value: Record<string, string | number | boolean>[], display: string) => void;
 }) {
+  const t = useT();
   const floor = Math.min(Math.max(minEntries, 1), maxEntries);
   const [entries, setEntries] = useState<Record<string, string>[]>(() =>
     Array.from({ length: floor }, () => ({})),
@@ -801,8 +832,8 @@ export function GroupComposer({
                 ? (f.options?.find((o) => o.id === v)?.label ?? String(v))
                 : f.kind === "yes_no"
                   ? v === true
-                    ? "Yes"
-                    : "No"
+                    ? t("Yes")
+                    : t("No")
                   : String(v);
             return [`${f.label}: ${text}`];
           });
@@ -832,11 +863,11 @@ export function GroupComposer({
                 <button
                   type="button"
                   onClick={() => setEntries((rows) => rows.filter((_, j) => j !== i))}
-                  aria-label={`Remove ${itemLabel.toLowerCase()} ${i + 1}`}
+                  aria-label={t("Remove {item} {number}", { item: itemLabel.toLowerCase(), number: i + 1 })}
                   className="-mr-1 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-xs opacity-50 transition-opacity hover:opacity-100"
                 >
                   <X className="size-3" />
-                  Remove
+                  {t("Remove")}
                 </button>
               )}
             </div>
@@ -865,13 +896,13 @@ export function GroupComposer({
               className="inline-flex h-9 items-center gap-1.5 rounded-[var(--cf-radius-control)] border border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] px-3.5 text-sm transition-colors hover:border-[var(--cf-accent)]"
             >
               <Plus className="size-3.5" />
-              Add {itemLabel.toLowerCase()}
+              {t("Add {item}", { item: itemLabel.toLowerCase() })}
             </button>
           )}
           <p className="text-xs opacity-55">
             {canAdd
-              ? `${entries.length} of up to ${maxEntries}.`
-              : `That's the most you can add (${maxEntries}).`}
+              ? t("{count} of up to {max}.", { count: entries.length, max: maxEntries })
+              : t("That's the most you can add ({max}).", { max: maxEntries })}
           </p>
         </div>
       )}
@@ -882,7 +913,7 @@ export function GroupComposer({
         onClick={submit}
         className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] text-sm font-medium text-[var(--cf-accent-text)] transition-transform active:scale-[0.98] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40"
       >
-        Continue
+        {t("Continue")}
         <KeyHint tone="inverse">↵</KeyHint>
       </button>
     </div>
@@ -917,6 +948,7 @@ function GroupFieldInput({
   malformed?: boolean;
   onChange: (v: string) => void;
 }) {
+  const t = useT();
   /*
     Said on the way out of the box, not on the way through it.
 
@@ -965,7 +997,7 @@ function GroupFieldInput({
                   : "border-[var(--cf-chip-border)] bg-[var(--cf-chip-bg)] hover:border-[var(--cf-accent)]",
               )}
             >
-              {v === "yes" ? "Yes" : "No"}
+              {v === "yes" ? t("Yes") : t("No")}
             </button>
           ))}
         </div>
@@ -983,7 +1015,7 @@ function GroupFieldInput({
           onChange={(e) => onChange(e.target.value)}
           className={cn(inputClass, value === "" && "opacity-55")}
         >
-          <option value="">Choose…</option>
+          <option value="">{t("Choose…")}</option>
           {(field.options ?? []).map((o) => (
             <option key={o.id} value={o.id}>
               {o.label}
@@ -1051,7 +1083,7 @@ function GroupFieldInput({
       />
       {showError && (
         <span className="block text-[0.6875rem] text-[var(--cf-warning)]">
-          That&apos;s not the format {field.label.toLowerCase()} expects.
+          {t("That's not the format {field} expects.", { field: field.label.toLowerCase() })}
         </span>
       )}
     </label>

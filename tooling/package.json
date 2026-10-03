@@ -7,6 +7,7 @@
     "gen:plans": "tsx gen-seed-plans.ts",
     "gen:templates": "tsx gen-seed-templates.ts",
     "gen:blocks": "tsx gen-block-docs.ts",
+    "gen:interface-text": "tsx gen-interface-text.ts",
     "gen:api-docs": "tsx gen-api-docs.ts",
     "spec:coverage": "tsx check-spec-coverage.ts",
     "test": "vitest run",

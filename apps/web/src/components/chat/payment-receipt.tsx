@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { PAYMENT_PROVIDER_LABELS } from "@repo/form-schema";
 import { Confetti } from "./confetti";
 import type { PaymentReceipt } from "./use-chat";
+import { useT } from "./i18n";
 
 const paidAtFormat = new Intl.DateTimeFormat(undefined, {
   day: "numeric",
@@ -26,6 +27,7 @@ const CELEBRATION_MS = 2600;
  * or a replayed report, it is just the receipt.
  */
 export function PaymentReceiptCard({ receipt }: { receipt: PaymentReceipt }) {
+  const t = useT();
   const [celebrating, setCelebrating] = useState(receipt.fresh);
 
   useEffect(() => {
@@ -35,7 +37,7 @@ export function PaymentReceiptCard({ receipt }: { receipt: PaymentReceipt }) {
   }, [celebrating]);
 
   const via = receipt.provider ? PAYMENT_PROVIDER_LABELS[receipt.provider] : null;
-  const note = receipt.simulated ? "Simulated" : receipt.testMode ? "Test payment" : null;
+  const note = receipt.simulated ? t("Simulated") : receipt.testMode ? t("Test payment") : null;
 
   return (
     <div className="relative mt-2 flex w-full justify-start">
@@ -75,7 +77,7 @@ export function PaymentReceiptCard({ receipt }: { receipt: PaymentReceipt }) {
             </svg>
           </div>
           <div className="cf-paid-rise min-w-0 flex-1">
-            <p className="text-sm font-semibold">Payment successful</p>
+            <p className="text-sm font-semibold">{t("Payment successful")}</p>
             {receipt.display && (
               <p className="text-2xl font-semibold tracking-tight tabular-nums">
                 {receipt.display}
@@ -90,17 +92,17 @@ export function PaymentReceiptCard({ receipt }: { receipt: PaymentReceipt }) {
         </div>
 
         <dl className="cf-paid-rise mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t border-[color-mix(in_oklab,var(--success)_25%,transparent)] pt-3 text-xs">
-          <dt className="opacity-70">Paid on</dt>
+          <dt className="opacity-70">{t("Paid on")}</dt>
           <dd>{paidAtFormat.format(receipt.paidAt)}</dd>
           {via && (
             <>
-              <dt className="opacity-70">Paid via</dt>
+              <dt className="opacity-70">{t("Paid via")}</dt>
               <dd>{via}</dd>
             </>
           )}
           {receipt.paymentId && (
             <>
-              <dt className="opacity-70">Payment ID</dt>
+              <dt className="opacity-70">{t("Payment ID")}</dt>
               <dd className="truncate font-mono select-all">{receipt.paymentId}</dd>
             </>
           )}

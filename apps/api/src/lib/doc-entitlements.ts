@@ -193,6 +193,11 @@ export function stripForPublish(input: FormDoc, ent: Entitlements): StripResult 
     }
     if (anyVerified) note(stripped, "blocks[].verify", "verified_answers");
   }
+  // The form in more than its own language. Its own language is every plan's.
+  if (s.languages?.length && !can(ent, "multi_language")) {
+    s.languages = [];
+    note(stripped, "settings.languages", "multi_language");
+  }
   if (s.language && s.language !== "en" && doc.settings.agent?.language && doc.settings.agent.language !== s.language) {
     // A form whose agent speaks a different language than the form chrome is the
     // multi-language feature in all but name.

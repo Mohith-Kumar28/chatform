@@ -19,6 +19,7 @@ import {
   splitPhone,
   type CountryCode,
 } from "./phone-value";
+import { useT } from "../i18n";
 
 /**
  * The message box, when the question is asking for a phone number.
@@ -74,6 +75,7 @@ export function PhoneInput({
    */
   variant?: "composer" | "field";
 }) {
+  const t = useT();
   const cell = variant === "field";
   const numberRef = useRef<HTMLInputElement>(null);
 
@@ -110,7 +112,7 @@ export function PhoneInput({
     the last one.
   */
   const [touched, setTouched] = useState(false);
-  const problem = touched ? phoneProblem(value, country) : null;
+  const problem = touched ? phoneProblem(value, country, t) : null;
 
   function emit(nextCountry: CountryCode, nextTyped: string) {
     const composed = composePhone(nextCountry, nextTyped);
@@ -186,7 +188,7 @@ export function PhoneInput({
             saw happen.
           */}
           <select
-            aria-label="Country calling code"
+            aria-label={t("Country calling code")}
             value={country}
             onChange={(e) => pickCountry(e.target.value as CountryCode)}
             className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent text-base opacity-0"

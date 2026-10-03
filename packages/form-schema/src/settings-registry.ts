@@ -4,6 +4,7 @@ import { GOOGLE_FONTS } from "./google-fonts.generated";
 import { isDarkTheme, themeFromAccent, withAppearance } from "./palette";
 import { applyFormTheme, backgroundDecorOn, matchFormTheme, THEME_CHOICES, themeFont, withoutFormTheme } from "./form-themes";
 import type { ThemeDoc } from "./settings";
+import { FORM_LANGUAGES, MAX_FORM_LANGUAGES } from "./languages";
 
 const GOOGLE_FONT_FAMILIES = GOOGLE_FONTS.map(([family]) => family);
 
@@ -85,7 +86,8 @@ export type SettingFormat =
   | "emails"
   | "list"
   | "font"
-  | "language";
+  | "language"
+  | "languages";
 
 export type SettingValue = string | number | boolean | string[] | undefined;
 
@@ -697,16 +699,33 @@ export const SETTINGS_REGISTRY: readonly SettingDef[] = [
     key: "form.language",
     section: "form",
     label: "Language",
-    where: "Only through the AI for now",
+    where: `${SETTINGS} → Languages`,
     format: "language",
-    hint: "two-letter code; the agent speaks it and the form's own buttons use it",
+    hint: "two-letter code for the language the form is written in; the agent speaks it and the form's own buttons use it",
     // The form and its agent move together, which is the combination every
     // plan has. Only a mismatch between them is `multi_language`.
     get: (doc) => doc.settings.language,
     set: (doc, v) => {
       doc.settings.language = v as string;
       doc.settings.agent.language = v as string;
+      doc.settings.languages = doc.settings.languages.filter((code) => code !== v);
     },
+  }),
+  def({
+    key: "form.languages",
+    section: "form",
+    label: "Also available in",
+    where: `${SETTINGS} → Languages`,
+    format: "languages",
+    maxItems: MAX_FORM_LANGUAGES - 1,
+    hint: "the other languages respondents can read the form in, as two-letter codes or names, one per line; the author then translates each one from Settings → Languages",
+    feature: "multi_language",
+    get: (doc) => doc.settings.languages,
+    // The form's own language is not one of its others.
+    set: (doc, v) => {
+      doc.settings.languages = (Array.isArray(v) ? v : []).filter((code) => code !== doc.settings.language);
+    },
+    gate: (v) => (Array.isArray(v) && v.length > 0 ? "multi_language" : null),
   }),
 ];
 
@@ -825,6 +844,17 @@ export function parseSettingValue(d: SettingDef, input: string, ctx: ParseContex
     case "font": {
       const hit = GOOGLE_FONT_FAMILIES.find((f) => f.toLowerCase() === raw.toLowerCase());
       return hit ? { ok: true, value: hit } : fail(`"${raw}" is not a Google Fonts family`);
+    }
+    case "languages": {
+      // A name is as good as a code: "Hindi", "hindi", "हिन्दी" and "hi" are one language.
+      const codes: string[] = [];
+      for (const item of splitList(raw)) {
+        const wanted = item.toLowerCase();
+        const hit = FORM_LANGUAGES.find((l) => l.code === wanted || l.name.toLowerCase() === wanted || l.native.toLowerCase() === wanted);
+        if (!hit) return fail(`"${item.slice(0, 30)}" is not a language a form can be offered in`);
+        if (!codes.includes(hit.code)) codes.push(hit.code);
+      }
+      return d.maxItems !== undefined && codes.length > d.maxItems ? fail(`at most ${d.maxItems} languages`) : { ok: true, value: codes };
     }
     case "language":
       return /^[a-z]{2}$/i.test(raw) ? { ok: true, value: raw.toLowerCase() } : fail("a two-letter language code like en or hi");

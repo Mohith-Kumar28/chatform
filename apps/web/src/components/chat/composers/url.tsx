@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Globe, Lock } from "lucide-react";
+import { useT } from "../i18n";
 
 type Scheme = "https" | "http";
 
@@ -33,6 +34,7 @@ export function UrlInput({
   placeholder?: string;
   autoFocus?: boolean;
 }) {
+  const t = useT();
   const parsed = splitUrl(value);
   // Kept locally because an empty box has no value to carry the scheme in.
   const [chosen, setChosen] = useState<Scheme>("https");
@@ -72,7 +74,7 @@ export function UrlInput({
         <button
           type="button"
           onClick={toggle}
-          aria-label={`Scheme: ${scheme}. Switch to ${secure ? "http" : "https"}`}
+          aria-label={t("Scheme: {scheme}. Switch to {other}", { scheme, other: secure ? "http" : "https" })}
           className="flex shrink-0 items-center gap-1.5 pr-2.5 pl-3.5 transition-colors hover:bg-[color-mix(in_oklch,var(--cf-accent)_8%,transparent)] focus-visible:bg-[color-mix(in_oklch,var(--cf-accent)_12%,transparent)] focus-visible:outline-none"
         >
           {prefix}

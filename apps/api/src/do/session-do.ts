@@ -42,6 +42,8 @@ import {
   PAYMENT_PROVIDER_LABELS,
   type SettledPayment,
   type ValidateOptions,
+  fillText,
+  type Translate,
 } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import type { RespondentContext } from "../lib/respondent-context.js";
@@ -503,9 +505,6 @@ const FALLBACK_TOKEN_BUDGET = 1_000_000;
  */
 const MAX_EXTRACTION_CALLS = 40;
 
-/** Said to a returning respondent whose earlier answers were on another version. */
-const FORM_UPDATED_TEXT = "This form has been updated since you last visited, so we're starting again from the top.";
-
 /**
  * Whether an extracted card holds anything at all. An empty object or list is
  * the extractor finding nothing, and recording it would only earn a "please
@@ -537,6 +536,16 @@ function writingOnly(steps: ReadonlyArray<{ toolCalls: ReadonlyArray<{ toolName:
 export class SessionDO extends DurableObject<Bindings> {
   private meta: DoSessionMeta | null = null;
   private doc: FormDoc | null = null;
+  /**
+   * chatform's own sentences in the language this session is held in, keyed by
+   * the English. Null in English, which is every session before languages.
+   *
+   * The questions are already in the right language: the document this session
+   * was opened with is the translated one. This covers what the session says
+   * for itself, on the paths where no model is writing the reply.
+   */
+  private messages: Map<string, string> | null = null;
+  private readonly t: Translate = (text, vars) => fillText(this.messages?.get(text) ?? text, vars);
   private state: EvalState = { answers: {}, variables: {}, hidden: {} };
   private invalidCounts = new Map<string, number>();
   /**
@@ -753,6 +762,7 @@ export class SessionDO extends DurableObject<Bindings> {
     const parsed = FormDoc.safeParse(params.docJson);
     if (!parsed.success) return { ok: false, code: "invalid_form" };
     this.doc = parsed.data;
+    await this.loadMessages();
     this.state.hidden = { ...params.hiddenFields };
     this.meta = {
       sessionId: params.sessionId,
@@ -834,7 +844,7 @@ export class SessionDO extends DurableObject<Bindings> {
      */
     const opening = resolveNext(this.doc, null, this.state);
     if (!(opening.kind === "block" && opening.block.type === "welcome")) {
-      await this.appendMessage("assistant", greeting(this.doc));
+      await this.appendMessage("assistant", greeting(this.doc, this.t));
     }
     await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
 
@@ -851,12 +861,32 @@ export class SessionDO extends DurableObject<Bindings> {
     return { ok: true };
   }
 
+  /**
+   * Read our own sentences in the session's language, once per activation.
+   *
+   * One indexed read, and only for a session not in English. A failure leaves
+   * the map empty and the sentences in English: a respondent is never held up
+   * for want of a translation.
+   */
+  private async loadMessages(): Promise<void> {
+    const lang = this.doc?.settings.language;
+    if (!lang || lang === "en") return;
+    try {
+      const { results } = await this.env.DB.prepare(`SELECT source, text FROM form_translations WHERE form_id = '' AND lang = ?`)
+        .bind(lang)
+        .all<{ source: string; text: string }>();
+      this.messages = new Map(results.map((row) => [row.source, row.text]));
+    } catch (err) {
+      console.error("session_messages_failed", { lang, ...errorInfo(err) });
+    }
+  }
+
   /** Ask the first question. Split out so the auth gate can defer it. */
   private async beginInterview(): Promise<void> {
     if (!this.doc) return;
     if (this.formUpdatedNotice) {
       this.formUpdatedNotice = false;
-      await this.emitMessage(FORM_UPDATED_TEXT);
+      await this.emitMessage(this.t("This form has been updated since you last visited, so we're starting again from the top."));
     }
     if (this.resumed) {
       /**
@@ -1436,7 +1466,7 @@ export class SessionDO extends DurableObject<Bindings> {
     const pending = this.meta?.pendingVerify;
     if (!pending) return;
     if (announce) {
-      const said = codeSentText(pending.channel, pending.sentTo);
+      const said = codeSentText(pending.channel, pending.sentTo, this.t);
       await this.emitMessage(said);
     }
     await this.emit("verify_required", {
@@ -1479,7 +1509,7 @@ export class SessionDO extends DurableObject<Bindings> {
      * step rather than the proof, and gets pointed back at the button.
      */
     if (pending.channel === "sms") {
-      const nudge = codeExpectedText(pending.channel);
+      const nudge = codeExpectedText(pending.channel, this.t);
       await this.emitMessage(nudge);
       await this.emitVerifyRequired(false);
       return { accepted: true };
@@ -1488,7 +1518,7 @@ export class SessionDO extends DurableObject<Bindings> {
     const said = input.type === "text" ? input.text : String(input.value ?? "");
     const code = said.replace(/\D/g, "");
     if (code.length < 4) {
-      const nudge = codeExpectedText(pending.channel);
+      const nudge = codeExpectedText(pending.channel, this.t);
       await this.emitMessage(nudge);
       await this.emitVerifyRequired(false);
       return { accepted: true };
@@ -1563,7 +1593,7 @@ export class SessionDO extends DurableObject<Bindings> {
     await this.persistMeta();
     await this.emit("verify_settled", { ref: block.ref, verified: true });
     await this.appendMessage("system_event", `Verified ${pending.sentTo} by ${pending.channel === "sms" ? "SMS" : "email"}`);
-    const done = codeVerifiedText(pending.channel);
+    const done = codeVerifiedText(pending.channel, this.t);
     await this.emitMessage(done);
 
     /*
@@ -1689,8 +1719,8 @@ export class SessionDO extends DurableObject<Bindings> {
 
   private async startPaymentOnce(ref: string, opts: { phone?: string }): Promise<StartPaymentResult> {
     const ok = await this.ensureLoaded();
-    if (!ok || !this.meta || !this.doc) return refuse("session_not_found", "This conversation has ended.");
-    if (this.meta.status !== "active") return refuse("session_closed", "This conversation has ended.");
+    if (!ok || !this.meta || !this.doc) return refuse("session_not_found", this.t("This conversation has ended."));
+    if (this.meta.status !== "active") return refuse("session_closed", this.t("This conversation has ended."));
     let result: StartPaymentResult;
     try {
       result = await this.runStartPayment(ref, opts);
@@ -1701,7 +1731,7 @@ export class SessionDO extends DurableObject<Bindings> {
         blockRef: ref,
         ...errorInfo(err),
       });
-      result = refuse("payment_unavailable", "We couldn't open checkout. Please try again in a moment.");
+      result = refuse("payment_unavailable", this.t("We couldn't open checkout. Please try again in a moment."));
     }
     /*
      * A preview that cannot take this payment for real — no account connected yet, a plan
@@ -1718,9 +1748,9 @@ export class SessionDO extends DurableObject<Bindings> {
   private async runStartPayment(ref: string, opts: { phone?: string }): Promise<StartPaymentResult> {
     const meta = this.meta!;
     const block = await this.currentBlock();
-    if (!block || block.ref !== ref) return refuse("stale_ref", "That question is no longer being asked.");
+    if (!block || block.ref !== ref) return refuse("stale_ref", this.t("That question is no longer being asked."));
     if (block.type !== "payment" || block.method !== "gateway") {
-      return refuse("payment_unavailable", "This question doesn't take a payment.");
+      return refuse("payment_unavailable", this.t("This question doesn't take a payment."));
     }
 
     // On the server, from this session's answers, before anything else reads it. See `priceNow`.
@@ -1765,17 +1795,17 @@ export class SessionDO extends DurableObject<Bindings> {
         });
         await this.ctx.storage.setAlarm(Date.now() + IDLE_ALARM_MS);
       }
-      return refuse("already_paid", "You've already paid for this.");
+      return refuse("already_paid", this.t("You've already paid for this."));
     }
 
     if (!gatewayEnabled(this.env)) {
       // Same sentence as a missing account, and for the same reason: nothing the
       // respondent does reaches it, so don't invite them to wait and retry.
-      return refuse("payment_unavailable", "This form can't take payments right now. Let its owner know.");
+      return refuse("payment_unavailable", this.t("This form can't take payments right now. Let its owner know."));
     }
     const ent = await getEntitlements(this.env, meta.organizationId);
     if (!can(ent, "collect_payments")) {
-      return refuse("plan_required", "This form can't take payments right now. Let its owner know.");
+      return refuse("plan_required", this.t("This form can't take payments right now. Let its owner know."));
     }
     /*
      * Paying does not require a signed-in respondent, deliberately.
@@ -1819,7 +1849,7 @@ export class SessionDO extends DurableObject<Bindings> {
        * something only the form's owner can fix — this one is the account being
        * gone, and no amount of retrying reaches it.
        */
-      return refuse("payment_unavailable", "This form can't take payments right now. Let its owner know.");
+      return refuse("payment_unavailable", this.t("This form can't take payments right now. Let its owner know."));
     }
     const preview = meta.formVersionId === "preview";
     if (preview && account.environment === "live") {
@@ -1888,12 +1918,12 @@ export class SessionDO extends DurableObject<Bindings> {
     let phone = identity?.phone ?? this.answeredPhone() ?? meta.paymentPhone ?? null;
     if (opts.phone !== undefined) {
       const given = normalizeE164(opts.phone);
-      if (!given) return refuse("phone_required", "That number needs its country code — for example +91 98765 43210.");
+      if (!given) return refuse("phone_required", this.t("That number needs its country code — for example +91 98765 43210."));
       phone = given;
       meta.paymentPhone = given;
     }
     if (account.provider === "cashfree" && !phone) {
-      return refuse("phone_required", "What number should the payment receipt go to?");
+      return refuse("phone_required", this.t("What number should the payment receipt go to?"));
     }
 
     /*
@@ -1918,7 +1948,7 @@ export class SessionDO extends DurableObject<Bindings> {
     );
     const attempts = priorAttempts + 1;
     if (attempts > MAX_PAYMENT_ATTEMPTS) {
-      return refuse("too_many_attempts", "That's too many attempts for now. Please contact the form's owner.");
+      return refuse("too_many_attempts", this.t("That's too many attempts for now. Please contact the form's owner."));
     }
     if (pending) await this.clearPendingPayment();
     meta.paymentAttempts = { ...meta.paymentAttempts, [ref]: attempts };
@@ -1977,8 +2007,8 @@ export class SessionDO extends DurableObject<Bindings> {
       await supersedeRecord(this.env, opened.record.id);
       const answered = this.state.answers[ref] !== answerBefore;
       return answered
-        ? refuse("already_paid", "You've already paid for this.")
-        : refuse("stale_ref", "That question is no longer being asked.");
+        ? refuse("already_paid", this.t("You've already paid for this."))
+        : refuse("stale_ref", this.t("That question is no longer being asked."));
     }
 
     /*
@@ -1998,7 +2028,7 @@ export class SessionDO extends DurableObject<Bindings> {
         askedMinor: priceAfter.ok ? priceAfter.amountMinor : null,
       });
       await supersedeRecord(this.env, opened.record.id);
-      return refuse("stale_ref", "The amount for this question just changed. Tap Pay again for the new total.");
+      return refuse("stale_ref", this.t("The amount for this question just changed. Tap Pay again for the new total."));
     }
 
     const expiresAt = opened.record.expiresAt ?? now;
@@ -2067,7 +2097,7 @@ export class SessionDO extends DurableObject<Bindings> {
     this.pendingUserTextPersisted = false;
     this.pendingUserMessageId = null;
     await this.emitMessage(
-      "Your checkout is still open — finish paying there, and I'll carry on as soon as it goes through. If the window closed, tap Pay again.",
+      this.t("Your checkout is still open — finish paying there, and I'll carry on as soon as it goes through. If the window closed, tap Pay again."),
     );
     await this.emitPaymentRequired();
     return { accepted: true };
@@ -2775,8 +2805,15 @@ export class SessionDO extends DurableObject<Bindings> {
       }
       await this.emitMessage(
         now.ok
-          ? `That changes "${block.title}" to ${formatAmount(now.amount, now.currency)}, so the ${formatAmount(held.amount, held.currency)} you paid earlier no longer covers it. You'll need to pay the new amount — the form's owner can refund the earlier payment.`
-          : `That changes "${block.title}" to a total this form can't take, so the ${formatAmount(held.amount, held.currency)} you paid earlier no longer covers it. Change the answer the total comes from to carry on — the form's owner can refund the earlier payment.`,
+          ? this.t(`That changes "{title}" to {amount}, so the {paid} you paid earlier no longer covers it. You'll need to pay the new amount — the form's owner can refund the earlier payment.`, {
+              title: block.title,
+              amount: formatAmount(now.amount, now.currency),
+              paid: formatAmount(held.amount, held.currency),
+            })
+          : this.t(`That changes "{title}" to a total this form can't take, so the {paid} you paid earlier no longer covers it. Change the answer the total comes from to carry on — the form's owner can refund the earlier payment.`, {
+              title: block.title,
+              paid: formatAmount(held.amount, held.currency),
+            }),
       );
     }
   }
@@ -2892,6 +2929,7 @@ export class SessionDO extends DurableObject<Bindings> {
     if (!parsed.success) return false;
     this.meta = stored.meta;
     this.doc = parsed.data;
+    await this.loadMessages();
     this.state = { answers: stored.answers, variables: stored.variables, hidden: this.meta.hiddenFields };
     /**
      * The high-water mark of what was actually emitted, not of what was last
@@ -4294,7 +4332,7 @@ export class SessionDO extends DurableObject<Bindings> {
       if (hasContent(extracted)) return this.record(block, extracted);
     }
 
-    const direct = validateAnswer(block, text, { timeZone: this.respondentZone() });
+    const direct = validateAnswer(block, text, { timeZone: this.respondentZone(), t: this.t });
 
     // ── 2. Hybrid and Scripted: is this simply the answer?
     //
@@ -4461,7 +4499,7 @@ export class SessionDO extends DurableObject<Bindings> {
     direct: { code?: string; hint?: string },
   ): Promise<{ accepted: boolean; error?: string }> {
     if (looksLikeQuestion(text)) {
-      await this.emitMessage(asideText(block));
+      await this.emitMessage(asideText(block, this.t));
       await this.emitMessage(questionText(block));
       await this.emitQuestion();
       return { accepted: true };
@@ -4542,7 +4580,7 @@ export class SessionDO extends DurableObject<Bindings> {
     }
     this.pendingUserTextPersisted = false;
     this.pendingUserMessageId = null;
-    await this.emitMessage("Tap any answer above to change it, or send the form when you're ready.");
+    await this.emitMessage(this.t("Tap any answer above to change it, or send the form when you're ready."));
     await this.emit("review", { answers: this.answerSummary() });
     return { accepted: true };
   }
@@ -4561,7 +4599,7 @@ export class SessionDO extends DurableObject<Bindings> {
     await this.emit("validation_error", { ref: block.ref, code, message: hint });
 
     if (count >= agent.escalateAfterInvalid) {
-      await this.emitMessage(escalateText(block));
+      await this.emitMessage(escalateText(block, this.t));
       await this.emit("escalate_ui", { ref: block.ref, spec: await this.publicBlockOf(block), reason: "repeated_invalid" });
       // Escalating used to be the one branch here that did not re-state the
       // question. The client arms its controls off the `question` event, so
@@ -4587,10 +4625,10 @@ export class SessionDO extends DurableObject<Bindings> {
         await this.emitQuestion();
         return { accepted: true };
       }
-      await this.emitMessage(clarifyText(block, hint, count));
+      await this.emitMessage(clarifyText(block, hint, count, this.t));
       await this.emitQuestion();
     } else {
-      await this.emitMessage(clarifyText(block, hint, count));
+      await this.emitMessage(clarifyText(block, hint, count, this.t));
       await this.emitQuestion();
     }
     return { accepted: true };
@@ -4697,7 +4735,7 @@ export class SessionDO extends DurableObject<Bindings> {
     raw: unknown,
     opts: ValidateOptions = {},
   ): Promise<{ accepted: boolean; error?: string }> {
-    let result = validateAnswer(block, raw, { timeZone: this.respondentZone(), ...opts });
+    let result = validateAnswer(block, raw, { timeZone: this.respondentZone(), t: this.t, ...opts });
 
     if (result.ok && block.type === "file_upload") {
       const authentic = await this.authenticFiles(result.value);
@@ -5221,8 +5259,8 @@ export class SessionDO extends DurableObject<Bindings> {
     await this.persistMeta();
     await this.emitMessage(
       missing.length === 1
-        ? `Almost there. I still need one answer before I can send this.`
-        : `Almost there. ${missing.length} answers are still missing before I can send this.`,
+        ? this.t("Almost there. I still need one answer before I can send this.")
+        : this.t("Almost there. {count} answers are still missing before I can send this.", { count: missing.length }),
     );
     await this.emitMessage(questionText(target));
     await this.emitQuestion();
@@ -5818,7 +5856,7 @@ export class SessionDO extends DurableObject<Bindings> {
       this.reopenQuestion(target);
       await this.persistMeta();
 
-      await this.emitMessage(`Sure, let's redo that one.`);
+      await this.emitMessage(this.t("Sure, let's redo that one."));
       if (this.doc.settings.agent.rephraseQuestions === false || !this.agentPhrases()) {
         await this.emitMessage(questionText(target));
       } else {

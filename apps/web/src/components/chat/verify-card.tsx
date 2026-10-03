@@ -5,6 +5,7 @@ import { Loader2, MailCheck, MessageSquareText } from "lucide-react";
 import { CodeForm } from "./auth-card";
 import { firebasePhoneConfigured, sendPhoneCode, type PhoneCodeSent } from "./firebase-phone";
 import type { VerifyState } from "./use-chat";
+import { useT } from "./i18n";
 
 /**
  * Confirming the answer they just gave, in the thread under it.
@@ -46,6 +47,7 @@ export function VerifyCard({
   onResend: () => void;
   onChange: () => void;
 }) {
+  const t = useT();
   const sms = verify.channel === "sms";
   const Icon = sms ? MessageSquareText : MailCheck;
 
@@ -53,7 +55,7 @@ export function VerifyCard({
     <div className="animate-message-in space-y-3 rounded-2xl bg-[var(--cf-chip-bg)] p-4">
       <p className="flex items-center gap-2 text-xs font-medium opacity-60">
         <Icon className="size-3.5" />
-        {sms ? "Confirm your number" : "Confirm your email"}
+        {sms ? t("Confirm your number") : t("Confirm your email")}
       </p>
 
       {sms ? (
@@ -67,7 +69,7 @@ export function VerifyCard({
           onSubmit={onSubmitCode}
           onResend={onResend}
           onChangeNumber={onChange}
-          changeLabel="Use a different address"
+          changeLabel={t("Use a different address")}
         />
       )}
 
@@ -102,6 +104,7 @@ function PhoneProof({
   onPhoneToken: (idToken: string) => void;
   onChange: () => void;
 }) {
+  const t = useT();
   const [sentAt, setSentAt] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,7 +162,7 @@ function PhoneProof({
           className="flex h-11 w-full items-center justify-center gap-2 rounded-full text-sm font-medium transition-transform active:scale-[0.98] disabled:opacity-50 motion-reduce:active:scale-100"
           style={{ background: "var(--cf-accent)", color: "var(--cf-accent-text)" }}
         >
-          {pending ? <Loader2 className="size-4 animate-spin" /> : `Send code to ${verify.sentTo}`}
+          {pending ? <Loader2 className="size-4 animate-spin" /> : t("Send code to {number}", { number: verify.sentTo })}
         </button>
       ) : (
         <CodeForm
@@ -181,7 +184,7 @@ function PhoneProof({
           onClick={onChange}
           className="text-[0.6875rem] underline opacity-55 hover:opacity-100"
         >
-          Use a different number
+          {t("Use a different number")}
         </button>
       )}
 
@@ -195,7 +198,7 @@ function PhoneProof({
 
       {error && (
         <p role="alert" className="text-destructive text-xs">
-          {error}
+          {t(error)}
         </p>
       )}
 
@@ -210,38 +213,48 @@ function PhoneProof({
  * which is never the respondent.
  */
 function PhoneUnavailable() {
+  const t = useT();
   useEffect(() => {
     console.error(
       "[chatform] Phone verification is unavailable: NEXT_PUBLIC_FIREBASE_API_KEY, " +
         "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN and NEXT_PUBLIC_FIREBASE_PROJECT_ID must all be set.",
     );
   }, []);
-  return <p className="text-xs opacity-60">Phone verification isn&apos;t available right now.</p>;
+  return <p className="text-xs opacity-60">{t("Phone verification isn't available right now.")}</p>;
 }
 
 /** The attribution Google's terms require in exchange for hiding the badge. */
 function RecaptchaNotice() {
+  const t = useT();
   return (
     <p className="text-[0.625rem] leading-relaxed opacity-40">
-      Protected by reCAPTCHA. Google&apos;s{" "}
-      <a
-        href="https://policies.google.com/privacy"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="underline hover:opacity-80"
-      >
-        Privacy Policy
-      </a>{" "}
-      and{" "}
-      <a
-        href="https://policies.google.com/terms"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="underline hover:opacity-80"
-      >
-        Terms
-      </a>{" "}
-      apply.
+      {t("Protected by reCAPTCHA. Google's {privacy} and {terms} apply.")
+        .split(/(\{privacy\}|\{terms\})/)
+        .map((part) =>
+          part === "{privacy}" ? (
+            <a
+              key="privacy"
+              href="https://policies.google.com/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:opacity-80"
+            >
+              {t("Privacy Policy")}
+            </a>
+          ) : part === "{terms}" ? (
+            <a
+              key="terms"
+              href="https://policies.google.com/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:opacity-80"
+            >
+              {t("Terms")}
+            </a>
+          ) : (
+            part
+          ),
+        )}
     </p>
   );
 }

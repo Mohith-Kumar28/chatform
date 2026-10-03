@@ -1,8 +1,12 @@
-import { interpolate, type Block, type FormDoc } from "@repo/form-schema";
+import { interpolate, untranslated, type Block, type FormDoc, type Translate } from "@repo/form-schema";
 
 /**
  * Template-mode phrasing: deterministic, zero-cost question/ack text.
  * The AI agent layer (M5) replaces these with LLM-generated phrasing.
+ *
+ * Each sentence here is ours rather than the author's, so each takes the
+ * session's `t` and comes out in the language the form is being read in. With
+ * none passed it is English, exactly as written.
  */
 
 /**
@@ -19,8 +23,8 @@ import { interpolate, type Block, type FormDoc } from "@repo/form-schema";
  * So the welcome case belongs to the flow, and this covers the other one.
  * `SessionDO.init` decides which applies.
  */
-export function greeting(doc: FormDoc): string {
-  return `Hi! I'll walk you through "${doc.title}". It only takes a minute.`;
+export function greeting(doc: FormDoc, t: Translate = untranslated): string {
+  return t(`Hi! I'll walk you through "{title}". It only takes a minute.`, { title: doc.title });
 }
 
 /**
@@ -47,14 +51,14 @@ export function transitionAck(index: number): string {
   return TRANSITIONS[index % TRANSITIONS.length]!;
 }
 
-export function clarifyText(block: Block, hint: string, attempt: number): string {
-  const openers = ["Hmm, ", "Sorry, ", "One more try: ", "Let me rephrase: "];
+export function clarifyText(block: Block, hint: string, attempt: number, t: Translate = untranslated): string {
+  const openers = [t("Hmm, "), t("Sorry, "), t("One more try: "), t("Let me rephrase: ")];
   const opener = openers[Math.min(attempt, openers.length - 1)]!;
   return `${opener}${hint} ${block.title}`;
 }
 
-export function escalateText(block: Block): string {
-  return `No problem, let's make this easier. You can use the controls below for "${block.title}".`;
+export function escalateText(block: Block, t: Translate = untranslated): string {
+  return t(`No problem, let's make this easier. You can use the controls below for "{title}".`, { title: block.title });
 }
 
 export function closingText(endingTitle: string): string {
@@ -87,12 +91,12 @@ export function looksLikeQuestion(text: string): boolean {
  * stop pretending the question was a bad answer, and the form's author may have
  * already written the answer to this one.
  */
-export function asideText(block: Block): string {
+export function asideText(block: Block, t: Translate = untranslated): string {
   const why = block.agentHints?.whyWeAsk?.trim();
   if (why) return why;
   return block.required
-    ? "Good question. I can't answer that one here, but this answer is needed to finish."
-    : "Good question. I can't answer that one here, and you're welcome to skip this if you'd rather.";
+    ? t("Good question. I can't answer that one here, but this answer is needed to finish.")
+    : t("Good question. I can't answer that one here, and you're welcome to skip this if you'd rather.");
 }
 
 /**
@@ -107,20 +111,20 @@ export function asideText(block: Block): string {
  * sends it from the page, on a tap, so this asks for the tap rather than
  * announcing a text that nobody has sent yet.
  */
-export function codeSentText(channel: "sms" | "email", destination: string): string {
+export function codeSentText(channel: "sms" | "email", destination: string, t: Translate = untranslated): string {
   return channel === "sms"
-    ? `Let's confirm ${destination}. Tap send below and a 6-digit code will come through by text.`
-    : `I've emailed a 6-digit code to ${destination}. Pop it in below to confirm the address.`;
+    ? t("Let's confirm {destination}. Tap send below and a 6-digit code will come through by text.", { destination })
+    : t("I've emailed a 6-digit code to {destination}. Pop it in below to confirm the address.", { destination });
 }
 
 /** When they replied to the code step with something that is not a code. */
-export function codeExpectedText(channel: "sms" | "email"): string {
+export function codeExpectedText(channel: "sms" | "email", t: Translate = untranslated): string {
   return channel === "sms"
-    ? "Use the box below to confirm that number. The code has to go through the verification step, not the chat."
-    : "I still need the 6-digit code from that email, or say the word and I'll send another.";
+    ? t("Use the box below to confirm that number. The code has to go through the verification step, not the chat.")
+    : t("I still need the 6-digit code from that email, or say the word and I'll send another.");
 }
 
 /** Once the code checks out, before the conversation moves on. */
-export function codeVerifiedText(channel: "sms" | "email"): string {
-  return channel === "sms" ? "Number confirmed, thank you." : "Address confirmed, thank you.";
+export function codeVerifiedText(channel: "sms" | "email", t: Translate = untranslated): string {
+  return channel === "sms" ? t("Number confirmed, thank you.") : t("Address confirmed, thank you.");
 }

@@ -1,7 +1,7 @@
 import { FENCE_RULE, fence, fenceNonce } from "@repo/guard";
 import { mediaUrls } from "./research.js";
 import { linkedFormSection, type SourceForm } from "./form-import.js";
-import { ADDABLE_BLOCK_TYPES, andList, enforcesUnique, OTHER_ANSWER, renderBlockCatalog, type Block, type FormDoc } from "@repo/form-schema";
+import { ADDABLE_BLOCK_TYPES, andList, languageName, enforcesUnique, OTHER_ANSWER, renderBlockCatalog, type Block, type FormDoc } from "@repo/form-schema";
 
 /**
  * The interview agent's prompts.
@@ -161,7 +161,12 @@ ${
 - They see nothing until you write text, and a tool call makes them wait for a second reply. So when you call a tool, put your short acknowledgement of what they said in the same response, before the tool call, and it reaches them straight away. After the tool result, carry on without acknowledging again: ask the question the result names, or give the answer you looked up. Never ask a question before a tool result that decides which one comes next.
 - They may change their mind about an earlier answer ("actually, change my team name", "I want to change my problem statement"). Never refuse, never tell them to start over, and never just ask the current question again as though they had not spoken: call change_earlier_answer with that question's ref, with the new value if they already gave it, or without one to reopen the question, then follow what it returns.
 - Otherwise, never ask about a ref other than the current objective. Never invent options.
-- Mirror the respondent's language. Sound like a person, not a brochure.
+- ${
+    // English is the unlabelled case, and must stay byte-identical: this prefix is cached.
+    doc.settings.language === "en"
+      ? "Mirror the respondent's language."
+      : `This form is in ${languageName(doc.settings.language)}, and the questions you are given are already written in it. Write in ${languageName(doc.settings.language)}. If the respondent writes to you in a different language, mirror theirs instead.`
+  } Sound like a person, not a brochure.
 - Punctuate like a person typing. NEVER use an em dash (—) or an en dash (–) in anything you send: use a full stop, a comma, a colon, brackets, or two shorter sentences. A dash-spliced sentence is the clearest tell there is that a machine wrote the message, and this form is meant to read like it came from somebody. The same goes for the rest of the AI house style: no "it's not just X, it's Y", no "let's dive in", no three-item flourish where one word would do.`);
 
   return parts.join("\n\n");

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { ArrowUp, X } from "lucide-react";
 import { Chip } from "./primitives";
+import { useT } from "../i18n";
 
 /** The server keeps up to this many characters of an "Other" answer. */
 export const MAX_OTHER_LENGTH = 200;
@@ -32,6 +33,7 @@ export function OtherOption({
   disabled?: boolean;
   submitLabel?: string;
 }) {
+  const t = useT();
   const input = useRef<HTMLInputElement>(null);
   const open = value !== null;
   useEffect(() => {
@@ -41,7 +43,7 @@ export function OtherOption({
   if (!open) {
     return (
       <Chip disabled={disabled} onClick={() => onChange("")}>
-        Other…
+        {t("Other…")}
       </Chip>
     );
   }
@@ -57,8 +59,8 @@ export function OtherOption({
         value={value}
         maxLength={MAX_OTHER_LENGTH}
         disabled={disabled}
-        aria-label="Your own answer"
-        placeholder="Type your answer"
+        aria-label={t("Your own answer")}
+        placeholder={t("Type your answer")}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Escape") onChange(null);
@@ -74,7 +76,7 @@ export function OtherOption({
         <button
           type="button"
           disabled={disabled || !text}
-          aria-label={submitLabel ?? "Send"}
+          aria-label={submitLabel ?? t("Send")}
           onClick={() => onSubmit(text)}
           className="inline-flex size-8 shrink-0 items-center justify-center rounded-[var(--cf-radius-control)] bg-[var(--cf-accent)] text-[var(--cf-accent-text)] disabled:opacity-40"
         >
@@ -83,7 +85,7 @@ export function OtherOption({
       ) : (
         <button
           type="button"
-          aria-label="Remove your own answer"
+          aria-label={t("Remove your own answer")}
           onClick={() => onChange(null)}
           className="inline-flex size-8 shrink-0 items-center justify-center rounded-full opacity-60 hover:opacity-100"
         >

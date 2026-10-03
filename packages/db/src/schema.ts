@@ -2072,3 +2072,21 @@ export const storagePurges = sqliteTable(
   },
   (t) => [index("idx_storage_purges_kind").on(t.kind, t.id)],
 );
+
+/**
+ * One form in several languages: a translation memory keyed by the source text.
+ * `form_id = ''` is chatform's own interface text. See migration 0063.
+ */
+export const formTranslations = sqliteTable(
+  "form_translations",
+  {
+    formId: text("form_id").notNull(),
+    lang: text("lang").notNull(),
+    sourceHash: text("source_hash").notNull(),
+    source: text("source").notNull(),
+    text: text("text").notNull(),
+    edited: integer("edited").notNull().default(0),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.formId, t.lang, t.sourceHash] })],
+);

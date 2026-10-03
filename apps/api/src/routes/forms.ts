@@ -4,12 +4,12 @@ import { validator } from "../lib/validator.js";
 import { withOwnerNotification } from "../lib/owner-notification.js";
 import { markAiTurnsApplied } from "../lib/ai-thread.js";
 import { z } from "zod";
-import { DEFAULT_REDIRECT_DELAY_SEC, FormDoc, ThemeDoc, lintFormDoc, hasErrors, migrateFormDoc } from "@repo/form-schema";
+import { DEFAULT_REDIRECT_DELAY_SEC, FormDoc, formLanguages, ThemeDoc, lintFormDoc, hasErrors, migrateFormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
 import { hashPassword, isHashedPassword } from "../lib/crypto.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
-import { requirePermission, requireGauge, entitlementsFor, assertPermission, type AuthzVars } from "../lib/authorize.js";
+import { requirePermission, requireGauge, requireFeature, entitlementsFor, assertPermission, type AuthzVars } from "../lib/authorize.js";
 import { accessFor, workspaceFilter, workspaceRoleFor } from "../lib/workspace-access.js";
 import { workspacePermissionsFor } from "../lib/permissions.js";
 import { stripForPublish, checkDocLimits, checkGatewayPayments } from "../lib/doc-entitlements.js";
@@ -25,6 +25,7 @@ import { requireWorkspace, formSlug, ALL_WORKSPACES } from "../lib/workspace.js"
 import { localMidnight } from "../lib/org-analytics.js";
 import { enqueueMail } from "../lib/mail.js";
 import { canOpenWorkspace } from "../lib/workspace-access.js";
+import { aiTranslate, importTranslationsCsv, translationStatus, translationsCsv, deferOn } from "../lib/translations.js";
 import { ARCHIVED_FORM_SELECT, archiveForm, purgeFormNow, restoreForm, type ArchivedFormRow } from "../lib/form-archive.js";
 
 export const formsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
@@ -60,6 +61,9 @@ formsRouter.post("/forms/:id/publish", requirePermission("form", "publish"));
 formsRouter.post("/forms/:id/unpublish", requirePermission("form", "publish"));
 formsRouter.delete("/forms/:id", requirePermission("form", "delete"));
 formsRouter.patch("/forms/:id/workspace", requirePermission("form", "update"));
+// Translating is an edit to the form, and offering more than one language is the paid part.
+formsRouter.post("/forms/:id/translations/:lang/ai", requirePermission("form", "update"), requireFeature("multi_language", { surface: "builder.languages" }));
+formsRouter.put("/forms/:id/translations/:lang/csv", requirePermission("form", "update"), requireFeature("multi_language", { surface: "builder.languages" }));
 
 const FormSummary = z.object({
   id: z.string(),
@@ -1052,5 +1056,116 @@ formsRouter.get(
       /* a damaged row reads as an empty thread */
     }
     return c.json({ turns } as z.infer<typeof AiThread>);
+  },
+);
+
+// ─── languages ───────────────────────────────────────────────────────────────
+
+const LanguageStatus = z.object({
+  lang: z.string(),
+  name: z.string(),
+  /** Strings in the draft as it stands. */
+  total: z.number(),
+  /** How many have a translation. Fewer than `total` is "Translation needed". */
+  translated: z.number(),
+});
+
+/** The draft, which is what an author is translating; a respondent reads the same strings once it is published. */
+async function draftDoc(c: Context<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>): Promise<FormDoc | null> {
+  const row = await c.env.DB.prepare(`SELECT working_schema FROM forms WHERE id = ? AND deleted_at IS NULL`)
+    .bind(c.get("form")!.id)
+    .first<{ working_schema: string }>();
+  if (!row) return null;
+  const parsed = FormDoc.safeParse(migrateFormDoc(JSON.parse(row.working_schema)));
+  return parsed.success ? parsed.data : null;
+}
+
+const noDraft = { error: { code: "not_found", message: "Form not found" } } as const;
+const notOffered = { error: { code: "language_not_added", message: "Add this language to the form first." } } as const;
+
+formsRouter.get(
+  "/forms/:id/translations",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Where each of the form's languages stands",
+    responses: { 200: { description: "Languages", content: { "application/json": { schema: resolver(z.object({ languages: z.array(LanguageStatus) })) } } } },
+  }),
+  async (c) => {
+    const doc = await draftDoc(c);
+    if (!doc) return c.json(noDraft, 404);
+    return c.json({ languages: await translationStatus(c.env, { formId: c.get("form")!.id, doc }) });
+  },
+);
+
+formsRouter.post(
+  "/forms/:id/translations/:lang/ai",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Translate the form into one of its languages with AI",
+    responses: {
+      200: { description: "Translated", content: { "application/json": { schema: resolver(LanguageStatus) } } },
+      404: { description: "The form does not offer this language", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
+    },
+  }),
+  async (c) => {
+    const doc = await draftDoc(c);
+    if (!doc) return c.json(noDraft, 404);
+    const lang = c.req.param("lang");
+    if (lang === doc.settings.language || !formLanguages(doc).includes(lang)) return c.json(notOffered, 404);
+    const form = c.get("form")!;
+    return c.json(await aiTranslate(c.env, { formId: form.id, organizationId: form.organization_id, doc, lang }));
+  },
+);
+
+formsRouter.get(
+  "/forms/:id/translations/:lang/csv",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Download a language's translations as a spreadsheet to fill in",
+    responses: { 200: { description: "CSV: id, original, translation" } },
+  }),
+  async (c) => {
+    const doc = await draftDoc(c);
+    if (!doc) return c.json(noDraft, 404);
+    const lang = c.req.param("lang");
+    if (lang === doc.settings.language || !formLanguages(doc).includes(lang)) return c.json(notOffered, 404);
+    const csv = await translationsCsv(c.env, { formId: c.get("form")!.id, doc, lang });
+    return c.body(csv, 200, {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="translations-${lang}.csv"`,
+    });
+  },
+);
+
+formsRouter.put(
+  "/forms/:id/translations/:lang/csv",
+  describeRoute({
+    tags: ["dashboard"],
+    summary: "Upload a filled-in translations spreadsheet",
+    responses: {
+      200: { description: "Saved", content: { "application/json": { schema: resolver(z.object({ saved: z.number(), skipped: z.number(), status: LanguageStatus })) } } },
+      404: { description: "The form does not offer this language", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
+      413: { description: "The file is too large", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
+    },
+  }),
+  async (c) => {
+    const doc = await draftDoc(c);
+    if (!doc) return c.json(noDraft, 404);
+    const lang = c.req.param("lang");
+    if (lang === doc.settings.language || !formLanguages(doc).includes(lang)) return c.json(notOffered, 404);
+    const csv = await c.req.text();
+    // Every string a form can hold, twice over, is well under this.
+    if (csv.length > 4_000_000) return c.json({ error: { code: "too_large", message: "That file is too large." } }, 413);
+    const form = c.get("form")!;
+    return c.json(
+      await importTranslationsCsv(c.env, {
+        formId: form.id,
+        organizationId: form.organization_id,
+        doc,
+        lang,
+        csv,
+        defer: deferOn(c),
+      }),
+    );
   },
 );

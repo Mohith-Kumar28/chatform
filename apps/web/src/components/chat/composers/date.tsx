@@ -6,6 +6,7 @@ import { DayPicker, type ClassNames } from "react-day-picker";
 import { addDays, addYears, format, isAfter, isBefore, isValid, parseISO, startOfDay, startOfMonth } from "date-fns";
 import { localZone, slotsOnDay } from "@repo/form-schema";
 import { cn } from "@/lib/utils";
+import { useT, type Translate } from "../i18n";
 
 /**
  * Date composer.
@@ -42,6 +43,7 @@ export function DateComposer({
   timeZone?: string;
   onPick: (iso: string, display: string) => void;
 }) {
+  const t = useT();
   const today = startOfDay(new Date());
   /**
    * The day chosen so far, when a time is still owed.
@@ -115,9 +117,9 @@ export function DateComposer({
   // Shortcuts for the common near dates, only the ones the bounds allow. A
   // block capped in the past (a birthday) simply gets none.
   const quick = [
-    { label: "Today", date: today },
-    { label: "Tomorrow", date: addDays(today, 1) },
-    { label: "Next week", date: addDays(today, 7) },
+    { label: t("Today"), date: today },
+    { label: t("Tomorrow"), date: addDays(today, 1) },
+    { label: t("Next week"), date: addDays(today, 7) },
   ].filter((q) => !disabled(q.date));
 
   if (includeTime && chosenDay) {
@@ -134,13 +136,13 @@ export function DateComposer({
           </button>
           <span className="flex items-center gap-1 text-xs opacity-50">
             <Clock className="size-3" />
-            {zoneLabel(chosenDay) ?? "Pick a time"}
+            {zoneLabel(chosenDay, t) ?? t("Pick a time")}
           </span>
         </div>
 
         {slots.length === 0 ? (
           <p className="px-1 py-4 text-center text-xs opacity-60">
-            No times left on that day. Pick another one.
+            {t("No times left on that day. Pick another one.")}
           </p>
         ) : (
           <div className="grid max-h-56 grid-cols-3 gap-1.5 overflow-y-auto">
@@ -148,7 +150,7 @@ export function DateComposer({
               <button
                 key={ms}
                 type="button"
-                onClick={() => onPick(slotMoment(ms), `${format(chosenDay, "EEE d MMM yyyy")} at ${formatSlot(ms)}`)}
+                onClick={() => onPick(slotMoment(ms), t("{date} at {time}", { date: format(chosenDay, "EEE d MMM yyyy"), time: formatSlot(ms) }))}
                 className="rounded-lg border border-[var(--cf-chip-border)] px-2 py-2 text-xs transition-colors hover:border-transparent hover:bg-[var(--cf-accent)] hover:text-[var(--cf-accent-text)]"
               >
                 {formatSlot(ms)}
@@ -266,12 +268,12 @@ function slotMoment(ms: number): string {
 }
 
 /** "Times in GMT+5:30": the times on the pad are theirs, and this says so. */
-function zoneLabel(day: Date): string | null {
+function zoneLabel(day: Date, t: Translate): string | null {
   try {
     const name = new Intl.DateTimeFormat("en-US", { timeZoneName: "short" })
       .formatToParts(day)
       .find((p) => p.type === "timeZoneName")?.value;
-    return name ? `Times in ${name}` : null;
+    return name ? t("Times in {zone}", { zone: name }) : null;
   } catch {
     return null;
   }

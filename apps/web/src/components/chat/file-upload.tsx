@@ -13,6 +13,7 @@ import {
 } from "@repo/form-schema";
 import { uploadToSession, type UploadedFile } from "./upload-transport";
 import { cn } from "@/lib/utils";
+import { useT } from "./i18n";
 
 interface Item {
   key: string;
@@ -55,6 +56,7 @@ export function FileUploadControl({
   disabled?: boolean;
   onSubmit: (files: UploadedFile[], display: string) => void;
 }) {
+  const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
@@ -85,19 +87,19 @@ export function FileUploadControl({
           name: file.name,
           size: file.size,
           state: "error",
-          error: `This one is ${formatSize(file.size)}, and the limit is ${maxSizeMB}MB. Try a smaller version, or a screenshot instead.`,
+          error: t("This one is {size}, and the limit is {limit}MB. Try a smaller version, or a screenshot instead.", { size: formatSize(file.size), limit: maxSizeMB }),
         });
         continue;
       }
       const mime = uploadMimeOf(file.name, file.type);
       if (!acceptsMime(accept, mime)) {
-        const what = mime ? `${describeMime(mime)} files` : "This kind of file";
+        const what = mime ? t("{kind} files", { kind: describeMime(mime) }) : t("This kind of file");
         push({
           key,
           name: file.name,
           size: file.size,
           state: "error",
-          error: `${what} can't be used here. Try ${isAnyFile(accept) ? "an image, a PDF or a document" : describeAccept(accept)}.`,
+          error: t("{what} can't be used here. Try {options}.", { what, options: isAnyFile(accept) ? t("an image, a PDF or a document") : describeAccept(accept) }),
         });
         continue;
       }
@@ -107,7 +109,7 @@ export function FileUploadControl({
         const stored = await uploadToSession({ file, blockRef, uploadBase, respondentToken });
         patch({ state: "done", file: stored });
       } catch (err) {
-        patch({ state: "error", error: err instanceof Error ? err.message : "Upload failed" });
+        patch({ state: "error", error: err instanceof Error ? t(err.message) : t("Upload failed") });
       }
     }
   }
@@ -119,8 +121,8 @@ export function FileUploadControl({
   // dig through their files wants first is which files are even allowed.
   const limits = [
     describeAccept(accept),
-    `up to ${maxSizeMB}MB`,
-    maxFiles > 1 ? `${maxFiles} files max` : "",
+    t("up to {size}MB", { size: maxSizeMB }),
+    maxFiles > 1 ? t("{count} files max", { count: maxFiles }) : "",
   ]
     .filter(Boolean)
     .join(" \u00b7 ");
@@ -183,7 +185,7 @@ export function FileUploadControl({
             {dropIcon(accept)}
           </span>
           <span className="text-sm font-medium">
-            {full ? "That's all we need" : dragging ? "Drop to upload" : "Drop a file or tap to choose"}
+            {full ? t("That's all we need") : dragging ? t("Drop to upload") : t("Drop a file or tap to choose")}
           </span>
           <span className="text-xs opacity-55">{limits}</span>
         </button>
@@ -225,7 +227,7 @@ export function FileUploadControl({
                 {item.state !== "uploading" && (
                   <button
                     type="button"
-                    aria-label={item.state === "error" ? "Dismiss" : `Remove ${item.name}`}
+                    aria-label={item.state === "error" ? t("Dismiss") : t("Remove {name}", { name: item.name })}
                     onClick={() => setItems((s) => s.filter((it) => it.key !== item.key))}
                     className="shrink-0 opacity-50 transition-opacity hover:opacity-100"
                   >
@@ -253,10 +255,10 @@ export function FileUploadControl({
           )}
         >
           {busy
-            ? "Uploading…"
+            ? t("Uploading…")
             : done.length === 1
-              ? "Send this file"
-              : `Send these ${done.length} files`}
+              ? t("Send this file")
+              : t("Send these {count} files", { count: done.length })}
         </button>
       )}
     </div>

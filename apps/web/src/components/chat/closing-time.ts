@@ -5,6 +5,8 @@
  * same split as `respondent-hint.ts` and `stuck-turn.ts`.
  */
 
+import type { Translate } from "./i18n";
+
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
@@ -51,7 +53,13 @@ interface Options {
   /** Test seams. Undefined means the respondent's own locale and zone. */
   locale?: string;
   timeZone?: string;
+  /** The form's language. Undefined reads as the English written here. */
+  t?: Translate;
 }
+
+/** `t` for a caller with no dictionary: the English, with its placeholders filled. */
+const plain: Translate = (text, vars) =>
+  vars ? text.replace(/\{([a-zA-Z]+)\}/g, (whole, name: string) => (name in vars ? String(vars[name]) : whole)) : text;
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
@@ -71,7 +79,7 @@ export function describeClosing(
   const at = Date.parse(closeAt);
   if (!Number.isFinite(at)) return null;
 
-  const { started = false, locale, timeZone } = opts;
+  const { started = false, locale, timeZone, t = plain } = opts;
   const remaining = at - now;
 
   const absolute = new Intl.DateTimeFormat(locale, {
@@ -82,12 +90,12 @@ export function describeClosing(
 
   if (remaining <= 0) {
     const text = started
-      ? "Closing time passed. You can still finish this response."
-      : "This form has closed.";
+      ? t("Closing time passed. You can still finish this response.")
+      : t("This form has closed.");
     return { tier: "passed", text, tickMs: null, srText: text };
   }
 
-  const srText = `This form closes on ${absolute}.`;
+  const srText = t("This form closes on {date}.", { date: absolute });
 
   // Under an hour, the hours field is always zero and printing it wastes the
   // two characters that make the minutes legible at a glance.
@@ -96,7 +104,7 @@ export function describeClosing(
     const secs = Math.floor((remaining % MINUTE) / SECOND);
     return {
       tier: "imminent",
-      text: `Closes in ${pad(mins)}:${pad(secs)}`,
+      text: t("Closes in {time}", { time: `${pad(mins)}:${pad(secs)}` }),
       tickMs: SECOND,
       srText,
     };
@@ -108,7 +116,7 @@ export function describeClosing(
     const secs = Math.floor((remaining % MINUTE) / SECOND);
     return {
       tier: "hours",
-      text: `Closes in ${pad(hours)}:${pad(mins)}:${pad(secs)}`,
+      text: t("Closes in {time}", { time: `${pad(hours)}:${pad(mins)}:${pad(secs)}` }),
       tickMs: SECOND,
       srText,
     };
@@ -120,7 +128,7 @@ export function describeClosing(
       tier: "days",
       // "1d 00h" for the one minute either side of the boundary is worse than
       // the day on its own.
-      text: hours > 0 ? `Closes in 1d ${pad(hours)}h` : "Closes in 1d",
+      text: hours > 0 ? t("Closes in 1d {hours}h", { hours: pad(hours) }) : t("Closes in 1d"),
       tickMs: MINUTE,
       srText,
     };
@@ -137,7 +145,7 @@ export function describeClosing(
     tier: "distant",
     // The date, because that is what someone plans around at this distance,
     // and the count, because "9d left" is the part that reads as pressure.
-    text: `Closes ${date} · ${days}d left`,
+    text: t("Closes {date} · {days}d left", { date, days }),
     tickMs: MINUTE,
     srText,
   };
@@ -170,11 +178,12 @@ export interface CapacityDescription {
  */
 export function describeCapacity(
   capacity: { max: number; taken: number } | undefined,
+  t: Translate = plain,
 ): CapacityDescription | null {
   if (!capacity || !Number.isFinite(capacity.max) || capacity.max <= 0) return null;
 
   const left = Math.max(0, capacity.max - capacity.taken);
-  if (left === 0) return { text: "No spots left", urgent: true };
+  if (left === 0) return { text: t("No spots left"), urgent: true };
 
   /*
    * Scarce in proportion or scarce in absolute terms, whichever is the larger
@@ -183,5 +192,5 @@ export function describeCapacity(
    * other one lie.
    */
   const urgent = left <= Math.max(5, Math.floor(capacity.max * 0.1));
-  return { text: left === 1 ? "1 spot left" : `${left} spots left`, urgent };
+  return { text: left === 1 ? t("1 spot left") : t("{count} spots left", { count: left }), urgent };
 }

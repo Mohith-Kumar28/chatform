@@ -37,6 +37,14 @@ export const CLOSED_MESSAGE_DEFAULT = "This form is no longer accepting response
 
 export const SettingsDoc = z.object({
   language: z.string().length(2).default("en"),
+  /**
+   * The other languages the form is offered in, beside `language`.
+   *
+   * Codes only: the translations themselves are not in the document (see
+   * `languages.ts`). Caught rather than refused, because a form doc re-parses
+   * on every read and one bad entry here must not take the form down.
+   */
+  languages: z.array(z.string().length(2)).max(20).default([]).catch([]),
   rtl: z.boolean().default(false),
 
   progressBar: z.enum(["percent", "steps", "none"]).default("percent"),

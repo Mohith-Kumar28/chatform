@@ -27,6 +27,7 @@ import {
 import { LockedControl } from "@/components/billing/gate";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { LinkSettings } from "./link-settings";
+import { LanguageSettings } from "./language-settings";
 import { FollowUpPanel } from "./followup-panel";
 import { AgentSettings } from "./agent-settings";
 import { ShortcutsList } from "@/components/ui/shortcuts-dialog";
@@ -52,6 +53,7 @@ interface SettingsPanelProps {
 // last section here now, drawn apart in the nav so it is not lost in the list.
 const SECTIONS = [
   { id: "general", label: "General" },
+  { id: "language", label: "Language" },
   { id: "access", label: "Access & closing" },
   { id: "hidden", label: "Hidden fields & variables" },
   { id: "link", label: "Link & social" },
@@ -223,6 +225,12 @@ export function SettingsPanel({
           </SettingGroup>
         </SettingSection>
         </>
+      )}
+
+      {section === "language" && (
+        <SettingSection title="Language">
+          <LanguageSettings formId={params.id} settings={settings} onChange={onChange} />
+        </SettingSection>
       )}
 
       {section === "access" && (

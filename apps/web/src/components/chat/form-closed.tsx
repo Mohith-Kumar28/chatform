@@ -10,6 +10,7 @@ import { useThemeFonts } from "@/lib/theme-fonts";
 import { LogoMark } from "@/components/brand/logo";
 import { RichText, SAFE_ELEMENTS } from "./rich-text";
 import { cn } from "@/lib/utils";
+import { useT } from "./i18n";
 
 /**
  * What somebody gets when they open a form that is no longer taking answers.
@@ -63,6 +64,7 @@ export function FormClosed({
   message?: string;
   contained?: boolean;
 }) {
+  const t = useT();
   const logoUrl = safeMediaSrc(config.theme.logoUrl);
   const body = (message ?? config.closedMessage ?? "").trim();
 
@@ -82,6 +84,8 @@ export function FormClosed({
   const full = config.closedReason === "capacity";
   useThemeFonts(config.theme);
   const schemeTheme = useSchemeTheme(config.theme);
+  // Our name sits inside the line, wherever the language puts it.
+  const [beforeBrand, afterBrand] = t("Powered by {brand}").split("{brand}");
 
   return (
     <div
@@ -150,7 +154,7 @@ export function FormClosed({
           className="mt-1.5 w-full min-w-0 text-2xl font-semibold break-words text-balance sm:text-3xl"
           style={{ fontFamily: "var(--cf-font-heading)" }}
         >
-          {full ? "This form is full" : "This form is closed"}
+          {full ? t("This form is full") : t("This form is closed")}
         </h1>
 
         {authored && (
@@ -188,10 +192,11 @@ export function FormClosed({
       */}
       {!config.brandingHidden && (
         <p className="pb-6 text-center text-[0.6875rem] opacity-40">
-          Powered by{" "}
+          {beforeBrand}
           <a href="https://chatform.in" target="_blank" rel="noreferrer" className="underline">
             chatform
           </a>
+          {afterBrand}
         </p>
       )}
     </div>
@@ -221,6 +226,7 @@ export function FormClosed({
  * either. The heading stands on its own.
  */
 function ClosedDetail({ closeAt, full }: { closeAt?: string; full: boolean }) {
+  const t = useT();
   const nowRef = useRef(0);
   const subscribe = useCallback((onStoreChange: () => void) => {
     nowRef.current = Date.now();
@@ -236,7 +242,7 @@ function ClosedDetail({ closeAt, full }: { closeAt?: string; full: boolean }) {
   if (full) {
     return (
       <Chip icon={<Users className="mt-px size-3.5 shrink-0" strokeWidth={2} />}>
-        Every place has been taken
+        {t("Every place has been taken")}
       </Chip>
     );
   }
@@ -252,7 +258,7 @@ function ClosedDetail({ closeAt, full }: { closeAt?: string; full: boolean }) {
 
   return (
     <Chip icon={<Clock className="mt-px size-3.5 shrink-0" strokeWidth={2} />}>
-      Closed {new Intl.DateTimeFormat(undefined, { dateStyle: "long", timeStyle: "short" }).format(at)}
+      {t("Closed {date}", { date: new Intl.DateTimeFormat(undefined, { dateStyle: "long", timeStyle: "short" }).format(at) })}
     </Chip>
   );
 }

@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { isDarkColor, resolveScheme, ThemeDoc, type PublicFormConfig } from "@repo/form-schema";
 import { ChatClient } from "@/components/chat/chat-client";
+import { LanguageGate } from "@/components/chat/language";
+import { I18nProvider } from "@/components/chat/i18n";
 import { FormClosed } from "@/components/chat/form-closed";
 import { ViewPing } from "@/components/chat/view-ping";
 import { EmbedBridge } from "@/components/chat/embed-bridge";
@@ -13,9 +15,10 @@ import { SITE_ORIGIN } from "@/lib/seo";
 const API_ORIGIN = process.env.API_ORIGIN ?? process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.in";
 const PUBLIC_API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "https://api.chatform.in";
 
-async function getConfig(slug: string): Promise<PublicFormConfig | null> {
+async function getConfig(slug: string, lang?: string): Promise<PublicFormConfig | null> {
   try {
-    const res = await fetch(`${API_ORIGIN}/p/forms/${slug}/config`, { cache: "no-store" });
+    const query = lang ? `?lang=${encodeURIComponent(lang.slice(0, 8))}` : "";
+    const res = await fetch(`${API_ORIGIN}/p/forms/${slug}/config${query}`, { cache: "no-store" });
     if (!res.ok) return null;
     return (await res.json()) as PublicFormConfig;
   } catch {
@@ -104,7 +107,10 @@ export async function generateMetadata({ params }: PageProps<"/f/[slug]">): Prom
 export default async function PublicFormPage({ params, searchParams }: PageProps<"/f/[slug]">) {
   const { slug } = await params;
   const query = await searchParams;
-  const config = await getConfig(slug);
+  // A language the link names, of the ones the form offers. The API falls back
+  // to the form as written for anything else, so an unknown code is harmless.
+  const lang = typeof query.lang === "string" ? query.lang : undefined;
+  const config = await getConfig(slug, lang);
 
   // A dead API or a bad slug used to render a plausible-looking empty chat
   // built from a hardcoded fallback config. A respondent could sit in a form
@@ -126,9 +132,11 @@ export default async function PublicFormPage({ params, searchParams }: PageProps
    */
   if (config.closed) {
     return (
-      <div className={query.embed === "1" ? "cf-embedded" : undefined}>
+      <div className={query.embed === "1" ? "cf-embedded" : undefined} lang={config.language} dir={config.rtl ? "rtl" : undefined}>
         <ViewPing slug={slug} apiOrigin={PUBLIC_API_ORIGIN} />
-        <FormClosed config={config} />
+        <I18nProvider messages={config.messages}>
+          <FormClosed config={config} />
+        </I18nProvider>
       </div>
     );
   }
@@ -182,7 +190,7 @@ export default async function PublicFormPage({ params, searchParams }: PageProps
   const paymentCancelled = typeof query.cf_pay_cancelled === "string" ? query.cf_pay_cancelled : undefined;
 
   return (
-    <div className={embedded ? "cf-embedded" : undefined}>
+    <div className={embedded ? "cf-embedded" : undefined} lang={config.language} dir={config.rtl ? "rtl" : undefined}>
       {/* A view is a view whether it is framed or not. */}
       <ViewPing slug={slug} apiOrigin={PUBLIC_API_ORIGIN} />
       {embedded ? (
@@ -192,14 +200,18 @@ export default async function PublicFormPage({ params, searchParams }: PageProps
           hiddenFieldNames={config.hiddenFieldNames ?? []}
         />
       ) : null}
-      <ChatClient
-        config={config}
-        hiddenFields={hiddenFields}
-        resumeToken={resumeToken}
-        followUpId={followUpId}
-        paymentReturn={paymentReturn}
-        paymentCancelled={paymentCancelled}
-      />
+      <I18nProvider messages={config.messages}>
+      <LanguageGate config={config} explicit={lang !== undefined}>
+        <ChatClient
+          config={config}
+          hiddenFields={hiddenFields}
+          resumeToken={resumeToken}
+          followUpId={followUpId}
+          paymentReturn={paymentReturn}
+          paymentCancelled={paymentCancelled}
+        />
+      </LanguageGate>
+      </I18nProvider>
     </div>
   );
 }

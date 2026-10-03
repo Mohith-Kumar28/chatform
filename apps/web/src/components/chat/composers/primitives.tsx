@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef } from "react";
 import { Mic, SendHorizontal, SkipForward, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InputSemantics } from "./input-semantics";
+import { useT } from "../i18n";
 
 /**
  * Chat composer primitives, themed entirely from the runtime `--cf-*` variables
@@ -178,6 +179,7 @@ export function ComposerShell({
  * becoming furniture people stop seeing.
  */
 export function SkipButton({ onSkip }: { onSkip: () => void }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -192,7 +194,7 @@ export function SkipButton({ onSkip }: { onSkip: () => void }) {
       )}
     >
       <SkipForward className="size-4" strokeWidth={2} />
-      Skip
+      {t("Skip")}
       {/* Esc, not a letter: the composer is focused on every question, so a
           one-letter shortcut would eat the first character of an answer that
           starts with it. `kbd-hint` hides this where there is no keyboard. */}
@@ -207,7 +209,7 @@ export function SendRow({
   children,
   onSend,
   disabled,
-  label = "Send",
+  label: givenLabel,
   canSkip = false,
   onSkip,
 }: {
@@ -219,6 +221,8 @@ export function SendRow({
   canSkip?: boolean;
   onSkip?: () => void;
 }) {
+  const t = useT();
+  const label = givenLabel ?? t("Send");
   return (
     <div className="relative flex items-end">
       <div className="min-w-0 flex-1">{children}</div>
@@ -297,15 +301,16 @@ export function DictateButton({
   shortcut?: string;
   className?: string;
 }) {
+  const t = useT();
   return (
     <button
       type="button"
       onClick={onToggle}
       onMouseDown={keepFocus}
       aria-pressed={listening}
-      aria-label={listening ? "Stop dictating" : "Dictate your answer"}
+      aria-label={listening ? t("Stop dictating") : t("Dictate your answer")}
       aria-keyshortcuts={shortcut ? DICTATE_KEY : undefined}
-      title={shortcut ? `${listening ? "Stop dictating" : "Dictate"} (${shortcut})` : undefined}
+      title={shortcut ? `${listening ? t("Stop dictating") : t("Dictate")} (${shortcut})` : undefined}
       className={cn(
         // One pill, key and mic together, so the M reads as this button's key
         // rather than a stray label beside it. Where `kbd-hint` draws nothing

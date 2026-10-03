@@ -84,7 +84,7 @@ export const FEATURES: Record<FeatureKey, FeatureMeta> = {
   remove_branding: { label: "Remove chatform branding", blurb: "Drop the “Powered by chatform” footer." },
 
   duplicate_prevention: { label: "One response per person", blurb: "Limit a form to one response each, recognised by the respondent's browser." },
-  multi_language: { label: "Multiple languages", blurb: "Serve one form in several languages.", soon: true },
+  multi_language: { label: "Multiple languages", blurb: "Offer one form in several languages, translated for you." },
   respondent_auth_google: { label: "Google verification", blurb: "Ask respondents to verify who they are." },
   respondent_auth_phone: { label: "Phone verification", blurb: "Verify respondents by SMS code." },
   respondent_auth_email: { label: "Email verification", blurb: "Verify respondents with a code sent to their email." },
