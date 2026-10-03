@@ -27,9 +27,12 @@ function Recording() {
   const [playing, setPlaying] = useState(false);
   const [userPaused, setUserPaused] = useState(false);
   const [muted, setMuted] = useState(true);
-  /* Sound is on unless the visitor turns it off. A browser only lets a video
-     be heard once the page has been tapped or typed in, so until then it plays
-     silently and the first tap anywhere brings the sound in. */
+  /* Sound is on unless the visitor turns it off. The same approach as the
+     product tour: always try to play with sound first, because a browser
+     allows it for anyone who has tapped or typed on the page and, in Chrome,
+     for a returning visitor who has played our video before. Only when that
+     is refused does it play silently, and then the first tap, click or key
+     anywhere on the page brings the sound in without restarting it. */
   const wantSound = useRef(true);
 
   useEffect(() => {
@@ -37,31 +40,57 @@ function Recording() {
     if (!el || typeof IntersectionObserver === "undefined") return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     el.volume = 0.7;
+
+    const GESTURES = ["pointerdown", "keydown", "touchend", "click"] as const;
+    let armed = false;
+    const disarm = () => {
+      armed = false;
+      for (const type of GESTURES) window.removeEventListener(type, onGesture, { capture: true });
+    };
+    const arm = () => {
+      if (armed) return;
+      armed = true;
+      for (const type of GESTURES) window.addEventListener(type, onGesture, { capture: true });
+    };
+    const playSilently = () => {
+      el.muted = true;
+      el.play().catch(() => {});
+      arm();
+    };
+    /* With sound if the browser allows it, silently and listening if not. */
     const start = () => {
-      el.muted = !(wantSound.current && navigator.userActivation?.hasBeenActive);
-      el.play().catch(() => {
-        // Sound was refused after all: play silently instead of not at all.
+      if (!wantSound.current) {
         el.muted = true;
         el.play().catch(() => {});
-      });
+        return;
+      }
+      el.muted = false;
+      el.play().then(disarm, playSilently);
     };
+    function onGesture(event: Event) {
+      // The player's own buttons speak for themselves.
+      if (event.target instanceof Node && el!.parentElement?.contains(event.target)) return;
+      if (!wantSound.current) return disarm();
+      // Off screen it is paused; the next time it scrolls in, `start` tries
+      // with sound, and this gesture is what lets that succeed.
+      if (el!.paused || !el!.muted) return;
+      el!.muted = false;
+      // A gesture the browser does not count (the end of a scroll, say)
+      // pauses an unmuted video: go back to silent and wait for a real one.
+      el!.play().then(disarm, playSilently);
+    }
+
     const io = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && !userPaused) start();
+        if (entry?.isIntersecting && !userPaused) start();
         else el.pause();
       },
       { threshold: 0.35 },
     );
     io.observe(el);
-    const unlock = () => {
-      if (wantSound.current) el.muted = false;
-    };
-    window.addEventListener("pointerup", unlock, { once: true });
-    window.addEventListener("keydown", unlock, { once: true });
     return () => {
       io.disconnect();
-      window.removeEventListener("pointerup", unlock);
-      window.removeEventListener("keydown", unlock);
+      disarm();
     };
   }, [userPaused]);
 
