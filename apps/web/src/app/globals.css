@@ -1928,3 +1928,25 @@ html.cf-keyboard-open [data-chat-header-row] {
 .fab-clear:not(:has([data-fill-viewport])) {
   padding-bottom: var(--fab-clearance);
 }
+
+/* Marketing doodles drift a little as their section scrolls past (doodles.tsx).
+   A scroll-driven timeline, so no script; without support they sit still. */
+@supports (animation-timeline: view()) {
+  .doodle-drift {
+    animation: cf-doodle-drift linear both;
+    animation-timeline: view();
+  }
+}
+@keyframes cf-doodle-drift {
+  from {
+    translate: 0 28px;
+  }
+  to {
+    translate: 0 -28px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .doodle-drift {
+    animation: none;
+  }
+}

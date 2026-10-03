@@ -1,6 +1,16 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { Doodle, type DoodleName } from "./doodles";
+
+const FOOTER_DOODLES: { name: DoodleName; tone: "orange" | "violet"; tilt: number }[] = [
+  { name: "bubble", tone: "violet", tilt: -6 },
+  { name: "pencil", tone: "orange", tilt: 8 },
+  { name: "check", tone: "violet", tilt: -4 },
+  { name: "sparkle", tone: "orange", tilt: 12 },
+  { name: "envelope", tone: "violet", tilt: -10 },
+  { name: "plane", tone: "orange", tilt: 6 },
+];
 
 /**
  * Every link here resolves. Nothing is listed that does not exist yet.
@@ -19,14 +29,11 @@ const COLUMNS = [
       { href: "/use-cases", label: "What people use it for" },
       { href: "/form-templates", label: "Form templates" },
       { href: "/ai-form-builder", label: "AI form builder" },
-      { href: "/#how-it-works", label: "How it works" },
-      { href: "/#the-moment", label: "How it answers back" },
-      /* `/#product` was the describe/shape/share band, which is gone — the
-         mosaic it summarised does the same job at `#features`, sharing
-         included. A footer link to a deleted anchor scrolls nowhere and
-         nothing on the page says so. */
-      { href: "/#features", label: "Building and sharing" },
-      { href: "/pricing#question-types", label: "Question types" },
+      { href: "/#features", label: "The builder" },
+      { href: "/#design", label: "Design your form" },
+      { href: "/#analytics", label: "Form analytics" },
+      { href: "/#share", label: "Share and embed" },
+      { href: "/#question-types", label: "Question types" },
       { href: "/pricing", label: "Pricing" },
     ],
   },
@@ -153,6 +160,15 @@ export function MarketingFooter() {
           the docs, where it is written down properly.
         */}
         <p>Made with care, for people who have to ask other people things.</p>
+      </div>
+
+      {/* A last row of the page's doodles, standing in a line. */}
+      <div aria-hidden className="mx-auto mt-12 hidden max-w-6xl grid-cols-6 md:grid">
+        {FOOTER_DOODLES.map((d) => (
+          <div key={d.name} className="relative grid h-20 place-items-center">
+            <Doodle name={d.name} tone={d.tone} tilt={d.tilt} drift={false} className="static size-16" />
+          </div>
+        ))}
       </div>
     </footer>
   );

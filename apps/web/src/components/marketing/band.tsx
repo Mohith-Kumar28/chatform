@@ -4,13 +4,11 @@ import { DotField, MarkWatermark } from "./annotate";
 /**
  * A full-bleed horizontal band, tinted by one block family.
  *
- * This replaces `Section`, and the thing it deliberately does not have is an
- * eyebrow. The old shell took one on every band — "The difference", "How it
- * works", "Build", "Converse", "Collect", "Pricing", "Questions" — nine tiny
- * uppercase labels each restating the heading directly beneath it in weaker
- * type. They were the page's most repeated element and its least useful: a
- * heading that needs a label above it to explain what it is has not been
- * written yet. The prop is gone rather than optional, so it cannot come back.
+ * The eyebrow came back on 2026-10-03, at the owner's call, with the home page
+ * rebuilt on Youform's structure. It was removed once for restating the heading
+ * beneath it; the rule now is that an eyebrow names the feature ("Partial
+ * submissions") and the heading says what it does for you, so the two never
+ * say the same thing.
  *
  * `tone` names a question family, and the ground comes from that family's
  * `-band` token — pastel on cream, deep tint on charcoal, derived rather than
@@ -96,6 +94,7 @@ export function Band({
   containerClassName,
   size = "default",
   mark,
+  hairline = false,
 }: {
   id?: string;
   tone?: BandTone;
@@ -110,6 +109,8 @@ export function Band({
    * Off unless asked for, and asked for rarely — see the note below.
    */
   mark?: keyof typeof MARK_PLACEMENTS;
+  /** A 1px rule across the top: how two cream sections meet without a colour change. */
+  hairline?: boolean;
 }) {
   /**
    * The plain tones are the flat ones.
@@ -145,6 +146,7 @@ export function Band({
         size === "tall" && "py-24 sm:py-32",
         tone === "sand" && "bg-muted/50",
         tone === "ink" && "bg-foreground text-background dark:bg-card dark:text-foreground",
+        hairline && "border-border/70 border-t",
         className,
       )}
     >
@@ -180,10 +182,13 @@ export function BandTitle({
   children,
   accent,
   accentClassName,
+  eyebrow,
   className,
   as: Comp = "h2",
 }: {
   children: React.ReactNode;
+  /** The feature's name, small and uppercase, above the heading. */
+  eyebrow?: React.ReactNode;
   /**
    * A second line in the hand, the way the switch band's heading answers
    * itself. Orange by default, which holds on cream, sand and ink; a vivid
@@ -195,32 +200,44 @@ export function BandTitle({
   as?: "h1" | "h2";
 }) {
   return (
-    <Comp
-      /* Fluid to 3.9rem, up from a fixed 2.75. The old size was one step above
-         the body copy beneath it and one step below the hero — a heading that
-         resolves an argument in five words, set as though it were a paragraph
-         label. On a ground this saturated a timid heading is worse than on
-         cream: the colour commits and the type does not, and the band reads as
-         a mistake rather than a decision. Tracking tightens with the size, as
-         display type has to. */
-      className={cn(
-        "font-display text-[2.5rem] leading-[1.03] font-bold tracking-[-0.04em] text-balance",
-        "sm:text-[clamp(2.75rem,1.4rem+3.4vw,3.9rem)]",
-        className,
-      )}
-    >
+    <>
+      {eyebrow && <Eyebrow className="mb-4">{eyebrow}</Eyebrow>}
+      <Comp
+        /* Fluid to 3.9rem, up from a fixed 2.75. The old size was one step above
+           the body copy beneath it and one step below the hero — a heading that
+           resolves an argument in five words, set as though it were a paragraph
+           label. On a ground this saturated a timid heading is worse than on
+           cream: the colour commits and the type does not, and the band reads as
+           a mistake rather than a decision. Tracking tightens with the size, as
+           display type has to. */
+        className={cn(
+          "font-display text-[2.5rem] leading-[1.03] font-bold tracking-[-0.04em] text-balance",
+          "sm:text-[clamp(2.75rem,1.4rem+3.4vw,3.9rem)]",
+          className,
+        )}
+      >
+        {children}
+        {accent && (
+          <span
+            className={cn(
+              "font-hand text-primary block text-[1.12em] leading-[1.05] font-normal tracking-normal",
+              accentClassName,
+            )}
+          >
+            {accent}
+          </span>
+        )}
+      </Comp>
+    </>
+  );
+}
+
+/** A small uppercase label: what this section is about, before what it says. */
+export function Eyebrow({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <p className={cn("text-primary-soft-foreground text-xs font-bold tracking-[0.09em] uppercase", className)}>
       {children}
-      {accent && (
-        <span
-          className={cn(
-            "font-hand text-primary block text-[1.12em] leading-[1.05] font-normal tracking-normal",
-            accentClassName,
-          )}
-        >
-          {accent}
-        </span>
-      )}
-    </Comp>
+    </p>
   );
 }
 

@@ -1,19 +1,31 @@
 import type { Metadata } from "next";
 import { LaunchVideo } from "@/components/marketing/launch-video";
 import { Hero } from "@/components/marketing/hero";
-import { SpectrumStrip } from "@/components/marketing/spectrum-strip";
-import { TheMoment } from "@/components/marketing/the-moment";
-import { HowItConverts } from "@/components/marketing/how-it-converts";
-import { WhatItDoes } from "@/components/marketing/what-it-does";
 import { Developers } from "@/components/marketing/developers";
 import { SwitchBand } from "@/components/marketing/switch-band";
-import { PricingSection } from "@/components/marketing/pricing-section";
 import { CtaBand } from "@/components/marketing/cta-band";
 import { ChatformEmbed } from "@/components/marketing/chatform-embed";
-import { Band, BandTitle, BandLede } from "@/components/marketing/band";
+import { Band } from "@/components/marketing/band";
+import { LogoMarquee, StatsRow, TestimonialQuote } from "@/components/marketing/social-proof";
+import { AiBuilderSection } from "@/components/marketing/ai-builder-section";
+import { BuilderRecording } from "@/components/marketing/builder-recording";
+import { QuestionTypesSection } from "@/components/marketing/question-types-section";
+import { CustomizeSection } from "@/components/marketing/theme-playground";
+import { UnlimitedBand } from "@/components/marketing/unlimited-band";
+import { Capabilities } from "@/components/marketing/capabilities";
+import { AnalyticsSection } from "@/components/marketing/analytics-section";
+import { AskYourData } from "@/components/marketing/ask-your-data";
+import { PartialsSection } from "@/components/marketing/partials-section";
+import { ShareTabs } from "@/components/marketing/share-tabs";
+import { TrustSection } from "@/components/marketing/trust-section";
+import { TemplatesTeaser } from "@/components/marketing/templates-teaser";
+import { ReviewsCarousel } from "@/components/marketing/reviews-carousel";
+import { HOME_FAQ, HomeFaq } from "@/components/marketing/home-faq";
+import { AskAi } from "@/components/marketing/ask-ai";
+import { TESTIMONIALS } from "@/content/social-proof";
 import { JsonLd } from "@/components/seo/json-ld";
 import { buildCatalogue, dollars } from "@/lib/pricing-catalogue";
-import { canonical, openGraphBase, softwareApplicationLd } from "@/lib/seo";
+import { canonical, faqPageLd, openGraphBase, softwareApplicationLd } from "@/lib/seo";
 
 /**
  * Plain words in every position, page and metadata alike — and the outcome
@@ -72,57 +84,25 @@ export const metadata: Metadata = {
 };
 
 /**
- * Six bands, down from thirteen sections.
+ * The home page, rebuilt on 2026-10-03 on Youform's structure at the owner's
+ * call: one feature per section, each an eyebrow, a two-line heading, a short
+ * paragraph and one picture or live demo, separated by hairlines, with tinted
+ * panels (unlimited, partials, ask-your-data) and full-bleed bands (templates,
+ * the close) for contrast. Testimonials are woven between features, not
+ * collected at the end.
  *
- * What left this page, and where it went:
+ * Left the page in that rebuild: HowItConverts, TheMoment, WhatItDoes, the
+ * spectrum strip and the pricing cards (pricing lives on /pricing). Kept:
+ * the launch video and the developer band.
  *
- *  - `MetricBand` — four big numbers over four small labels. Deleted. The
- *    count of question types is now the spectrum strip, which shows the range
- *    instead of stating it; the three infrastructure numbers moved into the
- *    developer band, where they mean something.
- *  - The 26-tile question-type grid — a full screen to say "there are a lot,
- *    and each has a colour". The strip says it in a fifth of the height; the
- *    full list moved to `/pricing#question-types`.
- *  - `ActBuild` / `ActConverse` / `ActCollect` — three consecutive grids of
- *    fourteen identical cards. Merged into one mosaic where no two tiles are
- *    the same shape.
- *  - `HowItWorks` — "Describe it. Shape it. Share it." in three cards.
- *    Deleted. Two of the three said what the mosaic directly beneath them
- *    already said at four times the size, in the same order, with better
- *    pictures; the heading was the same claim as `WhatItDoes`' heading. The
- *    third, sharing, is the one thing the mosaic did not cover, so it became a
- *    full-width tile inside it. A band whose job is to summarise the band
- *    below it is a band the reader has to read twice.
- *  - `ComparisonTable` — seven vendors and sixteen rows, with footnotes.
- *    Moved to `/pricing`. Somebody reading a competitive matrix is comparing,
- *    and comparing happens on the pricing page.
- *  - The eight-item FAQ — every answer a paragraph. Moved to `/pricing`.
- *
- * The scroll is now a progression through the block-family palette: cream,
- * the full spectrum, violet, cream, sand with coloured tiles, ink, cream,
- * orange. The same colours a respondent moves through, in the same order.
- *
- * `LaunchVideo` sits directly under the hero: the chat demo up there makes the
- * point in seconds, and the video gets the full width for the long version.
- *
- * `HowItConverts` follows, in three tiles: it talks like a person, it chases
- * the ones who left, and it answers the questions a form leaves unanswered.
- *
- * `TheDropOff` ("a long form is a list of reasons to leave") was removed on
- * 2026-09-27 at the owner's call; its citations still live in
- * `content/research.ts` and on /why-conversation-works.
+ * The social-proof slots (logos, stats, four testimonials, reviews) render
+ * nothing until `content/social-proof.ts` has real entries.
  */
 export default function LandingPage() {
   const catalogue = buildCatalogue();
 
   return (
     <>
-      {/*
-        The product, as a product, on the page most searches for it land on.
-        It was only on `/pricing`, so the home page told a crawler that an
-        organisation and a website existed and nothing about what they sell.
-        Same offers as the pricing page, built from the same catalogue.
-      */}
       <JsonLd
         nodes={[
           softwareApplicationLd(
@@ -133,33 +113,38 @@ export default function LandingPage() {
               url: "/pricing",
             })),
           ),
+          faqPageLd(HOME_FAQ.map((f) => ({ question: f.q, answer: f.a }))),
         ]}
       />
       <Hero />
+      <LogoMarquee />
+      <StatsRow />
       <LaunchVideo />
-      <HowItConverts />
       <SwitchBand />
-      <SpectrumStrip />
-      <TheMoment />
-      <WhatItDoes />
+      <AiBuilderSection />
+      <BuilderRecording />
+      <QuestionTypesSection />
+      <CustomizeSection />
+      <UnlimitedBand />
+      <Capabilities />
+      <AnalyticsSection />
+      <AskYourData />
+      <PartialsSection />
+      <ShareTabs />
+      <TrustSection />
       <Developers />
-
-      <Band id="pricing" size="tall">
-        <div className="max-w-2xl">
-          {/* "Free" on a pricing page is the most distrusted word in software,
-              and the answer to the distrust is the thing somebody would have
-              scribbled next to it, so it is the heading's own second line. */}
-          <BandTitle accent="no card to start.">Free until you outgrow it.</BandTitle>
-          <BandLede>Build, publish and collect for free, forever.</BandLede>
-        </div>
-        <div className="mt-12">
-          <PricingSection />
-        </div>
-      </Band>
-
+      <TemplatesTeaser />
+      {TESTIMONIALS.big && (
+        <Band hairline>
+          <TestimonialQuote testimonial={TESTIMONIALS.big} variant="big" />
+        </Band>
+      )}
+      <ReviewsCarousel />
+      <HomeFaq />
       <CtaBand />
+      <AskAi />
 
-      {/* The contact form as a corner button, with the dashboard's own settings. */}
+      {/* The contact form as a corner button; the share band's "Try the popup" opens it too. */}
       <ChatformEmbed form="contact-us-673e52" />
     </>
   );

@@ -234,9 +234,13 @@ export function ResultsAnalytics({ analytics }: { analytics: AnalyticsPayload })
                 fill="var(--muted)"
                 fillOpacity={0.5}
                 dot={false}
+                /* No entrance animations on this chart: they stuck part-way
+                   when the data re-rendered mid-draw, leaving views drawn for
+                   the first few days and the bars at a third of their height. */
+                isAnimationActive={false}
               />
-              <Bar dataKey="completed" name="Completed" stackId="r" fill="var(--chart-1)" maxBarSize={48} radius={[0, 0, 0, 0]} />
-              <Bar dataKey="unfinished" name="Didn't finish" stackId="r" fill="var(--chart-2)" maxBarSize={48} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="completed" name="Completed" stackId="r" fill="var(--chart-1)" maxBarSize={48} radius={[0, 0, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="unfinished" name="Didn't finish" stackId="r" fill="var(--chart-2)" maxBarSize={48} radius={[4, 4, 0, 0]} isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
         )}

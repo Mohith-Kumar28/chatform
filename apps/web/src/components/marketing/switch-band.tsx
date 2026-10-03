@@ -7,7 +7,10 @@ import { SwitchPanel } from "@/components/import/switch-panel";
 import { SourceLogo } from "@/components/import/source-logo";
 import type { ImportSource } from "@/components/import/import-client";
 import { IMPORT_PAGES } from "@/content/import-sources";
+import { TESTIMONIALS } from "@/content/social-proof";
 import { cn } from "@/lib/utils";
+import { SectionLede, SectionTitle } from "./kit";
+import { TestimonialQuote } from "./social-proof";
 
 /**
  * "Already using something else?" The importer, on the home page.
@@ -22,16 +25,15 @@ export function SwitchBand() {
   const page = IMPORT_PAGES.find((p) => p.source === active)!;
 
   return (
-    <Band id="import" size="tall">
+    <Band id="import" hairline>
       <div className="max-w-2xl">
-        <p className="text-muted-foreground text-xs font-semibold tracking-[0.14em] uppercase">Already using something else?</p>
-        <h2 className="font-display mt-4 text-4xl leading-[1.02] font-semibold tracking-tight text-balance sm:text-6xl">
+        <SectionTitle eyebrow="Already using something else?" accent="Bring your questions with you.">
           Switch to chatform.
-          <span className="font-hand text-primary block text-[1.1em] leading-[1.05] font-normal">Bring your questions with you.</span>
-        </h2>
-        <p className="text-muted-foreground mt-5 max-w-xl text-lg leading-relaxed text-pretty">
-          Paste a Typeform, Google Forms, Tally, Jotform or Youform link, or any page with a form on it. We copy the questions and the logic, and you can talk to it before you sign up.
-        </p>
+        </SectionTitle>
+        <SectionLede className="max-w-xl">
+          Paste a Typeform, Google Forms, Tally, Jotform or Youform link, or any page with a form on it. We copy the
+          questions and the logic, and you can talk to it before you sign up.
+        </SectionLede>
       </div>
 
       <div role="tablist" aria-label="Your current form builder" className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -69,6 +71,8 @@ export function SwitchBand() {
             tab, and a remount there would wipe the link that moved it. */}
         <SwitchPanel page={page} onDetect={setActive} />
       </div>
+
+      <TestimonialQuote testimonial={TESTIMONIALS.switch} />
     </Band>
   );
 }
