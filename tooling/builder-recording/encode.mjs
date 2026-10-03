@@ -6,8 +6,8 @@
  * Reads the .events.json written beside the recording and:
  *  - speeds up the slow stretches (typing ~2x, the AI drafting the form ~4x),
  *  - zooms in on the prompt while it is typed, and back out,
- *  - lays a click on every click, keys under every typing stretch, a whoosh as
- *    the AI starts and a ding when the form lands (Kenney CC0 sounds from
+ *  - lays a soft click on every click, keys under every typing stretch, a
+ *    whoosh as the AI starts and a ding when the form lands (sounds from
  *    launch-video/public), and
  *  - writes builder-demo.mp4 (h264 + aac, faststart) and a webp poster.
  *
@@ -85,20 +85,31 @@ v.push(`${segments.map((_, i) => `[v${i}]`).join("")}concat=n=${segments.length}
 const inputs = ["-i", input];
 const a = [];
 let n = 0;
-function sound(file, t, { volume = 1, length } = {}) {
+function sound(file, t, { volume = 1, length, lowpass, skip = 0 } = {}) {
   inputs.push("-i", join(SFX, file));
   n += 1;
   const ms = Math.max(0, Math.round(warp(t) * 1000));
-  const trim = length ? `atrim=0:${length.toFixed(3)},afade=t=out:st=${Math.max(0, length - 0.15).toFixed(3)}:d=0.15,` : "";
-  a.push(`[${n}:a]${trim}aformat=sample_rates=48000:channel_layouts=stereo,volume=${volume},adelay=${ms}|${ms}[a${n}]`);
+  // `skip` drops a sample's leading silence, so the sound lands on its event.
+  const fade = length ? Math.min(0.15, length / 2) : 0;
+  const trim = length
+    ? `atrim=${skip.toFixed(3)}:${(skip + length).toFixed(3)},asetpts=PTS-STARTPTS,afade=t=out:st=${(length - fade).toFixed(3)}:d=${fade.toFixed(3)},`
+    : "";
+  // A low-pass takes the bright edge off a sample, so it sits under the picture.
+  const soften = lowpass ? `lowpass=f=${lowpass},` : "";
+  a.push(`[${n}:a]${trim}${soften}aformat=sample_rates=48000:channel_layouts=stereo,volume=${volume},adelay=${ms}|${ms}[a${n}]`);
 }
 
-for (const e of events) if (e.type === "click" && e.t > LEAD) sound("sfx-k/click.wav", e.t, { volume: 0.7 });
-sound("sfx/typing-fast.mp3", typeStart.t, { volume: 0.45, length: warp(typeEnd.t) - warp(typeStart.t) });
+// Quiet on purpose. The first mix used Kenney's click, an 11 ms tick at full
+// brightness, and it was harsh at any volume: a real mouse click, rolled off
+// and well under the typing, is felt more than heard.
+for (const e of events)
+  if (e.type === "click" && e.t > LEAD) sound("sfx/rm-mouse-click.wav", e.t, { volume: 0.5, skip: 0.095, length: 0.08, lowpass: 4500 });
+sound("sfx/typing-soft.mp3", typeStart.t, { volume: 0.5, length: warp(typeEnd.t) - warp(typeStart.t), lowpass: 5000 });
 const keys = [at("keys-start"), at("keys-end")];
-if (keys[0] && keys[1]) sound("sfx/typing-fast.mp3", keys[0].t, { volume: 0.4, length: Math.max(0.3, keys[1].t - keys[0].t) });
-sound("sfx/rm-whoosh.wav", waitStart.t, { volume: 0.35 });
-sound("sfx/rm-ding.wav", waitEnd.t, { volume: 0.4 });
+if (keys[0] && keys[1])
+  sound("sfx/typing-soft.mp3", keys[0].t, { volume: 0.45, length: Math.max(0.3, keys[1].t - keys[0].t), lowpass: 5000 });
+sound("sfx/rm-whoosh.wav", waitStart.t, { volume: 0.14, lowpass: 4000 });
+sound("sfx/rm-ding.wav", waitEnd.t, { volume: 0.16 });
 
 a.push(
   `${Array.from({ length: n }, (_, i) => `[a${i + 1}]`).join("")}amix=inputs=${n}:normalize=0:duration=longest,` +

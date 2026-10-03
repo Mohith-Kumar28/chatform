@@ -21,11 +21,7 @@ import { TrustSection } from "@/components/marketing/trust-section";
 import { TemplatesTeaser } from "@/components/marketing/templates-teaser";
 import { ReviewsCarousel } from "@/components/marketing/reviews-carousel";
 import { HOME_FAQ, HomeFaq } from "@/components/marketing/home-faq";
-import { SpectrumStrip } from "@/components/marketing/spectrum-strip";
-import { HowItConverts } from "@/components/marketing/how-it-converts";
-import { TheMoment } from "@/components/marketing/the-moment";
-import { AgentBrief } from "@/components/marketing/agent-brief";
-import { ResponsesSection } from "@/components/marketing/responses-section";
+import { HowItsDifferent } from "@/components/marketing/how-its-different";
 import { TESTIMONIALS } from "@/content/social-proof";
 import { JsonLd } from "@/components/seo/json-ld";
 import { buildCatalogue, dollars } from "@/lib/pricing-catalogue";
@@ -95,12 +91,12 @@ export const metadata: Metadata = {
  * the close) for contrast. Testimonials are woven between features, not
  * collected at the end.
  *
- * Our own sections came along, reshaped to the same pattern, because they are
- * what makes chatform different: the three pillars (talks like a person,
- * follows up, answers back), the knowledge-base demo, the agent brief, the
- * conversation-not-the-row results, the typed-answer reads, the dead-end
- * linter and the ordinary-things list (inside Capabilities), and the spectrum
- * strip. Only the pricing cards left; they live on /pricing.
+ * What makes chatform different sits in one section right after the tour,
+ * "How is this different from other forms?": it asks again, it follows up, and
+ * it answers back from a knowledge base and a brief. The typed-answer reads,
+ * the dead-end linter and the ordinary-things list are inside Capabilities.
+ * The question types have one section of their own, so nothing repeats them
+ * under the hero. Only the pricing cards left; they live on /pricing.
  *
  * The social-proof slots (logos, stats, four testimonials, reviews) render
  * nothing until `content/social-proof.ts` has real entries.
@@ -124,21 +120,17 @@ export default function LandingPage() {
         ]}
       />
       <Hero />
-      <SpectrumStrip />
       <LogoMarquee />
       <StatsRow />
       <LaunchVideo />
-      <HowItConverts />
+      <HowItsDifferent />
       <SwitchBand />
       <AiBuilderSection />
       <BuilderRecording />
-      <TheMoment />
-      <AgentBrief />
       <QuestionTypesSection />
       <CustomizeSection />
       <UnlimitedBand />
       <Capabilities />
-      <ResponsesSection />
       <AnalyticsSection />
       <AskYourData />
       <PartialsSection />

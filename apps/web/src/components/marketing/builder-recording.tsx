@@ -9,8 +9,8 @@ import { PANEL_SHADOW, SectionLede, SectionTitle, TextLink } from "./kit";
 import { TestimonialQuote } from "./social-proof";
 
 /**
- * A silent screen recording of the real builder, under 1 MB, served as a static
- * asset. Re-record with `tooling/builder-recording/record.mjs` and `encode.mjs`
+ * A screen recording of the real builder with quiet click and typing sounds,
+ * about 1 MB, served as a static asset. Re-record with `tooling/builder-recording/record.mjs` and `encode.mjs`
  * when the builder changes enough that this stops matching it.
  */
 const VIDEO = "/marketing/builder-demo.mp4";
@@ -27,20 +27,42 @@ function Recording() {
   const [playing, setPlaying] = useState(false);
   const [userPaused, setUserPaused] = useState(false);
   const [muted, setMuted] = useState(true);
+  /* Sound is on unless the visitor turns it off. A browser only lets a video
+     be heard once the page has been tapped or typed in, so until then it plays
+     silently and the first tap anywhere brings the sound in. */
+  const wantSound = useRef(true);
 
   useEffect(() => {
     const el = video.current;
     if (!el || typeof IntersectionObserver === "undefined") return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    el.volume = 0.7;
+    const start = () => {
+      el.muted = !(wantSound.current && navigator.userActivation?.hasBeenActive);
+      el.play().catch(() => {
+        // Sound was refused after all: play silently instead of not at all.
+        el.muted = true;
+        el.play().catch(() => {});
+      });
+    };
     const io = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && !userPaused) el.play().catch(() => {});
+        if (entry.isIntersecting && !userPaused) start();
         else el.pause();
       },
       { threshold: 0.35 },
     );
     io.observe(el);
-    return () => io.disconnect();
+    const unlock = () => {
+      if (wantSound.current) el.muted = false;
+    };
+    window.addEventListener("pointerup", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      io.disconnect();
+      window.removeEventListener("pointerup", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
   }, [userPaused]);
 
   const toggle = () => {
@@ -63,12 +85,11 @@ function Recording() {
     el.play().catch(() => {});
   };
 
-  /* It has to start muted to autoplay; the clicks and typing are one tap away. */
   const toggleSound = () => {
     const el = video.current;
     if (!el) return;
     el.muted = !el.muted;
-    setMuted(el.muted);
+    wantSound.current = !el.muted;
     if (!el.muted && el.paused) el.play().catch(() => {});
   };
 
@@ -97,6 +118,7 @@ function Recording() {
         preload="none"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
+        onVolumeChange={(e) => setMuted(e.currentTarget.muted)}
         aria-label="Screen recording: a form is built from a sentence, the questions are walked through, a rating question is added, the design is changed and the share page is opened."
         className="block aspect-[1600/900] w-full bg-[var(--muted)]"
       />

@@ -189,10 +189,10 @@ export const MOMENT_SCRIPT: readonly DemoTurn[] = [
     role: "bot",
     text: "Almost done. Where should I send your invite?",
   },
-  { role: "user", text: "hold on, how much is Pro before I commit to anything?", waitMs: 1100 },
+  { role: "user", text: "hold on, how long does onboarding take? we launch next month", waitMs: 1100 },
   {
     role: "bot",
-    text: "Pro is $24 a month, or $192 a year, which works out to $16 a month. It covers 2,000 AI conversations, your own branding, and the partial responses people leave behind.\n\nAnyway, where should I send your invite?",
+    text: "About two weeks from kickoff, and your first workspace is live within three days. A launch next month is comfortable.\n\nAnyway, where should I send your invite?",
     waitMs: 700,
   },
   { role: "user", text: "maya@northwind.co", waitMs: 1400 },
