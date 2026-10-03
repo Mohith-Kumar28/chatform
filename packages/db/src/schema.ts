@@ -19,6 +19,8 @@ export const users = sqliteTable(
     updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
     /** Set when the person deletes their account; purged 30 days later unless they recover it. */
     deletedAt: ts("deleted_at"),
+    /** The last erase warning sent for a deleted account ('3d' or '1d'). */
+    deletionNotice: text("deletion_notice"),
   },
   // Signups in a window — the daily rollup and the console's live tile both ask
   // for exactly this and nothing else on the row.
@@ -325,6 +327,8 @@ export const forms = sqliteTable(
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
     updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
     deletedAt: ts("deleted_at"),
+    /** The last erase warning sent for a deleted account ('3d' or '1d'). */
+    deletionNotice: text("deletion_notice"),
     /** When an archived form is deleted for good. Null on every live form. */
     purgeAt: ts("purge_at"),
     /** Who archived it; the purge warnings go to them. */

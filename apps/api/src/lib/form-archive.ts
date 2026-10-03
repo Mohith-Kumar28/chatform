@@ -18,13 +18,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const ARCHIVE_RETENTION_MS = 30 * DAY_MS;
 
 export type PurgeNotice = "3d" | "1d";
-const NOTICE_LEAD_MS: Record<PurgeNotice, number> = { "3d": 3 * DAY_MS, "1d": DAY_MS };
+export const NOTICE_LEAD_MS: Record<PurgeNotice, number> = { "3d": 3 * DAY_MS, "1d": DAY_MS };
 
 /**
  * Warnings go out once a day, in this UTC hour (08:30 in India), so a batch of forms
  * archived together lands as one email rather than one per five-minute tick.
  */
-const NOTICE_HOUR_UTC = 3;
+export const NOTICE_HOUR_UTC = 3;
 
 /** Archive a form. False when it was not found or already archived. */
 export async function archiveForm(

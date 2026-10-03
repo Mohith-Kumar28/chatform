@@ -488,33 +488,80 @@ export function passwordResetEmail(a: { name: string | null; resetUrl: string })
 
 // ─────────────────────────── account deletion ───────────────────────────
 
-/** Sent the moment someone deletes their account: the date it is erased, and the way back. */
-export function accountDeletionEmail(a: { name: string | null; purgeAt: number; signInUrl: string }): Omit<MailMessage, "to"> {
-  const greeting = a.name?.trim() ? `Hi ${escapeHtml(a.name.trim())},` : "Hi,";
-  const when = longDate(a.purgeAt);
+/**
+ * A deleted account: right after it is deleted, then three days and one day
+ * before it is erased. Leads with what goes, in numbers, the way the Archive's
+ * warning does, and has one button: sign in to recover it.
+ */
+export function accountDeletionEmail(a: {
+  stage: "scheduled" | "3d" | "1d";
+  email: string;
+  name: string | null;
+  deletedAt: number;
+  purgeAt: number;
+  tally: { organizations: number; forms: number; responses: number; files: number };
+  recoverUrl: string;
+}): Omit<MailMessage, "to"> {
+  const date = longDate(a.purgeAt);
+  const hi = a.name?.trim() ? `${a.name.trim().split(/\s+/)[0]!}, ` : "";
+  const eyebrow = a.stage === "1d" ? "Erasing tomorrow" : a.stage === "3d" ? "Erasing in 3 days" : "Account deleted";
+  const tone = a.stage === "3d" ? "warning" : "danger";
+  const title =
+    a.stage === "1d"
+      ? "Your account will be erased tomorrow"
+      : a.stage === "3d"
+        ? `Your account will be erased on ${date}`
+        : "Your account is deleted";
+  const lead =
+    a.stage === "scheduled"
+      ? `${hi}you deleted your chatform account and were signed out everywhere. Nothing is gone yet: sign in before ${date} and everything comes back exactly as it was.`
+      : `${hi}your chatform account will be erased for good ${a.stage === "1d" ? "tomorrow" : `on ${date}`}. After that it cannot be recovered. Sign in before then to keep it.`;
+  const lost =
+    a.tally.forms > 0
+      ? statTiles([
+          { value: a.tally.forms.toLocaleString("en-US"), label: a.tally.forms === 1 ? "Form" : "Forms" },
+          { value: a.tally.responses.toLocaleString("en-US"), label: a.tally.responses === 1 ? "Response" : "Responses" },
+          { value: a.tally.files.toLocaleString("en-US"), label: a.tally.files === 1 ? "File" : "Files" },
+        ])
+      : "";
+  const reassurance =
+    a.stage === "scheduled"
+      ? "Didn't do this? Recover your account, then change your password."
+      : "If you meant to delete it, there is nothing to do.";
+
   const body = [
-    h1("Your account is deleted"),
-    p(greeting),
-    p(`Your chatform account has been deleted and you have been signed out everywhere. Forms in workspaces only you were in have stopped taking responses.`),
-    p(`<strong>Everything is erased for good on ${when}.</strong> Until then, sign in to recover your account exactly as it was.`),
-    button(a.signInUrl, "Recover my account"),
-    p(`<span style="color:${MUTED};font-size:13px;">Didn't do this? Sign in and recover your account, then change your password.</span>`),
-    fallbackLink(a.signInUrl),
+    hero({ eyebrow, tone, title, subtitle: escapeHtml(lead) }),
+    lost,
+    detailRows([
+      ["Account", escapeHtml(a.email)],
+      ["Deleted on", escapeHtml(longDate(a.deletedAt))],
+      ["Erased on", escapeHtml(date)],
+    ]),
+    `<p style="margin:12px 0 0 0;font-size:13px;line-height:1.6;color:${MUTED};">Organizations only you are in go with it: their forms, responses and files. Organizations shared with others stay with them.</p>`,
+    button(a.recoverUrl, "Recover my account"),
+    p(`<span style="color:${MUTED};">${escapeHtml(reassurance)}</span>`),
   ].join("\n");
 
   return {
-    subject: "Your chatform account is deleted",
-    html: layout({ preheader: `Sign in before ${when} to recover it.`, body }),
+    subject: a.stage === "scheduled" ? "Your chatform account is deleted" : `Your chatform account will be erased ${a.stage === "1d" ? "tomorrow" : `on ${date}`}`,
+    html: layout({
+      preheader: lead,
+      body,
+      footer: `You received this because the chatform account for ${escapeHtml(a.email)} was deleted.`,
+    }),
     text: [
-      greeting.replace(/<[^>]+>/g, ""),
+      lead,
       ``,
-      `Your chatform account has been deleted and you have been signed out everywhere. Forms in workspaces only you were in have stopped taking responses.`,
+      ...(a.tally.forms > 0
+        ? [`Erased with it: ${count(a.tally.forms, "form", "forms")}, ${count(a.tally.responses, "response", "responses")}, ${count(a.tally.files, "file", "files")}.`, ``]
+        : []),
+      `Account: ${a.email}`,
+      `Deleted on: ${longDate(a.deletedAt)}`,
+      `Erased on: ${date}`,
       ``,
-      `Everything is erased for good on ${when}. Until then, sign in to recover your account exactly as it was:`,
+      `Recover my account: ${a.recoverUrl}`,
       ``,
-      a.signInUrl,
-      ``,
-      `Didn't do this? Sign in and recover your account, then change your password.`,
+      reassurance,
     ].join("\n"),
   };
 }

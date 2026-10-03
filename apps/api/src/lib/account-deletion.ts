@@ -4,8 +4,8 @@ import { deleteSessionCookie, setSessionCookie } from "better-auth/cookies";
 import { z } from "zod";
 import type { Bindings } from "../env.js";
 import { purgeUserData } from "./delete-account.js";
+import { NOTICE_HOUR_UTC, NOTICE_LEAD_MS, type PurgeNotice } from "./form-archive.js";
 import { enqueueMail } from "./mail.js";
-import { webOrigins } from "./origins.js";
 
 /**
  * Deleting an account, with a way back.
@@ -82,19 +82,14 @@ export function accountDeletionPlugin(env: Bindings): BetterAuthPlugin {
 
           const deletedAt = Date.now();
           await ctx.context.internalAdapter.updateUser(user.id, { deletedAt: new Date(deletedAt) });
+          // A fresh thirty days gets both warnings again, even after an earlier recovery.
+          await env.DB.prepare(`UPDATE users SET deletion_notice = NULL WHERE id = ?`).bind(user.id).run();
           await ctx.context.internalAdapter.deleteUserSessions(user.id);
           deleteSessionCookie(ctx);
 
-          const purgeAt = purgeDateFor(deletedAt);
-          await enqueueMail(env, {
-            kind: "account_deletion_scheduled",
-            to: user.email,
-            name: user.name ?? null,
-            purgeAt,
-            signInUrl: `${webOrigins(env)[0]!}/signin`,
-          });
+          await enqueueMail(env, { kind: "account_deletion", userId: user.id, stage: "scheduled" });
           console.log("account_deletion_scheduled", user.id);
-          return ctx.json({ deletedAt, purgeAt });
+          return ctx.json({ deletedAt, purgeAt: purgeDateFor(deletedAt) });
         },
       ),
 
@@ -105,6 +100,7 @@ export function accountDeletionPlugin(env: Bindings): BetterAuthPlugin {
         async (ctx) => {
           const { session, user } = ctx.context.session;
           await ctx.context.internalAdapter.updateUser(user.id, { deletedAt: null });
+          await env.DB.prepare(`UPDATE users SET deletion_notice = NULL WHERE id = ?`).bind(user.id).run();
           // The cached session cookie still carries the old mark for up to five
           // minutes; rewrite it so the dashboard opens on the next request.
           await setSessionCookie(ctx, { session, user: { ...user, deletedAt: null } as typeof user });
@@ -140,6 +136,59 @@ export function accountDeletionPlugin(env: Bindings): BetterAuthPlugin {
       ],
     },
   };
+}
+
+/**
+ * The three-day and one-day warnings before an account is erased.
+ *
+ * Sent in the same morning hour as the Archive's form warnings, and claimed on
+ * the row before it is queued, so a retried tick never sends one twice.
+ */
+export async function sweepAccountDeletionNotices(env: Bindings, now = Date.now()): Promise<number> {
+  if (new Date(now).getUTCHours() !== NOTICE_HOUR_UTC) return 0;
+  // Deleted at or before these moments, the account is erased within that lead.
+  const by3d = now + NOTICE_LEAD_MS["3d"] - GRACE_MS;
+  const by1d = now + NOTICE_LEAD_MS["1d"] - GRACE_MS;
+  const { results } = await env.DB.prepare(
+    `SELECT id, deleted_at, deletion_notice FROM users
+      WHERE deleted_at IS NOT NULL AND deleted_at > ?1 AND deleted_at <= ?2
+        AND (deletion_notice IS NULL OR (deletion_notice = '3d' AND deleted_at <= ?3))
+      LIMIT 200`,
+  )
+    .bind(now - GRACE_MS, by3d, by1d)
+    .all<{ id: string; deleted_at: number; deletion_notice: string | null }>();
+
+  let sent = 0;
+  for (const row of results ?? []) {
+    const stage: PurgeNotice = row.deleted_at <= by1d ? "1d" : "3d";
+    const claimed = await env.DB.prepare(`UPDATE users SET deletion_notice = ?1 WHERE id = ?2 AND deletion_notice IS ?3`)
+      .bind(stage, row.id, row.deletion_notice)
+      .run();
+    if ((claimed.meta?.changes ?? 0) === 0) continue;
+    await enqueueMail(env, { kind: "account_deletion", userId: row.id, stage });
+    sent++;
+  }
+  return sent;
+}
+
+/** What erasing this account takes with it: the organizations nobody else is in, and what they hold. */
+export async function accountErasureTally(
+  env: Bindings,
+  userId: string,
+): Promise<{ organizations: number; forms: number; responses: number; files: number }> {
+  const solo = `SELECT m.organization_id FROM members m
+                 WHERE m.user_id = ?1
+                   AND NOT EXISTS (SELECT 1 FROM members x WHERE x.organization_id = m.organization_id AND x.user_id <> ?1)`;
+  const row = await env.DB.prepare(
+    `SELECT (SELECT COUNT(*) FROM (${solo})) AS organizations,
+            (SELECT COUNT(*) FROM forms f WHERE f.organization_id IN (${solo})) AS forms,
+            (SELECT COUNT(*) FROM submissions s JOIN forms f ON f.id = s.form_id
+              WHERE f.organization_id IN (${solo}) AND s.status = 'completed') AS responses,
+            (SELECT COUNT(*) FROM files fl WHERE fl.organization_id IN (${solo})) AS files`,
+  )
+    .bind(userId)
+    .first<{ organizations: number; forms: number; responses: number; files: number }>();
+  return row ?? { organizations: 0, forms: 0, responses: 0, files: 0 };
 }
 
 /**

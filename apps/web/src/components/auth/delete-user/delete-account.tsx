@@ -147,16 +147,16 @@ export function DeleteAccount({ className }: DeleteAccountProps) {
 
                 <ul className="text-muted-foreground list-disc space-y-1.5 pl-5 text-sm">
                   <li>You are signed out on every device.</li>
-                  <li>Forms in workspaces only you are in stop taking responses.</li>
+                  <li>Forms in organizations only you are in stop taking responses.</li>
                   <li>
                     For 30 days you can sign in again and recover everything as it was.
                   </li>
                   <li>
                     On <span className="text-foreground font-medium">{purgeDate(openedAt)}</span>,
-                    your account and those workspaces, with every form, response and file, are
+                    your account and those organizations, with every form, response and file, are
                     erased for good.
                   </li>
-                  <li>Workspaces shared with others stay with them.</li>
+                  <li>Organizations shared with others stay with them.</li>
                 </ul>
 
                 <AlertDialogFooter>

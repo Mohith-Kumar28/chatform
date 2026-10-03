@@ -26,7 +26,7 @@ import {
 import { runBuilderFeedbackTriage } from "./lib/builder-feedback.js";
 import { sweepDeletedFormFeedback } from "./lib/feedback-issues.js";
 import { purgeDueForms, sweepPurgeNotices } from "./lib/form-archive.js";
-import { purgeDeletedAccounts } from "./lib/account-deletion.js";
+import { purgeDeletedAccounts, sweepAccountDeletionNotices } from "./lib/account-deletion.js";
 import { pruneMailDeliveries, recordMailDelivery, type MailJob } from "./lib/mail.js";
 import {
   sweepExpiredResponses,
@@ -246,7 +246,8 @@ export default {
        */
       await sweepPurgeNotices(env).catch((err) => console.error("purge_notice_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
       await purgeDueForms(env).catch((err) => console.error("form_purge_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
-      // Accounts deleted thirty days ago and never recovered. See `lib/account-deletion.ts`.
+      // Deleted accounts: the three-day and one-day warnings, then the erase itself.
+      await sweepAccountDeletionNotices(env).catch((err) => console.error("account_notice_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
       await purgeDeletedAccounts(env).catch((err) => console.error("account_purge_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
 
       /**

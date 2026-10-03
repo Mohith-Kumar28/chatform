@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
 import { applySchema, fetchApi, minimalDoc, seedTenant } from "./helpers.js";
-import { purgeDeletedAccounts } from "../src/lib/account-deletion.js";
+import { purgeDeletedAccounts, sweepAccountDeletionNotices } from "../src/lib/account-deletion.js";
 
 type T = Awaited<ReturnType<typeof seedTenant>>;
 
@@ -233,5 +233,41 @@ describe("account deletion", () => {
     await purgeDeletedAccounts(env);
     expect(await env.DB.prepare(`SELECT id FROM users WHERE id = ?`).bind(t.userId).first()).toBeTruthy();
     expect(await env.DB.prepare(`SELECT id FROM organizations WHERE id = ?`).bind(t.orgId).first()).toBeTruthy();
+  });
+
+  it("warns three days out and the day before, once each, and starts over after a recovery", async () => {
+    const t = await seedTenant("delnotice");
+    expect((await scheduleDeletion(t, { confirmation: "delnotice@example.com", password: "supersecret123" })).ok).toBe(true);
+    const DAY = 86_400_000;
+    // The sweep only runs in its morning hour.
+    const now = Date.UTC(2026, 9, 10, 3, 15);
+    const notice = async () =>
+      (await env.DB.prepare(`SELECT deletion_notice AS n FROM users WHERE id = ?`).bind(t.userId).first<{ n: string | null }>())?.n;
+    const deletedAt = (ms: number) => env.DB.prepare(`UPDATE users SET deleted_at = ? WHERE id = ?`).bind(ms, t.userId).run();
+
+    await deletedAt(now - 20 * DAY);
+    await sweepAccountDeletionNotices(env, now);
+    expect(await notice()).toBeNull();
+
+    await deletedAt(now - 27 * DAY - 3_600_000);
+    expect(await sweepAccountDeletionNotices(env, now + 3_600_000)).toBe(0); // wrong hour
+    await sweepAccountDeletionNotices(env, now);
+    expect(await notice()).toBe("3d");
+    await sweepAccountDeletionNotices(env, now);
+    expect(await notice()).toBe("3d");
+
+    await deletedAt(now - 29 * DAY - 3_600_000);
+    await sweepAccountDeletionNotices(env, now);
+    expect(await notice()).toBe("1d");
+
+    // Recovering clears it, so a later deletion is warned again.
+    await env.DB.prepare(`UPDATE users SET deleted_at = NULL WHERE id = ?`).bind(t.userId).run();
+    const cookie = await signIn("delnotice@example.com");
+    await fetchApi("/api/auth/account/restore", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, origin: "http://localhost:3000" },
+      body: "{}",
+    });
+    expect(await notice()).toBeNull();
   });
 });

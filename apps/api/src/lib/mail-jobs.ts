@@ -1,4 +1,5 @@
 import { cleanLine } from "@repo/guard";
+import { accountErasureTally, purgeDateFor } from "./account-deletion.js";
 import {
   readFormDoc,
   displayAnswer,
@@ -124,13 +125,22 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOu
       return oneMessage(job.to, await sendMail(env, { to: job.to, ...msg }));
     }
 
-    case "account_deletion_scheduled": {
+    case "account_deletion": {
+      const user = await env.DB.prepare(`SELECT email, name, deleted_at FROM users WHERE id = ?`)
+        .bind(job.userId)
+        .first<{ email: string; name: string | null; deleted_at: number | null }>();
+      // Recovered (or already erased) since this was queued.
+      if (!user?.deleted_at) return NO_MAIL;
       const msg = accountDeletionEmail({
-        name: job.name,
-        purgeAt: job.purgeAt,
-        signInUrl: withUtm(job.signInUrl, job.kind),
+        stage: job.stage,
+        email: user.email,
+        name: user.name,
+        deletedAt: user.deleted_at,
+        purgeAt: purgeDateFor(user.deleted_at),
+        tally: await accountErasureTally(env, job.userId),
+        recoverUrl: withUtm(`${webOrigins(env)[0]!}/signin`, job.kind),
       });
-      return oneMessage(job.to, await sendMail(env, { to: job.to, ...msg }));
+      return oneMessage(user.email, await sendMail(env, { to: user.email, ...msg }));
     }
 
     case "otp": {
