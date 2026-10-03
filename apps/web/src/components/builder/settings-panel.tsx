@@ -58,10 +58,10 @@ const SECTIONS = [
   { id: "general", label: "General" },
   { id: "completion", label: "Email notifications" },
   { id: "access", label: "Access & closing" },
-  { id: "hidden", label: "Hidden fields & variables" },
   { id: "link", label: "Link & social" },
   { id: "followup", label: "Follow-ups" },
   { id: "language", label: "Language" },
+  { id: "hidden", label: "Hidden fields & variables" },
   { id: "shortcuts", label: "Keyboard shortcuts" },
   { id: "agent", label: "Agent" },
 ] as const;
