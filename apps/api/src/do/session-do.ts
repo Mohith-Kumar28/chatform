@@ -6225,6 +6225,23 @@ export class SessionDO extends DurableObject<Bindings> {
     this.loaded = false;
   }
 
+  /**
+   * Purge this object if its conversation no longer exists in D1. For objects
+   * orphaned before deletes queued their own purge (migration 0058), found by
+   * listing the namespace. Anything younger than a day is left alone: a session
+   * being opened writes here before its row lands.
+   */
+  async purgeIfOrphaned(): Promise<"purged" | "kept" | "unknown"> {
+    const stored = await this.ctx.storage.get<StoredSession>("session");
+    const sessionId = stored?.meta?.sessionId;
+    if (!sessionId) return "unknown";
+    if (Date.now() - (stored.meta.startedAt ?? 0) < 86_400_000) return "kept";
+    const row = await this.env.DB.prepare(`SELECT 1 AS ok FROM chat_sessions WHERE id = ?`).bind(sessionId).first();
+    if (row) return "kept";
+    await this.purge();
+    return "purged";
+  }
+
   async getTranscript(): Promise<{ id: string; role: string; content: string; blockRef: string | null; createdAt: number }[]> {
     await this.ensureLoaded();
     const entries = await this.ctx.storage.list<{ id: string; role: string; content: string; blockRef: string | null; createdAt: number }>({ prefix: "msg:" });

@@ -682,6 +682,8 @@ export const files = sqliteTable(
     checksumSha256: text("checksum_sha256"),
     status: text("status").notNull().default("pending"),
     rejectReason: text("reject_reason"),
+    /** Builder images only: when `sweepUnusedAssets` last found it still in use. */
+    checkedAt: integer("checked_at"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
     confirmedAt: ts("confirmed_at"),
   },

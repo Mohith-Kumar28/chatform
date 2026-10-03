@@ -21,7 +21,9 @@ const SESSION_BATCH = 100;
 
 type Row = { id: number; ref: string; attempts: number };
 
-export async function drainStoragePurges(env: Bindings): Promise<{ r2: number; vector: number; session: number }> {
+export async function drainStoragePurges(
+  env: Bindings,
+): Promise<{ r2: number; vector: number; session_object: number; session: number }> {
   return {
     r2: await drain(env, "r2", BATCH, async (refs) => {
       await env.R2.delete(refs);
@@ -29,6 +31,22 @@ export async function drainStoragePurges(env: Bindings): Promise<{ r2: number; v
     vector: await drain(env, "vector", BATCH, async (refs) => {
       // Remote-only: a local worker has no index, so there is nothing to delete.
       if (env.VECTORIZE) await env.VECTORIZE.deleteByIds(refs);
+    }),
+    // Objects listed from the namespace by id, each checking for its own conversation.
+    session_object: await drain(env, "session_object", SESSION_BATCH, async (refs) => {
+      const failed: string[] = [];
+      await Promise.all(
+        refs.map(async (ref) => {
+          try {
+            const stub = env.SESSION_DO.get(env.SESSION_DO.idFromString(ref), SESSION_LOCATION) as unknown as DurableObjectStub<SessionDO>;
+            const outcome = await stub.purgeIfOrphaned();
+            if (outcome === "purged") console.log("session_object_purged", ref);
+          } catch {
+            failed.push(ref);
+          }
+        }),
+      );
+      return failed;
     }),
     session: await drain(env, "session", SESSION_BATCH, async (refs) => {
       // Each one on its own: a single object failing must not keep the rest queued.
@@ -50,7 +68,7 @@ export async function drainStoragePurges(env: Bindings): Promise<{ r2: number; v
 
 async function drain(
   env: Bindings,
-  kind: "r2" | "vector" | "session",
+  kind: "r2" | "vector" | "session" | "session_object",
   limit: number,
   remove: (refs: string[]) => Promise<string[] | void>,
 ): Promise<number> {
@@ -95,6 +113,78 @@ export async function prunePendingUploads(env: Bindings, now = Date.now()): Prom
     `DELETE FROM files WHERE rowid IN (SELECT rowid FROM files WHERE status = 'pending' AND created_at < ? LIMIT 500)`,
   )
     .bind(now - 86_400_000)
+    .run();
+  return res.meta?.changes ?? 0;
+}
+
+/**
+ * Builder images nothing uses any more: replaced logos and avatars, media taken
+ * out of a form, images of forms long since purged.
+ *
+ * An image is named by its id inside form documents (the draft and every
+ * published version, so restoring an old version never loses one), organization
+ * logos, profile pictures and templates. Each is looked up about once a day, a
+ * week after upload at the earliest so one added a moment ago is never taken
+ * before the draft that uses it is saved. Deleting the row queues the object.
+ */
+export async function sweepUnusedAssets(env: Bindings, now = Date.now(), limit = 25): Promise<number> {
+  const due =
+    (
+      await env.DB.prepare(
+        `SELECT id FROM files
+          WHERE uploaded_by = 'builder' AND form_id IS NULL AND status = 'confirmed'
+            AND created_at < ?1 AND COALESCE(checked_at, 0) < ?2
+          ORDER BY COALESCE(checked_at, 0) LIMIT ?3`,
+      )
+        .bind(now - 7 * 86_400_000, now - 86_400_000, limit)
+        .all<{ id: string }>()
+    ).results ?? [];
+
+  let removed = 0;
+  for (const { id } of due) {
+    const res = await env.DB.prepare(
+      `DELETE FROM files
+        WHERE id = ?1
+          AND NOT EXISTS (SELECT 1 FROM forms WHERE instr(working_schema, ?1) > 0)
+          AND NOT EXISTS (SELECT 1 FROM form_versions WHERE instr(schema_json, ?1) > 0)
+          AND NOT EXISTS (SELECT 1 FROM organizations WHERE instr(COALESCE(logo, ''), ?1) > 0)
+          AND NOT EXISTS (SELECT 1 FROM users WHERE instr(COALESCE(image, ''), ?1) > 0)
+          AND NOT EXISTS (SELECT 1 FROM form_templates WHERE instr(schema_json, ?1) > 0)`,
+    )
+      .bind(id)
+      .run();
+    if ((res.meta?.changes ?? 0) > 0) {
+      removed++;
+      console.log("unused_asset_deleted", id);
+    } else {
+      await env.DB.prepare(`UPDATE files SET checked_at = ? WHERE id = ?`).bind(now, id).run();
+    }
+  }
+  return removed;
+}
+
+/**
+ * Respondents nothing points at any more.
+ *
+ * A respondent is a person across forms, with their email and phone. When the
+ * last response that names them goes (deleted, purged with its form or its
+ * organization) and no bug report or merged record names them either, keeping
+ * their contact details serves nobody. A week since they were last seen, so one
+ * in the middle of starting a response is never caught. Their keys cascade.
+ */
+export async function pruneOrphanRespondents(env: Bindings, now = Date.now()): Promise<number> {
+  const res = await env.DB.prepare(
+    `DELETE FROM respondents WHERE id IN (
+       SELECT r.id FROM respondents r
+        WHERE r.last_seen_at < ?1
+          AND NOT EXISTS (SELECT 1 FROM submissions s WHERE s.respondent_id = r.id)
+          AND NOT EXISTS (SELECT 1 FROM respondent_feedback f WHERE f.respondent_id = r.id)
+          AND NOT EXISTS (SELECT 1 FROM respondents m WHERE m.merged_into = r.id)
+          -- A merged row leads an old id to the surviving person; it stays while they do.
+          AND (r.merged_into IS NULL OR NOT EXISTS (SELECT 1 FROM respondents w WHERE w.id = r.merged_into))
+        LIMIT 500)`,
+  )
+    .bind(now - 7 * 86_400_000)
     .run();
   return res.meta?.changes ?? 0;
 }

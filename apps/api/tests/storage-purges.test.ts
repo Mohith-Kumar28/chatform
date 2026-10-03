@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
-import { env } from "cloudflare:test";
+import { env, runInDurableObject } from "cloudflare:test";
 import { applySchema, fetchApi, seedTenant } from "./helpers.js";
-import { drainStoragePurges, prunePendingUploads } from "../src/lib/storage-purges.js";
+import { drainStoragePurges, pruneOrphanRespondents, prunePendingUploads, sweepUnusedAssets } from "../src/lib/storage-purges.js";
+import { SESSION_LOCATION } from "../src/lib/session-location.js";
 
 /**
  * Deleting a row must take what it pointed at outside D1 with it.
@@ -172,5 +173,105 @@ describe("storage purges", () => {
     expect(await env.R2.head(stale)).toBeNull();
     expect(await env.R2.head(fresh)).not.toBeNull();
     expect(await env.DB.prepare(`SELECT id FROM files WHERE id = 'file_purgepend_new'`).first()).toBeTruthy();
+  });
+
+  it("deletes builder images nothing uses any more, and keeps the ones a form or an old version names", async () => {
+    const t = await seedTenant("purgeast");
+    const old = Date.now() - 10 * 86_400_000;
+    const asset = async (id: string, createdAt: number) => {
+      const key = `assets/${t.orgId}/${id}-x.png`;
+      await env.DB.prepare(
+        `INSERT INTO files (id, organization_id, uploaded_by, r2_key, filename, mime, size_bytes, status, created_at, confirmed_at)
+         VALUES (?1, ?2, 'builder', ?3, 'x.png', 'image/png', 5, 'confirmed', ?4, ?4)`,
+      )
+        .bind(id, t.orgId, key, createdAt)
+        .run();
+      await env.R2.put(key, "bytes");
+      return key;
+    };
+    const used = await asset("ast_purgeast_used", old);
+    const versioned = await asset("ast_purgeast_ver", old);
+    const unused = await asset("ast_purgeast_gone", old);
+    const fresh = await asset("ast_purgeast_new", Date.now());
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE forms SET working_schema = json_set(working_schema, '$.theme.logo', '/p/assets/ast_purgeast_used') WHERE id = ?`).bind(t.formId),
+      env.DB.prepare(
+        `INSERT INTO form_versions (id, form_id, version, schema_json, checksum, published_at, created_by, created_at)
+         VALUES ('fv_purgeast', ?1, 1, '{"logo":"/p/assets/ast_purgeast_ver"}', 'ck', ?2, ?3, ?2)`,
+      ).bind(t.formId, Date.now(), t.userId),
+    ]);
+
+    expect(await sweepUnusedAssets(env, Date.now(), 1000)).toBe(1);
+    await drainStoragePurges(env);
+    expect(await env.R2.head(unused)).toBeNull();
+    for (const key of [used, versioned, fresh]) expect(await env.R2.head(key)).not.toBeNull();
+    // Checked today, so not looked up again until tomorrow.
+    const checked = await env.DB.prepare(`SELECT checked_at FROM files WHERE id = 'ast_purgeast_used'`).first<{ checked_at: number | null }>();
+    expect(checked?.checked_at).toBeGreaterThan(0);
+  });
+
+  it("forgets respondents nothing names any more", async () => {
+    const t = await seedTenant("purgeresp2");
+    const old = Date.now() - 10 * 86_400_000;
+    const person = (id: string, seen: number, mergedInto: string | null = null) =>
+      env.DB.prepare(
+        `INSERT INTO respondents (id, email, first_seen_at, last_seen_at, merged_into, created_at) VALUES (?1, 'p@example.com', ?2, ?2, ?3, ?2)`,
+      ).bind(id, seen, mergedInto);
+    await env.DB.batch([
+      person("rsp_pr_orphan", old),
+      person("rsp_pr_recent", Date.now()),
+      person("rsp_pr_answered", old),
+      person("rsp_pr_winner", old),
+      person("rsp_pr_loser", old, "rsp_pr_winner"),
+      env.DB.prepare(
+        `INSERT INTO form_versions (id, form_id, version, schema_json, checksum, published_at, created_by, created_at)
+         VALUES ('fv_purgeresp2', ?1, 1, '{}', 'ck', ?2, ?3, ?2)`,
+      ).bind(t.formId, Date.now(), t.userId),
+      env.DB.prepare(
+        `INSERT INTO submissions (id, form_id, form_version_id, organization_id, status, started_at, respondent_id)
+         VALUES ('sbm_purgeresp2', ?1, 'fv_purgeresp2', ?2, 'completed', ?3, 'rsp_pr_answered')`,
+      ).bind(t.formId, t.orgId, Date.now()),
+    ]);
+
+    await pruneOrphanRespondents(env);
+    const left = async (id: string) => !!(await env.DB.prepare(`SELECT id FROM respondents WHERE id = ?`).bind(id).first());
+    expect(await left("rsp_pr_orphan")).toBe(false);
+    expect(await left("rsp_pr_recent")).toBe(true);
+    expect(await left("rsp_pr_answered")).toBe(true);
+    // A merged row leads to the survivor, so the survivor and the row both stay.
+    expect(await left("rsp_pr_winner")).toBe(true);
+    expect(await left("rsp_pr_loser")).toBe(true);
+  });
+
+  it("an orphaned conversation object purges itself, and a live or new one does not", async () => {
+    const t = await seedTenant("purgedo");
+    await addSession(t, "chs_purgedo_live");
+    const old = Date.now() - 3 * 86_400_000;
+    const seed = async (name: string, sessionId: string, startedAt: number) => {
+      const id = env.SESSION_DO.idFromName(name);
+      const stub = env.SESSION_DO.get(id, SESSION_LOCATION);
+      await runInDurableObject(stub, async (_instance, state) => {
+        await state.storage.put("session", { meta: { sessionId, startedAt } });
+        await state.storage.put("msg:1", { content: "hello" });
+      });
+      return { hex: id.toString(), stub };
+    };
+    const orphan = await seed("chs_purgedo_gone", "chs_purgedo_gone", old);
+    const live = await seed("chs_purgedo_live", "chs_purgedo_live", old);
+    const young = await seed("chs_purgedo_young", "chs_purgedo_young", Date.now());
+
+    await env.DB.prepare(
+      `INSERT INTO storage_purges (kind, ref, queued_at) VALUES ('session_object', ?1, ?4), ('session_object', ?2, ?4), ('session_object', ?3, ?4)`,
+    )
+      .bind(orphan.hex, live.hex, young.hex, Date.now())
+      .run();
+    await drainStoragePurges(env);
+
+    const size = (stub: DurableObjectStub) =>
+      runInDurableObject(stub, async (_i, state) => (await state.storage.list()).size);
+    expect(await size(orphan.stub)).toBe(0);
+    expect(await size(live.stub)).toBe(2);
+    expect(await size(young.stub)).toBe(2);
+    expect((await env.DB.prepare(`SELECT COUNT(*) AS n FROM storage_purges WHERE kind = 'session_object'`).first<{ n: number }>())?.n).toBe(0);
   });
 });

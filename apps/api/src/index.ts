@@ -27,7 +27,7 @@ import { runBuilderFeedbackTriage } from "./lib/builder-feedback.js";
 import { sweepDeletedFormFeedback } from "./lib/feedback-issues.js";
 import { purgeDueForms, sweepPurgeNotices } from "./lib/form-archive.js";
 import { purgeDeletedAccounts, sweepAccountDeletionNotices } from "./lib/account-deletion.js";
-import { drainStoragePurges, prunePendingUploads } from "./lib/storage-purges.js";
+import { drainStoragePurges, pruneOrphanRespondents, prunePendingUploads, sweepUnusedAssets } from "./lib/storage-purges.js";
 import { pruneMailDeliveries, recordMailDelivery, type MailJob } from "./lib/mail.js";
 import {
   sweepExpiredResponses,
@@ -256,6 +256,8 @@ export default {
        * every purge above, so what they just deleted goes on the same tick.
        */
       await prunePendingUploads(env).catch((err) => console.error("pending_upload_prune_failed", err));
+      await sweepUnusedAssets(env).catch((err) => console.error("unused_asset_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
+      await pruneOrphanRespondents(env).catch((err) => console.error("respondent_prune_failed", { error: err instanceof Error ? err.message : String(err) }));
       await drainStoragePurges(env).catch((err) => console.error("storage_purge_sweep_failed", { error: err instanceof Error ? err.message : String(err) }));
 
       /**
