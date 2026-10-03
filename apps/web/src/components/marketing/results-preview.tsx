@@ -26,7 +26,7 @@ export interface ResultsField {
 const TRANSCRIPT = [
   { role: "bot", text: "How big is the team you're setting this up for?" },
   { role: "user", text: "we're about a dozen people right now" },
-  { role: "bot", text: "Twelve — noted. What brings you to Northwind?" },
+  { role: "bot", text: "Twelve, noted. What brings you to Northwind?" },
   { role: "user", text: "Replacing a tool" },
 ] as const;
 

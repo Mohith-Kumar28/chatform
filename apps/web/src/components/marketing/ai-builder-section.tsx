@@ -1,61 +1,15 @@
-"use client";
-
-import { useEffect, useRef, useState } from "react";
+import { Link2, MessageSquareText, Wand2 } from "lucide-react";
+import { AiBuildPreview } from "./ai-build-preview";
+import { ArrowMark, HandNote } from "./annotate";
+import { InView } from "./in-view";
 import { Band } from "./band";
 import { PrimaryCta, SectionLede, SectionTitle, Split, TextLink } from "./kit";
 
-const PROMPT =
-  "A client intake form for my interior design studio. Ask about the space, the budget and the timeline, and if they have photos, ask them to upload a few.";
-
-/**
- * The prompt types itself the first time the card is on screen, the way you
- * would type it. Without script, or with reduced motion, the whole sentence is
- * just there.
- */
-function TypedPrompt() {
-  const ref = useRef<HTMLParagraphElement>(null);
-  const [shown, setShown] = useState<number | null>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof IntersectionObserver === "undefined") return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-
-    let timer = 0;
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-        io.disconnect();
-        let n = 0;
-        setShown(0);
-        timer = window.setInterval(() => {
-          n += 1;
-          setShown(n);
-          if (n >= PROMPT.length) window.clearInterval(timer);
-        }, 28);
-      },
-      { rootMargin: "0px 0px -20% 0px" },
-    );
-    io.observe(el);
-    return () => {
-      io.disconnect();
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  const typing = shown !== null && shown < PROMPT.length;
-
-  return (
-    <p ref={ref} className="font-hand text-primary-soft-foreground relative mt-5 text-[clamp(1.6rem,1.2rem+1.1vw,2.1rem)] leading-[1.15]">
-      {/* The full sentence holds the height, so typing never moves the page. */}
-      <span aria-hidden className="invisible">&ldquo;{PROMPT}&rdquo;</span>
-      <span className="absolute inset-0">
-        &ldquo;{shown === null ? PROMPT : PROMPT.slice(0, shown)}
-        {typing ? <span className="animate-caret">|</span> : <>&rdquo;</>}
-      </span>
-    </p>
-  );
-}
+const BUILD_WAYS = [
+  { icon: MessageSquareText, label: "Type what you want.", detail: "\u201cOnboarding for a design agency\u201d becomes a whole form." },
+  { icon: Link2, label: "Or paste your website.", detail: "It reads your pages and asks in your own words." },
+  { icon: Wand2, label: "Then just ask for changes.", detail: "\u201cAdd a budget question and skip it under 10 people.\u201d" },
+] as const;
 
 function Sparkle({ className }: { className?: string }) {
   return (
@@ -74,27 +28,40 @@ export function AiBuilderSection() {
             Describe your form.
           </SectionTitle>
           <SectionLede>
-            Write a sentence, paste your website, or drop in an old form. You get the questions, the wording, the order
-            and the branching, ready to edit and publish.
+            You get the questions, the wording, the order and the branching, ready to edit and publish. Then it stays on
+            to ask them.
           </SectionLede>
+          <ul className="mt-7 flex flex-col gap-4">
+            {BUILD_WAYS.map((w) => (
+              <li key={w.label} className="flex items-start gap-3">
+                <span aria-hidden className="bg-primary-soft text-primary-soft-foreground mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg">
+                  <w.icon className="size-4" strokeWidth={2} />
+                </span>
+                <p className="leading-snug">
+                  <span className="font-semibold">{w.label}</span>{" "}
+                  <span className="text-muted-foreground">{w.detail}</span>
+                </p>
+              </li>
+            ))}
+          </ul>
           <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-4">
             <PrimaryCta>Build a form with AI</PrimaryCta>
             <TextLink href="/ai-form-builder">How the AI builder works</TextLink>
           </div>
         </div>
 
-        <div className="relative rounded-[18px] border border-[color-mix(in_oklch,var(--primary)_22%,transparent)] bg-[color-mix(in_oklch,var(--primary-soft)_70%,var(--card))] p-8 sm:p-12">
+        <div className="relative rounded-[18px] border border-[color-mix(in_oklch,var(--primary)_22%,transparent)] bg-[color-mix(in_oklch,var(--primary-soft)_70%,var(--card))] p-5 sm:p-8">
           <Sparkle className="absolute -top-7 -right-5 size-16 rotate-12" />
-          <p className="text-primary-soft-foreground text-xs font-bold tracking-[0.09em] uppercase">It starts with a sentence</p>
-          <TypedPrompt />
-          <ol className="border-primary/15 mt-8 grid grid-cols-3 gap-3 border-t pt-6 text-sm font-semibold">
-            {["Describe it", "Make it yours", "Share it"].map((step, i) => (
-              <li key={step} className="flex items-center gap-2">
-                <span className="bg-card text-foreground grid size-6 shrink-0 place-items-center rounded-full text-xs shadow-xs">{i + 1}</span>
-                {step}
-              </li>
-            ))}
-          </ol>
+          <p className="text-primary-soft-foreground mb-4 text-xs font-bold tracking-[0.09em] uppercase">It starts with a sentence</p>
+          <InView>
+            <AiBuildPreview readUrl="northwind.co" readPages={6} />
+            <div className="cf-a-rise mt-3 flex items-center justify-end gap-1 pr-1" style={{ animationDelay: "860ms" }}>
+              <ArrowMark dir="up-right" positioned={false} draw delay={900} className="text-primary-soft-foreground size-10 shrink-0 opacity-60" />
+              <HandNote tilt={-5} className="text-primary-soft-foreground">
+                it really reads your site
+              </HandNote>
+            </div>
+          </InView>
         </div>
       </Split>
     </Band>

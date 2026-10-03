@@ -183,12 +183,14 @@ export function BandTitle({
   accent,
   accentClassName,
   eyebrow,
+  eyebrowClassName,
   className,
   as: Comp = "h2",
 }: {
   children: React.ReactNode;
   /** The feature's name, small and uppercase, above the heading. */
   eyebrow?: React.ReactNode;
+  eyebrowClassName?: string;
   /**
    * A second line in the hand, the way the switch band's heading answers
    * itself. Orange by default, which holds on cream, sand and ink; a vivid
@@ -201,7 +203,7 @@ export function BandTitle({
 }) {
   return (
     <>
-      {eyebrow && <Eyebrow className="mb-4">{eyebrow}</Eyebrow>}
+      {eyebrow && <Eyebrow className={cn("mb-4", eyebrowClassName)}>{eyebrow}</Eyebrow>}
       <Comp
         /* Fluid to 3.9rem, up from a fixed 2.75. The old size was one step above
            the body copy beneath it and one step below the hero — a heading that
