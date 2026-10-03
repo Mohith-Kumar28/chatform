@@ -832,6 +832,7 @@ export function DashboardContent() {
         title={`Delete “${pendingDelete?.title}”?`}
         description="It moves to the Archive and the link stops working. You can restore it for 30 days, then it's deleted for good with all its responses."
         confirmLabel="Delete form"
+        confirmText={pendingDelete?.title.trim() || "delete"}
         /*
           `mutate`, not `mutateAsync`. Both report through the same `onError`
           toast, but the async form also rejects — and nothing awaits it here,

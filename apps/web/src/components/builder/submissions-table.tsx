@@ -1825,8 +1825,9 @@ export function SubmissionsTable({
         title={
           confirming?.length === 1 ? "Delete this response?" : `Delete ${confirming?.length ?? 0} responses?`
         }
-        description="The answers and the conversation go with it. This cannot be undone — download them first if you might want them."
+        description="The answers and the conversation go with it. This cannot be undone, so download them first if you might want them."
         confirmLabel="Delete"
+        confirmText="delete"
         /*
           Closed here rather than left to `ConfirmDialog`'s own busy state.
 

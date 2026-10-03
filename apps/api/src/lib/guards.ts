@@ -110,6 +110,11 @@ export const requireSession: MiddlewareHandler<{ Bindings: Bindings; Variables: 
 
   const session = await getAuth(c.env).api.getSession({ headers: c.req.raw.headers });
   if (!session) return unauthorized(c);
+  // Signed back in to an account they deleted: nothing opens until they recover
+  // it from the screen the web shows instead (`/api/auth/account/restore`).
+  if (session.user.deletedAt) {
+    return c.json({ error: { code: "account_pending_deletion", message: "This account is scheduled for deletion" } }, 403);
+  }
   c.set("userId", session.user.id);
   await next();
 };

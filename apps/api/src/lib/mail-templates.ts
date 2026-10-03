@@ -486,6 +486,39 @@ export function passwordResetEmail(a: { name: string | null; resetUrl: string })
   };
 }
 
+// ─────────────────────────── account deletion ───────────────────────────
+
+/** Sent the moment someone deletes their account: the date it is erased, and the way back. */
+export function accountDeletionEmail(a: { name: string | null; purgeAt: number; signInUrl: string }): Omit<MailMessage, "to"> {
+  const greeting = a.name?.trim() ? `Hi ${escapeHtml(a.name.trim())},` : "Hi,";
+  const when = longDate(a.purgeAt);
+  const body = [
+    h1("Your account is deleted"),
+    p(greeting),
+    p(`Your chatform account has been deleted and you have been signed out everywhere. Forms in workspaces only you were in have stopped taking responses.`),
+    p(`<strong>Everything is erased for good on ${when}.</strong> Until then, sign in to recover your account exactly as it was.`),
+    button(a.signInUrl, "Recover my account"),
+    p(`<span style="color:${MUTED};font-size:13px;">Didn't do this? Sign in and recover your account, then change your password.</span>`),
+    fallbackLink(a.signInUrl),
+  ].join("\n");
+
+  return {
+    subject: "Your chatform account is deleted",
+    html: layout({ preheader: `Sign in before ${when} to recover it.`, body }),
+    text: [
+      greeting.replace(/<[^>]+>/g, ""),
+      ``,
+      `Your chatform account has been deleted and you have been signed out everywhere. Forms in workspaces only you were in have stopped taking responses.`,
+      ``,
+      `Everything is erased for good on ${when}. Until then, sign in to recover your account exactly as it was:`,
+      ``,
+      a.signInUrl,
+      ``,
+      `Didn't do this? Sign in and recover your account, then change your password.`,
+    ].join("\n"),
+  };
+}
+
 // ─────────────────────────── one-time codes ───────────────────────────
 
 /**

@@ -495,6 +495,14 @@ export type MailJob =
       endsAt: number;
     }
   | {
+      /** They deleted their account. When it is erased, and how to change their mind. */
+      kind: "account_deletion_scheduled";
+      to: string;
+      name: string | null;
+      purgeAt: number;
+      signInUrl: string;
+    }
+  | {
       /** A form was created, by any route. Mailed to `PLATFORM_ADMIN_EMAILS`. */
       kind: "admin_new_form";
       formId: string;

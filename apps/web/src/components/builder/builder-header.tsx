@@ -476,8 +476,9 @@ export function BuilderHeader({
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title={`Delete "${title.slice(0, 60)}"?`}
-        description="The form and its link are removed. This can't be undone from here."
+        description="It moves to the Archive and the link stops working. You can restore it for 30 days, then it's deleted for good with all its responses."
         confirmLabel="Delete form"
+        confirmText={title.trim() || "delete"}
         onConfirm={() => void deleteHere()}
       />
     </TooltipProvider>

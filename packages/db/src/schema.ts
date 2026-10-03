@@ -17,6 +17,8 @@ export const users = sqliteTable(
     image: text("image"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
     updatedAt: ts("updated_at").notNull().$defaultFn(() => new Date()),
+    /** Set when the person deletes their account; purged 30 days later unless they recover it. */
+    deletedAt: ts("deleted_at"),
   },
   // Signups in a window — the daily rollup and the console's live tile both ask
   // for exactly this and nothing else on the row.

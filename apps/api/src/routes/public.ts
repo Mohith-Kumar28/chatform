@@ -32,6 +32,7 @@ import { cancelFollowUps, cancelFollowUpsForAddress, recordFollowUpClick, suppre
 import type { RespondentIdentity } from "@repo/form-schema";
 import { confirmPaymentForSession, providersForAccounts, startPaymentForSession } from "../lib/payments/service.js";
 import { SESSION_LOCATION } from "../lib/session-location.js";
+import { orgClosedSql } from "../lib/account-deletion.js";
 
 const sessionsRouter = new Hono<{ Bindings: Bindings }>();
 
@@ -230,7 +231,7 @@ sessionsRouter.get(
     const row = await c.env.DB.prepare(
       `SELECT f.status, fv.schema_json
          FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
-        WHERE f.slug = ? AND f.deleted_at IS NULL LIMIT 1`,
+        WHERE f.slug = ? AND f.deleted_at IS NULL AND NOT ${orgClosedSql("f.organization_id")} LIMIT 1`,
     )
       .bind(c.req.param("slug"))
       .first<{ status: string; schema_json: string }>();
@@ -263,7 +264,7 @@ sessionsRouter.get(
   const formRow = await c.env.DB.prepare(
     `SELECT f.id, f.slug, f.status, f.close_at, f.organization_id, fv.schema_json
      FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
-     WHERE f.slug = ? AND f.deleted_at IS NULL LIMIT 1`,
+     WHERE f.slug = ? AND f.deleted_at IS NULL AND NOT ${orgClosedSql("f.organization_id")} LIMIT 1`,
   )
     .bind(slug)
     .first<{
@@ -389,7 +390,7 @@ sessionsRouter.post(
     const formRow = await c.env.DB.prepare(
       `SELECT f.id, f.slug, f.status, f.close_at, f.organization_id, f.fingerprint_salt, fv.id AS version_id, fv.schema_json
        FROM forms f JOIN form_versions fv ON fv.id = f.active_version_id
-       WHERE f.slug = ? AND f.deleted_at IS NULL LIMIT 1`,
+       WHERE f.slug = ? AND f.deleted_at IS NULL AND NOT ${orgClosedSql("f.organization_id")} LIMIT 1`,
     )
       .bind(slug)
       .first<FormRow & { status: string }>();

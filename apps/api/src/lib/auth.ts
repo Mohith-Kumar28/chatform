@@ -22,7 +22,7 @@ import { seatLimit } from "@repo/entitlements";
 import { APIError } from "better-auth/api";
 import { webOrigins, returnOrigin, needsCrossSiteCookies, isSecureOrigin } from "./origins.js";
 import { enqueueMail } from "./mail.js";
-import { purgeUserData } from "./delete-account.js";
+import { accountDeletionPlugin } from "./account-deletion.js";
 import { recordUserContext } from "./user-context.js";
 import { impersonationPlugin } from "./impersonation.js";
 
@@ -288,29 +288,14 @@ export function createAuth(env: Bindings) {
       : {},
     user: {
       /**
-       * Closing an account, and meaning it.
-       *
-       * Gated on the password rather than on an emailed link. Better Auth asks
-       * for the credential on `deleteUser` when the account has one, and the
-       * card in settings puts that field in front of the confirmation — which
-       * is the check that actually matters here, because the person who can
-       * do damage with this button is somebody sitting at an unlocked laptop,
-       * and they already have the inbox.
-       *
-       * `beforeDelete` is where the real work happens: the account row itself
-       * cascades to four tables and would leave the workspace, its forms and
-       * every response behind. See `purgeUserData`. It throws rather than
-       * logs, so a failure leaves the account intact instead of half-deleted.
+       * Closing an account goes through `accountDeletionPlugin` instead: it
+       * schedules the deletion and leaves thirty days to change your mind.
+       * Better Auth's `/delete-user` can only delete on the spot, so it stays off.
        */
-      deleteUser: {
-        enabled: true,
-        beforeDelete: async (user) => {
-          await purgeUserData(env, user.id);
-        },
-        afterDelete: async (user) => {
-          // The one line that outlives the account, and it names no address.
-          console.log("account_deleted", user.id);
-        },
+      deleteUser: { enabled: false },
+      /** Read by `requireSession` and the web's `AuthGuard`. Never set from a request body. */
+      additionalFields: {
+        deletedAt: { type: "date", required: false, input: false },
       },
     },
     databaseHooks: {
@@ -359,6 +344,8 @@ export function createAuth(env: Bindings) {
       apiKeyPlugin(),
       // An admin acting as a customer: their session, from a header. See `./impersonation.ts`.
       impersonationPlugin(env),
+      // Deleting an account schedules it for thirty days. See `./account-deletion.ts`.
+      accountDeletionPlugin(env),
       /**
        * Several accounts signed in at once in one browser, switched from the
        * account menu. No tables: each extra session rides in its own signed

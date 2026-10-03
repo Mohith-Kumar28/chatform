@@ -605,12 +605,17 @@ describe("cleanup", () => {
     await insertPayment(t, stripe.id, "rpay_delete_me");
 
     mockFetch(() => ({ body: { id: "we_delete_me", deleted: true } }));
-    const res = await fetchApi("/api/auth/delete-user", {
+    const res = await fetchApi("/api/auth/account/delete", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: t.cookie, origin: "http://localhost:3000" },
-      body: JSON.stringify({ password: "supersecret123" }),
+      body: JSON.stringify({ confirmation: "payacc_del@example.com", password: "supersecret123" }),
     });
     expect(res.ok).toBe(true);
+    // Revoked when the account is purged, thirty days on, not when it is scheduled.
+    expect(calls.find((c) => c.method === "DELETE")).toBeUndefined();
+    await env.DB.prepare(`UPDATE users SET deleted_at = ? WHERE id = ?`).bind(Date.now() - 31 * 86_400_000, t.userId).run();
+    const { purgeDeletedAccounts } = await import("../src/lib/account-deletion.js");
+    await purgeDeletedAccounts(E);
 
     const deleted = calls.find((c) => c.method === "DELETE");
     expect(deleted?.url).toBe("https://api.stripe.com/v1/webhook_endpoints/we_delete_me");

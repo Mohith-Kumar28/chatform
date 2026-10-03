@@ -5,6 +5,7 @@ import { useAuth, useAuthPlugin } from "@better-auth-ui/react"
 import { useDeleteOrganization } from "@better-auth-ui/react/plugins/organization"
 import type { Organization } from "better-auth/client"
 import { TriangleAlert } from "lucide-react"
+import { useState } from "react"
 import { toast } from "sonner"
 
 import {
@@ -18,6 +19,7 @@ import {
   AlertDialogTitle
 } from "@/components/ui/alert-dialog"
 import { Card, CardContent } from "@/components/ui/card"
+import { TypeToConfirm, phraseMatches } from "@/components/ui/type-to-confirm"
 import { organizationPlugin } from "@/lib/auth/organization-plugin"
 import { useAuthForm } from "../auth-form"
 import { OrganizationView } from "./organization-view"
@@ -72,15 +74,25 @@ export function DeleteOrganizationDialog({
     }
   )
 
+  const [typed, setTyped] = useState("")
+  const confirmed = phraseMatches(typed, organization.name)
+
   const form = useAuthForm({
     defaultValues: {},
     onSubmit: async () => {
+      if (!confirmed) return
       await deleteOrganization({ organizationId: organization.id })
     }
   })
 
+  const handleOpenChange = (next: boolean) => {
+    if (isPending) return
+    if (!next) setTyped("")
+    onOpenChange(next)
+  }
+
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
         <form.AppForm>
           <form.AuthFormRoot className="flex flex-col gap-6">
@@ -104,6 +116,13 @@ export function DeleteOrganizationDialog({
               </CardContent>
             </Card>
 
+            <TypeToConfirm
+              phrase={organization.name}
+              value={typed}
+              onChange={setTyped}
+              disabled={isPending}
+            />
+
             <AlertDialogFooter>
               <AlertDialogCancel disabled={isPending}>
                 {localization.settings.cancel}
@@ -112,7 +131,7 @@ export function DeleteOrganizationDialog({
               <form.AuthFormSubmitButton
                 isPending={isPending}
                 variant="destructive"
-                disabled={isPending}
+                disabled={isPending || !confirmed}
               >
                 {organizationLocalization.deleteOrganization}
               </form.AuthFormSubmitButton>

@@ -63,6 +63,7 @@ const REFUSED_PATHS = [
   /^\/email-otp\/(request|change)-email/,
   /^\/set-password/,
   /^\/delete-user/,
+  /^\/account\/(delete|restore)/,
   /^\/revoke-/,
   /^\/sign-out/,
   /^\/multi-session\/(set-active|revoke)/,

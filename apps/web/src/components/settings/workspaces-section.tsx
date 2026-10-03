@@ -325,6 +325,8 @@ export function WorkspacesSection() {
           )
         }
         confirmLabel="Delete"
+        // Only an empty one can go; one with forms is refused before typing would matter.
+        confirmText={pendingDelete && pendingDelete.formCount === 0 ? pendingDelete.name : undefined}
         onConfirm={confirmDelete}
       />
     </>

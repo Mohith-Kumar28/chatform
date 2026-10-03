@@ -37,6 +37,7 @@ import {
   invitationEmail,
   otpEmail,
   passwordResetEmail,
+  accountDeletionEmail,
   planLapseEmail,
   planUpgradedEmail,
   platformEventEmail,
@@ -120,6 +121,15 @@ export async function runMailJob(env: Bindings, job: MailJob): Promise<MailJobOu
 
     case "password_reset": {
       const msg = passwordResetEmail({ name: job.name, resetUrl: job.resetUrl });
+      return oneMessage(job.to, await sendMail(env, { to: job.to, ...msg }));
+    }
+
+    case "account_deletion_scheduled": {
+      const msg = accountDeletionEmail({
+        name: job.name,
+        purgeAt: job.purgeAt,
+        signInUrl: withUtm(job.signInUrl, job.kind),
+      });
       return oneMessage(job.to, await sendMail(env, { to: job.to, ...msg }));
     }
 

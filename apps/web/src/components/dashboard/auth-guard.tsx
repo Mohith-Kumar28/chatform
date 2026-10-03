@@ -8,6 +8,8 @@ import { claimPersistedCacheFor, purgePersistedCache } from "@/lib/api/persist";
 import { setTrackedUser } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/button";
 import { currentPath, UNAUTHORIZED_EVENT } from "@/lib/safe-next";
+import { deletedAtOf } from "@/lib/account-deletion";
+import { AccountPendingDeletion } from "./account-pending-deletion";
 
 /**
  * The single session gate. The dashboard shell and the builder shell both use
@@ -133,5 +135,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!session) return null;
+  // Signed back in to an account they deleted: recover it or leave, nothing else.
+  const deletedAt = deletedAtOf(session.user);
+  if (deletedAt !== null) return <AccountPendingDeletion deletedAt={deletedAt} email={session.user.email} />;
   return <>{children}</>;
 }

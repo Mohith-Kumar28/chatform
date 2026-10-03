@@ -1,6 +1,36 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
-import { applySchema, fetchApi, seedTenant } from "./helpers.js";
+import { applySchema, fetchApi, minimalDoc, seedTenant } from "./helpers.js";
+import { purgeDeletedAccounts } from "../src/lib/account-deletion.js";
+
+type T = Awaited<ReturnType<typeof seedTenant>>;
+
+function scheduleDeletion(t: T, body: Record<string, unknown>): Promise<Response> {
+  return fetchApi("/api/auth/account/delete", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: t.cookie, origin: "http://localhost:3000" },
+    body: JSON.stringify(body),
+  });
+}
+
+/** Delete the account, then let the thirty days pass and run the sweep. */
+async function deleteAndPurge(t: T, email: string): Promise<void> {
+  const res = await scheduleDeletion(t, { confirmation: email, password: "supersecret123" });
+  expect(res.ok).toBe(true);
+  await env.DB.prepare(`UPDATE users SET deleted_at = ? WHERE id = ?`).bind(Date.now() - 31 * 86_400_000, t.userId).run();
+  await purgeDeletedAccounts(env);
+}
+
+/** Sign in again, as the person coming back to recover it would. */
+async function signIn(email: string): Promise<string> {
+  const res = await fetchApi("/api/auth/sign-in/email", {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: "http://localhost:3000" },
+    body: JSON.stringify({ email, password: "supersecret123" }),
+  });
+  expect(res.ok).toBe(true);
+  return res.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+}
 
 /**
  * Deleting an account has to mean it.
@@ -30,12 +60,7 @@ describe("account deletion", () => {
       .run();
     await env.R2.put("assets/delsolo/x.png", "bytes");
 
-    const res = await fetchApi("/api/auth/delete-user", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: t.cookie, origin: "http://localhost:3000" },
-      body: JSON.stringify({ password: "supersecret123" }),
-    });
-    expect(res.ok).toBe(true);
+    await deleteAndPurge(t, "delsolo@example.com");
 
     const user = await env.DB.prepare(`SELECT id FROM users WHERE id = ?`).bind(t.userId).first();
     expect(user).toBeNull();
@@ -82,12 +107,7 @@ describe("account deletion", () => {
     await env.R2.put("assets/delmany/0000.png", "bytes");
     await env.R2.put("assets/delmany/0149.png", "bytes");
 
-    const res = await fetchApi("/api/auth/delete-user", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: t.cookie, origin: "http://localhost:3000" },
-      body: JSON.stringify({ password: "supersecret123" }),
-    });
-    expect(res.ok).toBe(true);
+    await deleteAndPurge(t, "delmany@example.com");
 
     expect(await env.DB.prepare(`SELECT id FROM users WHERE id = ?`).bind(t.userId).first()).toBeNull();
     expect(await env.DB.prepare(`SELECT id FROM organizations WHERE id = ?`).bind(t.orgId).first()).toBeNull();
@@ -118,12 +138,7 @@ describe("account deletion", () => {
       .bind(owner.orgId, Date.now())
       .run();
 
-    const res = await fetchApi("/api/auth/delete-user", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: owner.cookie, origin: "http://localhost:3000" },
-      body: JSON.stringify({ password: "supersecret123" }),
-    });
-    expect(res.ok).toBe(true);
+    await deleteAndPurge(owner, "delshared@example.com");
 
     const org = await env.DB.prepare(`SELECT id FROM organizations WHERE id = ?`).bind(owner.orgId).first();
     expect(org).toBeTruthy();
@@ -139,5 +154,84 @@ describe("account deletion", () => {
       .bind(owner.orgId)
       .all<{ uid: string }>();
     expect(members.results?.map((m) => m.uid)).toEqual(["usr_delstay"]);
+  });
+
+  it("schedules rather than deletes, and signing back in recovers it", async () => {
+    const t = await seedTenant("delgrace");
+    const email = "delgrace@example.com";
+
+    // A published form, so the freeze has something to stop.
+    const doc = { ...minimalDoc("delgrace"), settings: { agent: { mode: "template" } } };
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO forms (id, organization_id, workspace_id, created_by, title, slug, status, working_schema, fingerprint_salt, active_version_id, created_at, updated_at)
+         VALUES ('frm_delgrace_pub', ?1, ?2, ?3, 'Live', 'delgrace-live', 'published', ?4, 'salt', 'fv_delgrace_pub', ?5, ?5)`,
+      ).bind(t.orgId, t.workspaceId, t.userId, JSON.stringify(doc), now),
+      env.DB.prepare(
+        `INSERT INTO form_versions (id, form_id, version, schema_json, checksum, published_at, created_by, created_at)
+         VALUES ('fv_delgrace_pub', 'frm_delgrace_pub', 1, ?1, 'ck', ?2, ?3, ?2)`,
+      ).bind(JSON.stringify(doc), now, t.userId),
+    ]);
+    expect((await fetchApi("/p/forms/delgrace-live/config")).status).toBe(200);
+
+    // The typed confirmation has to be their email, and the password has to be right.
+    expect((await scheduleDeletion(t, { confirmation: "nope", password: "supersecret123" })).status).toBe(400);
+    expect((await scheduleDeletion(t, { confirmation: email, password: "wrong-password" })).status).toBe(400);
+    expect((await scheduleDeletion(t, { confirmation: email.toUpperCase(), password: "supersecret123" })).ok).toBe(true);
+
+    // Marked, signed out everywhere, and nothing removed.
+    const row = await env.DB.prepare(`SELECT deleted_at FROM users WHERE id = ?`).bind(t.userId).first<{ deleted_at: number | null }>();
+    expect(row?.deleted_at).toBeGreaterThan(0);
+    const sessions = await env.DB.prepare(`SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?`).bind(t.userId).first<{ n: number }>();
+    expect(sessions?.n).toBe(0);
+    expect(await env.DB.prepare(`SELECT id FROM forms WHERE id = ?`).bind(t.formId).first()).toBeTruthy();
+
+    // Their only workspace stops serving its forms.
+    expect((await fetchApi("/p/forms/delgrace-live/config")).status).toBe(404);
+
+    // Signing up again with the address says why, and points at signing in.
+    const signup = await fetchApi("/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost:3000" },
+      body: JSON.stringify({ email, password: "anotherpass123", name: "Again" }),
+    });
+    expect(signup.status).toBe(403);
+    expect(((await signup.json()) as { code?: string }).code).toBe("ACCOUNT_PENDING_DELETION");
+
+    // Signing in works, but the app stays closed until they recover it.
+    const cookie = await signIn(email);
+    const blocked = await fetchApi("/api/forms", { headers: { cookie } });
+    expect(blocked.status).toBe(403);
+    expect(((await blocked.json()) as { error: { code: string } }).error.code).toBe("account_pending_deletion");
+
+    const restore = await fetchApi("/api/auth/account/restore", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, origin: "http://localhost:3000" },
+      body: "{}",
+    });
+    expect(restore.ok).toBe(true);
+    // The refreshed cookies replace the old ones by name, as a browser would.
+    const jar = new Map(cookie.split("; ").map((c) => [c.split("=")[0], c] as const));
+    for (const c of restore.headers.getSetCookie()) jar.set(c.split("=")[0]!, c.split(";")[0]!);
+    const fresh = [...jar.values()].join("; ");
+
+    const cleared = await env.DB.prepare(`SELECT deleted_at FROM users WHERE id = ?`).bind(t.userId).first<{ deleted_at: number | null }>();
+    expect(cleared?.deleted_at).toBeNull();
+    expect((await fetchApi("/api/forms", { headers: { cookie: fresh } })).status).toBe(200);
+    expect((await fetchApi("/p/forms/delgrace-live/config")).status).toBe(200);
+
+    // And a recovered account is never purged.
+    await purgeDeletedAccounts(env);
+    expect(await env.DB.prepare(`SELECT id FROM users WHERE id = ?`).bind(t.userId).first()).toBeTruthy();
+  });
+
+  it("keeps a scheduled account until its thirty days are up", async () => {
+    const t = await seedTenant("delwait");
+    expect((await scheduleDeletion(t, { confirmation: "delwait@example.com", password: "supersecret123" })).ok).toBe(true);
+    await env.DB.prepare(`UPDATE users SET deleted_at = ? WHERE id = ?`).bind(Date.now() - 29 * 86_400_000, t.userId).run();
+    await purgeDeletedAccounts(env);
+    expect(await env.DB.prepare(`SELECT id FROM users WHERE id = ?`).bind(t.userId).first()).toBeTruthy();
+    expect(await env.DB.prepare(`SELECT id FROM organizations WHERE id = ?`).bind(t.orgId).first()).toBeTruthy();
   });
 });

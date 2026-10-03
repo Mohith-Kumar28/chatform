@@ -1,20 +1,9 @@
 "use client"
 
-import {
-  authQueryKeys,
-  isReauthenticationRequiredError,
-  validateStringLength
-} from "@better-auth-ui/core"
-import {
-  useAuth,
-  useAuthPlugin,
-  useDeleteUser,
-  useListAccounts
-} from "@better-auth-ui/react"
+import { useAuth, useListAccounts, useSession } from "@better-auth-ui/react"
 import { useQueryClient } from "@tanstack/react-query"
 import { Eye, EyeOff, TriangleAlert } from "lucide-react"
 import { useState } from "react"
-import { toast } from "sonner"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -26,7 +15,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from "@/components/ui/alert-dialog"
-import { buttonVariants } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
 import {
@@ -35,210 +24,208 @@ import {
   InputGroupButton,
   InputGroupInput
 } from "@/components/ui/input-group"
-import { deleteUserPlugin } from "@/lib/auth/delete-user-plugin"
+import { Spinner } from "@/components/ui/spinner"
+import { TypeToConfirm, phraseMatches } from "@/components/ui/type-to-confirm"
+import { authClient as chatformAuthClient } from "@/lib/auth/auth-client"
+import { purgeDate } from "@/lib/account-deletion"
 import { cn } from "@/lib/utils"
-import { isAuthFormFieldInvalid, useAuthForm } from "../auth-form"
 import { ReauthenticationAction } from "../reauthentication"
 
 export type DeleteAccountProps = {
   className?: string
 }
 
+type Step = "explain" | "confirm"
+
 /**
- * Danger-zone card to delete the authenticated account, with a confirmation dialog and toasts.
+ * Danger-zone card to delete the signed-in account.
+ *
+ * Two steps, on purpose: the first says what deleting does and that there are
+ * thirty days to undo it; the second asks for the email address typed out and,
+ * when the account has one, the password. Deleting only schedules the erase;
+ * signing back in within the thirty days recovers everything.
  */
 export function DeleteAccount({ className }: DeleteAccountProps) {
-  const { authClient, basePaths, localization, viewPaths, navigate } = useAuth()
-
-  const {
-    localization: deleteUserLocalization,
-    sendDeleteAccountVerification
-  } = useAuthPlugin(deleteUserPlugin)
-
+  const { authClient } = useAuth()
+  const { data: session } = useSession(authClient)
   const { data: accounts } = useListAccounts(authClient)
-
   const queryClient = useQueryClient()
 
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [step, setStep] = useState<Step>("explain")
+  const [typed, setTyped] = useState("")
+  const [password, setPassword] = useState("")
+  const [passwordVisible, setPasswordVisible] = useState(false)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [needsReauth, setNeedsReauth] = useState(false)
+  // Taken when the dialog opens, so the date it promises holds still while it is read.
+  const [openedAt, setOpenedAt] = useState(0)
 
-  const hasCredentialAccount = accounts?.some(
-    (account) => account.providerId === "credential"
-  )
-  const needsPassword = !sendDeleteAccountVerification && hasCredentialAccount
+  const email = session?.user.email ?? ""
+  const hasPassword = accounts?.some((a) => a.providerId === "credential") ?? false
+  const ready =
+    !!email && phraseMatches(typed.toLowerCase(), email.toLowerCase()) && (!hasPassword || password.length > 0)
 
-  const deleteUser = useDeleteUser(authClient, {
-    meta: { errorPresentation: "inline" }
-  })
-  const needsReauthentication = isReauthenticationRequiredError(
-    deleteUser.error
-  )
+  const reset = () => {
+    setStep("explain")
+    setTyped("")
+    setPassword("")
+    setPasswordVisible(false)
+    setError(null)
+    setNeedsReauth(false)
+  }
 
-  const form = useAuthForm({
-    defaultValues: { password: "" },
-    onSubmit: async ({ value }) => {
-      await deleteUser.mutateAsync(
-        needsPassword ? { password: value.password } : {},
-        {
-          onSuccess: () => {
-            setConfirmOpen(false)
-            form.reset()
+  const handleOpenChange = (next: boolean) => {
+    if (pending) return
+    if (next) setOpenedAt(Date.now())
+    setOpen(next)
+    if (!next) reset()
+  }
 
-            if (sendDeleteAccountVerification) {
-              toast.success(deleteUserLocalization.deleteUserVerificationSent)
-            } else {
-              toast.success(deleteUserLocalization.deleteUserSuccess)
-              queryClient.removeQueries({ queryKey: authQueryKeys.all })
-              navigate({
-                to: `${basePaths.auth}/${viewPaths.auth.signIn}`,
-                replace: true
-              })
-            }
-          }
-        }
-      )
+  const submit = async () => {
+    if (!ready || pending) return
+    setPending(true)
+    setError(null)
+    const { error } = await chatformAuthClient.$fetch<{ deletedAt: number; purgeAt: number }>(
+      "/account/delete",
+      {
+        method: "POST",
+        body: { confirmation: typed.trim(), ...(hasPassword ? { password } : {}) }
+      }
+    )
+    setPending(false)
+    if (error) {
+      const code = (error as { code?: string }).code
+      if (code === "SESSION_NOT_FRESH") setNeedsReauth(true)
+      else setError(code === "INVALID_PASSWORD" ? "That password isn't right." : (error.message ?? "Couldn't delete your account."))
+      return
     }
-  })
-
-  const handleDialogOpenChange = (open: boolean) => {
-    setConfirmOpen(open)
-    deleteUser.reset()
-    form.reset()
-    setIsPasswordVisible(false)
+    // Every session is gone server-side. A full navigation, so nothing in
+    // memory still thinks this account is signed in.
+    queryClient.clear()
+    window.location.replace("/signin?deleted=1")
   }
 
   return (
     <Card className={cn("border-destructive", className)}>
       <CardContent className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-medium leading-tight">
-            {deleteUserLocalization.deleteAccount}
-          </p>
-
-          <p className="text-muted-foreground text-xs mt-0.5">
-            {deleteUserLocalization.deleteAccountDescription}
+          <p className="text-sm font-medium leading-tight">Delete account</p>
+          <p className="text-muted-foreground mt-0.5 text-xs">
+            Recoverable for 30 days, then erased for good.
           </p>
         </div>
 
-        <AlertDialog open={confirmOpen} onOpenChange={handleDialogOpenChange}>
+        <AlertDialog open={open} onOpenChange={handleOpenChange}>
           <AlertDialogTrigger
-            className={cn(
-              buttonVariants({ variant: "destructive", size: "sm" })
-            )}
-            disabled={!accounts}
+            className={cn(buttonVariants({ variant: "destructive", size: "sm" }))}
+            disabled={!accounts || !session}
           >
-            {deleteUserLocalization.deleteAccount}
+            Delete account
           </AlertDialogTrigger>
 
           <AlertDialogContent>
-            {needsReauthentication ? (
+            {needsReauth ? (
               <>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    {localization.settings.reauthenticationTitle}
-                  </AlertDialogTitle>
+                  <AlertDialogTitle>Sign in again to continue</AlertDialogTitle>
                 </AlertDialogHeader>
                 <ReauthenticationAction className="p-0" showTitle={false} />
               </>
+            ) : step === "explain" ? (
+              <>
+                <AlertDialogHeader>
+                  <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20">
+                    <TriangleAlert />
+                  </AlertDialogMedia>
+                  <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Here is what happens.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+
+                <ul className="text-muted-foreground list-disc space-y-1.5 pl-5 text-sm">
+                  <li>You are signed out on every device.</li>
+                  <li>Forms in workspaces only you are in stop taking responses.</li>
+                  <li>
+                    For 30 days you can sign in again and recover everything as it was.
+                  </li>
+                  <li>
+                    On <span className="text-foreground font-medium">{purgeDate(openedAt)}</span>,
+                    your account and those workspaces, with every form, response and file, are
+                    erased for good.
+                  </li>
+                  <li>Workspaces shared with others stay with them.</li>
+                </ul>
+
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <Button variant="destructive" onClick={() => setStep("confirm")}>
+                    Continue
+                  </Button>
+                </AlertDialogFooter>
+              </>
             ) : (
-              <form.AppForm>
-                <form.AuthFormRoot className="flex flex-col gap-6">
-                  <AlertDialogHeader>
-                    <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive">
-                      <TriangleAlert />
-                    </AlertDialogMedia>
+              <form
+                className="flex flex-col gap-6"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void submit()
+                }}
+              >
+                <AlertDialogHeader>
+                  <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20">
+                    <TriangleAlert />
+                  </AlertDialogMedia>
+                  <AlertDialogTitle>Confirm it&apos;s you</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Your data is erased on {purgeDate(openedAt)} unless you sign in again before then.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
 
-                    <AlertDialogTitle>
-                      {deleteUserLocalization.deleteAccount}
-                    </AlertDialogTitle>
+                <TypeToConfirm phrase={email} value={typed} onChange={setTyped} disabled={pending} />
 
-                    <AlertDialogDescription>
-                      {deleteUserLocalization.deleteAccountDescription}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
+                {hasPassword && (
+                  <Field>
+                    <FieldLabel htmlFor="delete-password">Password</FieldLabel>
+                    <InputGroup>
+                      <InputGroupInput
+                        id="delete-password"
+                        type={passwordVisible ? "text" : "password"}
+                        autoComplete="current-password"
+                        value={password}
+                        onChange={(e) => {
+                          setPassword(e.target.value)
+                          setError(null)
+                        }}
+                        disabled={pending}
+                      />
+                      <InputGroupAddon align="inline-end">
+                        <InputGroupButton
+                          size="icon-xs"
+                          aria-label={passwordVisible ? "Hide password" : "Show password"}
+                          onClick={() => setPasswordVisible((v) => !v)}
+                        >
+                          {passwordVisible ? <EyeOff /> : <Eye />}
+                        </InputGroupButton>
+                      </InputGroupAddon>
+                    </InputGroup>
+                  </Field>
+                )}
 
-                  {needsPassword && (
-                    <form.AppField
-                      name="password"
-                      validators={{
-                        onChange: ({ value }) =>
-                          validateStringLength(value, {
-                            requiredMessage: localization.auth.fieldRequired
-                          })
-                      }}
-                    >
-                      {(field) => {
-                        const isInvalid = isAuthFormFieldInvalid(
-                          field.state.meta
-                        )
-                        return (
-                          <Field data-invalid={isInvalid}>
-                            <FieldLabel htmlFor="delete-password">
-                              {localization.auth.password}
-                            </FieldLabel>
+                {error && <p className="text-destructive text-sm">{error}</p>}
 
-                            <InputGroup>
-                              <InputGroupInput
-                                id="delete-password"
-                                name={field.name}
-                                type={isPasswordVisible ? "text" : "password"}
-                                autoComplete="current-password"
-                                placeholder={
-                                  localization.auth.passwordPlaceholder
-                                }
-                                value={field.state.value}
-                                onBlur={field.handleBlur}
-                                onChange={(event) =>
-                                  field.handleChange(event.target.value)
-                                }
-                                disabled={deleteUser.isPending}
-                                required
-                              />
-
-                              <InputGroupAddon align="inline-end">
-                                <InputGroupButton
-                                  size="icon-xs"
-                                  aria-label={
-                                    isPasswordVisible
-                                      ? localization.auth.hidePassword
-                                      : localization.auth.showPassword
-                                  }
-                                  title={
-                                    isPasswordVisible
-                                      ? localization.auth.hidePassword
-                                      : localization.auth.showPassword
-                                  }
-                                  onClick={() => {
-                                    setIsPasswordVisible((visible) => !visible)
-                                  }}
-                                >
-                                  {isPasswordVisible ? <EyeOff /> : <Eye />}
-                                </InputGroupButton>
-                              </InputGroupAddon>
-                            </InputGroup>
-
-                            <field.AuthFormFieldError />
-                          </Field>
-                        )
-                      }}
-                    </form.AppField>
-                  )}
-
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={deleteUser.isPending}>
-                      {localization.settings.cancel}
-                    </AlertDialogCancel>
-
-                    <form.AuthFormSubmitButton
-                      isPending={deleteUser.isPending}
-                      variant="destructive"
-                      disabled={deleteUser.isPending}
-                    >
-                      {deleteUserLocalization.deleteAccount}
-                    </form.AuthFormSubmitButton>
-                  </AlertDialogFooter>
-                </form.AuthFormRoot>
-              </form.AppForm>
+                <AlertDialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setStep("explain")} disabled={pending}>
+                    Back
+                  </Button>
+                  <Button type="submit" variant="destructive" disabled={!ready || pending}>
+                    {pending && <Spinner />}
+                    Delete my account
+                  </Button>
+                </AlertDialogFooter>
+              </form>
             )}
           </AlertDialogContent>
         </AlertDialog>

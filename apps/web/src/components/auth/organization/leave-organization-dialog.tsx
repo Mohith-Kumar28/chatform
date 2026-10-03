@@ -5,6 +5,7 @@ import { useAuth, useAuthPlugin } from "@better-auth-ui/react"
 import { useLeaveOrganization } from "@better-auth-ui/react/plugins/organization"
 import type { Organization } from "better-auth/client"
 import { LogOut } from "lucide-react"
+import { useState } from "react"
 import { toast } from "sonner"
 
 import {
@@ -20,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
+import { TypeToConfirm, phraseMatches } from "@/components/ui/type-to-confirm"
 import { organizationPlugin } from "@/lib/auth/organization-plugin"
 import { OrganizationView } from "./organization-view"
 
@@ -73,8 +75,17 @@ export function LeaveOrganizationDialog({
     }
   )
 
+  const [typed, setTyped] = useState("")
+  const confirmed = phraseMatches(typed, organization.name)
+
+  const handleOpenChange = (next: boolean) => {
+    if (isPending) return
+    if (!next) setTyped("")
+    onOpenChange(next)
+  }
+
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogMedia className="bg-destructive/10 text-destructive">
@@ -96,6 +107,13 @@ export function LeaveOrganizationDialog({
           </CardContent>
         </Card>
 
+        <TypeToConfirm
+          phrase={organization.name}
+          value={typed}
+          onChange={setTyped}
+          disabled={isPending}
+        />
+
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isPending}>
             {localization.settings.cancel}
@@ -103,7 +121,7 @@ export function LeaveOrganizationDialog({
 
           <Button
             variant="destructive"
-            disabled={isPending}
+            disabled={isPending || !confirmed}
             onClick={() =>
               leaveOrganization({ organizationId: organization.id })
             }

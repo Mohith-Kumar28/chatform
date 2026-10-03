@@ -11,14 +11,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { TypeToConfirm, phraseMatches } from "@/components/ui/type-to-confirm";
 
 /**
  * Destructive confirmation. Replaces `window.confirm`, which the product used
  * for form deletion — it is unstyled, unthemed, blocks the whole tab, and on
  * some platforms is suppressed entirely.
  *
- * `confirmText` gates genuinely irreversible actions behind typing the name,
- * the way GitHub does. Use it only where undo is impossible.
+ * `confirmText` gates anything that deletes data behind typing its name, the
+ * way GitHub does. A slipped click on a delete button should never be enough.
  */
 export function ConfirmDialog({
   open,
@@ -44,22 +45,29 @@ export function ConfirmDialog({
   const [busy, setBusy] = useState(false);
   const [typed, setTyped] = useState("");
 
-  const blocked = confirmText !== undefined && typed.trim() !== confirmText;
+  const blocked = confirmText !== undefined && !phraseMatches(typed, confirmText);
+
+  function setOpen(o: boolean) {
+    if (busy) return;
+    // A half-typed name never carries over to the next thing this dialog confirms.
+    if (!o) setTyped("");
+    onOpenChange(o);
+  }
 
   async function run() {
     if (blocked) return;
     setBusy(true);
     try {
       await onConfirm();
-      onOpenChange(false);
       setTyped("");
+      onOpenChange(false);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => (busy ? null : onOpenChange(o))}>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -67,22 +75,18 @@ export function ConfirmDialog({
         </DialogHeader>
 
         {confirmText !== undefined && (
-          <div className="space-y-2">
-            <p className="text-muted-foreground text-caption">
-              Type <span className="text-foreground font-mono font-medium">{confirmText}</span> to
-              confirm.
-            </p>
-            <input
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              autoComplete="off"
-              className="border-input bg-background focus-visible:ring-ring/50 h-9 w-full rounded-md border px-3 text-sm outline-none focus-visible:ring-[3px]"
-            />
-          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void run();
+            }}
+          >
+            <TypeToConfirm phrase={confirmText} value={typed} onChange={setTyped} disabled={busy} />
+          </form>
         )}
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
+          <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
             {cancelLabel}
           </Button>
           <Button

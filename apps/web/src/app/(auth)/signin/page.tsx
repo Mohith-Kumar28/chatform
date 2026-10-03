@@ -51,6 +51,8 @@ function SignInForm() {
     params.get("error") ? "Google sign-in did not complete. Please try again." : null,
   );
   const [pending, setPending] = useState(false);
+  // Arriving straight from deleting an account: say how to undo it.
+  const [deletedNotice] = useState(() => params.get("deleted") === "1");
   // `null` = not known yet, so the button is not drawn and then yanked away on a
   // deployment that has no Google credentials configured.
   const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
@@ -113,6 +115,15 @@ function SignInForm() {
     try {
       if (mode === "signup") {
         const res = await signUp.email({ email, password, name: name || (email.split("@")[0] ?? "User") });
+        // An account deleted in the last 30 days still owns this address. The
+        // way back is signing in, so turn the form into that, message and all.
+        if (res.error?.code === "ACCOUNT_PENDING_DELETION") {
+          setMode("signin");
+          setPassword("");
+          setConfirm("");
+          setError(res.error.message ?? "This account was deleted recently. Sign in to recover it.");
+          return;
+        }
         if (res.error) throw new Error(res.error.message ?? "Sign up failed");
         /*
           Signing up no longer signs you in. The account exists and is inert
@@ -225,6 +236,11 @@ function SignInForm() {
                 <span className="bg-border h-px flex-1" />
               </div>
             </>
+          )}
+          {deletedNotice && (
+            <p className="text-muted-foreground bg-muted mb-4 rounded-lg px-3 py-2 text-sm">
+              Your account is deleted. Sign in within 30 days to recover it.
+            </p>
           )}
           <form onSubmit={submit} className="space-y-4">
             {mode === "signup" && (
