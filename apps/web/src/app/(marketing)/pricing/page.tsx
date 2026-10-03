@@ -1,6 +1,6 @@
 import { PricingPageClient } from "@/components/marketing/pricing-page-client";
 import { JsonLd } from "@/components/seo/json-ld";
-import { FAQ_ITEMS } from "@/components/marketing/faq";
+import { PRICING_FAQ } from "@/components/marketing/pricing-faq";
 import { buildCatalogue, dollars } from "@/lib/pricing-catalogue";
 import { breadcrumbLd, faqPageLd, softwareApplicationLd } from "@/lib/seo";
 
@@ -37,7 +37,7 @@ export default function PricingPage() {
               url: "/pricing",
             })),
           ),
-          faqPageLd(FAQ_ITEMS),
+          faqPageLd([...PRICING_FAQ]),
           breadcrumbLd([
             { name: "chatform", path: "/" },
             { name: "Pricing", path: "/pricing" },

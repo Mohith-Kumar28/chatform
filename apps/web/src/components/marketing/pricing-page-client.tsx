@@ -1,93 +1,80 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import { Check, Lock, Minus } from "lucide-react";
+import Link from "next/link";
+import { ArrowDown, Check, Minus, Plus } from "lucide-react";
 import { customFetch } from "@/lib/api/mutator";
 import type { Catalogue } from "@/lib/pricing-catalogue";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { Band, BandTitle, BandLede } from "@/components/marketing/band";
+import { Band, Eyebrow } from "@/components/marketing/band";
 import { PlanCard } from "@/components/marketing/plan-card";
-import { ComparisonLink } from "@/components/marketing/pricing-section";
-import { BlockTypeGrid } from "@/components/marketing/block-type-grid";
-import { QUESTION_TYPE_COUNT_WORD } from "@/components/marketing/question-types";
-import { ComparisonTable } from "@/components/marketing/comparison-table";
-import { Faq } from "@/components/marketing/faq";
+import { QUESTION_TYPE_COUNT } from "@/components/marketing/question-types";
+import { PricingCalculator } from "@/components/marketing/pricing-calculator";
+import { PRICING_FAQ } from "@/components/marketing/pricing-faq";
 import { CtaBand } from "@/components/marketing/cta-band";
+import { PrimaryCta, SECONDARY_CTA, SectionLede, SectionTitle, TextLink } from "@/components/marketing/kit";
 
 /**
- * The public pricing page — and now the page that carries everything the
- * landing page stopped carrying.
+ * The public pricing page, on the structure of Youform's: what is free said
+ * first and loudest, then the three plans, then a month of responses priced
+ * here and at Typeform, then the full comparison, then the questions.
  *
- * The landing page had grown into a specification: a 26-tile question-type
- * grid, a seven-vendor comparison matrix with footnotes, and an eight-item FAQ
- * of paragraph answers, all above the fold of a decision nobody had made yet.
- * Those three things are not persuasion, they are due diligence, and due
- * diligence happens here — after somebody has decided they are interested and
- * gone looking for the price. So they live on this page, in that order:
- * price, then what you can ask, then how it compares, then the objections.
- *
- * The plan data still comes from `/api/billing/plans`, which serves the
- * **seeded** catalogue rather than the in-process one — so what this page
- * promises is what the gates actually enforce. A hardcoded table here would
- * drift from the database the first time a limit changed. The cards are the
- * shared `PlanCard`, fed from that payload.
+ * The plan data comes from `/api/billing/plans`, which serves the **seeded**
+ * catalogue rather than the in-process one, so what this page promises is what
+ * the gates enforce. Rows that are not a gate (logic, signatures, embeds) are
+ * `everyPlan`; a row that is being built says so with `soon` and is never
+ * drawn as included.
  */
 
+/** What Free includes, the list a visitor does not expect to be free. */
+const FREE_INCLUDES = (maxFileMb: number, aiConversations: number) => [
+  `All ${QUESTION_TYPE_COUNT} question types`,
+  "Logic, branching and multiple endings",
+  "Scores and quizzes",
+  "Signatures",
+  `File uploads up to ${maxFileMb} MB`,
+  "Themes, colours and built-in fonts",
+  "Hidden fields",
+  "Website embeds, popups and QR codes",
+  "Email alerts to yourself",
+  "Google Sheets and Excel",
+  "Webhooks",
+  "Scheduling links",
+  "An AI form builder",
+  `${aiConversations} AI conversations a month`,
+  "A knowledge base it answers from",
+  "Claude and ChatGPT connector",
+];
+
+type Row =
+  | { limit: string; label?: string }
+  | { feature: string; label?: string }
+  | { everyPlan: string }
+  /** Hand-written cells, for a row that is words rather than a gate. */
+  | { text: string; cells: [string, string, string] }
+  | { soon: string };
+
 /** The comparison rows, grouped the way someone shopping actually thinks. */
-const GROUPS: {
-  title: string;
-  rows: ({ limit: string; label?: string } | { feature: string } | { everyPlan: string })[];
-}[] = [
+const GROUPS: { title: string; rows: Row[] }[] = [
   {
-    title: "Build & collect",
+    title: "Make it yours",
     rows: [
       { limit: "responses_per_month" },
-      { limit: "responses_ceiling_per_month" },
       { limit: "forms_count" },
       { limit: "blocks_per_form" },
-      { limit: "workspaces_count" },
-      { feature: "duplicate_prevention" },
-      { feature: "multi_language" },
-      { feature: "respondent_auth_google" },
-      { feature: "respondent_auth_phone" },
-      { feature: "respondent_auth_email" },
-      { feature: "verified_answers" },
-      { feature: "collect_payments" },
-    ],
-  },
-  {
-    // Files the form hands out (a brochure, a price list, an installer) and
-    // files it takes in. One limit governs both, so one group shows it.
-    title: "File Drops",
-    rows: [
-      { everyPlan: "Hand out any file in the chat — PDF, sheet, deck, zip, installer" },
-      { everyPlan: "Collect files from respondents" },
-      { limit: "max_upload_mb_per_file", label: "Largest file" },
+      { everyPlan: `All ${QUESTION_TYPE_COUNT} question types` },
+      { everyPlan: "Themes, colours and built-in fonts" },
+      { everyPlan: "Logic, scores and calculations" },
+      { everyPlan: "Hidden fields and multiple endings" },
+      { everyPlan: "Signatures" },
+      { limit: "max_upload_mb_per_file", label: "File uploads, per file" },
       { limit: "file_storage_mb" },
-    ],
-  },
-  {
-    title: "Results",
-    rows: [
-      { feature: "partial_responses" },
-      { feature: "advanced_analytics" },
-      { feature: "conversation_analytics" },
-      { feature: "export_partials" },
-      { feature: "ai_insights" },
-    ],
-  },
-  {
-    title: "Brand & share",
-    rows: [
       { feature: "remove_branding" },
-      { feature: "brand_logo" },
+      { feature: "brand_logo", label: "Your logo and brand name" },
       { feature: "custom_fonts" },
+      { feature: "form_metadata", label: "Link preview title and image" },
       { feature: "custom_domain" },
-      { feature: "form_metadata" },
-      { feature: "completion_redirect" },
-      { feature: "auto_reply_email" },
-      { feature: "refill_link" },
-      { feature: "tracking_pixels" },
+      { feature: "multi_language" },
     ],
   },
   {
@@ -95,30 +82,60 @@ const GROUPS: {
     rows: [
       { limit: "ai_conversations_per_month" },
       { limit: "ai_generations_per_month" },
-      { limit: "agent_max_turns" },
-      { feature: "agent_persona" },
+      { everyPlan: "Asks again when an answer is thin" },
+      { everyPlan: "A switch to ask every question word for word" },
       { feature: "agent_knowledge" },
-      { feature: "agent_guardrails" },
-      { feature: "agent_model_picker" },
-      /* Was `knowledge_entries`, a limit that no longer exists — the row
-         rendered nothing, so the table never said how much knowledge each
-         plan allows. */
       { limit: "knowledge_sources_count" },
       { limit: "knowledge_bytes" },
+      { feature: "agent_persona" },
+      { feature: "agent_guardrails" },
     ],
   },
   {
-    title: "Team & integrations",
+    title: "Share and connect",
     rows: [
-      { limit: "seats" },
+      { everyPlan: "Share links, website embeds and QR codes" },
+      { everyPlan: "Google Sheets and Excel" },
       { limit: "webhooks_per_form" },
+      { everyPlan: "Claude and ChatGPT connector" },
+      { everyPlan: "Scheduling links" },
+      { everyPlan: "Email alerts to yourself" },
+      { soon: "Zapier, Make and Slack" },
       { feature: "api_access" },
       { limit: "api_requests_per_month" },
+      { feature: "completion_redirect" },
+      { feature: "auto_reply_email" },
+      { feature: "collect_payments", label: "Collect payments with Stripe" },
+      { feature: "tracking_pixels" },
+    ],
+  },
+  {
+    title: "Learn and work together",
+    rows: [
+      { text: "Response analytics", cells: ["Basic", "Advanced", "Advanced"] },
+      { feature: "advanced_analytics", label: "Drop-off rates and per-question answer rates" },
+      { feature: "conversation_analytics" },
+      { feature: "partial_responses" },
+      { feature: "followup_email" },
+      { feature: "export_partials" },
+      { feature: "refill_link" },
+      { limit: "workspaces_count" },
+      { limit: "seats" },
+      { text: "Additional team seats", cells: ["", "", "$10 / month each"] },
       { feature: "team_roles" },
-      { feature: "activity_log" },
+      { feature: "duplicate_prevention" },
+      { feature: "respondent_auth_google", label: "Respondent sign-in with Google" },
+      { feature: "respondent_auth_email", label: "Respondent sign-in by email code" },
+      { feature: "respondent_auth_phone", label: "Respondent sign-in by SMS code" },
+      { feature: "verified_answers" },
+      { feature: "one_response_per_identity" },
+      { feature: "activity_log", label: "Activity log with CSV export" },
     ],
   },
 ];
+
+const Included = () => <Check className="text-primary mx-auto size-4" strokeWidth={2.5} aria-label="Included" />;
+const NotIncluded = () => <Minus className="text-muted-foreground/40 mx-auto size-4" aria-label="Not included" />;
 
 function formatLimit(value: number | null, unit: string): string {
   if (value === null) return "Unlimited";
@@ -181,21 +198,61 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
    */
   const data = live ?? initial;
   const plans = data.plans;
-  const saving = plans.find((p) => p.id === "pro")?.yearlySavingPercent;
+  const free = plans.find((p) => p.id === "free");
+  const pro = plans.find((p) => p.id === "pro");
+  const saving = pro?.yearlySavingPercent;
+  const cell = "px-3 py-3 text-center";
 
   return (
     <>
-      {/* The page's one mark, and it is at the opposite corner and the opposite
-          tilt from the one `CtaBand` closes with — so the two read as the same
-          shape seen twice rather than as a repeated stamp. Nothing between them
-          carries it: the comparison table in particular had it sitting behind
-          the numbers. */}
-      <Band size="tall" mark="bottom-left">
-        <div className="max-w-2xl">
-          <BandTitle as="h1">Collect for free. Pay to look closer.</BandTitle>
-          <BandLede>
-            Unlimited responses on every plan, including the free one.
-          </BandLede>
+      <Band size="tall">
+        <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
+          <Eyebrow>chatform pricing</Eyebrow>
+          <h1 className="font-display mt-5 text-[clamp(2.6rem,1.2rem+4.6vw,4.5rem)] leading-[1.02] font-bold tracking-[-0.045em] text-balance">
+            Unlimited responses.
+            <span className="block">{free?.limits.forms_count ?? 100} forms.</span>
+            <span className="font-hand text-primary block text-[1.12em] leading-[1.05] font-normal tracking-normal">Free forever.</span>
+          </h1>
+          <p className="text-muted-foreground mt-6 max-w-xl text-[1.0625rem] leading-relaxed text-pretty">
+            Build, style and share conversational forms on a free plan you can keep using. More responses never mean
+            a bigger bill. Upgrade only when you need the advanced features.
+          </p>
+          <div className="mt-8 flex w-full flex-wrap items-center justify-center gap-3">
+            <PrimaryCta className="max-sm:w-full">Create your free account</PrimaryCta>
+            <a href="#plans" className={`${SECONDARY_CTA} max-sm:w-full`}>
+              Compare plans
+            </a>
+          </div>
+          <p className="text-muted-foreground mt-5 text-sm">No credit card. No trial countdown. Fair use applies.</p>
+        </div>
+
+        <div className="mt-16 rounded-[18px] border border-[color-mix(in_oklch,var(--family-choice)_24%,transparent)] bg-[var(--family-choice-soft)] px-7 py-10 sm:px-12 sm:py-12">
+          <h2 className="font-display text-[1.75rem] leading-tight font-bold tracking-[-0.03em] sm:text-[2.25rem]">
+            Yes, all this is free.
+          </h2>
+          <ul className="mt-7 grid gap-x-8 gap-y-3.5 sm:grid-cols-2 lg:grid-cols-4">
+            {FREE_INCLUDES(free?.limits.max_upload_mb_per_file ?? 5, free?.limits.ai_conversations_per_month ?? 200).map((item) => (
+              <li key={item} className="flex items-start gap-2.5 text-[0.9375rem] font-medium">
+                <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-[var(--family-choice-ink)] text-[var(--background)]">
+                  <Check className="size-3" strokeWidth={3} />
+                </span>
+                {item}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-8">
+            <TextLink href="#everything">See every included feature</TextLink>
+          </div>
+        </div>
+      </Band>
+
+      <Band id="plans">
+        <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
+          <SectionTitle accent="Our prices let you keep it.">Our forms get the answer.</SectionTitle>
+          <SectionLede className="max-w-xl">
+            Stay on Free for as long as it fits. Choose Pro for your own branding, payments and follow-ups. Business
+            adds verified answers and more seats.
+          </SectionLede>
         </div>
 
         <div className="mt-10 flex flex-col items-center gap-9">
@@ -210,8 +267,6 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
           />
 
           <div className="grid w-full items-stretch gap-5 lg:grid-cols-3">
-            {/* No shimmer branch any more: the plans are rendered on the server,
-                so there is never a paint without them. */}
             {plans.map((plan) => (
               <PlanCard
                 key={plan.id}
@@ -219,69 +274,56 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
                 featured={plan.id === "pro"}
                 plan={plan}
                 ctaHref={plan.id === "free" ? "/signin?mode=signup" : `/usage?plan=${plan.id}&cycle=${cycle}`}
-                ctaLabel={plan.id === "free" ? "Start free" : `Choose ${plan.name}`}
+                ctaLabel={plan.id === "free" ? "Start for free" : `Get started with ${plan.name}`}
                 note={plan.checkoutReady === false ? "Contact us to set this up" : undefined}
-                soonLabels={plan.features
-                  .filter((f) => data.features[f]?.soon)
-                  .map((f) => data.features[f]!.label.toLowerCase())}
               />
             ))}
           </div>
 
-          <ComparisonLink href="#everything" />
+          <p className="text-muted-foreground text-center text-sm">
+            All prices in USD. Tax is handled at checkout. Fair use applies.
+          </p>
+          <a href="#everything" className="text-foreground inline-flex items-center gap-1.5 text-[0.9375rem] font-semibold underline-offset-[5px] hover:underline">
+            A closer look at what&apos;s included
+            <ArrowDown className="size-4" />
+          </a>
         </div>
       </Band>
 
-      {/* Moved here from the landing page, where 26 tiles cost a full screen to
-          say something the hero's spectrum strip now says in a fifth of it. */}
-      <Band id="question-types" tone="number">
-        <div className="max-w-2xl">
-          <BandTitle>{QUESTION_TYPE_COUNT_WORD} ways to ask.</BandTitle>
-          <BandLede tone="number">
-            Each renders its own control in the conversation — and still accepts a typed
-            answer.
-          </BandLede>
-        </div>
-        <div className="mt-10">
-          <BlockTypeGrid />
-        </div>
-      </Band>
-
-      <Band id="compare" tone="sand">
-        <div className="max-w-2xl">
-          <BandTitle>Most of these render a field and wait.</BandTitle>
-          <BandLede>
-            Including where someone else already does what we do.
-          </BandLede>
-        </div>
-        <div className="mt-10">
-          <ComparisonTable />
-        </div>
-      </Band>
+      {pro && free && (
+        <Band id="typeform">
+          <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
+            <SectionTitle eyebrow="chatform and Typeform · a little number play" accent="What's the monthly bill?">
+              More people answering.
+            </SectionTitle>
+            <SectionLede className="max-w-xl">
+              Slide to your expected response volume and see how the published monthly base plans compare.
+            </SectionLede>
+          </div>
+          <div className="mt-10">
+            <PricingCalculator
+              proPrice={Math.round(pro.priceMonthlyCents / 100)}
+              freeCeiling={free.limits.responses_ceiling_per_month ?? 10_000}
+            />
+          </div>
+        </Band>
+      )}
 
       {/* The full matrix, built from the API payload so it can never claim
           something the gates do not honour. */}
       <Band id="everything">
-        <BandTitle className="max-w-2xl">Everything, compared.</BandTitle>
-        <div className="mt-10 overflow-x-auto [overflow-y:visible]">
-          <table className="w-full min-w-[46rem] text-sm">
-            {/* Forty rows of ticks and numbers, and the only thing that says
-                which column is which is one row at the very top. Sticky, at
-                the height of the marketing nav so the two do not overlap —
-                DESIGN.md 4.4 asks for this on every table and this is the one
-                that most needs it. */}
-            <thead className="bg-background sticky top-[3.375rem] z-[1]">
+        <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
+          <SectionTitle eyebrow="The little details" accent="plan by plan.">
+            Find your kind of fit,
+          </SectionTitle>
+        </div>
+        <div className="bg-card/60 border-border mt-10 overflow-x-auto rounded-[18px] border px-5 pb-4 sm:px-8">
+          <table className="w-full min-w-[40rem] text-[0.9375rem]">
+            <thead>
               <tr className="border-border border-b">
-                <th className="bg-background py-2.5 pr-4 text-left font-medium" />
+                <th className="py-4 pr-4 text-left text-sm font-semibold">What&apos;s included</th>
                 {plans.map((p) => (
-                  <th
-                    key={p.id}
-                    className={
-                      p.id === "pro"
-                        ? "text-primary bg-background w-32 px-3 py-2.5 text-center text-xs font-semibold"
-                        : "bg-background w-32 px-3 py-2.5 text-center text-xs font-medium"
-                    }
-                  >
+                  <th key={p.id} className={`font-display w-32 px-3 py-4 text-center text-base font-semibold ${p.id === "pro" ? "text-primary" : ""}`}>
                     {p.name}
                   </th>
                 ))}
@@ -291,27 +333,40 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
               {GROUPS.map((group) => (
                 <Fragment key={group.title}>
                   <tr>
-                    <th
-                      colSpan={plans.length + 1}
-                      className="text-muted-foreground pt-7 pb-2 text-left text-[0.6875rem] font-semibold tracking-wider uppercase"
-                    >
+                    <th colSpan={plans.length + 1} className="text-primary-soft-foreground pt-8 pb-2 text-left text-xs font-bold tracking-[0.09em] uppercase">
                       {group.title}
                     </th>
                   </tr>
                   {group.rows.map((row) => {
-                    // Not a gate: something every plan does, so there is no
-                    // entitlement for the payload to disagree with.
                     if ("everyPlan" in row) {
                       return (
                         <tr key={row.everyPlan} className="border-border/60 border-b">
-                          <td className="py-2.5 pr-4">{row.everyPlan}</td>
+                          <td className="py-3 pr-4">{row.everyPlan}</td>
                           {plans.map((p) => (
-                            <td key={p.id} className="px-3 py-2.5 text-center">
-                              <Check
-                                className="text-primary mx-auto size-4"
-                                strokeWidth={2.5}
-                                aria-label="Included"
-                              />
+                            <td key={p.id} className={cell}>
+                              <Included />
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    }
+                    if ("soon" in row) {
+                      return (
+                        <tr key={row.soon} className="border-border/60 border-b">
+                          <td className="py-3 pr-4">{row.soon}</td>
+                          <td colSpan={plans.length} className="text-muted-foreground px-3 py-3 text-center text-sm">
+                            Being built, not available yet
+                          </td>
+                        </tr>
+                      );
+                    }
+                    if ("text" in row) {
+                      return (
+                        <tr key={row.text} className="border-border/60 border-b">
+                          <td className="py-3 pr-4">{row.text}</td>
+                          {row.cells.map((value, i) => (
+                            <td key={i} className={`${cell} text-sm`}>
+                              {value || <NotIncluded />}
                             </td>
                           ))}
                         </tr>
@@ -322,12 +377,15 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
                       if (!meta) return null;
                       return (
                         <tr key={row.limit} className="border-border/60 border-b">
-                          <td className="py-2.5 pr-4">{row.label ?? meta.label}</td>
-                          {plans.map((p) => (
-                            <td key={p.id} className="tabular px-3 py-2.5 text-center">
-                              {formatLimit(p.limits[row.limit] ?? null, meta.unit)}
-                            </td>
-                          ))}
+                          <td className="py-3 pr-4">{row.label ?? meta.label}</td>
+                          {plans.map((p) => {
+                            const value = formatLimit(p.limits[row.limit] ?? null, meta.unit);
+                            return (
+                              <td key={p.id} className={`tabular ${cell} text-sm`}>
+                                {value === "—" ? <NotIncluded /> : value}
+                              </td>
+                            );
+                          })}
                         </tr>
                       );
                     }
@@ -335,31 +393,16 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
                     if (!meta) return null;
                     return (
                       <tr key={row.feature} className="border-border/60 border-b">
-                        <td className="py-2.5 pr-4">
-                          {meta.label}
+                        <td className="py-3 pr-4">
+                          {row.label ?? meta.label}
                           {/* Priced, not built. Marked in plain sight: listing an
                               unbuilt feature as included in a paid plan is a
                               misrepresentation. */}
-                          {meta.soon && (
-                            <span className="text-muted-foreground ml-1.5 text-xs">
-                              coming soon
-                            </span>
-                          )}
+                          {meta.soon && <span className="text-muted-foreground ml-1.5 text-xs">coming soon</span>}
                         </td>
                         {plans.map((p) => (
-                          <td key={p.id} className="px-3 py-2.5 text-center">
-                            {p.features.includes(row.feature) ? (
-                              <Check
-                                className="text-primary mx-auto size-4"
-                                strokeWidth={2.5}
-                                aria-label="Included"
-                              />
-                            ) : (
-                              <Minus
-                                className="text-muted-foreground/40 mx-auto size-4"
-                                aria-label="Not included"
-                              />
-                            )}
+                          <td key={p.id} className={cell}>
+                            {p.features.includes(row.feature) ? <Included /> : <NotIncluded />}
                           </td>
                         ))}
                       </tr>
@@ -370,56 +413,39 @@ export function PricingPageClient({ initial }: { initial: Catalogue }) {
             </tbody>
           </table>
         </div>
+        {free && pro && (
+          <p className="text-muted-foreground mx-auto mt-5 max-w-3xl text-center text-sm leading-relaxed">
+            Unlimited responses means no per-plan quota. Fair use is a stated ceiling:{" "}
+            {formatLimit(free.limits.responses_ceiling_per_month ?? null, "count")} a month on Free and{" "}
+            {formatLimit(pro.limits.responses_ceiling_per_month ?? null, "count")} on paid plans. Past your AI
+            conversations, forms keep collecting and ask their questions as written.{" "}
+            <Link href="/contact" className="text-foreground font-medium underline underline-offset-4">
+              Ask us about a feature.
+            </Link>
+          </p>
+        )}
       </Band>
 
-      {/* The fine print, at the foot of the argument rather than the head of
-          it.
-
-          These three paragraphs used to sit directly under the plan cards, in
-          the first screenful — the fair-use ceiling, why AI conversations are
-          metered, and the tax and cancellation line. All three are true and
-          worth publishing, and none of them is a thing anybody is weighing at
-          the moment they are choosing between $0 and $16. Read there they were
-          an objection raised before anyone had objected; read here, after the
-          forty-row matrix, they answer the questions the matrix actually
-          provokes. */}
-      {plans[0] && plans[1] && (
-        <Band tone="sand" size="tight">
-          <div className="text-caption text-muted-foreground mx-auto max-w-3xl space-y-2.5">
-            <p className="flex items-start gap-2">
-              <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-              <span>
-                <strong className="text-foreground font-semibold">
-                  &ldquo;Unlimited responses&rdquo;
-                </strong>{" "}
-                means no per-plan quota. There is a monthly ceiling for fair use —{" "}
-                {formatLimit(plans[0].limits.responses_ceiling_per_month ?? null, "count")} on
-                Free and{" "}
-                {formatLimit(plans[1].limits.responses_ceiling_per_month ?? null, "count")} on
-                paid plans. We would rather tell you the number than write
-                &ldquo;subject to fair usage&rdquo;.
-              </span>
-            </p>
-            <p>
-              Every response is a real conversation with a language model, which costs us
-              money — so AI conversations are metered. Past the monthly count your forms
-              keep collecting, asking their questions directly instead of conversationally.
-              Nothing breaks and no response is lost.
-            </p>
-            <p>
-              Prices in USD. Tax is handled at checkout. Cancel any time from the billing
-              portal.
-            </p>
+      <Band id="faq">
+        <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16">
+          <div>
+            <SectionTitle eyebrow="No small print energy">A few good questions.</SectionTitle>
+            <p className="text-muted-foreground mt-5">Not sure which plan fits?</p>
+            <div className="mt-2">
+              <TextLink href="/contact">Talk to a real person</TextLink>
+            </div>
           </div>
-        </Band>
-      )}
-
-      <Band id="faq" tone="content">
-        <BandTitle className="mx-auto max-w-2xl text-center">
-          The things people ask before they trust this.
-        </BandTitle>
-        <div className="mt-10">
-          <Faq />
+          <div className="divide-border/70 divide-y">
+            {PRICING_FAQ.map((item) => (
+              <details key={item.question} className="group py-1">
+                <summary className="font-display flex cursor-pointer list-none items-center justify-between gap-6 py-4 text-lg font-semibold [&::-webkit-details-marker]:hidden">
+                  {item.question}
+                  <Plus className="text-muted-foreground size-5 shrink-0 transition-transform duration-200 group-open:rotate-45" />
+                </summary>
+                <p className="text-muted-foreground animate-message-in pb-5 leading-relaxed">{item.answer}</p>
+              </details>
+            ))}
+          </div>
         </div>
       </Band>
 

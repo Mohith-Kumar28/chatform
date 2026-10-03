@@ -44,40 +44,44 @@ export interface PlanCardPlan {
 }
 
 /**
- * The five lines that decide each tier, and every one of them is a real
- * entitlement — check against `PLANS` in `@repo/entitlements` before editing.
+ * The lines that decide each tier, and every one of them is a real entitlement:
+ * check against `PLANS` in `@repo/entitlements` before editing.
  *
- * Free's are limits because Free has no features at all (`features: []`); its
- * story is "everything that gets a form collecting". The paid tiers lead with
- * their quota and then spend four lines on what actually turns on, because
- * that is the question the card is being asked.
+ * Shaped after Youform's cards, which answer the same three questions ours
+ * must: what is free, what the money turns on, and how many people can use it.
+ * Nothing marked `soon` in the catalogue is here, and neither is the knowledge
+ * base on Pro: it is already on Free.
  */
 export const PLAN_HIGHLIGHTS: Record<string, readonly string[]> = {
   free: [
     "Unlimited responses",
+    `100 forms and all ${QUESTION_TYPE_COUNT} question types`,
+    "Logic, scoring and multiple endings",
     "200 AI conversations a month",
-    `All ${QUESTION_TYPE_COUNT} question types, logic and endings`,
-    "100 forms, CSV export and webhooks",
-    "Your own endings, scoring and branching",
+    "Google Sheets, webhooks and file uploads",
+    "A knowledge base your form answers from",
+    "One user",
   ],
-  // agent_persona · agent_knowledge · agent_guardrails · followup_email ·
-  // partial_responses + advanced_analytics + conversation_analytics ·
-  // brand_logo + custom_fonts + remove_branding ·
-  // respondent_auth_google + respondent_auth_phone + respondent_auth_email
+  // brand_logo + custom_fonts + remove_branding · collect_payments ·
+  // partial_responses + followup_email · advanced_analytics +
+  // conversation_analytics · respondent_auth_* · agent_persona + agent_guardrails
   pro: [
-    "2,000 AI conversations a month",
-    "Persona, goal and a knowledge base",
-    "Verified respondents by Google, email or SMS",
-    "Partial responses, analytics and follow-up emails",
     "Your logo and fonts, no chatform badge",
+    "Collect payments with Stripe",
+    "Partial responses and follow-up emails",
+    "Advanced analytics and drop-off",
+    "Respondent sign-in by Google, email or SMS",
+    "2,000 AI conversations, persona and guardrails",
+    "Up to 3 team members",
   ],
-  // verified_answers · one_response_per_identity · agent_model_picker · activity_log
+  // verified_answers · one_response_per_identity · activity_log
   business: [
-    "10,000 AI conversations a month",
     "Verified answers, by emailed or texted code",
     "One response per verified person",
-    "Pick the model that runs the interview",
-    "An activity log of every change",
+    "Activity log with CSV export",
+    "10,000 AI conversations a month",
+    "5 team members included",
+    "Extra seats at $10 a month each",
   ],
 };
 
@@ -154,10 +158,10 @@ export function PlanCard({
       </p>
       <p className="text-caption text-muted-foreground mt-1 min-h-[1.25rem]">
         {free
-          ? "Free forever. No card."
+          ? "Forever. No credit card, no trial countdown."
           : annual
-            ? `${dollars(plan.priceYearlyCents)} billed yearly — save ${plan.yearlySavingPercent}%`
-            : `${dollars(plan.priceMonthlyCents * 12)} a year at this rate`}
+            ? `Billed yearly at ${dollars(plan.priceYearlyCents)}, save ${plan.yearlySavingPercent}%`
+            : `Billed monthly, or ${dollars(plan.priceYearlyPerMonthCents)}/month billed yearly`}
       </p>
 
       {/* The featured card's button is the page's ask, so it takes both hues

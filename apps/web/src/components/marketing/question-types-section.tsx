@@ -28,7 +28,7 @@ export function QuestionTypesSection() {
             signature pad. People can still just type.
           </SectionLede>
           <div className="mt-7">
-            <TextLink href="/pricing#question-types">See every question type</TextLink>
+            <TextLink href="/docs/blocks">See every question type</TextLink>
           </div>
         </div>
 
