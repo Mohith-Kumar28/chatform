@@ -1950,3 +1950,14 @@ html.cf-keyboard-open [data-chat-header-row] {
     animation: none;
   }
 }
+
+/* The composer in the home page's small chat films: the answer is revealed a
+   character at a time (`steps()` comes inline, one step per character). */
+@keyframes cf-type-reveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}

@@ -1,19 +1,8 @@
-import dynamic from "next/dynamic";
-import { BookOpen, ShieldCheck, Target } from "lucide-react";
+import { ShieldCheck, Target, BookOpen } from "lucide-react";
 import { study } from "@/content/research";
 import { Band } from "./band";
-import { ArrowMark, HandNote } from "./annotate";
-import { MOMENT_SCRIPT } from "./chat-demo-scripts";
-import { FollowUpDemo, ThinAnswerDemo } from "./difference-demos";
-import { InView } from "./in-view";
+import { AnswersBackDemo, FollowUpDemo, ThinAnswerDemo } from "./difference-demos";
 import { SectionLede, SectionTitle, TextLink } from "./kit";
-import { LazySection } from "./lazy-section";
-
-/**
- * Fetched only when someone scrolls near it: the typewriter demo is a 33 KB
- * chunk with its own render loop, several viewports below the fold.
- */
-const ChatDemo = dynamic(() => import("./chat-demo").then((m) => m.ChatDemo));
 
 /**
  * What chatform does that a page of boxes cannot, in one place: it asks again
@@ -46,7 +35,7 @@ function Source({ id }: { id: string }) {
 function Card({ tone, art, title, other, ours, source }: { tone: "text" | "choice"; art: React.ReactNode; title: string; other: string; ours: string; source: string }) {
   return (
     <article className="bg-card/60 border-border flex flex-col overflow-hidden rounded-[18px] border">
-      <div className="min-h-[23rem] flex-1" style={{ background: `var(--family-${tone}-soft)` }}>
+      <div className="min-h-[28rem] flex-1" style={{ background: `var(--family-${tone}-soft)` }}>
         {art}
       </div>
       <div className="p-7 sm:p-8">
@@ -90,52 +79,32 @@ export function HowItsDifferent() {
           source="sauermann-2013"
         />
 
-        {/* The third answer, and the loudest: a respondent asks something back. */}
-        <article
-          className="grid gap-10 rounded-[18px] px-6 py-10 sm:px-10 sm:py-12 md:col-span-2 lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:gap-14"
-          style={{ background: "var(--brand-violet-band-vivid)", color: "var(--on-band-vivid)" }}
-        >
-          <div className="order-2 lg:order-1">
-            {/* The fallback reserves the feature variant's exact height
-                (`h-[22rem]` in `chat-demo.tsx`) so the swap shifts nothing. */}
-            <LazySection fallback={<div className="h-[22rem]" aria-hidden />} rootMargin="400px">
-              <ChatDemo script={MOMENT_SCRIPT} variant="feature" label="Recording" />
-            </LazySection>
-            <InView className="mt-3 flex items-start gap-2">
-              <ArrowMark dir="up-left" positioned={false} draw delay={260} className="size-11 shrink-0 opacity-60" />
-              <HandNote tilt={-3} className="cf-a-rise mt-5" style={{ color: "var(--on-band-vivid)", animationDelay: "700ms" }}>
-                nobody scripted that answer
-              </HandNote>
-            </InView>
+        {/* The third answer, wide: a respondent asks something back. */}
+        <article className="bg-card/60 border-border overflow-hidden rounded-[18px] border md:col-span-2 lg:grid lg:grid-cols-[1.25fr_1fr] lg:items-stretch">
+          <div className="flex items-center justify-center bg-[var(--family-scale-soft)] px-5 py-8 sm:px-8">
+            <AnswersBackDemo />
           </div>
-
-          <div className="order-1 lg:order-2">
-            <h3 className="font-display text-[1.75rem] leading-[1.1] font-bold tracking-[-0.03em] text-balance sm:text-[2rem]">
-              It answers their questions, too.
-            </h3>
-            <p className="mt-3 max-w-md leading-relaxed" style={{ color: "var(--on-band-vivid-muted)" }}>
-              Other forms go quiet when someone is unsure. Brief chatform like a person, and it answers, then picks up
-              where they were.
+          <div className="flex flex-col justify-center p-7 sm:p-10">
+            <h3 className="font-display text-xl font-semibold tracking-tight text-balance">It answers their questions, too.</h3>
+            <p className="text-muted-foreground mt-2 leading-relaxed">
+              Other forms go quiet when someone is unsure.{" "}
+              <span className="text-foreground">chatform answers from what you gave it, then picks up where they were.</span>
             </p>
-            <ul className="mt-7 flex flex-col gap-5">
+            <ul className="mt-6 flex flex-col gap-4">
               {BRIEF.map((b) => (
-                <li key={b.title} className="flex gap-3.5">
-                  <span className="bg-primary text-primary-foreground mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg">
+                <li key={b.title} className="flex gap-3">
+                  <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--family-scale-soft)] text-[var(--family-scale-ink)]">
                     <b.icon className="size-4" strokeWidth={2} />
                   </span>
                   <div>
-                    <p className="font-semibold">{b.title}</p>
-                    <p className="text-[0.9375rem] leading-snug" style={{ color: "var(--on-band-vivid-muted)" }}>
-                      {b.body}
-                    </p>
+                    <p className="text-[0.9375rem] font-semibold">{b.title}</p>
+                    <p className="text-muted-foreground text-[0.9375rem] leading-snug">{b.body}</p>
                   </div>
                 </li>
               ))}
             </ul>
-            <div className="mt-8">
-              <TextLink href="/why-conversation-works" className="text-[var(--on-band-vivid)] decoration-[var(--on-band-vivid)]">
-                Why a conversation works
-              </TextLink>
+            <div className="mt-7">
+              <TextLink href="/why-conversation-works">Why a conversation works</TextLink>
             </div>
           </div>
         </article>
