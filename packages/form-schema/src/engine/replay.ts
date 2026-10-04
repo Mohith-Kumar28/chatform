@@ -6,6 +6,7 @@ import {
   resolveNext,
   withChoices,
 } from "./evaluate";
+import { canonicalJson } from "../canonical";
 
 /**
  * Rebuild the state a form is in from the answers already stored for it.
@@ -89,6 +90,34 @@ export function replayState(
     cursor,
     offPath: Object.keys(answers).filter((ref) => !consumed.has(ref)),
   };
+}
+
+/**
+ * Whether two versions of a form ask the same questions in the same flow.
+ *
+ * A republish makes a new version whatever changed, and most republishes change
+ * nothing a respondent answered: a card dragged across the flow canvas, a colour,
+ * a notification setting. A draft started on one such version is still a draft
+ * of the other, so only what decides which questions are asked and what an
+ * answer means is compared. `layout`, `theme`, `settings`, the title and the
+ * description are left out.
+ *
+ * Through `canonicalJson`, because the builder rebuilds block objects as people
+ * edit them and key order is not a difference.
+ */
+export function sameFlow(a: FormDoc, b: FormDoc): boolean {
+  const flow = (doc: FormDoc) =>
+    canonicalJson(
+      JSON.stringify({
+        blocks: doc.blocks,
+        endings: doc.endings,
+        endingRules: doc.endingRules,
+        logic: doc.logic,
+        variables: doc.variables,
+        hiddenFields: doc.hiddenFields,
+      }),
+    );
+  return flow(a) === flow(b);
 }
 
 export interface MissingAnswer {

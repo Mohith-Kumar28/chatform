@@ -14,6 +14,7 @@ import {
   migrateFormDoc,
   readFormDoc,
   replayState,
+  sameFlow,
   unsatisfiedRequired,
   progressOf,
   needsExtraction,
@@ -634,6 +635,8 @@ export class SessionDO extends DurableObject<Bindings> {
    * not watch their own transcript print twice.
    */
   private historyReplayed = false;
+  /** When the last message was written, so no two share an instant. See `appendMessage`. */
+  private lastMessageAt = 0;
   private encoder = new TextEncoder();
   /**
    * Every token this session has spent: the org meter, and the backstop.
@@ -947,10 +950,49 @@ export class SessionDO extends DurableObject<Bindings> {
       const row = await this.env.DB.prepare(`SELECT form_version_id FROM submissions WHERE id = ?1`)
         .bind(submissionId)
         .first<{ form_version_id: string | null }>();
-      return !!row?.form_version_id && row.form_version_id !== this.meta.formVersionId;
+      if (!row?.form_version_id || row.form_version_id === this.meta.formVersionId) return false;
+      /*
+       * Another version is not another form. A republish makes a new version
+       * whatever changed, and one that only moved a card on the flow canvas was
+       * emptying the draft of everybody who came back afterwards: a respondent
+       * gave their email, the form was republished twice with the same eight
+       * questions, and each time they opened the page their answer was deleted
+       * and they were told the form had been updated. So the questions are
+       * compared, not the ids. Both sides are read as published, so the plan
+       * clamp on `this.doc` cannot pass for a difference.
+       */
+      const { results } = await this.env.DB.prepare(`SELECT id, schema_json FROM form_versions WHERE id IN (?1, ?2)`)
+        .bind(row.form_version_id, this.meta.formVersionId)
+        .all<{ id: string; schema_json: string }>();
+      const schemaOf = (id: string) => results.find((v) => v.id === id)?.schema_json;
+      const was = schemaOf(row.form_version_id);
+      const live = schemaOf(this.meta.formVersionId);
+      // The version it was started on is gone, so there is nothing to say it matches.
+      if (!was || !live) return true;
+      if (!sameFlow(readFormDoc(JSON.parse(was)), readFormDoc(JSON.parse(live)))) return true;
+      await this.moveDraftToLiveVersion(submissionId);
+      return false;
     } catch (err) {
       console.error("draft_version_read_failed", { sessionId: this.meta.sessionId, submissionId, ...errorInfo(err) });
       return false;
+    }
+  }
+
+  /**
+   * Put a draft that is being carried over on the version it is now answered on.
+   *
+   * The next visit then has nothing to compare, and the response is counted
+   * under the version that finished it. A failure leaves the row where it was,
+   * which costs the comparison again and nothing else.
+   */
+  private async moveDraftToLiveVersion(submissionId: string): Promise<void> {
+    if (!this.meta) return;
+    try {
+      await this.env.DB.prepare(`UPDATE submissions SET form_version_id = ?1 WHERE id = ?2`)
+        .bind(this.meta.formVersionId, submissionId)
+        .run();
+    } catch (err) {
+      console.error("draft_version_move_failed", { sessionId: this.meta.sessionId, submissionId, ...errorInfo(err) });
     }
   }
 
@@ -6240,12 +6282,20 @@ export class SessionDO extends DurableObject<Bindings> {
 
   private async appendMessage(role: "user" | "assistant" | "system_event", content: string, blockRef?: string): Promise<string> {
     const id = `msg_${crypto.randomUUID().slice(0, 12)}`;
+    /*
+     * Never the same instant twice. The clock here does not move between two
+     * writes of one request, so a greeting and the question under it were stored
+     * with one timestamp, and the results page, which orders by it, showed them
+     * in whichever order their random ids happened to sort.
+     */
+    const createdAt = Math.max(Date.now(), this.lastMessageAt + 1);
+    this.lastMessageAt = createdAt;
     await this.ctx.storage.put(`msg:${String(this.seq + 1).padStart(8, "0")}:${id}`, {
       id,
       role,
       content,
       blockRef: blockRef ?? null,
-      createdAt: Date.now(),
+      createdAt,
     });
     await this.ctx.storage.put("msg_count", (await this.ctx.storage.get<number>("msg_count") ?? 0) + 1);
     return id;

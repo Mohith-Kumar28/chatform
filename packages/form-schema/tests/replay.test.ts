@@ -3,6 +3,7 @@ import { FormDoc, type AnswerMap } from "../src/index";
 import { leadFormFixture } from "../src/fixtures";
 import {
   replayState,
+  sameFlow,
   unsatisfiedRequired,
   answerability,
   progressOf,
@@ -289,5 +290,51 @@ describe("progress on a form that branches with goto rules", () => {
     const p = progressOf(branchy, { q_role: "opt_watch", q_act: "guitar", q_instrument: "a guitar" });
     expect(p.answered).toBe(1);
     expect(p.totalEstimate).toBe(2);
+  });
+});
+
+/**
+ * A republish is a new version whatever changed, and a draft is only out of date
+ * when the questions are. This is the line between the two.
+ */
+describe("sameFlow", () => {
+  const copy = (): FormDoc => structuredClone(doc);
+
+  it("is true for a version that differs only in where its cards sit and how it looks", () => {
+    const next = copy();
+    next.title = "Renamed";
+    next.layout = { [next.blocks[0]!.ref]: { x: 40, y: 900 } };
+    next.settings = { ...next.settings, language: "fr" };
+    next.theme = { ...next.theme, colorScheme: "dark" };
+    expect(sameFlow(doc, next)).toBe(true);
+  });
+
+  it("does not mind the order a block's keys were written in", () => {
+    const next = copy();
+    next.blocks = next.blocks.map((b) => Object.fromEntries(Object.entries(b).reverse()) as typeof b);
+    expect(sameFlow(doc, next)).toBe(true);
+  });
+
+  it("is false once a question is reworded, added or removed", () => {
+    const reworded = copy();
+    reworded.blocks[1]!.title = `${reworded.blocks[1]!.title} (please)`;
+    expect(sameFlow(doc, reworded)).toBe(false);
+
+    const shorter = copy();
+    shorter.blocks = shorter.blocks.slice(0, -1);
+    expect(sameFlow(doc, shorter)).toBe(false);
+  });
+
+  it("is false once the routing or an ending changes", () => {
+    const rerouted = copy();
+    rerouted.logic = [];
+    const noRules = copy();
+    noRules.endingRules = [];
+    const ending = copy();
+    ending.endings[0]!.title = `${ending.endings[0]!.title}!`;
+    // Only the ones that are a change for this fixture can be asserted on.
+    if (doc.logic.length > 0) expect(sameFlow(doc, rerouted)).toBe(false);
+    if (doc.endingRules.length > 0) expect(sameFlow(doc, noRules)).toBe(false);
+    expect(sameFlow(doc, ending)).toBe(false);
   });
 });

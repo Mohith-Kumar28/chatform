@@ -319,16 +319,22 @@ describe("resuming a response started on an older version", () => {
    * with its answers, so questions this respondent never saw counted as given,
    * and one changed answer walked them past all of them to the ending.
    */
-  async function seedOnOldVersion(id: string): Promise<void> {
+  async function seedOnOldVersion(id: string, doc: Record<string, unknown> = OLD_DOC): Promise<void> {
     await env.DB.prepare(
-      `INSERT OR IGNORE INTO form_versions (id, form_id, version, schema_json, checksum, published_at, created_by, created_at)
+      `INSERT OR REPLACE INTO form_versions (id, form_id, version, schema_json, checksum, published_at, created_by, created_at)
        VALUES ('ver_resume_old', ?1, 0, ?2, 'ck', 0, ?3, 0)`,
     )
-      .bind(t.formId, JSON.stringify(DOC), t.userId)
+      .bind(t.formId, JSON.stringify(doc), t.userId)
       .run();
     await seedAbandoned(id);
     await env.DB.prepare(`UPDATE submissions SET form_version_id = 'ver_resume_old' WHERE id = ?`).bind(id).run();
   }
+
+  /** The version before a question was reworded: a different form, as far as a draft goes. */
+  const OLD_DOC = {
+    ...DOC,
+    blocks: DOC.blocks.map((b) => (b.ref === "q_team" ? { ...b, title: "How many of you are there?" } : b)),
+  };
 
   it("starts over from the top in the same response, and says why", async () => {
     await publish();
@@ -352,6 +358,62 @@ describe("resuming a response started on an older version", () => {
 
     const said = (await stub.getTranscript()).map((m) => m.content).join("\n");
     expect(said).toContain("This form has been updated since you last visited");
+  });
+
+  /**
+   * A republish is a new version whatever changed. One that only moved cards on
+   * the flow canvas was emptying the draft of everybody who came back after it:
+   * a respondent's email was deleted twice by two republishes of the same eight
+   * questions, each time on nothing more than opening the page.
+   */
+  it("carries on when the republish changed no question", async () => {
+    await publish();
+    await seedOnOldVersion("sbm_resume32", {
+      ...DOC,
+      layout: { q_team: { x: 40, y: 900 } },
+      settings: { ...DOC.settings, followUp: { enabled: false } },
+    });
+    const res = await open({ resumeToken: await token("sbm_resume32") });
+    expect(res.status).toBe(200);
+    const { sessionId } = (await res.json()) as { sessionId: string };
+    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+
+    const status = await stub.getStatus();
+    expect(status?.currentRef).toBe("q_team");
+    expect(status?.answers).toMatchObject({ q_name: "Maya", q_email: "maya@northwind.example" });
+
+    // Moved to the version it is now being answered on, with its answers.
+    const sub = await env.DB.prepare(`SELECT form_version_id FROM submissions WHERE id = ?`)
+      .bind("sbm_resume32")
+      .first<{ form_version_id: string }>();
+    expect(sub?.form_version_id).toBe(VERSION_ID);
+    const kept = await env.DB.prepare(`SELECT count(*) AS n FROM submission_answers WHERE submission_id = ?`)
+      .bind("sbm_resume32")
+      .first<{ n: number }>();
+    expect(kept?.n).toBe(2);
+
+    const said = (await stub.getTranscript()).map((m) => m.content).join("\n");
+    expect(said).not.toContain("has been updated");
+  });
+
+  /**
+   * The results page orders a transcript by time alone, and everything said in
+   * one request used to be stamped with the same millisecond.
+   */
+  it("stores what it says in the order it said it", async () => {
+    await publish();
+    await seedOnOldVersion("sbm_resume33");
+    const res = await open({ resumeToken: await token("sbm_resume33") });
+    const { sessionId } = (await res.json()) as { sessionId: string };
+    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+    const transcript = await stub.getTranscript();
+    expect(transcript.length).toBeGreaterThanOrEqual(3);
+    const times = transcript.map((m) => m.createdAt);
+    expect(new Set(times).size).toBe(times.length);
+    const notice = transcript.findIndex((m) => m.content.includes("has been updated"));
+    const question = transcript.findIndex((m) => m.content.includes("Your name?"));
+    expect(notice).toBeGreaterThanOrEqual(0);
+    expect(question).toBeGreaterThan(notice);
   });
 
   it("still resumes a response from the version that is live", async () => {
