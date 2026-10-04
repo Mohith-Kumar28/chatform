@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import { ChevronDown, Globe } from "lucide-react";
+import { Check, ChevronDown, Globe } from "lucide-react";
 import { formLanguage, pickFormLanguage, type PublicFormConfig } from "@repo/form-schema";
 import { LogoMark } from "@/components/brand/logo";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { chatThemeVars } from "@/lib/chat-theme";
 import { useSchemeTheme } from "@/lib/form-scheme";
 import { useThemeFonts } from "@/lib/theme-fonts";
@@ -36,13 +37,6 @@ function storedLanguage(slug: string): string | null {
 }
 
 const nativeName = (code: string) => formLanguage(code)?.native ?? code.toUpperCase();
-
-/** In the list: the language in itself, then in English, so it can be found either way. */
-function optionName(code: string): string {
-  const language = formLanguage(code);
-  if (!language) return code.toUpperCase();
-  return language.native === language.name ? language.name : `${language.native} · ${language.name}`;
-}
 
 /**
  * Remember a choice and show the form in it.
@@ -190,10 +184,11 @@ function LanguagePrompt({ config, languages }: { config: PublicFormConfig; langu
 /**
  * The header's language control.
  *
- * A real `<select>` drawn invisibly over a label we paint, for the same reasons
- * the phone field's country picker is one: the native wheel on a phone,
- * type-to-find on a desktop, and the accessibility tree, with no popover to
- * position inside a sticky header.
+ * A globe and the language's name, opening the app's own menu: each language
+ * written in itself, with its English name beside it, and a tick on the one in
+ * use. Plain text rather than a button, because it is a quiet setting in the
+ * corner of a conversation and a bordered pill beside the title competed with
+ * it. The ring only appears for keyboard focus.
  */
 export function LanguageSwitcher({
   config,
@@ -206,26 +201,36 @@ export function LanguageSwitcher({
   const t = useT();
   const languages = config.languages ?? [];
   if (languages.length < 2 || !config.language) return null;
+  const choose = (code: string) => {
+    if (code === config.language) return;
+    if (onChoose) onChoose(code);
+    else chooseLanguage(config, code);
+  };
   return (
-    // Plain text with a globe, not a button: it is a quiet setting in the
-    // corner of a conversation, and a bordered pill beside the title competed
-    // with it. The ring only appears for keyboard focus.
-    <div className="relative flex h-7 shrink-0 items-center gap-1 rounded-md px-1 text-xs font-medium opacity-70 transition-opacity hover:opacity-100 has-[select:focus-visible]:opacity-100 has-[select:focus-visible]:ring-2 has-[select:focus-visible]:ring-[var(--cf-accent)]">
-      <Globe className="size-3.5" aria-hidden />
-      <span lang={config.language}>{nativeName(config.language)}</span>
-      <ChevronDown className="size-3 opacity-45" aria-hidden />
-      <select
+    <DropdownMenu>
+      <DropdownMenuTrigger
         aria-label={t("Language")}
-        value={config.language}
-        onChange={(e) => (onChoose ? onChoose(e.target.value) : chooseLanguage(config, e.target.value))}
-        className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent text-base opacity-0"
+        className="flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md px-1 text-xs font-medium opacity-70 outline-none transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[var(--cf-accent)] data-[state=open]:opacity-100"
       >
-        {languages.map((code) => (
-          <option key={code} value={code}>
-            {optionName(code)}
-          </option>
-        ))}
-      </select>
-    </div>
+        <Globe className="size-3.5" aria-hidden />
+        <span lang={config.language}>{nativeName(config.language)}</span>
+        <ChevronDown className="size-3 opacity-45" aria-hidden />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-h-72 min-w-44 overflow-y-auto">
+        {languages.map((code) => {
+          const language = formLanguage(code);
+          const native = language?.native ?? code.toUpperCase();
+          return (
+            <DropdownMenuItem key={code} onSelect={() => choose(code)} className="gap-2">
+              <Check className={code === config.language ? "size-3.5" : "size-3.5 opacity-0"} aria-hidden />
+              <span lang={code}>{native}</span>
+              {language && language.name !== native && (
+                <span className="text-muted-foreground ml-auto pl-3 text-xs">{language.name}</span>
+              )}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
