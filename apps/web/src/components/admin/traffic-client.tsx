@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import {
@@ -85,6 +86,8 @@ function fillSeries(report: Report) {
       at,
       visitors: p?.visitors ?? 0,
       newVisitors: p?.newVisitors ?? 0,
+      // Here before this hour or day began.
+      returning: Math.max(0, (p?.visitors ?? 0) - (p?.newVisitors ?? 0)),
       views: p?.views ?? 0,
       signups: signups.get(at) ?? 0,
     });
@@ -102,10 +105,13 @@ function tick(at: number, bucket: "hour" | "day") {
 const CHART_SERIES = [
   { key: "visitors", label: "Visitors", color: SERIES[0] },
   { key: "newVisitors", label: "New visitors", color: SERIES[1] },
+  { key: "returning", label: "Returning", color: SERIES[4] },
   { key: "views", label: "Pageviews", color: SERIES[2] },
 ] as const;
 
-function TrafficChart({ report }: { report: Report }) {
+export const TRAFFIC_LEGEND = [...CHART_SERIES.map((s) => ({ label: s.label, color: s.color })), { label: "Sign-ups", color: SERIES[3] }];
+
+export function TrafficChart({ report }: { report: Report }) {
   const rows = useMemo(() => fillSeries(report), [report]);
   return (
     <ResponsiveContainer width="100%" height={260}>
@@ -130,10 +136,59 @@ function TrafficChart({ report }: { report: Report }) {
         />
         <Area type="monotone" dataKey="visitors" name="Visitors" stroke={SERIES[0]} fill={SERIES[0]} fillOpacity={0.18} strokeWidth={2} />
         <Area type="monotone" dataKey="newVisitors" name="New visitors" stroke={SERIES[1]} fill={SERIES[1]} fillOpacity={0.12} strokeWidth={1.5} />
+        <Line type="monotone" dataKey="returning" name="Returning" stroke={SERIES[4]} dot={false} strokeWidth={1.5} />
         <Line type="monotone" dataKey="views" name="Pageviews" stroke={SERIES[2]} dot={false} strokeWidth={1.5} strokeDasharray="4 3" />
         <Bar dataKey="signups" name="Sign-ups" fill={SERIES[3]} barSize={6} />
       </ComposedChart>
     </ResponsiveContainer>
+  );
+}
+
+/** Visitors per hour or day, stacked by where they came from: the top four sources and the rest. */
+function SourcesChart({ report }: { report: Report }) {
+  const { rows, series } = useMemo(() => {
+    const top = report.sources.slice(0, 4).map((s) => s.source);
+    const series = [
+      ...top.map((label, i) => ({ key: `s${i}`, label, color: SERIES[i]! })),
+      ...(report.sources.length > 4 ? [{ key: "other", label: "Other", color: "var(--muted-foreground)" }] : []),
+    ];
+    const byAt = new Map<number, Record<string, number>>();
+    for (const p of report.sourceSeries) {
+      const i = top.indexOf(p.source);
+      const key = i >= 0 ? `s${i}` : "other";
+      const row = byAt.get(p.at) ?? {};
+      row[key] = (row[key] ?? 0) + p.visitors;
+      byAt.set(p.at, row);
+    }
+    return { rows: fillSeries(report).map((r) => ({ at: r.at, ...byAt.get(r.at) })), series };
+  }, [report]);
+
+  if (series.length === 0) return <Empty>No visits in this period.</Empty>;
+  return (
+    <div className="space-y-3">
+      <Legend items={series} />
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
+          <CartesianGrid vertical={false} stroke="var(--border)" />
+          <XAxis
+            dataKey="at"
+            tickFormatter={(v: number) => tick(v, report.bucket)}
+            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+            tickLine={false}
+            axisLine={false}
+            minTickGap={24}
+          />
+          <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} tickLine={false} axisLine={false} />
+          <ReTooltip
+            labelFormatter={(v) => tick(Number(v), report.bucket)}
+            contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+          />
+          {series.map((s) => (
+            <Bar key={s.key} dataKey={s.key} name={s.label} stackId="sources" fill={s.color} />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
@@ -372,6 +427,47 @@ const vitalColumns = (first: string, labelOf: (key: string) => string) => [
   { key: "samples", header: "Pages", numeric: true, width: "5rem", render: (r: VitalsRow) => compact(r.samples) },
 ];
 
+/**
+ * The Traffic page's lead chart, for the Overview. It asks for the same report
+ * under the same key, so opening Traffic afterwards costs no second request.
+ * The Overview reaches back a year and traffic ninety days: a longer range shows ninety.
+ */
+export function TrafficSummary({ range, className }: { range: Range; className?: string }) {
+  const shown = (TRAFFIC_RANGES as readonly Range[]).includes(range) ? (range as (typeof TRAFFIC_RANGES)[number]) : "90d";
+  const { data } = useGetApiAdminTraffic(
+    { range: shown },
+    { query: { queryKey: getGetApiAdminTrafficQueryKey({ range: shown }), staleTime: shown === "1d" ? 60_000 : 300_000, placeholderData: keepPreviousData } },
+  );
+  const report = apiData<Report | undefined>(data);
+  return (
+    <ChartCard
+      className={className}
+      title="Traffic"
+      subtitle={
+        report
+          ? `${report.totals.visitors.toLocaleString()} visitors, ${report.totals.visits.toLocaleString()} visits, ${report.totals.views.toLocaleString()} page views${shown === range ? "" : " in the last 90 days"}`
+          : undefined
+      }
+      aside={
+        <Link href={`/admin/traffic?range=${shown}`} className="text-muted-foreground hover:text-foreground text-caption">
+          Traffic details
+        </Link>
+      }
+    >
+      {report ? (
+        <>
+          <div className="mb-3">
+            <Legend items={TRAFFIC_LEGEND} />
+          </div>
+          <TrafficChart report={report} />
+        </>
+      ) : (
+        <Skeleton className="h-64 rounded-lg" />
+      )}
+    </ChartCard>
+  );
+}
+
 export function TrafficClient() {
   const range = useRange(TRAFFIC_RANGES, "7d");
   const { data, isPending } = useGetApiAdminTraffic(
@@ -474,7 +570,7 @@ function TrafficBody({ report, comparedTo }: { report: Report; comparedTo: strin
           title="Visitors"
         >
           <div className="mb-3">
-            <Legend items={[...CHART_SERIES.map((s) => ({ label: s.label, color: s.color })), { label: "Sign-ups", color: SERIES[3] }]} />
+            <Legend items={TRAFFIC_LEGEND} />
           </div>
           <TrafficChart report={report} />
         </ChartCard>
@@ -548,6 +644,28 @@ function TrafficBody({ report, comparedTo }: { report: Report; comparedTo: strin
         </ChartCard>
         <ChartCard title="Campaigns" hint="The utm_campaign on the link they arrived by.">
           <BarList items={report.campaigns.map((r) => ({ label: r.key, value: r.visitors }))} unit=" visitors" emptyLabel="No tagged links in this period." />
+        </ChartCard>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-4">
+        <ChartCard className="min-w-0 lg:col-span-2" title={report.bucket === "hour" ? "Sources per hour" : "Sources per day"}>
+          <SourcesChart report={report} />
+        </ChartCard>
+        <ChartCard title="How often they come back" hint="Visitors in this period, by how many different days they have ever come.">
+          <Donut
+            items={report.loyalty.map((l, i) => ({ label: l.key, value: l.n, color: SERIES[i % SERIES.length] }))}
+            total={report.loyalty.reduce((n, l) => n + l.n, 0)}
+            legend="below"
+            ariaLabel="Visitors by days visited"
+          />
+        </ChartCard>
+        <ChartCard title="Pages per visit" hint="Visits in this period, by how many pages were opened.">
+          <Donut
+            items={report.depth.map((d, i) => ({ label: d.key, value: d.n, color: SERIES[i % SERIES.length] }))}
+            total={report.depth.reduce((n, d) => n + d.n, 0)}
+            legend="below"
+            ariaLabel="Visits by pages opened"
+          />
         </ChartCard>
       </div>
 

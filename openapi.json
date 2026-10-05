@@ -8691,6 +8691,64 @@
                         "byCountry"
                       ]
                     },
+                    "loyalty": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "n": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "n"
+                        ]
+                      }
+                    },
+                    "depth": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "n": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "n"
+                        ]
+                      }
+                    },
+                    "sourceSeries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "number"
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "source",
+                          "visitors"
+                        ]
+                      }
+                    },
                     "activeUsers": {
                       "type": "object",
                       "properties": {
@@ -8738,6 +8796,9 @@
                     "oses",
                     "languages",
                     "vitals",
+                    "loyalty",
+                    "depth",
+                    "sourceSeries",
                     "activeUsers",
                     "generatedAt"
                   ]

@@ -13,6 +13,7 @@ import { ActionQueue } from "./action-queue";
 import { LiveActivity } from "./live-activity";
 import { FeedbackCard } from "./feedback-card";
 import { COMPARED_TO, RANGE_DAYS, RangePicker, useRange } from "./range-picker";
+import { TrafficSummary } from "./traffic-client";
 import { apiData } from "@/lib/api/payload";
 import { money, usd, relativeDay } from "./format";
 
@@ -214,6 +215,8 @@ export function OverviewClient() {
 
         <LiveActivity className="lg:col-span-2" />
       </div>
+
+      <TrafficSummary range={range} />
 
       {/*
         Then why: where the arrivals go, and what they are worth.

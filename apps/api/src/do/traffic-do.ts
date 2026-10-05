@@ -465,6 +465,23 @@ export class TrafficDO extends DurableObject<Bindings> {
       oses: this.breakdown("s.os", from, to, 10, "AND s.os != ''"),
       languages: this.breakdown("substr(s.language, 1, 2)", from, to, 10, "AND s.language != ''"),
       vitals: this.vitals(from),
+      // Visitors by how many different days they have come, and visits by how many pages they opened.
+      loyalty: this.all<{ key: string; n: number }>(
+        `SELECT CASE WHEN days <= 1 THEN '1 day' WHEN days <= 3 THEN '2 to 3 days' WHEN days <= 9 THEN '4 to 9 days' ELSE '10+ days' END AS key,
+                COUNT(*) AS n FROM visitors WHERE last_seen >= ? GROUP BY key ORDER BY MIN(days)`,
+        from,
+      ),
+      depth: this.all<{ key: string; n: number }>(
+        `SELECT CASE WHEN views <= 1 THEN '1 page' WHEN views <= 3 THEN '2 to 3 pages' WHEN views <= 9 THEN '4 to 9 pages' ELSE '10+ pages' END AS key,
+                COUNT(*) AS n FROM visits WHERE last_at >= ? GROUP BY key ORDER BY MIN(views)`,
+        from,
+      ),
+      // Visitors per bucket per source, for the stacked chart; the client keeps the top few and folds the rest.
+      sourceSeries: this.all<{ at: number; source: string; visitors: number }>(
+        `SELECT w.at / ${size} * ${size} AS at, s.source, COUNT(DISTINCT w.visitor) AS visitors
+           FROM views w JOIN visits s ON s.visit = w.visit WHERE w.at >= ? GROUP BY 1, 2`,
+        from,
+      ),
       // People signed in to the dashboard or builder: today, this week, this month.
       activeUsers: { day: activeUsers(1), week: activeUsers(7), month: activeUsers(30) },
     };

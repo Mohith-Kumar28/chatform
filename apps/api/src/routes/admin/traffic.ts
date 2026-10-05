@@ -31,7 +31,10 @@ import { DAY_MS, FUNNEL_STAGES, STAGE_OF_ORG } from "./shared.js";
  *     for a quarter, whose shape a few minutes do not move.
  *   - live: 15 seconds in the isolate only. It is polled every 30 seconds.
  *   - campaigns: 5 minutes, like the overview.
- *   - visitors: not cached. One admin, one small indexed read.
+ *   - visitors: 30 seconds in the isolate.
+ *
+ * Every read also tells the browser to keep its answer for as long (`private`),
+ * so reloading the console does not ask again for what cannot have changed.
  */
 
 export const trafficRouter = new Hono<{ Bindings: Bindings; Variables: Partial<PlatformAdminVars> }>();
@@ -39,6 +42,7 @@ export const trafficRouter = new Hono<{ Bindings: Bindings; Variables: Partial<P
 const RANGE_KEYS = Object.keys(TRAFFIC_RANGES) as [TrafficRange, ...TrafficRange[]];
 const TrafficQuery = z.object({ range: z.enum(RANGE_KEYS).default("7d") });
 const TTL: Record<TrafficRange, number> = { "1d": 60, "7d": 300, "30d": 300, "90d": 3600 };
+const keepFor = (seconds: number) => `private, max-age=${seconds}`;
 
 const Breakdown = z.object({ key: z.string(), visitors: z.number(), visits: z.number(), views: z.number() });
 const PageRow = z.object({
@@ -105,6 +109,11 @@ const TrafficResponse = z.object({
   oses: z.array(Breakdown),
   languages: z.array(Breakdown),
   vitals: z.object({ byArea: z.array(VitalsRow), byCountry: z.array(VitalsRow) }),
+  /** Visitors, by how many different days they have come. */
+  loyalty: z.array(z.object({ key: z.string(), n: z.number() })),
+  /** Visits, by how many pages they opened. */
+  depth: z.array(z.object({ key: z.string(), n: z.number() })),
+  sourceSeries: z.array(z.object({ at: z.number(), source: z.string(), visitors: z.number() })),
   activeUsers: z.object({ day: z.number(), week: z.number(), month: z.number() }),
   generatedAt: z.number(),
 });
@@ -160,6 +169,7 @@ trafficRouter.get(
       ]);
       return { ...report, ...facts, generatedAt: Date.now() };
     });
+    c.header("cache-control", keepFor(Math.min(TTL[range], 300)));
     return c.json(payload);
   },
 );
@@ -187,7 +197,10 @@ trafficRouter.get(
       404: { description: "Not an admin" },
     },
   }),
-  async (c) => c.json(await cachedJson(c.env, "admin:traffic:live", 15, () => trafficLive(c.env))),
+  async (c) => {
+    c.header("cache-control", keepFor(15));
+    return c.json(await cachedJson(c.env, "admin:traffic:live", 15, () => trafficLive(c.env)));
+  },
 );
 
 // ─────────────────────────────── visitors ───────────────────────────────
@@ -298,24 +311,28 @@ trafficRouter.get(
   }),
   async (c) => {
     const { range, sort, q, offset } = c.req.valid("query");
-    // A name or an email is on the account, not on the visitor: find the accounts first.
-    const userIds =
-      q.length >= 3
-        ? ((
-            await c.env.DB.prepare(`SELECT id FROM users WHERE email LIKE ?1 OR name LIKE ?1 LIMIT 50`)
-              .bind(`%${q}%`)
-              .all<{ id: string }>()
-          ).results ?? []).map((u) => u.id)
-        : [];
-    const list = await trafficStore(c.env).visitors({
-      since: Date.now() - VISITOR_RANGES[range] * DAY_MS,
-      sort,
-      q,
-      userIds,
-      limit: VISITOR_PAGE,
-      offset,
+    const payload = await cachedJson(c.env, `admin:visitors:${range}:${sort}:${offset}:${q}`, 30, async () => {
+      // A name or an email is on the account, not on the visitor: find the accounts first.
+      const userIds =
+        q.length >= 3
+          ? ((
+              await c.env.DB.prepare(`SELECT id FROM users WHERE email LIKE ?1 OR name LIKE ?1 LIMIT 50`)
+                .bind(`%${q}%`)
+                .all<{ id: string }>()
+            ).results ?? []).map((u) => u.id)
+          : [];
+      const list = await trafficStore(c.env).visitors({
+        since: Date.now() - VISITOR_RANGES[range] * DAY_MS,
+        sort,
+        q,
+        userIds,
+        limit: VISITOR_PAGE,
+        offset,
+      });
+      return { total: list.total, pageSize: VISITOR_PAGE, rows: await withUsers(c.env, list.rows) };
     });
-    return c.json({ total: list.total, pageSize: VISITOR_PAGE, rows: await withUsers(c.env, list.rows) });
+    c.header("cache-control", keepFor(30));
+    return c.json(payload);
   },
 );
 
@@ -330,10 +347,16 @@ trafficRouter.get(
     },
   }),
   async (c) => {
-    const found = await trafficStore(c.env).visitor(c.req.param("id"));
-    if (!found) return c.json({ error: { code: "not_found", message: "Not found" } }, 404);
-    const [visitor] = await withUsers(c.env, [found.visitor]);
-    return c.json({ visitor: visitor!, visits: found.visits, views: found.views });
+    const id = c.req.param("id");
+    const payload = await cachedJson(c.env, `admin:visitor:${id}`, 30, async () => {
+      const found = await trafficStore(c.env).visitor(id);
+      if (!found) return null;
+      const [visitor] = await withUsers(c.env, [found.visitor]);
+      return { visitor: visitor!, visits: found.visits, views: found.views };
+    });
+    if (!payload) return c.json({ error: { code: "not_found", message: "Not found" } }, 404);
+    c.header("cache-control", keepFor(30));
+    return c.json(payload);
   },
 );
 

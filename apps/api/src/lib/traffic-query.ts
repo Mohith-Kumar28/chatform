@@ -74,6 +74,8 @@ export async function cachedJson<T>(
   const run = (async () => {
     try {
       const value = await load();
+      // Keys carry a search box's text; an isolate that has seen many starts over.
+      if (memo.size > 200) memo.clear();
       memo.set(key, { at: Date.now(), value });
       if (ttlSeconds >= 60) {
         await env.KV_CONFIG.put(key, JSON.stringify(value), { expirationTtl: ttlSeconds }).catch(() => {});

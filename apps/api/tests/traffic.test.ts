@@ -228,6 +228,20 @@ describe("TrafficDO", () => {
     expect(r.devices.map((d) => d.key).sort()).toEqual(["desktop", "mobile"]);
     expect(r.vitals.byArea).toEqual([{ key: "marketing", samples: 1, lcp: 1900, inp: null, ttfb: 300, cls: null }]);
     expect(r.activeUsers).toEqual({ day: 1, week: 1, month: 1 });
+    // Ana came on two days, Ben on one; one visit of three opened a second page.
+    expect(r.loyalty).toEqual([
+      { key: "1 day", n: 1 },
+      { key: "2 to 3 days", n: 1 },
+    ]);
+    expect(r.depth).toEqual([
+      { key: "1 page", n: 2 },
+      { key: "2 to 3 pages", n: 1 },
+    ]);
+    expect(r.sourceSeries.map((p) => [p.source, p.visitors]).sort()).toEqual([
+      ["Direct", 1],
+      ["Google", 1],
+      ["Instagram", 1],
+    ]);
     // A one-day range is hourly, and sees only today's two visits.
     const day = await store.report(1);
     expect(day.bucket).toBe("hour");

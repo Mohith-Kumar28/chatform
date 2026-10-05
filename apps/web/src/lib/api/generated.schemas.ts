@@ -2072,6 +2072,22 @@ export type GetApiAdminTraffic200Vitals = {
   byCountry: GetApiAdminTraffic200VitalsByCountryItem[];
 };
 
+export type GetApiAdminTraffic200LoyaltyItem = {
+  key: string;
+  n: number;
+};
+
+export type GetApiAdminTraffic200DepthItem = {
+  key: string;
+  n: number;
+};
+
+export type GetApiAdminTraffic200SourceSeriesItem = {
+  at: number;
+  source: string;
+  visitors: number;
+};
+
 export type GetApiAdminTraffic200ActiveUsers = {
   day: number;
   week: number;
@@ -2102,6 +2118,9 @@ export type GetApiAdminTraffic200 = {
   oses: GetApiAdminTraffic200OsesItem[];
   languages: GetApiAdminTraffic200LanguagesItem[];
   vitals: GetApiAdminTraffic200Vitals;
+  loyalty: GetApiAdminTraffic200LoyaltyItem[];
+  depth: GetApiAdminTraffic200DepthItem[];
+  sourceSeries: GetApiAdminTraffic200SourceSeriesItem[];
   activeUsers: GetApiAdminTraffic200ActiveUsers;
   generatedAt: number;
 };
