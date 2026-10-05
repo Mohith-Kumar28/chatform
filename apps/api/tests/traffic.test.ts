@@ -155,12 +155,30 @@ describe("TrafficDO", () => {
         os: "macOS",
       }),
     );
+    // Rae, a minute ago: filling in somebody's form. A respondent, not a visitor to the site.
+    await store.record(
+      hit({
+        at: now - MIN,
+        visitor: "rae",
+        visit: "rae-1",
+        area: "form",
+        path: "/f/intake",
+        channel: "Direct",
+        source: "Direct",
+        medium: "",
+        campaign: "",
+        referrerHost: "",
+        country: "FR",
+        region: "IDF",
+        city: "Paris",
+      }),
+    );
     // A leave whose view never arrived must not invent anybody.
     await store.record(hit({ visitor: "ghost", visit: "ghost-1", event: "leave", engagedMs: 5_000 }));
   });
 
   it("keeps one row per visitor: when they came, how often, how long, and their first source", async () => {
-    const { total, rows } = await store.visitors({ since: now - 30 * DAY, sort: "views", q: "", userIds: [], limit: 50, offset: 0 });
+    const { total, rows } = await store.visitors({ since: now - 30 * DAY, sort: "views", audience: "site", q: "", userIds: [], limit: 50, offset: 0 });
     expect(total).toBe(2);
     expect(rows[0]).toMatchObject({
       visitor: "ana",
@@ -182,7 +200,7 @@ describe("TrafficDO", () => {
 
   it("searches visitors by what is on the row, and by the accounts a name matched", async () => {
     const find = (q: string, userIds: string[] = []) =>
-      store.visitors({ since: 0, sort: "recent", q, userIds, limit: 50, offset: 0 }).then((r) => r.rows.map((v) => v.visitor));
+      store.visitors({ since: 0, audience: "site", sort: "recent", q, userIds, limit: 50, offset: 0 }).then((r) => r.rows.map((v) => v.visitor));
     expect(await find("berlin")).toEqual(["ben"]);
     expect(await find("ana@example.com", ["user_ana"])).toEqual(["ana"]);
     expect(await find("nobody")).toEqual([]);
@@ -205,7 +223,7 @@ describe("TrafficDO", () => {
   });
 
   it("reports a period: totals, sources, pages, entries, exits, places and vitals", async () => {
-    const r = await store.report(7);
+    const r = await store.report(7, "site");
     expect(r.bucket).toBe("day");
     expect(r.totals).toEqual({ visitors: 2, visits: 3, views: 4, newVisitors: 2, bounced: 2, engagedMs: 108_000 });
     expect(r.previous.views).toBe(0);
@@ -229,32 +247,58 @@ describe("TrafficDO", () => {
     expect(r.vitals.byArea).toEqual([{ key: "marketing", samples: 1, lcp: 1900, inp: null, ttfb: 300, cls: null }]);
     expect(r.activeUsers).toEqual({ day: 1, week: 1, month: 1 });
     // Ana came on two days, Ben on one; one visit of three opened a second page.
+    // Page views: Ana's three are from someone who came on two days, and two of them from a two-page visit.
     expect(r.loyalty).toEqual([
       { key: "1 day", n: 1 },
-      { key: "2 to 3 days", n: 1 },
+      { key: "2 to 3 days", n: 3 },
     ]);
     expect(r.depth).toEqual([
       { key: "1 page", n: 2 },
-      { key: "2 to 3 pages", n: 1 },
+      { key: "2 to 3 pages", n: 2 },
     ]);
-    expect(r.sourceSeries.map((p) => [p.source, p.visitors]).sort()).toEqual([
+    expect(r.sourceSeries.map((p) => [p.source, p.views]).sort()).toEqual([
       ["Direct", 1],
       ["Google", 1],
-      ["Instagram", 1],
+      ["Instagram", 2],
     ]);
+    // Everyone was on their first day when they first came; Ana's dashboard view today was a return.
+    expect(r.series.reduce((sum, p) => sum + p.newViews, 0)).toBe(3);
+    expect(r.hourly.reduce((sum, p) => sum + p.views, 0)).toBe(4);
+    expect(r.allTime).toBe(2);
     // A one-day range is hourly, and sees only today's two visits.
-    const day = await store.report(1);
+    const day = await store.report(1, "site");
     expect(day.bucket).toBe("hour");
     expect(day.totals).toMatchObject({ visitors: 2, visits: 2, views: 2, newVisitors: 1 });
   });
 
   it("shows who is here now", async () => {
-    const live = await store.live();
+    const live = await store.live("site");
     // Ben was seen two minutes ago; Ana ten.
     expect(live.online).toBe(1);
     expect(live.pages).toEqual([{ area: "marketing", path: "/blog/forms", visitors: 1 }]);
     expect(live.views.reduce((a, b) => a + b, 0)).toBe(2);
     expect(live.countries.map((c) => c.key)).toEqual(["DE"]);
+  });
+
+  it("never mixes respondents with the site's visitors", async () => {
+    const site = await store.report(7, "site");
+    const forms = await store.report(7, "respondents");
+    expect(forms.totals).toMatchObject({ visitors: 1, visits: 1, views: 1, newVisitors: 1 });
+    expect(forms.pages.map((p) => p.path)).toEqual(["/f/intake"]);
+    expect(forms.geo.map((g) => g.country)).toEqual(["FR"]);
+    expect(forms.areas.map((a) => a.key)).toEqual(["form"]);
+    expect(site.pages.map((p) => p.path)).not.toContain("/f/intake");
+    expect(site.geo.map((g) => g.country)).not.toContain("FR");
+    expect(site.areas.map((a) => a.key).sort()).toEqual(["app", "marketing"]);
+
+    const list = (audience: "site" | "respondents") =>
+      store.visitors({ since: 0, audience, sort: "recent", q: "", userIds: [], limit: 50, offset: 0 }).then((l) => l.rows.map((v) => v.visitor).sort());
+    expect(await list("respondents")).toEqual(["rae"]);
+    expect(await list("site")).toEqual(["ana", "ben"]);
+
+    const here = await store.live("respondents");
+    expect(here.online).toBe(1);
+    expect(here.pages).toEqual([{ area: "form", path: "/f/intake", visitors: 1 }]);
   });
 
   it("answers the campaign page and the daily rollup", async () => {
@@ -285,7 +329,7 @@ describe("TrafficDO", () => {
 
   it("lets a late, older hit move a visitor's start back and never their present", async () => {
     await store.record(hit({ at: now - 20 * DAY, visit: "ana-0", path: "/templates", source: "Reddit", city: "Mysuru" }));
-    const { rows } = await store.visitors({ since: 0, sort: "views", q: "", userIds: [], limit: 50, offset: 0 });
+    const { rows } = await store.visitors({ since: 0, sort: "views", audience: "site", q: "", userIds: [], limit: 50, offset: 0 });
     expect(rows[0]).toMatchObject({
       visitor: "ana",
       visits: 3,

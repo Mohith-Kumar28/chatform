@@ -1876,6 +1876,7 @@ export type PostApiAdminImpersonateStop200 = {
 
 export type GetApiAdminTrafficParams = {
 range?: GetApiAdminTrafficRange;
+audience?: GetApiAdminTrafficAudience;
 };
 
 export type GetApiAdminTrafficRange = typeof GetApiAdminTrafficRange[keyof typeof GetApiAdminTrafficRange];
@@ -1888,6 +1889,14 @@ export const GetApiAdminTrafficRange = {
   '90d': '90d',
 } as const;
 
+export type GetApiAdminTrafficAudience = typeof GetApiAdminTrafficAudience[keyof typeof GetApiAdminTrafficAudience];
+
+
+export const GetApiAdminTrafficAudience = {
+  site: 'site',
+  respondents: 'respondents',
+} as const;
+
 export type GetApiAdminTraffic200Range = typeof GetApiAdminTraffic200Range[keyof typeof GetApiAdminTraffic200Range];
 
 
@@ -1896,6 +1905,14 @@ export const GetApiAdminTraffic200Range = {
   '7d': '7d',
   '30d': '30d',
   '90d': '90d',
+} as const;
+
+export type GetApiAdminTraffic200Audience = typeof GetApiAdminTraffic200Audience[keyof typeof GetApiAdminTraffic200Audience];
+
+
+export const GetApiAdminTraffic200Audience = {
+  site: 'site',
+  respondents: 'respondents',
 } as const;
 
 export type GetApiAdminTraffic200Bucket = typeof GetApiAdminTraffic200Bucket[keyof typeof GetApiAdminTraffic200Bucket];
@@ -1935,6 +1952,7 @@ export type GetApiAdminTraffic200SeriesItem = {
   visits: number;
   views: number;
   newVisitors: number;
+  newViews: number;
 };
 
 export type GetApiAdminTraffic200SignupSeriesItem = {
@@ -1942,10 +1960,12 @@ export type GetApiAdminTraffic200SignupSeriesItem = {
   signups: number;
 };
 
-export type GetApiAdminTraffic200Hourly = {
+export type GetApiAdminTraffic200HourlyItem = {
   at: number;
   visitors: number;
-}[] | null;
+  views: number;
+  newViews: number;
+};
 
 export type GetApiAdminTraffic200ChannelsItem = {
   key: string;
@@ -2019,6 +2039,7 @@ export type GetApiAdminTraffic200GeoItem = {
   lon: number;
   visitors: number;
   visits: number;
+  views: number;
 };
 
 export type GetApiAdminTraffic200DevicesItem = {
@@ -2085,7 +2106,7 @@ export type GetApiAdminTraffic200DepthItem = {
 export type GetApiAdminTraffic200SourceSeriesItem = {
   at: number;
   source: string;
-  visitors: number;
+  views: number;
 };
 
 export type GetApiAdminTraffic200ActiveUsers = {
@@ -2096,13 +2117,16 @@ export type GetApiAdminTraffic200ActiveUsers = {
 
 export type GetApiAdminTraffic200 = {
   range: GetApiAdminTraffic200Range;
+  audience: GetApiAdminTraffic200Audience;
   bucket: GetApiAdminTraffic200Bucket;
   totals: GetApiAdminTraffic200Totals;
   previous: GetApiAdminTraffic200Previous;
   signups: GetApiAdminTraffic200Signups;
   series: GetApiAdminTraffic200SeriesItem[];
   signupSeries: GetApiAdminTraffic200SignupSeriesItem[];
-  hourly: GetApiAdminTraffic200Hourly;
+  hourly: GetApiAdminTraffic200HourlyItem[];
+  online: number;
+  allTime: number;
   channels: GetApiAdminTraffic200ChannelsItem[];
   sources: GetApiAdminTraffic200SourcesItem[];
   signupsBySource: GetApiAdminTraffic200SignupsBySourceItem[];
@@ -2124,6 +2148,18 @@ export type GetApiAdminTraffic200 = {
   activeUsers: GetApiAdminTraffic200ActiveUsers;
   generatedAt: number;
 };
+
+export type GetApiAdminTrafficLiveParams = {
+audience?: GetApiAdminTrafficLiveAudience;
+};
+
+export type GetApiAdminTrafficLiveAudience = typeof GetApiAdminTrafficLiveAudience[keyof typeof GetApiAdminTrafficLiveAudience];
+
+
+export const GetApiAdminTrafficLiveAudience = {
+  site: 'site',
+  respondents: 'respondents',
+} as const;
 
 export type GetApiAdminTrafficLive200PagesItem = {
   area: string;
@@ -2158,6 +2194,7 @@ export type GetApiAdminTrafficLive200 = {
 
 export type GetApiAdminVisitorsParams = {
 range?: GetApiAdminVisitorsRange;
+audience?: GetApiAdminVisitorsAudience;
 sort?: GetApiAdminVisitorsSort;
 /**
  * @maxLength 80
@@ -2179,6 +2216,14 @@ export const GetApiAdminVisitorsRange = {
   '30d': '30d',
   '90d': '90d',
   '365d': '365d',
+} as const;
+
+export type GetApiAdminVisitorsAudience = typeof GetApiAdminVisitorsAudience[keyof typeof GetApiAdminVisitorsAudience];
+
+
+export const GetApiAdminVisitorsAudience = {
+  site: 'site',
+  respondents: 'respondents',
 } as const;
 
 export type GetApiAdminVisitorsSort = typeof GetApiAdminVisitorsSort[keyof typeof GetApiAdminVisitorsSort];

@@ -320,6 +320,9 @@
   --chart-4: oklch(0.7 0.14 100);
   --chart-5: oklch(0.58 0.19 10);
   --chart-6: oklch(0.64 0.14 235);
+  /* Admin analytics only: the folded "Other" series and chart grid lines. Neutral, so never a seventh hue. */
+  --chart-other: oklch(0.72 0.01 75);
+  --chart-grid: oklch(0.93 0.008 85);
 
   /* ── sidebar / builder chrome ── */
   /* The question list sits directly on the page — its coloured pills already
@@ -465,6 +468,8 @@
   --chart-4: oklch(0.67 0.135 100);
   --chart-5: oklch(0.6 0.18 10);
   --chart-6: oklch(0.65 0.13 235);
+  --chart-other: oklch(0.52 0.01 70);
+  --chart-grid: oklch(0.3 0.01 62);
 
   /* Dark: the families keep their hue but lift for contrast, and the soft
      fills become tints of the surface rather than near-white. */
@@ -577,6 +582,11 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
   --color-chart-6: var(--chart-6);
+  --color-chart-other: var(--chart-other);
+  /* The names the admin analytics kit uses for a good, a worrying and a bad move. */
+  --color-good: var(--success);
+  --color-warn: var(--warning);
+  --color-bad: var(--destructive);
   --color-sidebar: var(--sidebar);
   --color-panel: var(--panel);
   --color-family-content: var(--family-content);
@@ -1960,4 +1970,23 @@ html.cf-keyboard-open [data-chat-header-row] {
   to {
     clip-path: inset(0 0 0 0);
   }
+}
+
+/* The admin analytics pages (Traffic, Visitors, the Overview's traffic): dense, tabular, hairlines. */
+.analytics {
+  font-size: 13px;
+  line-height: 1.45;
+}
+.analytics .num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+.analytics .recharts-cartesian-grid line {
+  stroke: var(--chart-grid);
+}
+.analytics .recharts-text {
+  font-variant-numeric: tabular-nums;
+}
+.analytics .recharts-wrapper *:focus {
+  outline: none;
 }

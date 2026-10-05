@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { keepPreviousData } from "@tanstack/react-query";
-import { Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { countryFlag, countryName, DEVICE_LABELS } from "@repo/form-schema";
 import {
   getGetApiAdminVisitorsByIdQueryKey,
@@ -16,38 +16,42 @@ import type {
   GetApiAdminVisitorsById200,
   GetApiAdminVisitorsParams,
 } from "@/lib/api/generated.schemas";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState } from "@/components/ui/empty-state";
 import { apiData } from "@/lib/api/payload";
-import { RangePicker, useRange } from "./range-picker";
-import { AREA_LABEL, duration } from "./traffic-client";
+import { RANGE_DAYS, useRange } from "./range-picker";
+import { Audience } from "./analytics/audience";
+import { AnalyticsFrame, AudiencePills, RangePills, useAudience } from "./analytics/controls";
+import { DataTable, type Column } from "./analytics/kit/data-table";
+import { fmt, rangeLabel, useMounted } from "./analytics/kit/format";
+import { Degraded, PageHeader, PageSkeleton, Panel, Segmented } from "./analytics/kit/ui";
+import { AREA_LABEL, duration, useTrafficReport } from "./traffic-client";
 import { relativeDay } from "./format";
 
 /**
  * Every browser that has opened a page: when it came, how often, how long it
  * stayed, what brought it, and whose account it is once it has signed in.
  *
- * The list is the Directory's shape (search, one sort, pages in the URL) so the
- * two read alike. A row opens the visitor's visits, each with its pages in the
- * order they were opened.
+ * shipwithmuse's Visitors page: the visitor log, and on its own tab who they
+ * are. A row opens the visitor's visits, each with its pages in the order they
+ * were opened. Like Traffic, it shows one audience at a time.
  */
 
 type Visitor = GetApiAdminVisitors200["rows"][number];
 type Detail = GetApiAdminVisitorsById200;
 type Sort = NonNullable<GetApiAdminVisitorsParams["sort"]>;
 
-const SORTS: { value: Sort; label: string }[] = [
-  { value: "recent", label: "Last seen" },
-  { value: "views", label: "Most page views" },
-  { value: "visits", label: "Most visits" },
-  { value: "days", label: "Most days" },
-  { value: "time", label: "Most time" },
-];
+type Tab = "log" | "audience";
+
+const SORTS = [
+  ["recent", "Most recent"],
+  ["views", "Most views"],
+  ["visits", "Most visits"],
+  ["days", "Most days"],
+  ["time", "Most time"],
+] as const satisfies readonly (readonly [Sort, string])[];
 
 /** A recent moment as a distance; anything older than a day as `relativeDay` writes it. */
 function ago(ms: number): string {
@@ -85,14 +89,9 @@ export function VisitorsClient() {
   const pathname = usePathname();
   const params = useSearchParams();
   const range = useRange(undefined, "30d");
-
-  const sort = (SORTS.find((s) => s.value === params.get("sort"))?.value ?? "recent") satisfies Sort;
-  const q = params.get("q") ?? "";
-  const offset = Number(params.get("offset") ?? 0) || 0;
+  const audience = useAudience();
+  const tab: Tab = params.get("tab") === "audience" ? "audience" : "log";
   const open = params.get("v");
-
-  // Local so typing does not refetch on every keystroke; the URL moves on submit.
-  const [draft, setDraft] = useState(q);
 
   const setParam = (patch: Record<string, string>) => {
     const next = new URLSearchParams(params.toString());
@@ -105,160 +104,206 @@ export function VisitorsClient() {
     router.replace(`${pathname}?${next.toString()}`, { scroll: false });
   };
 
-  const query: GetApiAdminVisitorsParams = { range, sort, offset, ...(q ? { q } : {}) };
-  const { data, isPending } = useGetApiAdminVisitors(query, {
-    query: { queryKey: getGetApiAdminVisitorsQueryKey(query), placeholderData: keepPreviousData, staleTime: 30_000 },
-  });
-  const body = apiData<GetApiAdminVisitors200 | undefined>(data);
-  const rows = body?.rows ?? [];
-  const total = body?.total ?? 0;
-  const size = body?.pageSize ?? 50;
-
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-h1">Visitors</h1>
-        <RangePicker />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <form
-          className="relative min-w-56 flex-1 sm:max-w-xs"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setParam({ q: draft.trim() });
-          }}
-        >
-          <Search
-            className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
-            strokeWidth={2}
-            aria-hidden
-          />
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Email, city, source, page…"
-            className="pl-8"
-            aria-label="Search visitors"
-          />
-        </form>
-        <p className="text-muted-foreground text-caption tabular">{total.toLocaleString()} visitors</p>
-        <Select value={sort} onValueChange={(v) => setParam({ sort: v === "recent" ? "" : v })}>
-          <SelectTrigger size="sm" aria-label="Sort visitors" className="ml-auto w-44 shrink-0">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SORTS.map((s) => (
-              <SelectItem key={s.value} value={s.value}>
-                {s.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {isPending ? (
-        <Skeleton className="h-96 rounded-xl" />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          title={q ? "No visitors match" : "No visitors in this period"}
-          description={q ? "Try a different search, or a longer period." : "Pick a longer period."}
-          action={
-            q || offset ? (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setDraft("");
-                  setParam({ q: "" });
-                }}
-              >
-                Clear search
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : (
-        <div className="bg-card shadow-xs overflow-x-auto rounded-xl">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Visitor</TableHead>
-                <TableHead className="text-right">Visits</TableHead>
-                <TableHead className="text-right">Page views</TableHead>
-                <TableHead className="text-right">Days</TableHead>
-                <TableHead className="text-right">Time on site</TableHead>
-                <TableHead>First came from</TableHead>
-                <TableHead>First page, last page</TableHead>
-                <TableHead className="text-right">Last seen</TableHead>
-                <TableHead className="text-right">First seen</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((v) => (
-                <TableRow key={v.visitor} className="group cursor-pointer" onClick={() => setParam({ v: v.visitor })}>
-                  <TableCell className="max-w-64">
-                    <button type="button" className="block w-full min-w-0 text-left">
-                      <span className="group-hover:text-primary block truncate font-medium transition-colors duration-[var(--duration-micro)]">
-                        {who(v)}
-                      </span>
-                      <span className="text-muted-foreground block truncate text-xs">
-                        {[place(v), device(v)].filter(Boolean).join(" · ") || "Unknown place and device"}
-                      </span>
-                    </button>
-                  </TableCell>
-                  <TableCell className="tabular text-right">{v.visits.toLocaleString()}</TableCell>
-                  <TableCell className="tabular text-right">{v.views.toLocaleString()}</TableCell>
-                  <TableCell className="tabular text-right">{v.days.toLocaleString()}</TableCell>
-                  <TableCell className="tabular text-right">{duration(v.engaged_ms)}</TableCell>
-                  <TableCell className="max-w-44 truncate text-xs">{cameFrom(v)}</TableCell>
-                  <TableCell className="max-w-72 text-xs">
-                    <span className="block truncate">{page(v.landing_area, v.landing_path)}</span>
-                    <span className="text-muted-foreground block truncate">{page(v.last_area, v.last_path)}</span>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-right text-xs whitespace-nowrap" title={exact(v.last_seen)}>
-                    {ago(v.last_seen)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-right text-xs whitespace-nowrap" title={exact(v.first_seen)}>
-                    {relativeDay(v.first_seen)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-
-      {total > size && (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-muted-foreground text-caption tabular">
-            {offset + 1}&ndash;{Math.min(offset + size, total)} of {total.toLocaleString()}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={offset === 0}
-              onClick={() => setParam({ offset: String(Math.max(0, offset - size)) })}
-            >
-              Previous
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={offset + size >= total}
-              onClick={() => setParam({ offset: String(offset + size) })}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
-      )}
+    <AnalyticsFrame>
+      <PageHeader
+        title="Visitors"
+        description={`${audience === "site" ? "People on chatform" : "People filling in forms"} · ${rangeLabel(RANGE_DAYS[range])}`}
+        actions={
+          <>
+            <Segmented<Tab>
+              label="View"
+              value={tab}
+              onChange={(t) => setParam({ tab: t === "log" ? "" : t })}
+              options={[
+                ["log", "Visitor log"],
+                ["audience", "Audience"],
+              ]}
+            />
+            <AudiencePills />
+            <RangePills fallback="30d" />
+          </>
+        }
+      />
+      {tab === "audience" ? <AudienceTab /> : <VisitorLog setParam={setParam} />}
 
       <Sheet open={!!open} onOpenChange={(next) => !next && setParam({ v: "" })}>
         <SheetContent side="right" className="w-full gap-0 overflow-y-auto p-0 sm:max-w-lg">
           {open && <VisitorBody id={open} />}
         </SheetContent>
       </Sheet>
+    </AnalyticsFrame>
+  );
+}
+
+/** Who they are, from the same report the Traffic page reads (ninety days at most). */
+function AudienceTab() {
+  const range = useRange(undefined, "30d");
+  const audience = useAudience();
+  const { analytics, days, isError, refetch } = useTrafficReport(range, audience);
+  if (isError) return <Degraded what="Audience stats" onRetry={refetch} />;
+  if (!analytics) return <PageSkeleton />;
+  return <Audience a={analytics} days={days} />;
+}
+
+function VisitorLog({ setParam }: { setParam: (patch: Record<string, string>) => void }) {
+  const params = useSearchParams();
+  const range = useRange(undefined, "30d");
+  const audience = useAudience();
+  const mounted = useMounted();
+  const sort: Sort = SORTS.find(([value]) => value === params.get("sort"))?.[0] ?? "recent";
+  const q = params.get("q") ?? "";
+  const offset = Number(params.get("offset") ?? 0) || 0;
+  const [draft, setDraft] = useState(q);
+
+  // Debounced search into the URL, so a filtered view can be refreshed or shared.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (draft.trim() !== q) setParam({ q: draft.trim() });
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
+
+  const query: GetApiAdminVisitorsParams = { range, audience, sort, offset, ...(q ? { q } : {}) };
+  const { data, isPending, isError, refetch } = useGetApiAdminVisitors(query, {
+    query: { queryKey: getGetApiAdminVisitorsQueryKey(query), placeholderData: keepPreviousData, staleTime: 30_000 },
+  });
+  const body = apiData<GetApiAdminVisitors200 | undefined>(data);
+  const rows = body?.rows ?? [];
+  const total = body?.total ?? 0;
+  const per = body?.pageSize ?? 50;
+  const page = Math.floor(offset / per) + 1;
+  const pages = Math.max(1, Math.ceil(total / per));
+
+  const columns = useMemo<Column<Visitor>[]>(
+    () => [
+      { id: "rank", header: "#", cell: (_, i) => <span className="num text-xs text-muted-foreground">{offset + i + 1}</span>, className: "w-10" },
+      {
+        id: "visitor",
+        header: "Visitor",
+        info: "The account, once this browser has signed in. Until then, its device fingerprint.",
+        cell: (v) =>
+          v.user_email ? (
+            <span className="block max-w-56 truncate">
+              <span className="font-medium">{v.user_name || v.user_email}</span>
+              {v.user_name && <span className="text-muted-foreground"> · {v.user_email}</span>}
+            </span>
+          ) : (
+            <span className="font-mono text-xs" title={v.visitor}>
+              {v.visitor.slice(0, 14)}…
+            </span>
+          ),
+      },
+      { id: "views", header: "Views", num: true, info: "Pages opened, counting repeats", cell: (v) => fmt(v.views) },
+      { id: "visits", header: "Visits", num: true, info: "Separate sittings, 30 idle minutes apart", cell: (v) => fmt(v.visits) },
+      { id: "days", header: "Days", num: true, info: "Distinct days they came", cell: (v) => fmt(v.days) },
+      { id: "time", header: "Time", num: true, info: "Time with a page actually on screen", cell: (v) => duration(v.engaged_ms) },
+      {
+        id: "last",
+        header: "Last seen",
+        cell: (v) => <span title={exact(v.last_seen)}>{mounted ? ago(v.last_seen) : ""}</span>,
+        className: "whitespace-nowrap text-xs",
+      },
+      {
+        id: "first",
+        header: "First seen",
+        cell: (v) => <span title={exact(v.first_seen)}>{mounted ? relativeDay(v.first_seen) : ""}</span>,
+        className: "num whitespace-nowrap text-xs text-muted-foreground",
+      },
+      {
+        id: "location",
+        header: "Location",
+        info: "Approximate, from Cloudflare's IP geolocation. IP addresses are not stored.",
+        cell: (v) => place(v) || <span className="text-muted-foreground">Unknown</span>,
+        className: "whitespace-nowrap text-xs",
+      },
+      { id: "device", header: "Device", cell: (v) => device(v) || <span className="text-muted-foreground">Unknown</span>, className: "whitespace-nowrap text-xs" },
+      {
+        id: "from",
+        header: "Came from",
+        info: "What brought them the first time",
+        cell: (v) => (
+          <span className="block max-w-44 truncate" title={cameFrom(v)}>
+            {v.source && v.source !== "Direct" ? cameFrom(v) : <span className="text-muted-foreground">direct</span>}
+          </span>
+        ),
+        className: "text-xs",
+      },
+      {
+        id: "path",
+        header: "Landing → last page",
+        cell: (v) => (
+          <span className="block max-w-72 truncate" title={`${v.landing_path} → ${v.last_path}`}>
+            {v.landing_path || "/"}
+            {v.last_path && v.last_path !== v.landing_path && <span className="text-muted-foreground"> → {v.last_path}</span>}
+          </span>
+        ),
+        className: "font-mono text-xs",
+      },
+    ],
+    [offset, mounted],
+  );
+
+  const go = (p: number) => setParam({ offset: p > 1 ? String((p - 1) * per) : "" });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full sm:w-80">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Search email, fingerprint, country, city, source…"
+            aria-label="Search visitors"
+            className="h-8 pl-8 text-[13px]"
+          />
+        </div>
+        <span className="num text-xs text-muted-foreground">
+          {fmt(total)} {q ? (total === 1 ? "visitor matches" : "visitors match") : total === 1 ? "visitor" : "visitors"}
+        </span>
+        <div className="max-w-full overflow-x-auto sm:ml-auto">
+          <Segmented<Sort> label="Sort visitors" value={sort} onChange={(k) => setParam({ sort: k === "recent" ? "" : k })} options={SORTS} />
+        </div>
+      </div>
+
+      {isError ? (
+        <Degraded what="The visitor list" onRetry={refetch} />
+      ) : isPending ? (
+        <PageSkeleton />
+      ) : (
+        <Panel flush>
+          <DataTable
+            columns={columns}
+            data={rows}
+            getRowId={(v) => v.visitor}
+            onRowClick={(v) => setParam({ v: v.visitor })}
+            empty={q ? "No visitors match." : "No visitors in this range yet."}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5 text-xs text-muted-foreground">
+            <span className="num">{total ? `Rows ${fmt(offset + 1)} to ${fmt(Math.min(offset + rows.length, total))} of ${fmt(total)}` : "No rows"}</span>
+            {pages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => go(page - 1)}>
+                  <ChevronLeft className="size-3.5" /> Previous
+                </Button>
+                <span className="num">
+                  {page} / {pages}
+                </span>
+                <Button size="sm" variant="outline" disabled={page >= pages} onClick={() => go(page + 1)}>
+                  Next <ChevronRight className="size-3.5" />
+                </Button>
+              </div>
+            )}
+          </div>
+        </Panel>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Each row is one visitor: a signed-in account, or a device fingerprint. Click a row for their visits and the pages of each. Views are pages
+        opened, counting repeats. Days are distinct days they came. Location is approximate (Cloudflare IP geolocation; IPs are not stored).
+      </p>
     </div>
   );
 }

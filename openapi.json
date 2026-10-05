@@ -7998,6 +7998,18 @@
                 "90d"
               ]
             }
+          },
+          {
+            "in": "query",
+            "name": "audience",
+            "schema": {
+              "default": "site",
+              "type": "string",
+              "enum": [
+                "site",
+                "respondents"
+              ]
+            }
           }
         ],
         "tags": [
@@ -8019,6 +8031,13 @@
                         "7d",
                         "30d",
                         "90d"
+                      ]
+                    },
+                    "audience": {
+                      "type": "string",
+                      "enum": [
+                        "site",
+                        "respondents"
                       ]
                     },
                     "bucket": {
@@ -8124,6 +8143,9 @@
                           },
                           "newVisitors": {
                             "type": "number"
+                          },
+                          "newViews": {
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -8131,7 +8153,8 @@
                           "visitors",
                           "visits",
                           "views",
-                          "newVisitors"
+                          "newVisitors",
+                          "newViews"
                         ]
                       }
                     },
@@ -8154,29 +8177,36 @@
                       }
                     },
                     "hourly": {
-                      "anyOf": [
-                        {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "at": {
-                                "type": "number"
-                              },
-                              "visitors": {
-                                "type": "number"
-                              }
-                            },
-                            "required": [
-                              "at",
-                              "visitors"
-                            ]
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "number"
+                          },
+                          "visitors": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          },
+                          "newViews": {
+                            "type": "number"
                           }
                         },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                        "required": [
+                          "at",
+                          "visitors",
+                          "views",
+                          "newViews"
+                        ]
+                      }
+                    },
+                    "online": {
+                      "type": "number"
+                    },
+                    "allTime": {
+                      "type": "number"
                     },
                     "channels": {
                       "type": "array",
@@ -8441,6 +8471,9 @@
                           },
                           "visits": {
                             "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -8450,7 +8483,8 @@
                           "lat",
                           "lon",
                           "visitors",
-                          "visits"
+                          "visits",
+                          "views"
                         ]
                       }
                     },
@@ -8738,14 +8772,14 @@
                           "source": {
                             "type": "string"
                           },
-                          "visitors": {
+                          "views": {
                             "type": "number"
                           }
                         },
                         "required": [
                           "at",
                           "source",
-                          "visitors"
+                          "views"
                         ]
                       }
                     },
@@ -8774,6 +8808,7 @@
                   },
                   "required": [
                     "range",
+                    "audience",
                     "bucket",
                     "totals",
                     "previous",
@@ -8781,6 +8816,8 @@
                     "series",
                     "signupSeries",
                     "hourly",
+                    "online",
+                    "allTime",
                     "channels",
                     "sources",
                     "signupsBySource",
@@ -8821,6 +8858,20 @@
     "/api/admin/traffic/live": {
       "get": {
         "operationId": "getApiAdminTrafficLive",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "audience",
+            "schema": {
+              "default": "site",
+              "type": "string",
+              "enum": [
+                "site",
+                "respondents"
+              ]
+            }
+          }
+        ],
         "tags": [
           "admin"
         ],
@@ -8971,6 +9022,18 @@
                 "30d",
                 "90d",
                 "365d"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "audience",
+            "schema": {
+              "default": "site",
+              "type": "string",
+              "enum": [
+                "site",
+                "respondents"
               ]
             }
           },

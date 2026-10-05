@@ -69,6 +69,7 @@ import type {
   GetApiAdminRevenueParams,
   GetApiAdminTraffic200,
   GetApiAdminTrafficLive200,
+  GetApiAdminTrafficLiveParams,
   GetApiAdminTrafficParams,
   GetApiAdminUsers200,
   GetApiAdminUsersParams,
@@ -5008,20 +5009,27 @@ export type getApiAdminTrafficLiveResponseError = (getApiAdminTrafficLiveRespons
 
 export type getApiAdminTrafficLiveResponse = (getApiAdminTrafficLiveResponseSuccess | getApiAdminTrafficLiveResponseError)
 
-export const getGetApiAdminTrafficLiveUrl = () => {
+export const getGetApiAdminTrafficLiveUrl = (params?: GetApiAdminTrafficLiveParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/admin/traffic/live`
+  return stringifiedParams.length > 0 ? `/api/admin/traffic/live?${stringifiedParams}` : `/api/admin/traffic/live`
 }
 
 /**
  * @summary Visitors a minute at a time for the last half hour, and who is here now
  */
-export const getApiAdminTrafficLive = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminTrafficLiveResponse> => {
+export const getApiAdminTrafficLive = async (params?: GetApiAdminTrafficLiveParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminTrafficLiveResponse> => {
 
-  return customFetch<getApiAdminTrafficLiveResponse>(getGetApiAdminTrafficLiveUrl(),
+  return customFetch<getApiAdminTrafficLiveResponse>(getGetApiAdminTrafficLiveUrl(params),
   {
     ...options,
     method: 'GET'
@@ -5034,23 +5042,23 @@ export const getApiAdminTrafficLive = async ( options?: Parameters<typeof custom
 
 
 
-export const getGetApiAdminTrafficLiveQueryKey = () => {
+export const getGetApiAdminTrafficLiveQueryKey = (params?: GetApiAdminTrafficLiveParams,) => {
     return [
-    `/api/admin/traffic/live`
+    `/api/admin/traffic/live`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetApiAdminTrafficLiveQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminTrafficLive>>, TError = void>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminTrafficLive>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetApiAdminTrafficLiveQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminTrafficLive>>, TError = void>(params?: GetApiAdminTrafficLiveParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminTrafficLive>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminTrafficLiveQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminTrafficLiveQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminTrafficLive>>> = ({ signal }) => getApiAdminTrafficLive({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminTrafficLive>>> = ({ signal }) => getApiAdminTrafficLive(params, { signal, ...requestOptions });
 
 
 
@@ -5068,11 +5076,11 @@ export type GetApiAdminTrafficLiveQueryError = void
  */
 
 export function useGetApiAdminTrafficLive<TData = Awaited<ReturnType<typeof getApiAdminTrafficLive>>, TError = void>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminTrafficLive>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: GetApiAdminTrafficLiveParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminTrafficLive>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetApiAdminTrafficLiveQueryOptions(options)
+  const queryOptions = getGetApiAdminTrafficLiveQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
