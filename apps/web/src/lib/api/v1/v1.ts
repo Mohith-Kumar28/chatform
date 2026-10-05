@@ -183,11 +183,6 @@ import type {
   PostV1PaymentAccountsOauthByProviderStart403,
   PostV1PaymentAccountsOauthByProviderStart422,
   PostV1PaymentAccountsOauthByProviderStartBody,
-  PostV1PaymentAccountsStripe200,
-  PostV1PaymentAccountsStripe402,
-  PostV1PaymentAccountsStripe409,
-  PostV1PaymentAccountsStripe422,
-  PostV1PaymentAccountsStripeBody,
   PostV1ResponsesByIdAbandon200,
   PostV1ResponsesByIdAbandonBody,
   PostV1ResponsesByIdAnswers200,
@@ -4880,7 +4875,7 @@ export const getPostV1PaymentAccountsOauthByProviderStartUrl = (provider: string
 
 /**
  * Returns the gateway's consent URL. It must be opened in a browser signed in to chatform as the user who created this key; the state is single-use and expires in ten minutes. `returnTo` must be a page on the chatform app.
- * @summary Start connecting a Cashfree or Razorpay account
+ * @summary Start connecting a Cashfree, Razorpay or Stripe account
  */
 export const postV1PaymentAccountsOauthByProviderStart = async (provider: string,
     postV1PaymentAccountsOauthByProviderStartBody: PostV1PaymentAccountsOauthByProviderStartBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1PaymentAccountsOauthByProviderStartResponse> => {
@@ -4937,7 +4932,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostV1PaymentAccountsOauthByProviderStartMutationVariables = {provider: string;data: PostV1PaymentAccountsOauthByProviderStartBody}
 
     /**
- * @summary Start connecting a Cashfree or Razorpay account
+ * @summary Start connecting a Cashfree, Razorpay or Stripe account
  */
 export const usePostV1PaymentAccountsOauthByProviderStart = <TError = PostV1PaymentAccountsOauthByProviderStart402 | PostV1PaymentAccountsOauthByProviderStart403 | PostV1PaymentAccountsOauthByProviderStart422,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1PaymentAccountsOauthByProviderStart>>, TError,PostV1PaymentAccountsOauthByProviderStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -4948,113 +4943,6 @@ export const usePostV1PaymentAccountsOauthByProviderStart = <TError = PostV1Paym
         TContext
       > => {
       return useMutation(getPostV1PaymentAccountsOauthByProviderStartMutationOptions(options));
-    }
-    export type postV1PaymentAccountsStripeResponse200 = {
-  data: PostV1PaymentAccountsStripe200
-  status: 200
-}
-
-export type postV1PaymentAccountsStripeResponse402 = {
-  data: PostV1PaymentAccountsStripe402
-  status: 402
-}
-
-export type postV1PaymentAccountsStripeResponse409 = {
-  data: PostV1PaymentAccountsStripe409
-  status: 409
-}
-
-export type postV1PaymentAccountsStripeResponse422 = {
-  data: PostV1PaymentAccountsStripe422
-  status: 422
-}
-
-export type postV1PaymentAccountsStripeResponseSuccess = (postV1PaymentAccountsStripeResponse200) & {
-  headers: Headers;
-};
-export type postV1PaymentAccountsStripeResponseError = (postV1PaymentAccountsStripeResponse402 | postV1PaymentAccountsStripeResponse409 | postV1PaymentAccountsStripeResponse422) & {
-  headers: Headers;
-};
-
-export type postV1PaymentAccountsStripeResponse = (postV1PaymentAccountsStripeResponseSuccess | postV1PaymentAccountsStripeResponseError)
-
-export const getPostV1PaymentAccountsStripeUrl = () => {
-
-
-
-
-  return `/v1/payment-accounts/stripe`
-}
-
-/**
- * Accepts only a restricted key (`rk_test_…` or `rk_live_…`); a full `sk_` secret key is refused with `full_secret_key`. The key is checked by reading the account, creating and immediately expiring a Checkout Session, and creating a webhook endpoint — a missing permission comes back as `missing_permission` with the permission named.
- * @summary Connect a Stripe account with a restricted key
- */
-export const postV1PaymentAccountsStripe = async (postV1PaymentAccountsStripeBody: PostV1PaymentAccountsStripeBody, options?: Parameters<typeof customFetch>[1]): Promise<postV1PaymentAccountsStripeResponse> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Array.isArray(h)) return Object.fromEntries(h);
-    return h;
-  };
-return customFetch<postV1PaymentAccountsStripeResponse>(getPostV1PaymentAccountsStripeUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(postV1PaymentAccountsStripeBody)
-  }
-);}
-
-
-
-
-
-export const getPostV1PaymentAccountsStripeMutationOptions = <TError = PostV1PaymentAccountsStripe402 | PostV1PaymentAccountsStripe409 | PostV1PaymentAccountsStripe422,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1PaymentAccountsStripe>>, TError,PostV1PaymentAccountsStripeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postV1PaymentAccountsStripe>>, TError,PostV1PaymentAccountsStripeMutationVariables, TContext> => {
-
-const mutationKey = ['postV1PaymentAccountsStripe'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postV1PaymentAccountsStripe>>, PostV1PaymentAccountsStripeMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  postV1PaymentAccountsStripe(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostV1PaymentAccountsStripeMutationResult = NonNullable<Awaited<ReturnType<typeof postV1PaymentAccountsStripe>>>
-    export type PostV1PaymentAccountsStripeMutationBody = PostV1PaymentAccountsStripeBody
-    export type PostV1PaymentAccountsStripeMutationError = PostV1PaymentAccountsStripe402 | PostV1PaymentAccountsStripe409 | PostV1PaymentAccountsStripe422
-    export type PostV1PaymentAccountsStripeMutationVariables = {data: PostV1PaymentAccountsStripeBody}
-
-    /**
- * @summary Connect a Stripe account with a restricted key
- */
-export const usePostV1PaymentAccountsStripe = <TError = PostV1PaymentAccountsStripe402 | PostV1PaymentAccountsStripe409 | PostV1PaymentAccountsStripe422,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postV1PaymentAccountsStripe>>, TError,PostV1PaymentAccountsStripeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof postV1PaymentAccountsStripe>>,
-        TError,
-        PostV1PaymentAccountsStripeMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostV1PaymentAccountsStripeMutationOptions(options));
     }
     export type postV1PaymentAccountsCashfreeOnboardResponse200 = {
   data: PostV1PaymentAccountsCashfreeOnboard200
@@ -5279,7 +5167,7 @@ export const getDeleteV1PaymentAccountsByIdUrl = (id: string,) => {
 }
 
 /**
- * Revokes the grant (Cashfree, Razorpay) or deletes the webhook endpoint (Stripe) at the gateway, then wipes the stored credentials. Forms still pointing at the account stop accepting payments until another account is chosen.
+ * Revokes chatform's access at the gateway, then wipes the stored credentials. Forms still pointing at the account stop accepting payments until another account is chosen.
  * @summary Disconnect a payment account
  */
 export const deleteV1PaymentAccountsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteV1PaymentAccountsByIdResponse> => {

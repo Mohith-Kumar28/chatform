@@ -123,8 +123,8 @@ export async function purgeOrganization(env: Bindings, orgId: string): Promise<v
   /*
     Connected payment gateways. Their rows go with the organization's cascade — and the
     payments recorded against them with the forms — but the grants live at Cashfree, Razorpay
-    and Stripe, and a deleted workspace must not leave a working token or a subscribed webhook
-    endpoint on someone's merchant account. Best effort, account by account: a gateway that is
+    and Stripe, and a deleted workspace must not leave a working token or a live connection
+    on someone's merchant account. Best effort, account by account: a gateway that is
     down does not get to veto a person's deletion.
   */
   await revokeOrganizationPaymentAccounts(env, orgId);

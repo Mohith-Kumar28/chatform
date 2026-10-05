@@ -9,6 +9,14 @@ field, endpoint or event is not a breaking change, so handle values you do not
 recognise. CI compares every change to the API against the previous one and
 refuses a breaking change that was not meant.
 
+## 2026-10-05
+
+- **Removed:** the endpoint that connected Stripe with a pasted restricted
+  key. Stripe now connects like Razorpay and Cashfree:
+  `POST /v1/payment-accounts/oauth/{provider}/start` with `stripe` as the
+  provider returns Stripe's consent page, and nobody pastes a key. `credentialKind` no longer reports `restricted_key`.
+  The SDK's `paymentAccounts.connectStripe()` goes with it.
+
 ## 2026-10-02
 
 - **Webhooks:** `response.answer_recorded`, `session.started` and

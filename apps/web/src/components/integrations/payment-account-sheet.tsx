@@ -16,7 +16,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import {
   PAYMENT_ACCOUNTS_KEY,
-  PaymentAccountError,
   accountDisplay,
   paymentAccountsFetch,
   type PaymentAccount,
@@ -32,12 +31,9 @@ import { ProviderLogo } from "./provider-logo";
  * that account onto the server with as little for the author to get wrong as
  * possible:
  *
- * - **Razorpay and Cashfree** are one button. Partner OAuth sends the author to
- *   the gateway to approve, and back to this tab; there is no key to copy.
- * - **Stripe** is a restricted key, pasted, because Connect is not open to an
- *   Indian platform. The steps say exactly which permissions to switch on, and
- *   a full secret key is refused before it leaves the browser — a key that can
- *   move money out of the account has no business being stored by a form tool.
+ * every gateway is one button. The author is sent to Razorpay, Cashfree or
+ * Stripe to approve, and comes back to this tab connected. There is no key to
+ * copy, and none of theirs is ever asked for.
  *
  * Rendered inside the Integrate tab's side sheet, like the webhook and
  * spreadsheet panels beside it.
@@ -151,11 +147,7 @@ export function PaymentAccountPanel({
         </div>
       ) : (
         <LockedControl feature="collect_payments">
-          {provider === "stripe" ? (
-            <StripeConnect hasAccount={accounts.length > 0} />
-          ) : (
-            <OAuthConnect provider={provider} formId={formId} hasAccount={accounts.length > 0} />
-          )}
+          <OAuthConnect provider={provider} formId={formId} hasAccount={accounts.length > 0} />
         </LockedControl>
       )}
     </div>
@@ -356,16 +348,12 @@ function AccountCard({ account, formId }: { account: PaymentAccount; formId: str
                 : `${label} stopped accepting Chatform's sign-in for this account. Forms using it can't take payments until you reconnect.`}
               {account.lastError ? ` (${account.lastError})` : ""}
             </p>
-            {account.provider === "stripe" ? (
-              <p>Create a new restricted key below and connect it.</p>
-            ) : (
-              <LockedControl feature="collect_payments" chip="inline">
-                <Button size="sm" shape="pill" disabled={reconnect.isPending} onClick={() => reconnect.mutate()}>
-                  <RefreshCw className="size-3.5" />
-                  {reconnect.isPending ? "Opening…" : "Reconnect"}
-                </Button>
-              </LockedControl>
-            )}
+            <LockedControl feature="collect_payments" chip="inline">
+              <Button size="sm" shape="pill" disabled={reconnect.isPending} onClick={() => reconnect.mutate()}>
+                <RefreshCw className="size-3.5" />
+                {reconnect.isPending ? "Opening…" : "Reconnect"}
+              </Button>
+            </LockedControl>
           </div>
         </div>
       )}
@@ -394,7 +382,7 @@ function OAuthConnect({
   formId,
   hasAccount,
 }: {
-  provider: Exclude<PaymentProviderName, "stripe">;
+  provider: PaymentProviderName;
   formId: string;
   hasAccount: boolean;
 }) {
@@ -588,136 +576,6 @@ function CashfreeOnboard({ formId, onUseOAuth }: { formId: string; onUseOAuth: (
         )}
       </form>
     </section>
-  );
-}
-
-/** The permissions a restricted key needs, as Stripe's key editor names them. */
-const STRIPE_PERMISSIONS = [
-  { resource: "Accounts", access: "Read", why: "names the account and its currency" },
-  { resource: "Checkout Sessions", access: "Write", why: "opens the checkout" },
-  { resource: "Webhook Endpoints", access: "Write", why: "tells Chatform when a payment lands" },
-  { resource: "Payment Intents", access: "Read", why: "checks a payment really went through" },
-  { resource: "Charges", access: "Read", why: "notices a refund" },
-] as const;
-
-/** A code from `POST /api/payment-accounts/stripe`, in the author's words. */
-export function stripeKeyError(code: string, message: string, permission?: string): string {
-  switch (code) {
-    case "full_secret_key":
-      return "That's your full secret key (sk_…), which can move money out of your account. Create a restricted key (rk_…) in step 1 instead.";
-    case "invalid_key":
-      return "Stripe didn't accept that key. Check you copied all of it and that it hasn't been deleted.";
-    case "missing_permission":
-      // The server names the permission the way Stripe's key editor does; the
-      // `rak_…` identifier appears nowhere the author can find it.
-      return permission
-        ? message || `The key is missing “${permission}”. Edit the key in Stripe, switch it on, and connect again.`
-        : "The key is missing a permission from step 1. Edit the key in Stripe and connect again.";
-    default:
-      return message;
-  }
-}
-
-function StripeConnect({ hasAccount }: { hasAccount: boolean }) {
-  const queryClient = useQueryClient();
-  const [key, setKey] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  const connect = useMutation({
-    mutationFn: (restrictedKey: string) =>
-      paymentAccountsFetch<{ account: PaymentAccount }>("/api/payment-accounts/stripe", {
-        method: "POST",
-        body: JSON.stringify({ restrictedKey }),
-      }),
-    onSuccess: ({ account }) => {
-      setKey("");
-      setError(null);
-      toast.success(`${account?.label ?? "Stripe account"} connected.`);
-      void queryClient.invalidateQueries({ queryKey: PAYMENT_ACCOUNTS_KEY });
-    },
-    onError: (err: Error) =>
-      setError(
-        err instanceof PaymentAccountError ? stripeKeyError(err.code, err.message, err.permission) : err.message,
-      ),
-  });
-
-  return (
-    <form
-      className="space-y-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const trimmed = key.trim();
-        if (!trimmed) return;
-        // Refused here too, so a full secret key is never sent at all.
-        if (/^sk_(test|live)_/.test(trimmed)) {
-          setError(stripeKeyError("full_secret_key", ""));
-          return;
-        }
-        connect.mutate(trimmed);
-      }}
-    >
-      <h3 className="text-h3">{hasAccount ? "Connect another Stripe account" : "Connect Stripe"}</h3>
-
-      <ol className="space-y-4">
-        <li className="flex gap-3">
-          <StepNumber n={1} />
-          <div className="min-w-0 flex-1 space-y-2">
-            <p className="text-sm">
-              <a
-                href="https://dashboard.stripe.com/apikeys/create"
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary inline-flex items-center gap-0.5 font-medium hover:underline"
-              >
-                Open Stripe&apos;s restricted keys page
-                <ArrowUpRight className="size-3.5" />
-              </a>
-              , name the key “Chatform”, and switch on:
-            </p>
-            <ul className="text-caption space-y-1">
-              {STRIPE_PERMISSIONS.map((p) => (
-                <li key={p.resource} className="flex flex-wrap gap-x-1.5">
-                  <span className="font-medium">{p.resource}</span>
-                  <span className="text-muted-foreground">{p.access}, {p.why}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="text-muted-foreground text-micro">Leave everything else as None.</p>
-          </div>
-        </li>
-
-        <li className="flex gap-3">
-          <StepNumber n={2} />
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <Label htmlFor="stripe-key">Paste the key</Label>
-            <Input
-              id="stripe-key"
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              value={key}
-              onChange={(e) => {
-                setKey(e.target.value);
-                setError(null);
-              }}
-              placeholder="rk_live_…"
-              className="font-mono text-xs"
-              aria-invalid={error ? true : undefined}
-            />
-            {error && <p className="text-caption text-destructive">{error}</p>}
-          </div>
-        </li>
-
-        <li className="flex gap-3">
-          <StepNumber n={3} />
-          <div className="min-w-0 flex-1">
-            <Button type="submit" size="sm" shape="pill" disabled={!key.trim() || connect.isPending}>
-              {connect.isPending ? "Checking the key…" : "Connect"}
-            </Button>
-          </div>
-        </li>
-      </ol>
-    </form>
   );
 }
 

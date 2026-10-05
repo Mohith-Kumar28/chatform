@@ -32,28 +32,17 @@ your gateway's dashboard, exactly as they are for any other payment you take.
 
 In the builder, open a form's **Integrate** tab and find **Take payments**.
 
-- **Razorpay** and **Cashfree** connect with one button. You approve chatform on
-  the gateway's own page and come straight back. There is no key to copy.
-  Accounts connected this way take payments in rupees (INR) only.
-- **Stripe** connects with a *restricted* key. Create one in Stripe's dashboard
-  with these permissions, and leave everything else as None:
+Every gateway connects with one button. You approve chatform on the gateway's
+own page and come straight back. There is no key to copy or paste.
 
-  | Resource | Access |
-  | --- | --- |
-  | Accounts | Read |
-  | Checkout Sessions | Write |
-  | Webhook Endpoints | Write |
-  | Payment Intents | Read |
-  | Charges | Read |
+- **Stripe** opens Stripe's own page, where you pick the Stripe account to use,
+  or create one if you have none. Payments are charged on that account
+  directly, in any currency Stripe supports, and Stripe pays them out to your
+  bank on your usual schedule.
+- **Razorpay** and **Cashfree** accounts take payments in rupees (INR) only.
 
-  A full secret key (`sk_…`) is refused. It can move money out of your account,
-  and a form tool has no reason to hold one. The key is checked before it is
-  saved: chatform creates a checkout, cancels it straight away, and registers
-  a webhook on your Stripe account.
-
-A Stripe test key (`rk_test_…`) connects a test account, which you can pay with
-Stripe's test cards in the builder's preview. A preview never charges a live
-account; it offers **Simulate payment** instead.
+A preview never charges a live account; it offers **Simulate payment**
+instead.
 
 Disconnecting removes chatform's access at the gateway and deletes the stored
 credential. Payments already recorded stay in your results.

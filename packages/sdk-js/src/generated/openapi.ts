@@ -814,7 +814,7 @@ export interface paths {
         post?: never;
         /**
          * Disconnect a payment account
-         * @description Revokes the grant (Cashfree, Razorpay) or deletes the webhook endpoint (Stripe) at the gateway, then wipes the stored credentials. Forms still pointing at the account stop accepting payments until another account is chosen.
+         * @description Revokes chatform's access at the gateway, then wipes the stored credentials. Forms still pointing at the account stop accepting payments until another account is chosen.
          */
         delete: operations["deleteV1PaymentAccountsById"];
         options?: never;
@@ -856,30 +856,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Start connecting a Cashfree or Razorpay account
+         * Start connecting a Cashfree, Razorpay or Stripe account
          * @description Returns the gateway's consent URL. It must be opened in a browser signed in to chatform as the user who created this key; the state is single-use and expires in ten minutes. `returnTo` must be a page on the chatform app.
          */
         post: operations["postV1PaymentAccountsOauthByProviderStart"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/payment-accounts/stripe": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Connect a Stripe account with a restricted key
-         * @description Accepts only a restricted key (`rk_test_…` or `rk_live_…`); a full `sk_` secret key is refused with `full_secret_key`. The key is checked by reading the account, creating and immediately expiring a Checkout Session, and creating a webhook endpoint — a missing permission comes back as `missing_permission` with the permission named.
-         */
-        post: operations["postV1PaymentAccountsStripe"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4709,7 +4689,7 @@ export interface operations {
                             } | null;
                             createdAt: number;
                             /** @enum {string} */
-                            credentialKind: "oauth" | "restricted_key" | "connect";
+                            credentialKind: "oauth" | "connect";
                             currencies: string[];
                             /** @enum {string} */
                             environment: "test" | "live";
@@ -5011,127 +4991,6 @@ export interface operations {
                 };
             };
             /** @description returnTo is not a page on the app */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            code: string;
-                            doc_url?: string;
-                            issues?: {
-                                code: string;
-                                message: string;
-                                path?: string;
-                                ref?: string;
-                            }[];
-                            message: string;
-                            request_id?: string;
-                        } & {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-        };
-    };
-    postV1PaymentAccountsStripe: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    restrictedKey: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Connected */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        account: {
-                            connectedBy?: {
-                                email: string | null;
-                                name: string | null;
-                            } | null;
-                            createdAt: number;
-                            /** @enum {string} */
-                            credentialKind: "oauth" | "restricted_key" | "connect";
-                            currencies: string[];
-                            /** @enum {string} */
-                            environment: "test" | "live";
-                            formsUsing?: number;
-                            id: string;
-                            isDefault?: boolean;
-                            label: string;
-                            lastError: string | null;
-                            /** @enum {string} */
-                            provider: "cashfree" | "razorpay" | "stripe";
-                            providerAccountId: string | null;
-                            /** @enum {string} */
-                            status: "active" | "needs_reconnect" | "revoked" | "disconnected";
-                        };
-                    };
-                };
-            };
-            /** @description Plan does not include collecting payments */
-            402: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            code: string;
-                            doc_url?: string;
-                            issues?: {
-                                code: string;
-                                message: string;
-                                path?: string;
-                                ref?: string;
-                            }[];
-                            message: string;
-                            request_id?: string;
-                        } & {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            /** @description The Stripe account is connected to another organization */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error: {
-                            code: string;
-                            doc_url?: string;
-                            issues?: {
-                                code: string;
-                                message: string;
-                                path?: string;
-                                ref?: string;
-                            }[];
-                            message: string;
-                            request_id?: string;
-                        } & {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-            /** @description full_secret_key, invalid_key or missing_permission */
             422: {
                 headers: {
                     [name: string]: unknown;

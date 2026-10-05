@@ -309,7 +309,7 @@ function PaymentsOAuthResult({
  *
  * Except for an account that is already connected. The API deliberately lets a
  * lapsed plan, or an organization taken off the rollout, list and disconnect
- * its accounts — a live OAuth grant or a Stripe webhook must never be stranded
+ * its accounts — a live grant at a gateway must never be stranded
  * on a merchant's account with no way to remove it. So a gateway with an
  * account keeps its card open whatever the plan or the flag says, and the
  * sheet locks only the ways to connect more.
@@ -431,6 +431,8 @@ function oauthReason(reason: string | null): string {
       return "your plan doesn't include taking payments.";
     case "connected_elsewhere":
       return "that account is already connected to another Chatform organization.";
+    case "mode_mismatch":
+      return "that account is in the wrong mode (test or live) for this site.";
     case "no_merchant_id":
     case "exchange_failed":
     case "save_failed":

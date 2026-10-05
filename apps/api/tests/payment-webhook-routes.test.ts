@@ -3,7 +3,6 @@ import { env } from "cloudflare:test";
 import { applySchema, seedTenant, fetchApi, type Tenant } from "./helpers.js";
 import type { Bindings } from "../src/env.js";
 import type { SessionDO } from "../src/do/session-do.js";
-import { saveStripeKeyAccount } from "../src/lib/payments/accounts.js";
 
 /**
  * The webhook routes with their real signature checks.
@@ -11,8 +10,7 @@ import { saveStripeKeyAccount } from "../src/lib/payments/accounts.js";
  * `gateway-payments.test.ts` swaps every verifier for a header, which is the right trade for
  * testing what happens after a delivery is believed and the wrong one for testing whether it
  * should be. Here nothing about a delivery is mocked: the body is signed with the secret the
- * route really reads — Razorpay's from the environment, Stripe's opened from the account row it
- * was sealed into — and goes through the router, the verifier, the event parser, the dedupe and
+ * route really reads, from the environment — and goes through the router, the verifier, the event parser, the dedupe and
  * settlement. Only the gateway's own API, behind `withAdapter`, is faked, because a webhook is a
  * trigger to go and ask it.
  */
@@ -54,6 +52,7 @@ const mutableEnv = env as unknown as Record<string, string | undefined>;
 const RAZORPAY_SECRET = "rzp_webhook_secret_for_routes";
 const STRIPE_SECRET = "whsec_route_test_secret";
 let savedRazorpaySecret: string | undefined;
+let savedStripeSecret: string | undefined;
 
 const enc = new TextEncoder();
 async function hmacHex(key: string, message: string): Promise<string> {
@@ -65,7 +64,6 @@ async function hmacHex(key: string, message: string): Promise<string> {
 let t: Tenant;
 const STRIPE_ACCOUNT = "pac_routestripe01";
 const OTHER_STRIPE_ACCOUNT = "pac_routestripe02";
-const GONE_STRIPE_ACCOUNT = "pac_routestripe03";
 const RAZORPAY_ACCOUNT = "pac_routerazorpay1";
 
 function doc(account: string) {
@@ -141,15 +139,13 @@ async function subscribePro(orgId: string): Promise<void> {
 }
 
 async function stripeAccount(id: string, providerAccountId: string): Promise<void> {
-  await saveStripeKeyAccount(E, {
-    id,
-    orgId: t.orgId,
-    userId: t.userId,
-    key: `rk_test_${id}`,
-    description: { providerAccountId, label: `Stripe ${providerAccountId}`, currencies: ["INR"], environment: "test" },
-    webhookId: `we_${id}`,
-    webhookSecret: STRIPE_SECRET,
-  });
+  await env.DB.prepare(
+    `INSERT INTO payment_accounts (id, organization_id, provider, credential_kind, environment, provider_account_id,
+                                   display_label, credentials_enc, status, currencies_json, created_at, updated_at)
+     VALUES (?1, ?2, 'stripe', 'connect', 'test', ?3, 'Stripe', 'sealed', 'active', '["INR"]', ?4, ?4)`,
+  )
+    .bind(id, t.orgId, providerAccountId, Date.now())
+    .run();
 }
 
 let stripeSlug: string;
@@ -161,13 +157,11 @@ beforeAll(async () => {
   await subscribePro(t.orgId);
   savedRazorpaySecret = mutableEnv.RAZORPAY_WEBHOOK_SECRET;
   mutableEnv.RAZORPAY_WEBHOOK_SECRET = RAZORPAY_SECRET;
+  savedStripeSecret = mutableEnv.STRIPE_CONNECT_WEBHOOK_SECRET;
+  mutableEnv.STRIPE_CONNECT_WEBHOOK_SECRET = STRIPE_SECRET;
 
   await stripeAccount(STRIPE_ACCOUNT, "acct_route_one");
   await stripeAccount(OTHER_STRIPE_ACCOUNT, "acct_route_two");
-  await stripeAccount(GONE_STRIPE_ACCOUNT, "acct_route_gone");
-  await env.DB.prepare(`UPDATE payment_accounts SET status = 'disconnected', webhook_secret_enc = NULL WHERE id = ?1`)
-    .bind(GONE_STRIPE_ACCOUNT)
-    .run();
   const now = Date.now();
   await env.DB.prepare(
     `INSERT INTO payment_accounts (id, organization_id, provider, credential_kind, environment, provider_account_id,
@@ -183,6 +177,7 @@ beforeAll(async () => {
 
 afterAll(() => {
   mutableEnv.RAZORPAY_WEBHOOK_SECRET = savedRazorpaySecret;
+  mutableEnv.STRIPE_CONNECT_WEBHOOK_SECRET = savedStripeSecret;
 });
 
 const stubFor = (sid: string) => env.SESSION_DO.get(env.SESSION_DO.idFromName(sid)) as unknown as DurableObjectStub<SessionDO>;
@@ -209,9 +204,11 @@ async function openCheckout(slug: string): Promise<{ sid: string; recordId: stri
   return { sid, recordId };
 }
 
-function stripeEvent(recordId: string, eventId: string): string {
+function stripeEvent(recordId: string, eventId: string, account = "acct_route_one"): string {
   return JSON.stringify({
     id: eventId,
+    // Which connected account the event happened on: the platform endpoint hears them all.
+    account,
     type: "checkout.session.completed",
     data: {
       object: {
@@ -226,26 +223,26 @@ function stripeEvent(recordId: string, eventId: string): string {
   });
 }
 
-async function stripeDelivery(accountId: string, body: string, signedBody = body): Promise<Response> {
+async function stripeDelivery(body: string, signedBody = body): Promise<Response> {
   const ts = Math.floor(Date.now() / 1000);
-  return fetchApi(`/p/payments/webhooks/stripe/${accountId}`, {
+  return fetchApi("/p/payments/webhooks/stripe", {
     method: "POST",
     headers: { "content-type": "application/json", "stripe-signature": `t=${ts},v1=${await hmacHex(STRIPE_SECRET, `${ts}.${signedBody}`)}` },
     body,
   });
 }
 
-describe("POST /p/payments/webhooks/stripe/:accountId", () => {
+describe("POST /p/payments/webhooks/stripe", () => {
   it("refuses a tampered body with a 401, and settles the genuine one", async () => {
     const { sid, recordId } = await openCheckout(stripeSlug);
     gw.orders.get(`ord_${recordId}`)!.status = "paid";
     const body = stripeEvent(recordId, `evt_route_${recordId}`);
 
-    const tampered = await stripeDelivery(STRIPE_ACCOUNT, body.replace("49900", "100"), body);
+    const tampered = await stripeDelivery(body.replace("49900", "100"), body);
     expect(tampered.status).toBe(401);
     expect((await stubFor(sid).getStatus())?.answers.q_pay).toBeUndefined();
 
-    const genuine = await stripeDelivery(STRIPE_ACCOUNT, body);
+    const genuine = await stripeDelivery(body);
     expect(genuine.status).toBe(200);
     expect(await genuine.json()).toMatchObject({ processed: 1 });
     const state = await stubFor(sid).getStatus();
@@ -253,22 +250,37 @@ describe("POST /p/payments/webhooks/stripe/:accountId", () => {
     expect(state?.currentRef).toBe("q_after");
   });
 
-  it("answers 404 for an unknown account and 410 for a disconnected one", async () => {
-    const body = stripeEvent("rpay_nothing", "evt_route_nowhere");
-    expect((await stripeDelivery("pac_routenosuch9", body)).status).toBe(404);
-    expect((await stripeDelivery("not-an-account", body)).status).toBe(404);
-    expect((await stripeDelivery(RAZORPAY_ACCOUNT, body)).status).toBe(404);
-    expect((await stripeDelivery(GONE_STRIPE_ACCOUNT, body)).status).toBe(410);
+  it("refuses everything while the endpoint's secret is not set", async () => {
+    mutableEnv.STRIPE_CONNECT_WEBHOOK_SECRET = "";
+    try {
+      expect((await stripeDelivery(stripeEvent("rpay_nothing", "evt_route_nosecret"))).status).toBe(401);
+    } finally {
+      mutableEnv.STRIPE_CONNECT_WEBHOOK_SECRET = STRIPE_SECRET;
+    }
   });
 
-  it("ignores an event for a record on another account, even signed with a valid secret", async () => {
+  it("ignores an event that names a different merchant from the record's own", async () => {
     const { sid, recordId } = await openCheckout(stripeSlug);
     gw.orders.get(`ord_${recordId}`)!.status = "paid";
-    // Delivered to the other account's endpoint, which shares nothing but the secret in this fixture.
-    const res = await stripeDelivery(OTHER_STRIPE_ACCOUNT, stripeEvent(recordId, `evt_route_other_${recordId}`));
+    // Genuinely from Stripe, and about someone else's account: one secret signs every merchant's events.
+    const res = await stripeDelivery(stripeEvent(recordId, `evt_route_other_${recordId}`, "acct_route_two"));
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ignored: 1, processed: 0 });
     expect((await stubFor(sid).getStatus())?.answers.q_pay).toBeUndefined();
+  });
+
+  it("marks the account revoked when the admin removes chatform inside Stripe", async () => {
+    const body = JSON.stringify({
+      id: "evt_route_deauth",
+      account: "acct_route_two",
+      type: "account.application.deauthorized",
+      data: { object: { id: "ca_test_client", object: "application" } },
+    });
+    expect((await stripeDelivery(body)).status).toBe(200);
+    const status = async (id: string) =>
+      (await env.DB.prepare(`SELECT status FROM payment_accounts WHERE id = ?1`).bind(id).first<{ status: string }>())?.status;
+    expect(await status(OTHER_STRIPE_ACCOUNT)).toBe("revoked");
+    expect(await status(STRIPE_ACCOUNT)).toBe("active");
   });
 });
 

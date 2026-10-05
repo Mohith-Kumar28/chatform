@@ -268,11 +268,14 @@ export interface Bindings {
   RAZORPAY_WEBHOOK_SECRET?: string;
   RAZORPAY_ENVIRONMENT?: string;
   /**
-   * Reserved for Stripe Connect and read by nothing yet. Stripe today is a
-   * restricted key the admin pastes, whose webhook secret is per account and
-   * lives sealed on its `payment_accounts` row.
+   * Stripe Connect. The platform's own secret key (every call names the form
+   * admin's account in a `Stripe-Account` header), the Connect OAuth client id
+   * (`ca_…`) the consent page is opened with, and the signing secret of the
+   * platform's one Connect webhook endpoint. All three, or Stripe is not offered.
+   * A test key connects test accounts; see `stripeMode`.
    */
   STRIPE_PLATFORM_SECRET_KEY?: string;
+  STRIPE_CONNECT_CLIENT_ID?: string;
   STRIPE_CONNECT_WEBHOOK_SECRET?: string;
 
   SIGNING_SALT: string;

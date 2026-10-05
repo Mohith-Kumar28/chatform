@@ -11,28 +11,27 @@ connect or disconnect where your money goes.
 | Endpoint | Scope | What it does |
 | --- | --- | --- |
 | `GET /v1/payment-accounts` | `payment:read` | The connected accounts. Credentials are never returned |
-| `POST /v1/payment-accounts/stripe` | `payment:write` | Connect Stripe with a restricted key: `{ "restrictedKey": "rk_…" }` |
-| `POST /v1/payment-accounts/oauth/{provider}/start` | `payment:write` | Start connecting `razorpay` or `cashfree`: `{ "returnTo" }`, returns a consent `url` |
+| `POST /v1/payment-accounts/oauth/{provider}/start` | `payment:write` | Start connecting `stripe`, `razorpay` or `cashfree`: `{ "returnTo" }`, returns a consent `url` |
 | `POST /v1/payment-accounts/cashfree/onboard` | `payment:write` | Create a Cashfree account for a business that has none |
 | `PATCH /v1/payment-accounts/{id}` | `payment:write` | `{ "label" }` to rename, `{ "isDefault": true }` to make it the default |
 | `DELETE /v1/payment-accounts/{id}` | `payment:write` | Disconnect it |
 
 ```bash
-curl -X POST https://api.chatform.in/v1/payment-accounts/stripe \
+PROVIDER=stripe
+curl -X POST https://api.chatform.in/v1/payment-accounts/oauth/$PROVIDER/start \
   -H "x-api-key: $CHATFORM_SECRET_KEY" \
   -H "content-type: application/json" \
-  -d '{"restrictedKey": "rk_live_…"}'
+  -d '{"returnTo": "https://chatform.in/dashboard"}'
 ```
 
-The reply is `{ account }`.
+The reply is `{ url }`: the gateway's consent page, for a person to open.
 
 ## Good to know
 
-- **Stripe takes a restricted key only.** A full `sk_` secret key is a `422`
-  with `full_secret_key`. The key is tested before it is saved, and a missing
-  permission is a `422` with `missing_permission` naming it.
-  [The permissions it needs →](/docs/payments)
-- **OAuth finishes in a browser.** The consent `url` has to be opened by the
+- **No keys.** Every gateway, Stripe included, connects by a person approving
+  chatform on the gateway's own page. No gateway key is sent to or stored by
+  chatform.
+- **Connecting finishes in a browser.** The consent `url` has to be opened by the
   person who created the key, signed in to chatform. It is single-use and
   expires in ten minutes. `returnTo` must be a page on the chatform app.
 - **Cashfree onboarding** returns an `onboardingUrl` for Cashfree's KYC, or
@@ -41,7 +40,7 @@ The reply is `{ account }`.
   credential. Forms still pointing at the account stop taking payments until
   you choose another.
 - **Plan.** Connecting needs a plan that collects payments; without one it is a
-  `402`. A Stripe account already connected to another organization is a `409`.
+  `402`.
 - The list is not paginated: it answers `{ accounts, enabled, providers }`.
 
 ## The payments themselves

@@ -174,7 +174,10 @@ RAZORPAY_OAUTH_CLIENT_SECRET=
 RAZORPAY_WEBHOOK_SECRET=
 RAZORPAY_ENVIRONMENT=test
 
-# Reserved for Stripe Connect; read by nothing yet. Stripe today is a restricted key the
-# admin pastes, with a per-account webhook secret stored sealed on its row.
+# Stripe Connect. The platform account's secret key, its Connect OAuth client id (ca_…, from
+# Settings → Connect → Onboarding options → OAuth), and the signing secret of the platform's
+# Connect webhook endpoint (POST /p/payments/webhooks/stripe, "events on connected accounts").
+# All three or Stripe is not offered. A test key connects test accounts.
 STRIPE_PLATFORM_SECRET_KEY=
+STRIPE_CONNECT_CLIENT_ID=
 STRIPE_CONNECT_WEBHOOK_SECRET=

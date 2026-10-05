@@ -15,7 +15,7 @@
  */
 
 export type PaymentProvider = "cashfree" | "razorpay" | "stripe";
-export type CredentialKind = "oauth" | "restricted_key" | "connect";
+export type CredentialKind = "oauth" | "connect";
 export type PaymentEnvironment = "test" | "live";
 export type RecordStatus = "created" | "paid" | "failed" | "expired" | "refunded" | "superseded";
 export type PaymentAccountStatus = "active" | "needs_reconnect" | "revoked" | "disconnected";

@@ -111,7 +111,7 @@ function num(value: unknown): number | null {
 // ─────────────────────────────── Stripe ───────────────────────────────
 
 /**
- * Verify a Stripe delivery to one account's endpoint.
+ * Verify a Stripe delivery to the platform's Connect endpoint.
  *
  * https://docs.stripe.com/webhooks#verify-manually — `t` is seconds; any `v1` entry may match,
  * because Stripe sends one per active secret while an endpoint's secret is being rolled. `v0`
@@ -161,7 +161,7 @@ export async function verifyStripeWebhook(
 /**
  * What one Stripe event is about.
  *
- * Only Checkout Session events and `charge.refunded` are subscribed (see `setupStripeRestrictedKey`).
+ * Only the events in `STRIPE_WEBHOOK_EVENTS` are subscribed.
  * A completed session whose `payment_status` is still `unpaid` is a delayed method — a bank
  * debit, say — that has not cleared; `async_payment_succeeded` follows when it does, so the
  * completion itself is ignored rather than read as paid.
@@ -209,6 +209,9 @@ export function parseStripeEvent(event: Record<string, unknown>): WebhookEvent {
       currency: str(object.currency)?.toUpperCase() ?? null,
     };
   }
+
+  // The admin removed chatform from inside Stripe. `account` is the account that did.
+  if (type === "account.application.deauthorized") return { ...base, type: base.providerAccountId ? "revoked" : "ignored" };
 
   return { ...base, type: "ignored" };
 }

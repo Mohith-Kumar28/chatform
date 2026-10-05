@@ -25,7 +25,7 @@ export type PaymentAccountStatus = "active" | "needs_reconnect" | "revoked" | "d
 export interface PaymentAccount {
   id: string;
   provider: PaymentProviderName;
-  credentialKind: "oauth" | "restricted_key" | "connect";
+  credentialKind: "oauth" | "connect";
   environment: "test" | "live";
   label: string;
   /** The gateway's own id for the account, as its dashboard shows it. */
@@ -82,8 +82,6 @@ export class PaymentAccountError extends Error {
     public readonly code: string,
     message: string,
     public readonly status: number,
-    /** `missing_permission`: the Stripe permission the key lacks. */
-    public readonly permission?: string,
   ) {
     super(message);
     this.name = "PaymentAccountError";
@@ -93,10 +91,8 @@ export class PaymentAccountError extends Error {
 /**
  * A call to the account routes that keeps the error code.
  *
- * Not `customFetch`, which flattens an error to its message: the Stripe form
- * turns `full_secret_key` / `invalid_key` / `missing_permission` into its own
- * sentences, and needs the code and the permission name to do it. It still
- * sends `apiHeaders()` — a raw fetch without them acts as the signed-in admin
+ * Not `customFetch`, which flattens an error to its message and drops the
+ * code. It still sends `apiHeaders()` — a raw fetch without them acts as the signed-in admin
  * rather than the customer being impersonated — and a plan denial still opens
  * the paywall, as every other request's does.
  */
@@ -114,13 +110,8 @@ export async function paymentAccountsFetch<T>(path: string, init: RequestInit = 
   if (res.ok) return body as T;
 
   if (isGateError(body)) openPaywall(body.error);
-  const err = (body as { error?: { code?: string; message?: string; permission?: string } } | null)?.error;
-  throw new PaymentAccountError(
-    err?.code ?? "request_failed",
-    err?.message ?? `Request failed: ${res.status}`,
-    res.status,
-    err?.permission,
-  );
+  const err = (body as { error?: { code?: string; message?: string } } | null)?.error;
+  throw new PaymentAccountError(err?.code ?? "request_failed", err?.message ?? `Request failed: ${res.status}`, res.status);
 }
 
 /**

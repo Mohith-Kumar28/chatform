@@ -140,8 +140,8 @@ const payments = await chatform.forms.payments.list(formId, { status: "paid" });
 `rejected`, so read the result rather than only the status. `import` saves
 nothing: check `report.notCopied` before you keep the document.
 `chatform.paymentAccounts` lists and connects the organization's own Stripe,
-Razorpay or Cashfree accounts; the gateway ones return a consent URL for a person
-to open.
+Razorpay or Cashfree accounts; connecting returns a consent URL for a person to
+open.
 
 ### Paging
 

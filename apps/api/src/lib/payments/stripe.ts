@@ -1,4 +1,5 @@
-import { currencyExponent, providerMinMinor } from "@repo/form-schema";
+import { currencyExponent } from "@repo/form-schema";
+import type { Bindings } from "../../env.js";
 import {
   ProviderError,
   type AccountDescription,
@@ -11,34 +12,62 @@ import {
 } from "./types.js";
 
 /**
- * Stripe, on the form admin's own account.
+ * Stripe, on the form admin's own account, reached through Stripe Connect.
  *
- * Today the credential is a restricted key the admin pastes (`rk_live_…`), because Stripe Connect
- * is not available to a platform incorporated in India. Every call goes through `StripeAuth` so
- * that the day Connect is, only the credential changes: a platform key plus a `Stripe-Account`
- * header reaches exactly the same endpoints with exactly the same bodies.
+ * The admin presses Connect, approves chatform on Stripe's own page, and comes back. Nothing is
+ * pasted and nothing of theirs is stored but the account id (`acct_…`): every call is made with
+ * chatform's platform key and a `Stripe-Account` header naming their account, which makes each
+ * checkout a direct charge. The money lands in their balance and is paid out to their bank by
+ * Stripe; it never passes through ours.
  *
- * The API version is pinned on every request and on the webhook endpoint we create. Without it
- * each merchant's calls would be answered in whatever version their account happened to default
- * to — and a restricted key pasted from an account opened in 2019 describes a Checkout Session
- * differently from one opened last week.
+ * The API version is pinned on every request. Without it each call would be answered in whatever
+ * version the platform account happened to default to, and a dashboard upgrade would change what
+ * a Checkout Session looks like underneath running forms.
  */
 
 export const STRIPE_API = "https://api.stripe.com";
+export const STRIPE_CONNECT = "https://connect.stripe.com";
 export const STRIPE_API_VERSION = "2024-06-20";
 const TIMEOUT_MS = 10_000;
 
-export type StripeAuth =
-  | { kind: "restricted_key"; key: string }
-  | { kind: "connect"; platformKey: string; accountId: string };
+/** The platform's key, acting on one connected account. */
+export interface StripeAuth {
+  platformKey: string;
+  accountId: string;
+}
 
-/** The events the per-account endpoint is subscribed to — and nothing else. */
+type StripeEnv = Pick<Bindings, "STRIPE_PLATFORM_SECRET_KEY" | "STRIPE_CONNECT_CLIENT_ID" | "STRIPE_CONNECT_WEBHOOK_SECRET">;
+
+/** All three or nothing: a Connect button that cannot hear about the payment is worse than none. */
+export function stripeConfigured(env: StripeEnv): boolean {
+  return Boolean(env.STRIPE_PLATFORM_SECRET_KEY && env.STRIPE_CONNECT_CLIENT_ID && env.STRIPE_CONNECT_WEBHOOK_SECRET);
+}
+
+/** Live only on a live platform key. A test key connects test accounts, which take test cards. */
+export function stripeMode(env: StripeEnv): PaymentEnvironment {
+  return /^(sk|rk)_live_/.test(env.STRIPE_PLATFORM_SECRET_KEY ?? "") ? "live" : "test";
+}
+
+function platformKey(env: StripeEnv): string {
+  if (!env.STRIPE_PLATFORM_SECRET_KEY) throw new ProviderError("bad_request", "stripe_connect_not_configured");
+  return env.STRIPE_PLATFORM_SECRET_KEY;
+}
+
+export function stripeAuth(env: StripeEnv, accountId: string): StripeAuth {
+  return { platformKey: platformKey(env), accountId };
+}
+
+/**
+ * The events the platform's Connect endpoint is subscribed to, and nothing else.
+ * `account.application.deauthorized` is the admin removing chatform from inside Stripe.
+ */
 export const STRIPE_WEBHOOK_EVENTS = [
   "checkout.session.completed",
   "checkout.session.async_payment_succeeded",
   "checkout.session.async_payment_failed",
   "checkout.session.expired",
   "charge.refunded",
+  "account.application.deauthorized",
 ] as const;
 
 type Params = Record<string, unknown>;
@@ -72,14 +101,12 @@ interface StripeErrorBody {
   error?: { type?: string; code?: string; message?: string; param?: string };
 }
 
-/** A Stripe failure with what the connect flow needs to explain it. */
+/** A Stripe failure, with Stripe's own error code beside ours. */
 export class StripeApiError extends ProviderError {
   constructor(
     code: ProviderErrorCode,
     message: string,
     httpStatus: number,
-    /** `rak_…`, when Stripe names the permission a restricted key lacks. */
-    public permission: string | null,
     public stripeCode: string | null,
   ) {
     super(code, message, httpStatus);
@@ -88,26 +115,21 @@ export class StripeApiError extends ProviderError {
 }
 
 /**
- * The permission a restricted key is missing, from Stripe's own wording: "…Having the
- * 'rak_checkout_session_write' permission would allow this request to continue."
+ * Whose fault a refusal is decides what happens to the account.
+ *
+ * `account_invalid` is Stripe saying the platform no longer has this account: the admin removed
+ * chatform in their Stripe settings, or the account was closed. That is `invalid_grant`, which
+ * marks the one account `needs_reconnect`. A 401 is different in kind. The key is ours, shared by
+ * every connected account, so a bad one is our outage and must never be read as theirs, or one
+ * mistyped secret would flag every Stripe account on the platform at once.
  */
-export function missingPermissionFrom(message: string | undefined): string | null {
-  return message?.match(/'(rak_[a-z0-9_]+)'/)?.[1] ?? null;
-}
-
-function classify(status: number): ProviderErrorCode {
-  if (status === 401) return "unauthorized";
+function classify(status: number, stripeCode: string | null): ProviderErrorCode {
+  if (stripeCode === "account_invalid") return "invalid_grant";
+  if (status === 401) return "upstream";
   if (status === 404) return "not_found";
   if (status === 429) return "rate_limited";
   if (status >= 500) return "upstream";
   return "bad_request";
-}
-
-function authHeaders(auth: StripeAuth): Record<string, string> {
-  if (auth.kind === "connect") {
-    return { authorization: `Bearer ${auth.platformKey}`, "stripe-account": auth.accountId };
-  }
-  return { authorization: `Bearer ${auth.key}` };
 }
 
 /**
@@ -126,7 +148,8 @@ export async function stripeFetch<T>(
   const hasBody = method === "POST";
   const url = `${STRIPE_API}${path}${!hasBody && encoded ? `?${encoded}` : ""}`;
   const headers: Record<string, string> = {
-    ...authHeaders(auth),
+    authorization: `Bearer ${auth.platformKey}`,
+    "stripe-account": auth.accountId,
     "stripe-version": STRIPE_API_VERSION,
     ...(hasBody ? { "content-type": "application/x-www-form-urlencoded" } : {}),
     ...(opts.idempotencyKey ? { "idempotency-key": opts.idempotencyKey } : {}),
@@ -141,7 +164,7 @@ export async function stripeFetch<T>(
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (err) {
-    throw new StripeApiError("upstream", `stripe_unreachable: ${err instanceof Error ? err.name : "error"}`, 0, null, null);
+    throw new StripeApiError("upstream", `stripe_unreachable: ${err instanceof Error ? err.name : "error"}`, 0, null);
   }
 
   const text = await res.text();
@@ -154,7 +177,7 @@ export async function stripeFetch<T>(
   if (!res.ok) {
     const err = (body as StripeErrorBody).error;
     const message = err?.message ?? `Stripe ${path} returned ${res.status}`;
-    throw new StripeApiError(classify(res.status), message, res.status, missingPermissionFrom(err?.message), err?.code ?? null);
+    throw new StripeApiError(classify(res.status, err?.code ?? null), message, res.status, err?.code ?? null);
   }
   return body as T;
 }
@@ -349,178 +372,80 @@ function describeStripeAccount(account: StripeAccount, environment: PaymentEnvir
 
 // ─────────────────────────────── connecting ───────────────────────────────
 
-export type StripeSetupErrorCode = "full_secret_key" | "invalid_key" | "missing_permission" | "upstream";
-
-/** Why a pasted key was refused, in terms the connect sheet can say plainly. */
-export class StripeSetupError extends Error {
-  constructor(
-    public code: StripeSetupErrorCode,
-    message: string,
-    public permission?: string,
-  ) {
-    super(message);
-    this.name = "StripeSetupError";
-  }
-}
-
-/** `rk_test_…` → test, `rk_live_…` → live; anything else is not a restricted key. */
-export function parseRestrictedKey(raw: string): { key: string; environment: PaymentEnvironment } {
-  const key = raw.trim();
-  if (/^sk_(test|live)_/.test(key)) {
-    throw new StripeSetupError(
-      "full_secret_key",
-      "That is your full secret key, which can do anything on your Stripe account. Create a restricted key instead — it only needs the permissions listed in the steps.",
-    );
-  }
-  const match = key.match(/^rk_(test|live)_[A-Za-z0-9]{10,}$/);
-  if (!match) {
-    throw new StripeSetupError("invalid_key", "That does not look like a Stripe restricted key. It starts with rk_live_ or rk_test_.");
-  }
-  return { key, environment: match[1] as PaymentEnvironment };
-}
-
-function setupErrorFrom(err: unknown, step: string): StripeSetupError {
-  if (err instanceof StripeApiError) {
-    if (err.httpStatus === 401) {
-      return new StripeSetupError("invalid_key", "Stripe did not accept that key. It may have been deleted or rolled — create a new one and paste it again.");
-    }
-    if (err.httpStatus === 403 || err.permission) {
-      return new StripeSetupError(
-        "missing_permission",
-        err.permission
-          ? `The key is missing the “${stripePermissionLabel(err.permission)}” permission. Edit the key in Stripe, switch it on, and try again.`
-          : `The key does not have permission to ${step}. Edit the key in Stripe and grant the permissions listed in the steps.`,
-        err.permission ?? undefined,
-      );
-    }
-    if (err.code === "rate_limited" || err.code === "upstream") {
-      return new StripeSetupError("upstream", "Stripe did not answer just now. Try again in a minute.");
-    }
-    return new StripeSetupError("invalid_key", `Stripe refused the check (${step}): ${err.message}`);
-  }
-  return new StripeSetupError("upstream", "Stripe could not be reached. Try again in a minute.");
+function clientId(env: StripeEnv): string {
+  if (!env.STRIPE_CONNECT_CLIENT_ID) throw new ProviderError("bad_request", "stripe_connect_not_configured");
+  return env.STRIPE_CONNECT_CLIENT_ID;
 }
 
 /**
- * A `rak_…` permission in the words Stripe's restricted-key editor uses.
- *
- * Stripe's error names the permission by its API identifier, which appears nowhere in the
- * editor the admin has to go and change — "rak_checkout_session_write" is not a row they can
- * find. The resources a verified payment touches are named exactly; anything else is spelled
- * out from the identifier, which is close enough to search the editor for.
+ * Stripe's consent page: the admin picks one of their Stripe accounts, or creates one there, and
+ * approves. `read_write` is what lets the platform create a checkout on the account.
  */
-const STRIPE_RESOURCE_LABELS: Record<string, string> = {
-  checkout_session: "Checkout Sessions",
-  webhook: "Webhook Endpoints",
-  payment_intent: "Payment Intents",
-  charge: "Charges",
-  account: "Accounts",
-  accounts: "Accounts",
-  accounts_kyc_basic: "Accounts",
-  connected_account: "Accounts",
-};
-
-export function stripePermissionLabel(permission: string): string {
-  const m = permission.match(/^rak_(.+)_(read|write)$/);
-  if (!m) return permission;
-  const [, resource, access] = m as unknown as [string, string, "read" | "write"];
-  const name =
-    STRIPE_RESOURCE_LABELS[resource] ??
-    resource
-      .split("_")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-  return `${name} — ${access === "write" ? "Write" : "Read"}`;
+// https://docs.stripe.com/connect/oauth-reference#get-authorize
+export function stripeAuthorizeUrl(env: StripeEnv, state: string, redirectUri: string): string {
+  const url = new URL(`${STRIPE_CONNECT}/oauth/authorize`);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("client_id", clientId(env));
+  url.searchParams.set("scope", "read_write");
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("state", state);
+  return url.toString();
 }
 
-export interface StripeSetupResult {
-  auth: StripeAuth;
-  description: AccountDescription;
-  webhookId: string;
-  webhookSecret: string;
-}
-
-/**
- * Check a pasted restricted key can do everything a verified payment needs, then subscribe the
- * account's own endpoint.
- *
- * Proven by doing, not by reading permissions: Stripe has no endpoint that lists a key's
- * permissions, so each capability is exercised once. A Checkout Session is created and expired
- * straight away — the one way to know `create` works before a respondent presses Pay and finds
- * out it does not. It costs nothing and charges nobody; it shows in the admin's dashboard as an
- * expired session named for what it was.
- *
- * `webhookUrl` may be a function of the account, because the URL carries our row id and the
- * caller only knows which row — a reconnect reuses the old one — once it knows which Stripe
- * account the key belongs to.
- */
-export async function setupStripeRestrictedKey(
-  rawKey: string,
-  webhookUrl: string | ((description: AccountDescription) => Promise<string> | string),
-): Promise<StripeSetupResult> {
-  const { key, environment } = parseRestrictedKey(rawKey);
-  const auth: StripeAuth = { kind: "restricted_key", key };
-  const adapter = createStripeAdapter(auth, environment);
-
-  let description: AccountDescription;
+/** The OAuth endpoints answer RFC 6749's flat `{ error, error_description }`, not the API's nested one. */
+async function connectCall<T>(env: StripeEnv, path: string, params: Params): Promise<T> {
+  let res: Response;
   try {
-    description = await adapter.describeAccount();
-  } catch (err) {
-    throw setupErrorFrom(err, "read the account");
-  }
-
-  // https://docs.stripe.com/api/checkout/sessions/create + /expire
-  try {
-    const currency = description.currencies[0] ?? "USD";
-    const probe = await stripeFetch<StripeCheckoutSession>(auth, "POST", "/v1/checkout/sessions", {
-      mode: "payment",
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: currency.toLowerCase(),
-            // Round in every currency's units, so the probe itself is never refused for precision.
-            unit_amount: toStripeAmount(Math.max(providerMinMinor(currency), 1000), currency) ?? 1000,
-            product_data: { name: "chatform connection check (expired immediately)" },
-          },
-        },
-      ],
-      success_url: "https://chatform.in/",
-      metadata: { chatform_probe: "1" },
-    });
-    await stripeFetch(auth, "POST", `/v1/checkout/sessions/${encodeURIComponent(probe.id)}/expire`);
-  } catch (err) {
-    throw setupErrorFrom(err, "create Checkout Sessions");
-  }
-
-  const url = typeof webhookUrl === "function" ? await webhookUrl(description) : webhookUrl;
-  // https://docs.stripe.com/api/webhook_endpoints/create — `secret` is only ever returned here.
-  let endpoint: { id: string; secret?: string };
-  try {
-    endpoint = await stripeFetch<{ id: string; secret?: string }>(auth, "POST", "/v1/webhook_endpoints", {
-      url,
-      enabled_events: [...STRIPE_WEBHOOK_EVENTS],
-      api_version: STRIPE_API_VERSION,
-      description: "chatform verified payments",
+    res = await fetch(`${STRIPE_CONNECT}${path}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${platformKey(env)}`, "content-type": "application/x-www-form-urlencoded" },
+      body: encodeStripeForm(params),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (err) {
-    throw setupErrorFrom(err, "create webhook endpoints");
+    throw new ProviderError("upstream", `stripe_unreachable: ${err instanceof Error ? err.name : "error"}`);
   }
-  if (!endpoint.secret) throw new StripeSetupError("upstream", "Stripe created the webhook but did not return its secret. Try again.");
-
-  return { auth, description, webhookId: endpoint.id, webhookSecret: endpoint.secret };
+  const text = await res.text();
+  let body: { error?: string; error_description?: string } = {};
+  try {
+    body = text ? (JSON.parse(text) as typeof body) : {};
+  } catch {
+    body = {};
+  }
+  if (!res.ok) {
+    const code: ProviderErrorCode = body.error === "invalid_grant" ? "invalid_grant" : res.status >= 500 ? "upstream" : "bad_request";
+    throw new ProviderError(code, [body.error, body.error_description].filter(Boolean).join(": ").slice(0, 300) || `stripe_${res.status}`, res.status);
+  }
+  return body as T;
 }
 
 /**
- * Remove the endpoint we created. A 404 is success — it is already gone, which is the state
- * being asked for, and the admin may well have deleted it by hand.
+ * Trade the code from the consent redirect for the account it names.
+ *
+ * The response also carries an access and a refresh token for the account. Neither is kept:
+ * Stripe's own advice is to call with the platform key and a `Stripe-Account` header, which
+ * leaves nothing of the merchant's to store, seal, rotate or leak.
  */
-// https://docs.stripe.com/api/webhook_endpoints/delete
-export async function deleteStripeWebhook(auth: StripeAuth, id: string): Promise<void> {
+// https://docs.stripe.com/connect/oauth-reference#post-token
+export async function stripeExchangeCode(env: StripeEnv, code: string): Promise<{ accountId: string; livemode: boolean }> {
+  const body = await connectCall<{ stripe_user_id?: string; livemode?: boolean }>(env, "/oauth/token", {
+    grant_type: "authorization_code",
+    code,
+  });
+  if (!body.stripe_user_id) throw new ProviderError("upstream", "stripe_token_without_account");
+  return { accountId: body.stripe_user_id, livemode: body.livemode === true };
+}
+
+/**
+ * Remove chatform from the account. Already removed is success: it is the state being asked for,
+ * and the admin may well have done it from their own Stripe settings.
+ */
+// https://docs.stripe.com/connect/oauth-reference#post-deauthorize
+export async function stripeDeauthorize(env: StripeEnv, accountId: string): Promise<void> {
   try {
-    await stripeFetch(auth, "DELETE", `/v1/webhook_endpoints/${encodeURIComponent(id)}`);
+    await connectCall(env, "/oauth/deauthorize", { client_id: clientId(env), stripe_user_id: accountId });
   } catch (err) {
-    if (err instanceof ProviderError && err.code === "not_found") return;
+    if (err instanceof ProviderError && err.code !== "upstream") return;
     throw err;
   }
 }

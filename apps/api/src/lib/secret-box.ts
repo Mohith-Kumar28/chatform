@@ -3,7 +3,7 @@ import type { Bindings } from "../env.js";
 /**
  * Sealing the credentials a form admin hands us for their own payment gateway.
  *
- * An OAuth token for a merchant's Razorpay account or a restricted Stripe key
+ * An OAuth token for a merchant's Razorpay account or the Stripe account an organization connected
  * can create charges and read that merchant's payments. A D1 export, a backup
  * or a stray `SELECT *` must not be enough to do either, so these never sit in
  * the database as plaintext: they are AES-256-GCM ciphertext under a key that

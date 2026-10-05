@@ -10,9 +10,8 @@ import {
   loadAccountById,
   loadAccountForOrg,
   openCredentials,
-  openWebhookSecret,
   saveOAuthAccount,
-  saveStripeKeyAccount,
+  saveStripeConnectAccount,
   sweepPaymentTokens,
   withAdapter,
 } from "../src/lib/payments/accounts.js";
@@ -25,7 +24,7 @@ import { ProviderError, type PaymentAccountRow } from "../src/lib/payments/types
  * The properties worth defending here are the ones that fail silently in production: two
  * requests refreshing one rotating token at once (the loser kills a healthy account), an OAuth
  * callback completed by the wrong person, another tenant's account id that answers anything but
- * 404, and a full Stripe secret key accepted because it "worked".
+ * 404, and one bad platform key read as every Stripe merchant having revoked us.
  */
 
 const E = env as unknown as Bindings;
@@ -98,6 +97,9 @@ beforeAll(async () => {
     RAZORPAY_OAUTH_CLIENT_SECRET: "rzp_client_secret_test",
     CASHFREE_PARTNER_CLIENT_ID: "cf_client_test",
     CASHFREE_PARTNER_API_KEY: "cf_partner_key_test",
+    STRIPE_PLATFORM_SECRET_KEY: "sk_test_platform1234567890",
+    STRIPE_CONNECT_CLIENT_ID: "ca_test_client",
+    STRIPE_CONNECT_WEBHOOK_SECRET: "whsec_test_connect",
   });
 });
 
@@ -233,20 +235,23 @@ describe("withAdapter", () => {
     expect(result).toMatchObject({ accessToken: "cf_after_401" });
   });
 
-  it("sends a refused restricted key straight to needs_reconnect", async () => {
-    const stripe = await saveStripeKeyAccount(E, {
-      id: "pac_stripe_refused",
+  it("marks a Stripe account needs_reconnect when Stripe says the platform lost it, and only then", async () => {
+    const stripe = await saveStripeConnectAccount(E, {
       orgId: a.orgId,
       userId: null,
-      key: "rk_test_refused1234567",
       description: { providerAccountId: "acct_refused", label: "Refused", currencies: ["USD"], environment: "test" },
-      webhookId: "we_refused",
-      webhookSecret: "whsec_refused",
     });
+    // Our own key refused: an outage of ours, and nothing about this merchant.
     mockFetch(() => ({ status: 401, body: { error: { message: "Invalid API Key provided" } } }));
-    await expect(withAdapter(E, stripe, (adapter) => adapter.fetchStatus("cs_1"))).rejects.toMatchObject({ code: "unauthorized" });
+    await expect(withAdapter(E, stripe, (adapter) => adapter.fetchStatus("cs_1"))).rejects.toMatchObject({ code: "upstream" });
+    expect((await loadAccountById(E, stripe.id))!.status).toBe("active");
+
+    mockFetch(() => ({
+      status: 403,
+      body: { error: { code: "account_invalid", message: "The provided key does not have access to account 'acct_refused'" } },
+    }));
+    await expect(withAdapter(E, stripe, (adapter) => adapter.fetchStatus("cs_1"))).rejects.toMatchObject({ code: "invalid_grant" });
     expect((await loadAccountById(E, stripe.id))!.status).toBe("needs_reconnect");
-    expect(await openWebhookSecret(E, stripe)).toBe("whsec_refused");
   });
 
   it("the cron sweep renews tokens that expire within the hour", async () => {
@@ -263,97 +268,7 @@ describe("withAdapter", () => {
 
 const cookieJson = (t: Tenant, extra: Record<string, string> = {}) => ({ cookie: t.cookie, "content-type": "application/json", ...extra });
 
-function stripeHappyPath(accountId = "acct_route", webhookId = "we_route") {
-  mockFetch((call) => {
-    const path = new URL(call.url).pathname;
-    if (path === "/v1/account") return { body: { id: accountId, default_currency: "usd", business_profile: { name: "Route Co" } } };
-    if (path === "/v1/checkout/sessions") return { body: { id: "cs_probe" } };
-    if (path === "/v1/checkout/sessions/cs_probe/expire") return { body: { id: "cs_probe" } };
-    if (path === "/v1/webhook_endpoints") return { body: { id: webhookId, secret: `whsec_${webhookId}` } };
-    if (call.method === "DELETE" && path.startsWith("/v1/webhook_endpoints/")) return { body: { deleted: true } };
-    return { status: 404, body: { error: { message: "unexpected" } } };
-  });
-}
-
 describe("connect routes", () => {
-  it("refuses a full sk_ secret key without calling Stripe", async () => {
-    mockFetch(() => ({ body: {} }));
-    const res = await fetchApi("/api/payment-accounts/stripe", {
-      method: "POST",
-      headers: cookieJson(a),
-      body: JSON.stringify({ restrictedKey: "sk_live_51Habcdefghijklmnop" }),
-    });
-    expect(res.status).toBe(422);
-    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("full_secret_key");
-    expect(calls).toHaveLength(0);
-  });
-
-  it("connects a restricted key, subscribes the account's own webhook URL, and lists it without credentials", async () => {
-    stripeHappyPath();
-    const res = await fetchApi("/api/payment-accounts/stripe", {
-      method: "POST",
-      headers: cookieJson(a),
-      body: JSON.stringify({ restrictedKey: "rk_test_routeKey1234567" }),
-    });
-    expect(res.status).toBe(200);
-    const { account } = (await res.json()) as { account: { id: string; provider: string; environment: string; label: string } };
-    expect(account).toMatchObject({ provider: "stripe", environment: "test", label: "Route Co" });
-
-    const hook = new URLSearchParams(calls.find((c) => c.url.endsWith("/v1/webhook_endpoints"))!.body);
-    expect(hook.get("url")).toBe(`http://localhost/p/payments/webhooks/stripe/${account.id}`);
-    const row = (await loadAccountById(E, account.id))!;
-    expect(await openWebhookSecret(E, row)).toBe("whsec_we_route");
-
-    const list = await fetchApi("/api/payment-accounts", { headers: { cookie: a.cookie } });
-    expect(list.status).toBe(200);
-    const text = await list.text();
-    expect(text).not.toContain("rk_test_routeKey");
-    expect(text).not.toContain("credentials");
-    expect(text).not.toContain("whsec_");
-    const body = JSON.parse(text) as { accounts: { id: string }[]; enabled: boolean; providers: Record<string, { configured: boolean }> };
-    expect(body.enabled).toBe(true);
-    expect(body.providers).toEqual({ cashfree: { configured: true }, razorpay: { configured: true }, stripe: { configured: true } });
-    expect(body.accounts.map((x) => x.id)).toContain(account.id);
-
-    // Reconnecting the same Stripe account keeps the row and replaces the endpoint.
-    stripeHappyPath("acct_route", "we_route_2");
-    const again = await fetchApi("/api/payment-accounts/stripe", {
-      method: "POST",
-      headers: cookieJson(a),
-      body: JSON.stringify({ restrictedKey: "rk_test_routeKeyNEW4567" }),
-    });
-    expect(((await again.json()) as { account: { id: string } }).account.id).toBe(account.id);
-    expect(calls.some((c) => c.method === "DELETE" && c.url.endsWith("/v1/webhook_endpoints/we_route"))).toBe(true);
-
-    // The same Stripe account from another organization is refused.
-    stripeHappyPath("acct_route", "we_route_b");
-    const elsewhere = await fetchApi("/api/payment-accounts/stripe", {
-      method: "POST",
-      headers: cookieJson(b),
-      body: JSON.stringify({ restrictedKey: "rk_test_otherOrgKey1234" }),
-    });
-    expect(elsewhere.status).toBe(409);
-  });
-
-  it("names the missing permission", async () => {
-    mockFetch((call) =>
-      call.url.endsWith("/v1/account")
-        ? { status: 403, body: { error: { message: "… Having the 'rak_account_read' permission would allow this request to continue." } } }
-        : { status: 404, body: {} },
-    );
-    const res = await fetchApi("/api/payment-accounts/stripe", {
-      method: "POST",
-      headers: cookieJson(a),
-      body: JSON.stringify({ restrictedKey: "rk_live_noPermission1234" }),
-    });
-    expect(res.status).toBe(422);
-    const body = (await res.json()) as { error: { code: string; permission: string; message: string } };
-    expect(body).toMatchObject({ error: { code: "missing_permission", permission: "rak_account_read" } });
-    // In the words of Stripe's key editor, where the identifier appears nowhere.
-    expect(body.error.message).toContain("Accounts — Read");
-    expect(body.error.message).not.toContain("rak_");
-  });
-
   it("answers 404 for another organization's account and leaves it connected", async () => {
     const theirs = await cashfreeAccount(b.orgId, "cfm_theirs");
     const res = await fetchApi(`/api/payment-accounts/${theirs.id}`, { method: "DELETE", headers: { cookie: a.cookie } });
@@ -370,10 +285,11 @@ describe("connect routes", () => {
   });
 
   it("gates connecting on the plan and on the rollout flag, but not listing", async () => {
-    const locked = await fetchApi("/api/payment-accounts/stripe", {
+    const startBody = JSON.stringify({ returnTo: `${webOrigins(E)[0]}/forms/frm_x/integrate` });
+    const locked = await fetchApi("/api/payment-accounts/oauth/stripe/start", {
       method: "POST",
       headers: cookieJson(free),
-      body: JSON.stringify({ restrictedKey: "rk_test_freePlanKey1234" }),
+      body: startBody,
     });
     expect(locked.status).toBe(402);
     expect(((await locked.json()) as { error: { code: string } }).error.code).toBe("feature_locked");
@@ -381,10 +297,10 @@ describe("connect routes", () => {
 
     setEnv({ PAYMENTS_GATEWAY_ENABLED: "" });
     try {
-      const off = await fetchApi("/api/payment-accounts/stripe", {
+      const off = await fetchApi("/api/payment-accounts/oauth/stripe/start", {
         method: "POST",
         headers: cookieJson(a),
-        body: JSON.stringify({ restrictedKey: "rk_test_flaggedOff12345" }),
+        body: startBody,
       });
       expect(off.status).toBe(403);
       expect(((await off.json()) as { error: { code: string } }).error.code).toBe("gateway_payments_disabled");
@@ -400,10 +316,10 @@ describe("connect routes", () => {
     setEnv({ PLATFORM_ADMIN_EMAILS: "payacc_a@example.com" });
     try {
       const { token } = await startImpersonation(E, { adminId: a.userId, userId: b.userId, orgId: b.orgId });
-      const res = await fetchApi("/api/payment-accounts/stripe", {
+      const res = await fetchApi("/api/payment-accounts/oauth/stripe/start", {
         method: "POST",
         headers: cookieJson(a, { "x-chatform-impersonate": token }),
-        body: JSON.stringify({ restrictedKey: "rk_test_impersonated123" }),
+        body: JSON.stringify({ returnTo: `${webOrigins(E)[0]}/forms/frm_x/integrate` }),
       });
       expect(res.status).toBe(403);
       expect(((await res.json()) as { error: { code: string } }).error.code).toBe("impersonation_forbidden");
@@ -536,6 +452,98 @@ describe("OAuth connect", () => {
     expect(row).toBeNull();
   });
 
+  function stripeConnectEndpoints(accountId: string, livemode = false) {
+    mockFetch((call) => {
+      if (call.url === "https://connect.stripe.com/oauth/token") return { body: { stripe_user_id: accountId, livemode, scope: "read_write" } };
+      if (call.url === "https://connect.stripe.com/oauth/deauthorize") return { body: { stripe_user_id: accountId } };
+      if (call.url === "https://api.stripe.com/v1/account") {
+        return { body: { id: accountId, default_currency: "usd", business_profile: { name: "Route Co" } } };
+      }
+      return { status: 404, body: { error: { message: "unexpected" } } };
+    });
+  }
+
+  it("connects a Stripe account with one approval, storing no key of the merchant's", async () => {
+    const res = await fetchApi("/api/payment-accounts/oauth/stripe/start", {
+      method: "POST",
+      headers: cookieJson(a),
+      body: JSON.stringify({ returnTo: returnTo() }),
+    });
+    const consent = new URL(((await res.json()) as { url: string }).url);
+    expect(`${consent.origin}${consent.pathname}`).toBe("https://connect.stripe.com/oauth/authorize");
+    expect(Object.fromEntries(consent.searchParams)).toMatchObject({
+      response_type: "code",
+      client_id: "ca_test_client",
+      scope: "read_write",
+      redirect_uri: "http://localhost/api/payment-accounts/oauth/stripe/callback",
+    });
+
+    stripeConnectEndpoints("acct_route");
+    expect(outcome(await callback(consent.searchParams.get("state")!, a, "stripe"))).toMatchObject({ payments: "connected", base: returnTo() });
+    expect(calls[0]!.headers.get("authorization")).toBe("Bearer sk_test_platform1234567890");
+    expect(new URLSearchParams(calls[0]!.body).get("code")).toBe("authcode");
+    // Described on the merchant's account, with the platform's key.
+    expect(calls[1]!.headers.get("stripe-account")).toBe("acct_route");
+
+    const row = await env.DB.prepare(`SELECT id FROM payment_accounts WHERE organization_id = ? AND provider_account_id = 'acct_route'`)
+      .bind(a.orgId)
+      .first<{ id: string }>();
+    const account = (await loadAccountById(E, row!.id))!;
+    expect(account).toMatchObject({ provider: "stripe", credentialKind: "connect", environment: "test", displayLabel: "Route Co" });
+    expect(await openCredentials(E, account)).toEqual({ kind: "connect", accountId: "acct_route" });
+
+    const list = await fetchApi("/api/payment-accounts", { headers: { cookie: a.cookie } });
+    const text = await list.text();
+    expect(text).not.toContain("sk_test_platform");
+    expect(text).not.toContain("credentials");
+    const body = JSON.parse(text) as { accounts: { id: string }[]; enabled: boolean; providers: Record<string, { configured: boolean }> };
+    expect(body.enabled).toBe(true);
+    expect(body.providers).toEqual({ cashfree: { configured: true }, razorpay: { configured: true }, stripe: { configured: true } });
+    expect(body.accounts.map((x) => x.id)).toContain(account.id);
+
+    // Connecting it again keeps the row; forms and past payments point at its id.
+    stripeConnectEndpoints("acct_route");
+    expect(outcome(await callback(await start(a, "stripe"), a, "stripe")).payments).toBe("connected");
+    const rows = await env.DB.prepare(`SELECT id FROM payment_accounts WHERE provider_account_id = 'acct_route'`).all<{ id: string }>();
+    expect(rows.results.map((r) => r.id)).toEqual([account.id]);
+
+    // The same Stripe account from another organization is refused.
+    stripeConnectEndpoints("acct_route");
+    expect(outcome(await callback(await start(b, "stripe"), b, "stripe")).reason).toBe("connected_elsewhere");
+
+    // Disconnecting removes chatform from the account at Stripe.
+    stripeConnectEndpoints("acct_route");
+    const gone = await fetchApi(`/api/payment-accounts/${account.id}`, { method: "DELETE", headers: { cookie: a.cookie } });
+    expect(gone.status).toBe(200);
+    const deauth = calls.find((c) => c.url === "https://connect.stripe.com/oauth/deauthorize")!;
+    expect(Object.fromEntries(new URLSearchParams(deauth.body))).toEqual({ client_id: "ca_test_client", stripe_user_id: "acct_route" });
+    expect((await loadAccountById(E, account.id))!.credentialsEnc).toBe("");
+  });
+
+  it("refuses a live Stripe account approved against a test platform key", async () => {
+    stripeConnectEndpoints("acct_live_one", true);
+    expect(outcome(await callback(await start(a, "stripe"), a, "stripe")).reason).toBe("mode_mismatch");
+    expect(await env.DB.prepare(`SELECT id FROM payment_accounts WHERE provider_account_id = 'acct_live_one'`).first()).toBeNull();
+  });
+
+  it("does not offer Stripe until the platform key, client id and webhook secret are all set", async () => {
+    setEnv({ STRIPE_CONNECT_WEBHOOK_SECRET: "" });
+    try {
+      const res = await fetchApi("/api/payment-accounts/oauth/stripe/start", {
+        method: "POST",
+        headers: cookieJson(a),
+        body: JSON.stringify({ returnTo: returnTo() }),
+      });
+      expect(res.status).toBe(503);
+      const listed = (await (await fetchApi("/api/payment-accounts", { headers: { cookie: a.cookie } })).json()) as {
+        providers: Record<string, { configured: boolean }>;
+      };
+      expect(listed.providers.stripe).toEqual({ configured: false });
+    } finally {
+      setEnv({ STRIPE_CONNECT_WEBHOOK_SECRET: "whsec_test_connect" });
+    }
+  });
+
   it("refuses a provider that does not match the state", async () => {
     const state = await start(a, "razorpay");
     expect(outcome(await callback(state, a, "cashfree")).reason).toBe("provider_mismatch");
@@ -550,15 +558,6 @@ describe("/v1 parity", () => {
     const dash = await fetchApi("/api/payment-accounts", { headers: { cookie: a.cookie } });
     expect(await v1.json()).toEqual(await dash.json());
 
-    mockFetch(() => ({ body: {} }));
-    const sk = await fetchApi("/v1/payment-accounts/stripe", {
-      method: "POST",
-      headers: { "x-api-key": key.raw, "content-type": "application/json" },
-      body: JSON.stringify({ restrictedKey: "sk_test_51Habcdefghijklmnop" }),
-    });
-    expect(sk.status).toBe(422);
-    expect(((await sk.json()) as { error: { code: string } }).error.code).toBe("full_secret_key");
-
     const theirs = await cashfreeAccount(b.orgId, "cfm_v1_theirs");
     const cross = await fetchApi(`/v1/payment-accounts/${theirs.id}`, { method: "DELETE", headers: { "x-api-key": key.raw } });
     expect(cross.status).toBe(404);
@@ -570,10 +569,10 @@ describe("/v1 parity", () => {
     expect(await res.json()).toMatchObject({ error: { code: "insufficient_scope", required: "payment:read" } });
 
     const readOnly = await seedKey(a, "payv1ro", { scopes: { payment: ["read"] } });
-    const write = await fetchApi("/v1/payment-accounts/stripe", {
+    const write = await fetchApi("/v1/payment-accounts/oauth/stripe/start", {
       method: "POST",
       headers: { "x-api-key": readOnly.raw, "content-type": "application/json" },
-      body: JSON.stringify({ restrictedKey: "rk_test_whatever1234567" }),
+      body: JSON.stringify({ returnTo: `${webOrigins(E)[0]}/forms/frm_x/integrate` }),
     });
     expect(write.status).toBe(403);
   });
@@ -593,18 +592,14 @@ describe("cleanup", () => {
 
   it("revokes the gateway side when an account's workspace is deleted, and the rows go with it", async () => {
     const t = await seedTenant("payacc_del");
-    const stripe = await saveStripeKeyAccount(E, {
-      id: "pac_delete_me",
+    const stripe = await saveStripeConnectAccount(E, {
       orgId: t.orgId,
       userId: t.userId,
-      key: "rk_test_deleteMe1234567",
       description: { providerAccountId: "acct_delete_me", label: "Delete me", currencies: ["USD"], environment: "test" },
-      webhookId: "we_delete_me",
-      webhookSecret: "whsec_delete_me",
     });
     await insertPayment(t, stripe.id, "rpay_delete_me");
 
-    mockFetch(() => ({ body: { id: "we_delete_me", deleted: true } }));
+    mockFetch(() => ({ body: { stripe_user_id: "acct_delete_me" } }));
     const res = await fetchApi("/api/auth/account/delete", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: t.cookie, origin: "http://localhost:3000" },
@@ -612,14 +607,13 @@ describe("cleanup", () => {
     });
     expect(res.ok).toBe(true);
     // Revoked when the account is purged, thirty days on, not when it is scheduled.
-    expect(calls.find((c) => c.method === "DELETE")).toBeUndefined();
+    expect(calls.find((c) => c.url.endsWith("/oauth/deauthorize"))).toBeUndefined();
     await env.DB.prepare(`UPDATE users SET deleted_at = ? WHERE id = ?`).bind(Date.now() - 31 * 86_400_000, t.userId).run();
     const { purgeDeletedAccounts } = await import("../src/lib/account-deletion.js");
     await purgeDeletedAccounts(E);
 
-    const deleted = calls.find((c) => c.method === "DELETE");
-    expect(deleted?.url).toBe("https://api.stripe.com/v1/webhook_endpoints/we_delete_me");
-    expect(deleted?.headers.get("authorization")).toBe("Bearer rk_test_deleteMe1234567");
+    const deauth = calls.find((c) => c.url === "https://connect.stripe.com/oauth/deauthorize");
+    expect(new URLSearchParams(deauth?.body).get("stripe_user_id")).toBe("acct_delete_me");
     expect(await loadAccountById(E, stripe.id)).toBeNull();
     expect(await env.DB.prepare(`SELECT id FROM respondent_payments WHERE id = 'rpay_delete_me'`).first()).toBeNull();
   });

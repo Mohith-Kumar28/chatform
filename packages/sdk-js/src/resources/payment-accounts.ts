@@ -6,8 +6,8 @@ import type { PaymentAccount, PaymentAccounts } from "../types/index.js";
  * The organization's own payment gateways: Stripe, Razorpay or Cashfree.
  *
  * Payments go straight to the account connected here; Chatform never holds the
- * money. Razorpay and Cashfree connect through the provider's own consent page,
- * so `startOAuth()` returns a URL to send a person to, not a finished account.
+ * money. Every gateway connects through its own consent page, so `startOAuth()`
+ * returns a URL to send a person to, not a finished account.
  */
 export class PaymentAccountsResource {
   constructor(private readonly http: HttpClient) {}
@@ -17,14 +17,9 @@ export class PaymentAccountsResource {
     return this.http.get<PaymentAccounts>("/v1/payment-accounts", undefined, request);
   }
 
-  /** Connect Stripe with a restricted key. The key is stored encrypted and never returned. */
-  connectStripe(input: Body<"/v1/payment-accounts/stripe", "post">, request?: RequestOptions) {
-    return this.http.post<Res<"/v1/payment-accounts/stripe", "post">>("/v1/payment-accounts/stripe", input, request);
-  }
-
   /** The provider's consent page, for a person to open. The account appears once they approve. */
   startOAuth(
-    provider: "razorpay" | "cashfree",
+    provider: "stripe" | "razorpay" | "cashfree",
     input: Body<"/v1/payment-accounts/oauth/{provider}/start", "post">,
     request?: RequestOptions,
   ) {

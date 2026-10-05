@@ -4,10 +4,11 @@ import type { Bindings } from "../src/env.js";
 import {
   createStripeAdapter,
   encodeStripeForm,
-  setupStripeRestrictedKey,
   StripeApiError,
-  StripeSetupError,
-  STRIPE_WEBHOOK_EVENTS,
+  stripeAuthorizeUrl,
+  stripeDeauthorize,
+  stripeExchangeCode,
+  stripeMode,
   stripeSessionStatus,
   toStripeAmount,
 } from "../src/lib/payments/stripe.js";
@@ -68,6 +69,8 @@ const request = (over: Partial<CheckoutRequest> = {}): CheckoutRequest => ({
   ...over,
 });
 
+const MERCHANT = { platformKey: "sk_test_platform", accountId: "acct_merchant" };
+
 describe("Stripe", () => {
   it("form-encodes nested params the way Stripe expects", () => {
     const encoded = encodeStripeForm({
@@ -89,9 +92,9 @@ describe("Stripe", () => {
     ]);
   });
 
-  it("creates a Checkout Session with the record tied in, on a restricted key", async () => {
+  it("creates a Checkout Session on the merchant's account, with the record tied in", async () => {
     mockFetch(() => ({ body: { id: "cs_test_1", url: "https://checkout.stripe.com/c/pay/cs_test_1" } }));
-    const adapter = createStripeAdapter({ kind: "restricted_key", key: "rk_test_abc123456789" }, "test");
+    const adapter = createStripeAdapter(MERCHANT, "test");
     const before = Math.floor(Date.now() / 1000);
     const result = await adapter.createCheckout(request({ currency: "USD", amountMinor: 1999, expiresAt: Date.now() + 60_000 }));
 
@@ -102,8 +105,9 @@ describe("Stripe", () => {
     const [call] = calls;
     expect(call!.url).toBe("https://api.stripe.com/v1/checkout/sessions");
     expect(call!.method).toBe("POST");
-    expect(call!.headers.get("authorization")).toBe("Bearer rk_test_abc123456789");
-    expect(call!.headers.get("stripe-account")).toBeNull();
+    // A direct charge: the platform's key, on the merchant's account.
+    expect(call!.headers.get("authorization")).toBe("Bearer sk_test_platform");
+    expect(call!.headers.get("stripe-account")).toBe("acct_merchant");
     expect(call!.headers.get("idempotency-key")).toBe("idem-rpay_test0001-1");
     expect(call!.headers.get("content-type")).toBe("application/x-www-form-urlencoded");
     expect(call!.headers.get("stripe-version")).toBeTruthy();
@@ -136,7 +140,7 @@ describe("Stripe", () => {
     expect(toStripeAmount(500, "JPY")).toBe(500);
 
     mockFetch(() => ({ body: { id: "cs_isk", url: "https://checkout.stripe.com/c/pay/cs_isk" } }));
-    const adapter = createStripeAdapter({ kind: "restricted_key", key: "rk_test_abc123456789" }, "test");
+    const adapter = createStripeAdapter(MERCHANT, "test");
     await adapter.createCheckout(request({ currency: "ISK", amountMinor: 5000 }));
     expect(new URLSearchParams(calls[0]!.body).get("line_items[0][price_data][unit_amount]")).toBe("500000");
     // The confirmation is compared against the record in ISO units, so it has to come back in them.
@@ -148,9 +152,9 @@ describe("Stripe", () => {
     });
   });
 
-  it("sends Stripe-Account with the platform key for the Connect variant", async () => {
+  it("describes the connected account", async () => {
     mockFetch(() => ({ body: { id: "acct_merchant", default_currency: "eur", settings: { dashboard: { display_name: "Merchant" } } } }));
-    const adapter = createStripeAdapter({ kind: "connect", platformKey: "sk_live_platform", accountId: "acct_merchant" }, "live");
+    const adapter = createStripeAdapter({ platformKey: "sk_live_platform", accountId: "acct_merchant" }, "live");
     const description = await adapter.describeAccount();
     expect(description).toEqual({ providerAccountId: "acct_merchant", label: "Merchant", currencies: ["EUR"], environment: "live" });
     expect(calls[0]!.url).toBe("https://api.stripe.com/v1/account");
@@ -168,7 +172,7 @@ describe("Stripe", () => {
     ];
     for (const [session, expected] of cases) {
       mockFetch(() => ({ body: { id: "cs_1", amount_total: 1999, currency: "usd", ...session } }));
-      const status = await createStripeAdapter({ kind: "restricted_key", key: "rk_test_x1234567890" }, "test").fetchStatus("cs_1");
+      const status = await createStripeAdapter(MERCHANT, "test").fetchStatus("cs_1");
       expect(status.status, expected).toBe(expected);
       expect(status.amountMinor).toBe(1999);
       expect(status.currency).toBe("USD");
@@ -177,79 +181,58 @@ describe("Stripe", () => {
     }
   });
 
-  it("classifies Stripe errors and names a missing restricted-key permission", async () => {
-    mockFetch(() => ({ status: 401, body: { error: { type: "invalid_request_error", message: "Invalid API Key provided: rk_test_***" } } }));
-    const adapter = createStripeAdapter({ kind: "restricted_key", key: "rk_test_x1234567890" }, "test");
-    await expect(adapter.fetchStatus("cs_1")).rejects.toMatchObject({ code: "unauthorized", httpStatus: 401 });
+  it("tells a lost account apart from a bad platform key", async () => {
+    const adapter = createStripeAdapter(MERCHANT, "test");
+    // Ours, and every merchant's at once: never a reason to flag one of them.
+    mockFetch(() => ({ status: 401, body: { error: { type: "invalid_request_error", message: "Invalid API Key provided: sk_test_***" } } }));
+    await expect(adapter.fetchStatus("cs_1")).rejects.toMatchObject({ code: "upstream", httpStatus: 401 });
 
     mockFetch(() => ({
       status: 403,
-      body: {
-        error: {
-          type: "invalid_request_error",
-          message:
-            "The provided key 'rk_test_***' does not have the required permissions for this endpoint on account 'acct_1'. Having the 'rak_checkout_session_write' permission would allow this request to continue.",
-        },
-      },
+      body: { error: { type: "invalid_request_error", code: "account_invalid", message: "The provided key 'sk_test_***' does not have access to account 'acct_merchant'" } },
     }));
     const err = await adapter.createCheckout(request({ currency: "USD" })).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(StripeApiError);
-    expect((err as StripeApiError).permission).toBe("rak_checkout_session_write");
+    expect(err).toMatchObject({ code: "invalid_grant", stripeCode: "account_invalid" });
   });
 
-  describe("setupStripeRestrictedKey", () => {
-    it("refuses a full secret key before calling Stripe", async () => {
-      mockFetch(() => ({ body: {} }));
-      const err = await setupStripeRestrictedKey("sk_live_51Habcdefghijk", "https://x").catch((e: unknown) => e);
-      expect(err).toBeInstanceOf(StripeSetupError);
-      expect((err as StripeSetupError).code).toBe("full_secret_key");
-      expect((await setupStripeRestrictedKey("pk_live_nope", "https://x").catch((e: StripeSetupError) => e)).code).toBe("invalid_key");
-      expect(calls).toHaveLength(0);
+  describe("Connect OAuth", () => {
+    const E = { STRIPE_PLATFORM_SECRET_KEY: "sk_live_platform", STRIPE_CONNECT_CLIENT_ID: "ca_live_client", STRIPE_CONNECT_WEBHOOK_SECRET: "whsec_x" };
+
+    it("reads the mode off the platform key", () => {
+      expect(stripeMode(E)).toBe("live");
+      expect(stripeMode({ ...E, STRIPE_PLATFORM_SECRET_KEY: "sk_test_platform" })).toBe("test");
+      expect(stripeMode({})).toBe("test");
     });
 
-    it("reads the account, proves checkout works, and subscribes the endpoint", async () => {
-      mockFetch((call) => {
-        if (call.url.endsWith("/v1/account")) return { body: { id: "acct_42", default_currency: "usd", business_profile: { name: "Acme" } } };
-        if (call.url.endsWith("/v1/checkout/sessions")) return { body: { id: "cs_probe", url: "https://checkout" } };
-        if (call.url.endsWith("/v1/checkout/sessions/cs_probe/expire")) return { body: { id: "cs_probe", status: "expired" } };
-        if (call.url.endsWith("/v1/webhook_endpoints")) return { body: { id: "we_1", secret: "whsec_abc" } };
-        return { status: 404, body: { error: { message: "no" } } };
+    it("builds the consent URL", () => {
+      const url = new URL(stripeAuthorizeUrl(E, "nonce.mac", "https://api.example/cb"));
+      expect(`${url.origin}${url.pathname}`).toBe("https://connect.stripe.com/oauth/authorize");
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        response_type: "code",
+        client_id: "ca_live_client",
+        scope: "read_write",
+        redirect_uri: "https://api.example/cb",
+        state: "nonce.mac",
       });
-      let seen = "";
-      const result = await setupStripeRestrictedKey("rk_live_abcdefghijklmnop", (d) => {
-        seen = d.providerAccountId;
-        return `https://api.example/p/payments/webhooks/stripe/pac_${d.providerAccountId}`;
-      });
-      expect(seen).toBe("acct_42");
-      expect(result).toMatchObject({
-        webhookId: "we_1",
-        webhookSecret: "whsec_abc",
-        description: { providerAccountId: "acct_42", label: "Acme", environment: "live", currencies: ["USD"] },
-      });
-      expect(calls.map((c) => `${c.method} ${new URL(c.url).pathname}`)).toEqual([
-        "GET /v1/account",
-        "POST /v1/checkout/sessions",
-        "POST /v1/checkout/sessions/cs_probe/expire",
-        "POST /v1/webhook_endpoints",
-      ]);
-      const hook = new URLSearchParams(calls[3]!.body);
-      expect(hook.get("url")).toBe("https://api.example/p/payments/webhooks/stripe/pac_acct_42");
-      expect(hook.getAll("enabled_events[0]")).toEqual([STRIPE_WEBHOOK_EVENTS[0]]);
-      expect([...hook.keys()].filter((k) => k.startsWith("enabled_events"))).toHaveLength(STRIPE_WEBHOOK_EVENTS.length);
     });
 
-    it("says which permission is missing", async () => {
-      mockFetch((call) => {
-        if (call.url.endsWith("/v1/account")) return { body: { id: "acct_42", default_currency: "usd" } };
-        if (call.url.includes("/v1/checkout/sessions")) return { body: { id: "cs_probe" } };
-        return {
-          status: 403,
-          body: { error: { message: "The provided key 'rk_live_***' … Having the 'rak_webhook_write' permission would allow this request to continue." } },
-        };
-      });
-      const err = (await setupStripeRestrictedKey("rk_live_abcdefghijklmnop", "https://x").catch((e: unknown) => e)) as StripeSetupError;
-      expect(err.code).toBe("missing_permission");
-      expect(err.permission).toBe("rak_webhook_write");
+    it("exchanges the code for the account id and keeps no token", async () => {
+      mockFetch(() => ({ body: { stripe_user_id: "acct_42", livemode: true, access_token: "sk_live_theirs", refresh_token: "rt_x" } }));
+      expect(await stripeExchangeCode(E, "ac_123")).toEqual({ accountId: "acct_42", livemode: true });
+      expect(calls[0]!.url).toBe("https://connect.stripe.com/oauth/token");
+      expect(calls[0]!.headers.get("authorization")).toBe("Bearer sk_live_platform");
+      expect(Object.fromEntries(new URLSearchParams(calls[0]!.body))).toEqual({ grant_type: "authorization_code", code: "ac_123" });
+
+      mockFetch(() => ({ status: 400, body: { error: "invalid_grant", error_description: "Authorization code expired" } }));
+      await expect(stripeExchangeCode(E, "ac_old")).rejects.toMatchObject({ code: "invalid_grant" });
+    });
+
+    it("treats an account already removed as deauthorized, and an outage as a failure", async () => {
+      mockFetch(() => ({ status: 401, body: { error: "invalid_client", error_description: "This application is not connected to stripe account acct_42" } }));
+      await expect(stripeDeauthorize(E, "acct_42")).resolves.toBeUndefined();
+      mockFetch(() => ({ status: 503, body: {} }));
+      await expect(stripeDeauthorize(E, "acct_42")).rejects.toMatchObject({ code: "upstream" });
     });
   });
 });

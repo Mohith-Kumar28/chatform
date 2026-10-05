@@ -12,14 +12,12 @@ import {
   OAuthStartBody,
   PublicAccountSchema,
   RenameAccountBody,
-  StripeKeyBody,
   connectGate,
   handleCashfreeOnboard,
   handleDisconnect,
   handleList,
   handleOAuthStart,
   handleRename,
-  handleStripeConnect,
 } from "../payment-accounts.js";
 
 /**
@@ -66,7 +64,7 @@ paymentAccountsV1Router.post(
   validator("json", OAuthStartBody),
   describeRoute({
     tags: ["v1"],
-    summary: "Start connecting a Cashfree or Razorpay account",
+    summary: "Start connecting a Cashfree, Razorpay or Stripe account",
     description:
       "Returns the gateway's consent URL. It must be opened in a browser signed in to chatform as the user who created this key; the state is single-use and expires in ten minutes. `returnTo` must be a page on the chatform app.",
     responses: {
@@ -80,29 +78,6 @@ paymentAccountsV1Router.post(
     const refused = await connectGate(c, "v1.payments.connect");
     if (refused) return refused;
     return handleOAuthStart(c, c.req.param("provider"), c.req.valid("json").returnTo);
-  },
-);
-
-paymentAccountsV1Router.post(
-  "/payment-accounts/stripe",
-  requireScope("payment", "write"),
-  validator("json", StripeKeyBody),
-  describeRoute({
-    tags: ["v1"],
-    summary: "Connect a Stripe account with a restricted key",
-    description:
-      "Accepts only a restricted key (`rk_test_…` or `rk_live_…`); a full `sk_` secret key is refused with `full_secret_key`. The key is checked by reading the account, creating and immediately expiring a Checkout Session, and creating a webhook endpoint — a missing permission comes back as `missing_permission` with the permission named.",
-    responses: {
-      200: { description: "Connected", content: json(z.object({ account: PublicAccountSchema })) },
-      402: { description: "Plan does not include collecting payments", content: errorContent },
-      409: { description: "The Stripe account is connected to another organization", content: errorContent },
-      422: { description: "full_secret_key, invalid_key or missing_permission", content: errorContent },
-    },
-  }),
-  async (c) => {
-    const refused = await connectGate(c, "v1.payments.connect");
-    if (refused) return refused;
-    return handleStripeConnect(c, c.req.valid("json").restrictedKey);
   },
 );
 
@@ -153,7 +128,7 @@ paymentAccountsV1Router.delete(
     tags: ["v1"],
     summary: "Disconnect a payment account",
     description:
-      "Revokes the grant (Cashfree, Razorpay) or deletes the webhook endpoint (Stripe) at the gateway, then wipes the stored credentials. Forms still pointing at the account stop accepting payments until another account is chosen.",
+      "Revokes chatform's access at the gateway, then wipes the stored credentials. Forms still pointing at the account stop accepting payments until another account is chosen.",
     responses: {
       200: { description: "Disconnected", content: json(z.object({ ok: z.literal(true) })) },
       404: { description: "Not found", content: errorContent },

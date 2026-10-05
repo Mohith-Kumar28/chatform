@@ -548,7 +548,7 @@ export async function confirmPaymentRecord(env: Bindings, recordId: string): Pro
  * Ask the gateway, with the credential of whoever holds that merchant account now.
  *
  * Normally that is the account the record was created on. It is not when the admin has
- * disconnected and reconnected the same gateway account in between — a rotated Stripe key, a
+ * disconnected and reconnected the same gateway account in between — a Stripe account, a
  * re-authorised Razorpay grant — because a reconnect writes a new row and the record still
  * points at the wiped one. The money is on the same merchant account either way, so the live
  * row's credential can ask about it; without this the payment was unverifiable for ever and the
@@ -1064,26 +1064,6 @@ async function notifyRefunded(env: Bindings, record: RespondentPaymentRow): Prom
   }
 }
 
-/**
- * Whether two account rows are the same gateway account in the same organization — one
- * disconnected and reconnected, rather than two different merchants.
- */
-async function sameMerchantAccount(env: Bindings, recordAccountId: string, routeAccountId: string): Promise<boolean> {
-  const [mine, theirs] = await Promise.all([
-    loadAccountById(env, recordAccountId),
-    loadAccountById(env, routeAccountId),
-  ]);
-  return Boolean(
-    mine &&
-      theirs &&
-      mine.providerAccountId &&
-      mine.organizationId === theirs.organizationId &&
-      mine.provider === theirs.provider &&
-      mine.environment === theirs.environment &&
-      mine.providerAccountId === theirs.providerAccountId,
-  );
-}
-
 /** Tell a live session its attempt failed, so the card offers a retry. Best-effort. */
 async function notifyFailed(env: Bindings, record: RespondentPaymentRow, code?: string): Promise<void> {
   try {
@@ -1199,11 +1179,6 @@ export async function confirmPaymentForSession(
 
 // ─────────────────────────── webhooks ───────────────────────────
 
-export interface WebhookContext {
-  /** Set by the Stripe per-account route: an event must belong to this account. */
-  accountId?: string;
-}
-
 export interface WebhookSummary {
   processed: number;
   duplicates: number;
@@ -1228,7 +1203,6 @@ export async function applyWebhookEvents(
   env: Bindings,
   provider: PaymentProvider,
   events: WebhookEvent[],
-  ctx: WebhookContext = {},
 ): Promise<WebhookSummary> {
   const summary: WebhookSummary = { processed: 0, duplicates: 0, ignored: 0, failed: 0 };
 
@@ -1257,7 +1231,7 @@ export async function applyWebhookEvents(
     }
 
     try {
-      const outcome = await processEvent(env, provider, event, ctx);
+      const outcome = await processEvent(env, provider, event);
       const ignored = outcome.startsWith("ignored");
       await markWebhookEvent(env, provider, eventId, ignored ? "ignored" : "processed", outcome);
       if (ignored) summary.ignored += 1;
@@ -1301,7 +1275,6 @@ async function processEvent(
   env: Bindings,
   provider: PaymentProvider,
   event: WebhookEvent,
-  ctx: WebhookContext,
 ): Promise<string> {
   if (event.type === "ignored") return "ignored: event type";
 
@@ -1330,24 +1303,8 @@ async function processEvent(
   if (!record && event.providerOrderId) record = await loadRecordByOrder(env, provider, event.providerOrderId);
   if (!record) return "ignored: no matching record";
 
-  if (ctx.accountId && record.paymentAccountId !== ctx.accountId) {
-    /*
-     * Unless it is the same merchant, reconnected. A Stripe endpoint belongs to one account row,
-     * and disconnecting and reconnecting the same Stripe account (rotating the restricted key)
-     * makes a new row with a new endpoint — after which the gateway has only the new endpoint to
-     * deliver an old checkout's event to. Refusing it there lost the payment for good. Both rows
-     * must be the same merchant in the same organization, which is what makes them the same
-     * account rather than merely two accounts one person connected.
-     */
-    if (!(await sameMerchantAccount(env, record.paymentAccountId, ctx.accountId))) {
-      console.warn("payment_webhook_account_mismatch", { recordId: record.id, provider, route: ctx.accountId });
-      return "ignored: record belongs to another account";
-    }
-    console.log("payment_webhook_reconnected_account", { recordId: record.id, provider, route: ctx.accountId });
-  }
-
   /*
-   * A partner- or app-level webhook carries every connected merchant's events
+   * A partner-, app- or platform-level webhook carries every connected merchant's events
    * through one endpoint and one secret, so the signature proves the gateway
    * sent it and nothing about *which merchant* it concerns. The merchant id on
    * the event has to be the one on the account this record was created on.

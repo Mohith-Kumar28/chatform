@@ -22,14 +22,12 @@ import {
  * **The organization is always in the query.** `loadAccountForOrg` is what every route uses, and
  * it asks for the id AND the organization in one statement, so another tenant's account id is
  * indistinguishable from one that does not exist. `loadAccountById` exists only for the paths
- * that have no organization to check against yet — a Stripe webhook addressed to an account, the
- * token sweep — and each of those authenticates by other means first.
+ * that have no organization to check against yet — a verified webhook naming a record's account,
+ * the token sweep — and each of those authenticates by other means first.
  *
  * **Credentials are opened here and nowhere else.** Sealed with `secret-box` using the row id as
- * the associated data, so a sealed blob copied onto another row does not open. The webhook secret
- * is sealed under `<id>#webhook`, so the two columns of one row cannot be swapped for each other
- * either. Nothing returned to a route carries either column in the clear, and nothing here logs
- * them.
+ * the associated data, so a sealed blob copied onto another row does not open. Nothing returned to
+ * a route carries them in the clear, and nothing here logs them.
  */
 
 export const REFRESH_SKEW_MS = 5 * 60 * 1000;
@@ -288,12 +286,6 @@ export async function openCredentials(env: Bindings, account: PaymentAccountRow)
   return JSON.parse(await open(env, account.credentialsEnc, account.id)) as StoredCredentials;
 }
 
-/** The per-account webhook signing secret (Stripe), or null where the gateway signs with a platform secret. */
-export async function openWebhookSecret(env: Bindings, account: PaymentAccountRow): Promise<string | null> {
-  if (!account.webhookSecretEnc) return null;
-  return open(env, account.webhookSecretEnc, `${account.id}#webhook`);
-}
-
 // ─────────────────────────────── errors ───────────────────────────────
 
 /** The account cannot be used until someone reconnects it, or at all. */
@@ -326,7 +318,7 @@ function isUniqueViolation(err: unknown): boolean {
 const RECONNECT_MESSAGE: Record<PaymentProvider, string> = {
   cashfree: "Cashfree no longer accepts chatform's access. Reconnect the account.",
   razorpay: "Razorpay no longer accepts chatform's access. Reconnect the account.",
-  stripe: "Stripe no longer accepts this key. It may have been deleted or rolled — paste a new one.",
+  stripe: "Chatform was removed from this Stripe account. Reconnect the account.",
 };
 
 export async function markAccountStatus(
@@ -376,42 +368,35 @@ export async function saveOAuthAccount(env: Bindings, input: SaveOAuthAccountInp
     creds,
     accessExpiresAt: tokens.accessExpiresAt,
     refreshExpiresAt: tokens.refreshExpiresAt,
-    webhookSecret: null,
-    providerWebhookId: null,
     capabilities: input.capabilities ?? {},
   });
 }
 
-export interface SaveStripeKeyAccountInput {
-  /** Chosen before the webhook endpoint was created, because its URL carries it. */
-  id: string;
-  orgId: string;
-  userId: string | null;
-  key: string;
-  description: AccountDescription;
-  webhookId: string;
-  webhookSecret: string;
-}
-
-export async function saveStripeKeyAccount(env: Bindings, input: SaveStripeKeyAccountInput): Promise<PaymentAccountRow> {
+/**
+ * Store a Stripe account connected through Connect.
+ *
+ * There is no token to keep: the platform key is the worker's own, so the sealed credential is
+ * only the account id. It is still sealed, so the column means one thing for every gateway.
+ */
+export async function saveStripeConnectAccount(
+  env: Bindings,
+  input: { orgId: string; userId: string | null; description: AccountDescription },
+): Promise<PaymentAccountRow> {
   return upsertAccount(env, {
-    id: input.id,
     orgId: input.orgId,
     userId: input.userId,
     provider: "stripe",
-    credentialKind: "restricted_key",
+    credentialKind: "connect",
     description: input.description,
-    creds: { kind: "restricted_key", key: input.key },
+    creds: { kind: "connect", accountId: input.description.providerAccountId },
     accessExpiresAt: null,
     refreshExpiresAt: null,
-    webhookSecret: input.webhookSecret,
-    providerWebhookId: input.webhookId,
+    // Stripe charges in 135+ currencies from any account, whatever its default is.
     capabilities: { anyCurrency: true },
   });
 }
 
 interface UpsertInput {
-  id?: string;
   orgId: string;
   userId: string | null;
   provider: PaymentProvider;
@@ -420,8 +405,6 @@ interface UpsertInput {
   creds: StoredCredentials;
   accessExpiresAt: number | null;
   refreshExpiresAt: number | null;
-  webhookSecret: string | null;
-  providerWebhookId: string | null;
   capabilities: Record<string, unknown>;
 }
 
@@ -430,10 +413,9 @@ async function upsertAccount(env: Bindings, input: UpsertInput, attempt = 0): Pr
   const existing = await findConnectedByProviderAccount(env, input.provider, description.environment, description.providerAccountId);
   if (existing && existing.organizationId !== input.orgId) throw new AccountConflictError();
 
-  const id = existing?.id ?? input.id ?? newPaymentAccountId();
+  const id = existing?.id ?? newPaymentAccountId();
   const now = Date.now();
   const credentialsEnc = await seal(env, JSON.stringify(input.creds), id);
-  const webhookSecretEnc = input.webhookSecret ? await seal(env, input.webhookSecret, `${id}#webhook`) : null;
   const currencies = JSON.stringify(description.currencies.map((c) => c.toUpperCase()));
   const capabilities = JSON.stringify(input.capabilities);
   const label = description.label.slice(0, 200);
@@ -442,7 +424,7 @@ async function upsertAccount(env: Bindings, input: UpsertInput, attempt = 0): Pr
     await env.DB.prepare(
       `UPDATE payment_accounts
           SET credential_kind = ?, credentials_enc = ?, access_expires_at = ?, refresh_expires_at = ?,
-              refresh_lock_until = NULL, webhook_secret_enc = ?, provider_webhook_id = ?, status = 'active', last_error = NULL,
+              refresh_lock_until = NULL, status = 'active', last_error = NULL,
               currencies_json = ?, capabilities_json = ?, connected_by_user_id = ?, updated_at = ?
         WHERE id = ? AND organization_id = ?`,
     )
@@ -452,8 +434,6 @@ async function upsertAccount(env: Bindings, input: UpsertInput, attempt = 0): Pr
         credentialsEnc,
         input.accessExpiresAt,
         input.refreshExpiresAt,
-        webhookSecretEnc,
-        input.providerWebhookId,
         currencies,
         capabilities,
         input.userId,
@@ -467,9 +447,9 @@ async function upsertAccount(env: Bindings, input: UpsertInput, attempt = 0): Pr
       await env.DB.prepare(
         `INSERT INTO payment_accounts
            (id, organization_id, provider, credential_kind, environment, provider_account_id, display_label,
-            credentials_enc, access_expires_at, refresh_expires_at, webhook_secret_enc, provider_webhook_id,
+            credentials_enc, access_expires_at, refresh_expires_at,
             status, currencies_json, capabilities_json, connected_by_user_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
       )
         .bind(
           id,
@@ -482,8 +462,6 @@ async function upsertAccount(env: Bindings, input: UpsertInput, attempt = 0): Pr
           credentialsEnc,
           input.accessExpiresAt,
           input.refreshExpiresAt,
-          webhookSecretEnc,
-          input.providerWebhookId,
           currencies,
           capabilities,
           input.userId,
@@ -507,7 +485,7 @@ async function upsertAccount(env: Bindings, input: UpsertInput, attempt = 0): Pr
 /**
  * Disconnect: undo the grant at the gateway, then wipe what we held.
  *
- * The row stays, `disconnected`, with its credentials and webhook secret emptied — past payments
+ * The row stays, `disconnected`, with its credentials emptied — past payments
  * point at it, and the foreign key forbids deleting it while they do. The gateway side is best
  * effort: an admin asking to disconnect must not be told no because Razorpay is slow, and once the
  * sealed token is gone we could not use it anyway.
@@ -534,7 +512,7 @@ export async function disconnectAccount(env: Bindings, account: PaymentAccountRo
  * Revoke every connection an organization holds, ahead of the organization being deleted.
  *
  * The rows themselves go with the organization's cascade; this is only the gateway side, so a
- * deleted workspace does not leave a live Razorpay grant or a Stripe endpoint behind. Best effort
+ * deleted workspace does not leave a live Razorpay grant or Stripe connection behind. Best effort
  * for the same reason as `disconnectAccount`.
  */
 export async function revokeOrganizationPaymentAccounts(env: Bindings, orgId: string): Promise<void> {
@@ -708,8 +686,8 @@ async function refreshUnderLease(
  * Refreshes a token about to expire first. If the gateway still answers `unauthorized` — a token
  * revoked early, a clock that disagrees about expiry — the token is refreshed once more and `fn`
  * runs one more time; a second refusal, or a refresh answered `invalid_grant`, marks the account
- * `needs_reconnect`, which is the banner the builder shows. A restricted key has nothing to
- * refresh, so a refusal there goes straight to `needs_reconnect`.
+ * `needs_reconnect`, which is the banner the builder shows. A Stripe connection has no token to
+ * refresh; Stripe refusing the account arrives as `invalid_grant` and goes straight there.
  *
  * `fn` may run twice. Everything it calls should be safe to repeat: order creation carries an
  * idempotency key, and status reads are reads.

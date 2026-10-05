@@ -188,9 +188,9 @@
         ]
       }
     },
-    "/p/payments/webhooks/stripe/{accountId}": {
+    "/p/payments/webhooks/stripe": {
       "post": {
-        "operationId": "postPPaymentsWebhooksStripeByAccountId",
+        "operationId": "postPPaymentsWebhooksStripe",
         "tags": [
           "public"
         ],
@@ -209,16 +209,6 @@
             "description": "Recorded but not processed; the gateway should retry"
           }
         },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "accountId",
-            "required": true
-          }
-        ],
         "x-internal": true,
         "security": [
           {
@@ -395,7 +385,7 @@
         "tags": [
           "dashboard"
         ],
-        "summary": "OAuth callback from Cashfree or Razorpay",
+        "summary": "OAuth callback from Cashfree, Razorpay or Stripe",
         "description": "A browser redirect, not an API. Redirects to the returnTo page with `?payments=connected&provider=…` or `?payments=error&reason=…`.",
         "responses": {
           "302": {
@@ -30366,7 +30356,6 @@
                             "type": "string",
                             "enum": [
                               "oauth",
-                              "restricted_key",
                               "connect"
                             ]
                           },
@@ -30630,7 +30619,7 @@
         "tags": [
           "v1"
         ],
-        "summary": "Start connecting a Cashfree or Razorpay account",
+        "summary": "Start connecting a Cashfree, Razorpay or Stripe account",
         "description": "Returns the gateway's consent URL. It must be opened in a browser signed in to chatform as the user who created this key; the state is single-use and expires in ten minutes. `returnTo` must be a page on the chatform app.",
         "responses": {
           "200": {
@@ -30845,371 +30834,6 @@
             "required": true
           }
         ],
-        "x-required-scope": "payment:write",
-        "security": [
-          {
-            "secretKey": []
-          },
-          {
-            "apiKeyHeader": []
-          }
-        ]
-      }
-    },
-    "/v1/payment-accounts/stripe": {
-      "post": {
-        "operationId": "postV1PaymentAccountsStripe",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "restrictedKey": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 500
-                  }
-                },
-                "required": [
-                  "restrictedKey"
-                ]
-              }
-            }
-          }
-        },
-        "tags": [
-          "v1"
-        ],
-        "summary": "Connect a Stripe account with a restricted key",
-        "description": "Accepts only a restricted key (`rk_test_…` or `rk_live_…`); a full `sk_` secret key is refused with `full_secret_key`. The key is checked by reading the account, creating and immediately expiring a Checkout Session, and creating a webhook endpoint — a missing permission comes back as `missing_permission` with the permission named.",
-        "responses": {
-          "200": {
-            "description": "Connected",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "account": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "provider": {
-                          "type": "string",
-                          "enum": [
-                            "cashfree",
-                            "razorpay",
-                            "stripe"
-                          ]
-                        },
-                        "credentialKind": {
-                          "type": "string",
-                          "enum": [
-                            "oauth",
-                            "restricted_key",
-                            "connect"
-                          ]
-                        },
-                        "environment": {
-                          "type": "string",
-                          "enum": [
-                            "test",
-                            "live"
-                          ]
-                        },
-                        "label": {
-                          "type": "string"
-                        },
-                        "providerAccountId": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "status": {
-                          "type": "string",
-                          "enum": [
-                            "active",
-                            "needs_reconnect",
-                            "revoked",
-                            "disconnected"
-                          ]
-                        },
-                        "lastError": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "currencies": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "createdAt": {
-                          "type": "number"
-                        },
-                        "formsUsing": {
-                          "type": "number"
-                        },
-                        "connectedBy": {
-                          "anyOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                },
-                                "email": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "name",
-                                "email"
-                              ]
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "isDefault": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "provider",
-                        "credentialKind",
-                        "environment",
-                        "label",
-                        "providerAccountId",
-                        "status",
-                        "lastError",
-                        "currencies",
-                        "createdAt"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "account"
-                  ]
-                }
-              }
-            }
-          },
-          "402": {
-            "description": "Plan does not include collecting payments",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "issues": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "ref": {
-                                "type": "string"
-                              },
-                              "path": {
-                                "type": "string"
-                              },
-                              "code": {
-                                "type": "string"
-                              },
-                              "message": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "code",
-                              "message"
-                            ]
-                          }
-                        },
-                        "request_id": {
-                          "type": "string"
-                        },
-                        "doc_url": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "additionalProperties": {}
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The Stripe account is connected to another organization",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "issues": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "ref": {
-                                "type": "string"
-                              },
-                              "path": {
-                                "type": "string"
-                              },
-                              "code": {
-                                "type": "string"
-                              },
-                              "message": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "code",
-                              "message"
-                            ]
-                          }
-                        },
-                        "request_id": {
-                          "type": "string"
-                        },
-                        "doc_url": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "additionalProperties": {}
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ]
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "full_secret_key, invalid_key or missing_permission",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "issues": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "ref": {
-                                "type": "string"
-                              },
-                              "path": {
-                                "type": "string"
-                              },
-                              "code": {
-                                "type": "string"
-                              },
-                              "message": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "code",
-                              "message"
-                            ]
-                          }
-                        },
-                        "request_id": {
-                          "type": "string"
-                        },
-                        "doc_url": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "additionalProperties": {}
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ]
-                }
-              }
-            }
-          }
-        },
         "x-required-scope": "payment:write",
         "security": [
           {
@@ -31527,7 +31151,7 @@
           "v1"
         ],
         "summary": "Disconnect a payment account",
-        "description": "Revokes the grant (Cashfree, Razorpay) or deletes the webhook endpoint (Stripe) at the gateway, then wipes the stored credentials. Forms still pointing at the account stop accepting payments until another account is chosen.",
+        "description": "Revokes chatform's access at the gateway, then wipes the stored credentials. Forms still pointing at the account stop accepting payments until another account is chosen.",
         "responses": {
           "200": {
             "description": "Disconnected",
@@ -43499,7 +43123,6 @@
                             "type": "string",
                             "enum": [
                               "oauth",
-                              "restricted_key",
                               "connect"
                             ]
                           },
@@ -43699,7 +43322,7 @@
         "tags": [
           "dashboard"
         ],
-        "summary": "Start connecting a Cashfree or Razorpay account",
+        "summary": "Start connecting a Cashfree, Razorpay or Stripe account",
         "description": "Returns the gateway's consent URL. The state inside it is signed, single-use, expires in ten minutes, and can only be completed by the same signed-in user.",
         "responses": {
           "200": {
@@ -43914,368 +43537,6 @@
             "required": true
           }
         ],
-        "x-internal": true,
-        "security": [
-          {
-            "sessionCookie": []
-          }
-        ]
-      }
-    },
-    "/api/payment-accounts/stripe": {
-      "post": {
-        "operationId": "postApiPaymentAccountsStripe",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "restrictedKey": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 500
-                  }
-                },
-                "required": [
-                  "restrictedKey"
-                ]
-              }
-            }
-          }
-        },
-        "tags": [
-          "dashboard"
-        ],
-        "summary": "Connect a Stripe account with a restricted key",
-        "description": "Accepts only `rk_test_…` / `rk_live_…`. The key is exercised (account read, a Checkout Session created and expired, a webhook endpoint created) before it is stored, sealed.",
-        "responses": {
-          "200": {
-            "description": "Connected",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "account": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "provider": {
-                          "type": "string",
-                          "enum": [
-                            "cashfree",
-                            "razorpay",
-                            "stripe"
-                          ]
-                        },
-                        "credentialKind": {
-                          "type": "string",
-                          "enum": [
-                            "oauth",
-                            "restricted_key",
-                            "connect"
-                          ]
-                        },
-                        "environment": {
-                          "type": "string",
-                          "enum": [
-                            "test",
-                            "live"
-                          ]
-                        },
-                        "label": {
-                          "type": "string"
-                        },
-                        "providerAccountId": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "status": {
-                          "type": "string",
-                          "enum": [
-                            "active",
-                            "needs_reconnect",
-                            "revoked",
-                            "disconnected"
-                          ]
-                        },
-                        "lastError": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "currencies": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "createdAt": {
-                          "type": "number"
-                        },
-                        "formsUsing": {
-                          "type": "number"
-                        },
-                        "connectedBy": {
-                          "anyOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                },
-                                "email": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "name",
-                                "email"
-                              ]
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "isDefault": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "provider",
-                        "credentialKind",
-                        "environment",
-                        "label",
-                        "providerAccountId",
-                        "status",
-                        "lastError",
-                        "currencies",
-                        "createdAt"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "account"
-                  ]
-                }
-              }
-            }
-          },
-          "402": {
-            "description": "Plan does not include collecting payments",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "issues": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "ref": {
-                                "type": "string"
-                              },
-                              "path": {
-                                "type": "string"
-                              },
-                              "code": {
-                                "type": "string"
-                              },
-                              "message": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "code",
-                              "message"
-                            ]
-                          }
-                        },
-                        "request_id": {
-                          "type": "string"
-                        },
-                        "doc_url": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "additionalProperties": {}
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Account already connected to another organization",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "issues": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "ref": {
-                                "type": "string"
-                              },
-                              "path": {
-                                "type": "string"
-                              },
-                              "code": {
-                                "type": "string"
-                              },
-                              "message": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "code",
-                              "message"
-                            ]
-                          }
-                        },
-                        "request_id": {
-                          "type": "string"
-                        },
-                        "doc_url": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "additionalProperties": {}
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ]
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "full_secret_key, invalid_key or missing_permission",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "code": {
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
-                        },
-                        "issues": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "ref": {
-                                "type": "string"
-                              },
-                              "path": {
-                                "type": "string"
-                              },
-                              "code": {
-                                "type": "string"
-                              },
-                              "message": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "code",
-                              "message"
-                            ]
-                          }
-                        },
-                        "request_id": {
-                          "type": "string"
-                        },
-                        "doc_url": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "code",
-                        "message"
-                      ],
-                      "additionalProperties": {}
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ]
-                }
-              }
-            }
-          }
-        },
         "x-internal": true,
         "security": [
           {
@@ -44584,7 +43845,7 @@
           "dashboard"
         ],
         "summary": "Disconnect a payment account",
-        "description": "Revokes the grant or deletes the Stripe webhook at the gateway, then wipes the stored credentials.",
+        "description": "Revokes chatform's access at the gateway, then wipes the stored credentials.",
         "responses": {
           "200": {
             "description": "Disconnected",

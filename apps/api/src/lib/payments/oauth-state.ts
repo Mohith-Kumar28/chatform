@@ -4,8 +4,8 @@ import { webOrigins } from "../origins.js";
 import { hmacSha256, toBase64Url } from "./webhook-sig.js";
 
 /**
- * The `state` that carries a connect attempt through Cashfree's or Razorpay's consent screen and
- * back.
+ * The `state` that carries a connect attempt through a gateway's consent screen (Cashfree,
+ * Razorpay, Stripe) and back.
  *
  * The callback is a bare browser redirect, so `state` is the only thing tying "someone approved
  * a Razorpay account" to "this organization asked for it". Three properties matter:
@@ -41,7 +41,7 @@ const NONCE_HEX = 32;
 const MAC_CHARS = 24;
 const TOKEN_RE = new RegExp(`^[0-9a-f]{${NONCE_HEX}}\\.[A-Za-z0-9_-]{${MAC_CHARS}}$`);
 
-export type OAuthProvider = "cashfree" | "razorpay";
+export type OAuthProvider = "cashfree" | "razorpay" | "stripe";
 
 export interface OAuthStatePayload {
   orgId: string;

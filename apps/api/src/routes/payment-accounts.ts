@@ -19,7 +19,7 @@ import {
   renameAccount,
   setDefaultAccount,
   saveOAuthAccount,
-  saveStripeKeyAccount,
+  saveStripeConnectAccount,
   toPublicAccount,
 } from "../lib/payments/accounts.js";
 import {
@@ -29,14 +29,15 @@ import {
   createCashfreeAdapter,
 } from "../lib/payments/cashfree.js";
 import { createRazorpayAdapter, razorpayAuthorizeUrl, razorpayExchangeCode } from "../lib/payments/razorpay.js";
-import { deleteStripeWebhook, setupStripeRestrictedKey, StripeSetupError } from "../lib/payments/stripe.js";
+import { createStripeAdapter, stripeAuth, stripeAuthorizeUrl, stripeExchangeCode, stripeMode } from "../lib/payments/stripe.js";
 import { signOAuthState, validateReturnTo, verifyOAuthState, type OAuthProvider, type OAuthTokens } from "../lib/payments/oauth-state.js";
 import { providerConfigured } from "../lib/payments/registry.js";
-import { ProviderError, type AccountDescription, type PaymentAccountRow } from "../lib/payments/types.js";
+import { PAYMENT_PROVIDER_LABELS } from "@repo/form-schema";
+import { ProviderError, type AccountDescription } from "../lib/payments/types.js";
 
 /**
- * Connecting a form admin's own payment gateway account — Cashfree and Razorpay over partner
- * OAuth, Stripe with a pasted restricted key.
+ * Connecting a form admin's own payment gateway account: Cashfree and Razorpay over partner
+ * OAuth, Stripe over Stripe Connect. Every one is a button and a consent page; nobody pastes a key.
  *
  * Two routers, for the reason `billingPublicRouter` gives:
  *
@@ -81,7 +82,7 @@ paymentAccountsRouter.use("/payment-accounts/*", requireSession, requireOrg);
 export const PublicAccountSchema = z.object({
   id: z.string(),
   provider: z.enum(["cashfree", "razorpay", "stripe"]),
-  credentialKind: z.enum(["oauth", "restricted_key", "connect"]),
+  credentialKind: z.enum(["oauth", "connect"]),
   environment: z.enum(["test", "live"]),
   label: z.string(),
   providerAccountId: z.string().nullable(),
@@ -113,7 +114,6 @@ export const RenameAccountBody = z
   })
   .refine((b) => b.label !== undefined || b.isDefault !== undefined, { message: "Nothing to change" });
 export const OAuthStartBody = z.object({ returnTo: z.string().min(1).max(1000) });
-export const StripeKeyBody = z.object({ restrictedKey: z.string().min(1).max(500) });
 export const CashfreeOnboardBody = z.object({
   email: z.string().email().max(200),
   phone: z.string().min(8).max(20),
@@ -134,16 +134,12 @@ function problem(c: Ctx, status: 400 | 403 | 404 | 409 | 422 | 502 | 503, code: 
 }
 
 function isOAuthProvider(value: string | undefined): value is OAuthProvider {
-  return value === "cashfree" || value === "razorpay";
+  return value === "cashfree" || value === "razorpay" || value === "stripe";
 }
 
 /** The redirect URI registered with each gateway: on the API's own origin, never the web app's. */
 export function oauthRedirectUri(env: Bindings, provider: OAuthProvider): string {
   return `${env.APP_ORIGIN.replace(/\/$/, "")}/api/payment-accounts/oauth/${provider}/callback`;
-}
-
-export function stripeWebhookUrl(env: Bindings, accountId: string): string {
-  return `${env.APP_ORIGIN.replace(/\/$/, "")}/p/payments/webhooks/stripe/${accountId}`;
 }
 
 /** `{ errName, errMessage }` — Workers Logs serialise an `Error` as `{}`. */
@@ -197,69 +193,24 @@ export async function handleOAuthStart(c: Ctx, provider: string | undefined, ret
     return problem(c, 400, "no_user", "Connecting over OAuth has to be finished in a browser by a signed-in person.");
   }
   if (!providerConfigured(c.env, provider)) {
-    return problem(c, 503, "provider_not_configured", `${provider === "cashfree" ? "Cashfree" : "Razorpay"} is not set up on this deployment yet.`);
+    return problem(c, 503, "provider_not_configured", `${PAYMENT_PROVIDER_LABELS[provider]} is not set up on this deployment yet.`);
   }
   const returnTo = validateReturnTo(c.env, returnToRaw);
   if (!returnTo) return problem(c, 422, "invalid_return_to", "returnTo must be a page on this app.");
 
   const { state } = await signOAuthState(c.env, { orgId, userId, provider, returnTo });
   try {
+    const redirectUri = oauthRedirectUri(c.env, provider);
     const url =
       provider === "cashfree"
         ? await cashfreeAuthorizeUrl(c.env, state)
-        : razorpayAuthorizeUrl(c.env, state, oauthRedirectUri(c.env, provider));
+        : provider === "razorpay"
+          ? razorpayAuthorizeUrl(c.env, state, redirectUri)
+          : stripeAuthorizeUrl(c.env, state, redirectUri);
     return c.json({ url });
   } catch (err) {
     console.error("payment_oauth_start_failed", { orgId, provider, ...errorInfo(err) });
     return problem(c, 502, "provider_unavailable", "The payment provider did not answer. Try again in a minute.");
-  }
-}
-
-export async function handleStripeConnect(c: Ctx, restrictedKey: string): Promise<Response> {
-  const orgId = c.get("orgId")!;
-  const userId = c.get("userId") ?? null;
-
-  let reuse: PaymentAccountRow | null = null;
-  let accountId = "";
-  try {
-    const setup = await setupStripeRestrictedKey(restrictedKey, async (description: AccountDescription) => {
-      reuse = await findConnectedByProviderAccount(c.env, "stripe", description.environment, description.providerAccountId);
-      if (reuse && reuse.organizationId !== orgId) throw new AccountConflictError();
-      accountId = reuse?.id ?? newPaymentAccountId();
-      return stripeWebhookUrl(c.env, accountId);
-    });
-
-    /**
-     * A reconnect replaces the old endpoint rather than leaving two subscribed to the same
-     * account — two endpoints means every payment is delivered, and processed, twice.
-     */
-    const previous = reuse as PaymentAccountRow | null;
-    if (previous?.providerWebhookId && previous.providerWebhookId !== setup.webhookId) {
-      await deleteStripeWebhook(setup.auth, previous.providerWebhookId).catch((err: unknown) =>
-        console.warn("stripe_old_webhook_delete_failed", { accountId, ...errorInfo(err) }),
-      );
-    }
-
-    const saved = await saveStripeKeyAccount(c.env, {
-      id: accountId,
-      orgId,
-      userId,
-      key: restrictedKey.trim(),
-      description: setup.description,
-      webhookId: setup.webhookId,
-      webhookSecret: setup.webhookSecret,
-    });
-    return c.json({ account: toPublicAccount(saved) });
-  } catch (err) {
-    if (err instanceof StripeSetupError) {
-      if (err.code === "upstream") return problem(c, 502, "provider_unavailable", err.message);
-      return problem(c, 422, err.code, err.message, err.permission ? { permission: err.permission } : {});
-    }
-    if (err instanceof AccountConflictError) {
-      return problem(c, 409, "account_connected_elsewhere", "This Stripe account is already connected to another chatform organization.");
-    }
-    console.error("stripe_connect_failed", { orgId, ...errorInfo(err) });
-    throw err;
   }
 }
 
@@ -341,7 +292,7 @@ paymentAccountsRouter.post(
   validator("json", OAuthStartBody),
   describeRoute({
     tags: ["dashboard"],
-    summary: "Start connecting a Cashfree or Razorpay account",
+    summary: "Start connecting a Cashfree, Razorpay or Stripe account",
     description:
       "Returns the gateway's consent URL. The state inside it is signed, single-use, expires in ten minutes, and can only be completed by the same signed-in user.",
     responses: {
@@ -355,28 +306,6 @@ paymentAccountsRouter.post(
     const refused = refuseImpersonation(c) ?? (await assertOrgWide(c, "webhook", "create")) ?? (await connectGate(c, "payments.connect"));
     if (refused) return refused;
     return handleOAuthStart(c, c.req.param("provider"), c.req.valid("json").returnTo);
-  },
-);
-
-paymentAccountsRouter.post(
-  "/payment-accounts/stripe",
-  validator("json", StripeKeyBody),
-  describeRoute({
-    tags: ["dashboard"],
-    summary: "Connect a Stripe account with a restricted key",
-    description:
-      "Accepts only `rk_test_…` / `rk_live_…`. The key is exercised (account read, a Checkout Session created and expired, a webhook endpoint created) before it is stored, sealed.",
-    responses: {
-      200: { description: "Connected", content: json(z.object({ account: PublicAccountSchema })) },
-      402: { description: "Plan does not include collecting payments", content: errorContent },
-      409: { description: "Account already connected to another organization", content: errorContent },
-      422: { description: "full_secret_key, invalid_key or missing_permission", content: errorContent },
-    },
-  }),
-  async (c) => {
-    const refused = refuseImpersonation(c) ?? (await assertOrgWide(c, "webhook", "create")) ?? (await connectGate(c, "payments.connect"));
-    if (refused) return refused;
-    return handleStripeConnect(c, c.req.valid("json").restrictedKey);
   },
 );
 
@@ -427,7 +356,7 @@ paymentAccountsRouter.delete(
   describeRoute({
     tags: ["dashboard"],
     summary: "Disconnect a payment account",
-    description: "Revokes the grant or deletes the Stripe webhook at the gateway, then wipes the stored credentials.",
+    description: "Revokes chatform's access at the gateway, then wipes the stored credentials.",
     responses: {
       200: { description: "Disconnected", content: json(z.object({ ok: z.literal(true) })) },
       404: { description: "Not found", content: errorContent },
@@ -456,7 +385,7 @@ paymentAccountsPublicRouter.get(
   "/payment-accounts/oauth/:provider/callback",
   describeRoute({
     tags: ["dashboard"],
-    summary: "OAuth callback from Cashfree or Razorpay",
+    summary: "OAuth callback from Cashfree, Razorpay or Stripe",
     description:
       "A browser redirect, not an API. Redirects to the returnTo page with `?payments=connected&provider=…` or `?payments=error&reason=…`.",
     responses: { 302: { description: "Back to the app" } },
@@ -505,6 +434,28 @@ paymentAccountsPublicRouter.get(
     if (!gatewayEnabled(c.env)) return fail("disabled");
     const ent = await getEntitlements(c.env, payload.orgId);
     if (!ent.features.collect_payments) return fail("plan_required");
+
+    if (payload.provider === "stripe") {
+      let description: AccountDescription;
+      try {
+        const { accountId, livemode } = await stripeExchangeCode(c.env, code);
+        // A live account approved against a test platform key, or the reverse, cannot be charged.
+        const environment = stripeMode(c.env);
+        if (livemode !== (environment === "live")) return fail("mode_mismatch");
+        description = await createStripeAdapter(stripeAuth(c.env, accountId), environment).describeAccount();
+      } catch (err) {
+        console.error("payment_oauth_exchange_failed", { orgId: payload.orgId, provider: payload.provider, ...errorInfo(err) });
+        return fail("exchange_failed");
+      }
+      try {
+        await saveStripeConnectAccount(c.env, { orgId: payload.orgId, userId: payload.userId, description });
+      } catch (err) {
+        if (err instanceof AccountConflictError) return fail("connected_elsewhere");
+        console.error("payment_oauth_save_failed", { orgId: payload.orgId, provider: payload.provider, ...errorInfo(err) });
+        return fail("save_failed");
+      }
+      return c.redirect(backTo(payload.returnTo, { payments: "connected", provider: payload.provider }), 302);
+    }
 
     let tokens: OAuthTokens;
     let description: AccountDescription;

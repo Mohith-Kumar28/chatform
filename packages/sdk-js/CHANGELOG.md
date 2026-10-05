@@ -1,5 +1,14 @@
 # @chatformhq/js
 
+## Unreleased
+
+### Breaking
+
+- `paymentAccounts.connectStripe()` is gone, with the endpoint behind it.
+  Stripe now connects the way Razorpay and Cashfree do:
+  `paymentAccounts.startOAuth("stripe", { returnTo })` returns Stripe's consent
+  page for a person to open. No Stripe key is pasted or stored.
+
 ## 0.3.0
 
 Every type is now generated from the API's OpenAPI spec instead of written by

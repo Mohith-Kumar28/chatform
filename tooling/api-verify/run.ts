@@ -533,10 +533,6 @@ async function main() {
   await step({ method: "GET", path: "/v1/payment-accounts" }, { status: [200, 403], has: ["accounts"] });
   await step({ method: "GET", path: "/v1/forms/{id}/payments", params: { id: F } }, { status: 200, has: ["data"] });
   await step(
-    { method: "POST", path: "/v1/payment-accounts/stripe", body: { restrictedKey: "rk_test_notarealkey" } },
-    { status: [400, 402, 422], outcome: "negative-only", note: "a fake key; connecting a real one is not a script's job" },
-  );
-  await step(
     { method: "POST", path: "/v1/payment-accounts/oauth/{provider}/start", params: { provider: "razorpay" }, body: { returnTo: "https://chatform.in/dashboard" } },
     { status: [200, 402, 403, 422], note: "returns a consent URL; nobody opens it" },
   );

@@ -260,49 +260,49 @@ export const usePostPPaymentsWebhooksRazorpay = <TError = void,
       > => {
       return useMutation(getPostPPaymentsWebhooksRazorpayMutationOptions(options));
     }
-    export type postPPaymentsWebhooksStripeByAccountIdResponse200 = {
+    export type postPPaymentsWebhooksStripeResponse200 = {
   data: void
   status: 200
 }
 
-export type postPPaymentsWebhooksStripeByAccountIdResponse400 = {
+export type postPPaymentsWebhooksStripeResponse400 = {
   data: void
   status: 400
 }
 
-export type postPPaymentsWebhooksStripeByAccountIdResponse401 = {
+export type postPPaymentsWebhooksStripeResponse401 = {
   data: void
   status: 401
 }
 
-export type postPPaymentsWebhooksStripeByAccountIdResponse500 = {
+export type postPPaymentsWebhooksStripeResponse500 = {
   data: void
   status: 500
 }
 
-export type postPPaymentsWebhooksStripeByAccountIdResponseSuccess = (postPPaymentsWebhooksStripeByAccountIdResponse200) & {
+export type postPPaymentsWebhooksStripeResponseSuccess = (postPPaymentsWebhooksStripeResponse200) & {
   headers: Headers;
 };
-export type postPPaymentsWebhooksStripeByAccountIdResponseError = (postPPaymentsWebhooksStripeByAccountIdResponse400 | postPPaymentsWebhooksStripeByAccountIdResponse401 | postPPaymentsWebhooksStripeByAccountIdResponse500) & {
+export type postPPaymentsWebhooksStripeResponseError = (postPPaymentsWebhooksStripeResponse400 | postPPaymentsWebhooksStripeResponse401 | postPPaymentsWebhooksStripeResponse500) & {
   headers: Headers;
 };
 
-export type postPPaymentsWebhooksStripeByAccountIdResponse = (postPPaymentsWebhooksStripeByAccountIdResponseSuccess | postPPaymentsWebhooksStripeByAccountIdResponseError)
+export type postPPaymentsWebhooksStripeResponse = (postPPaymentsWebhooksStripeResponseSuccess | postPPaymentsWebhooksStripeResponseError)
 
-export const getPostPPaymentsWebhooksStripeByAccountIdUrl = (accountId: string,) => {
-
-
+export const getPostPPaymentsWebhooksStripeUrl = () => {
 
 
-  return `/p/payments/webhooks/stripe/${accountId}`
+
+
+  return `/p/payments/webhooks/stripe`
 }
 
 /**
  * @summary Stripe payment webhook
  */
-export const postPPaymentsWebhooksStripeByAccountId = async (accountId: string, options?: Parameters<typeof customFetch>[1]): Promise<postPPaymentsWebhooksStripeByAccountIdResponse> => {
+export const postPPaymentsWebhooksStripe = async ( options?: Parameters<typeof customFetch>[1]): Promise<postPPaymentsWebhooksStripeResponse> => {
 
-  return customFetch<postPPaymentsWebhooksStripeByAccountIdResponse>(getPostPPaymentsWebhooksStripeByAccountIdUrl(accountId),
+  return customFetch<postPPaymentsWebhooksStripeResponse>(getPostPPaymentsWebhooksStripeUrl(),
   {
     ...options,
     method: 'POST'
@@ -315,11 +315,11 @@ export const postPPaymentsWebhooksStripeByAccountId = async (accountId: string, 
 
 
 
-export const getPostPPaymentsWebhooksStripeByAccountIdMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksStripeByAccountId>>, TError,PostPPaymentsWebhooksStripeByAccountIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksStripeByAccountId>>, TError,PostPPaymentsWebhooksStripeByAccountIdMutationVariables, TContext> => {
+export const getPostPPaymentsWebhooksStripeMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksStripe>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksStripe>>, TError,void, TContext> => {
 
-const mutationKey = ['postPPaymentsWebhooksStripeByAccountId'];
+const mutationKey = ['postPPaymentsWebhooksStripe'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -329,10 +329,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postPPaymentsWebhooksStripeByAccountId>>, PostPPaymentsWebhooksStripeByAccountIdMutationVariables> = (props) => {
-          const {accountId} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postPPaymentsWebhooksStripe>>, void> = () => {
 
-          return  postPPaymentsWebhooksStripeByAccountId(accountId,requestOptions)
+
+          return  postPPaymentsWebhooksStripe(requestOptions)
         }
 
 
@@ -342,23 +342,23 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostPPaymentsWebhooksStripeByAccountIdMutationResult = NonNullable<Awaited<ReturnType<typeof postPPaymentsWebhooksStripeByAccountId>>>
+    export type PostPPaymentsWebhooksStripeMutationResult = NonNullable<Awaited<ReturnType<typeof postPPaymentsWebhooksStripe>>>
 
-    export type PostPPaymentsWebhooksStripeByAccountIdMutationError = void
-    export type PostPPaymentsWebhooksStripeByAccountIdMutationVariables = {accountId: string}
+    export type PostPPaymentsWebhooksStripeMutationError = void
+
 
     /**
  * @summary Stripe payment webhook
  */
-export const usePostPPaymentsWebhooksStripeByAccountId = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksStripeByAccountId>>, TError,PostPPaymentsWebhooksStripeByAccountIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+export const usePostPPaymentsWebhooksStripe = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postPPaymentsWebhooksStripe>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof postPPaymentsWebhooksStripeByAccountId>>,
+        Awaited<ReturnType<typeof postPPaymentsWebhooksStripe>>,
         TError,
-        PostPPaymentsWebhooksStripeByAccountIdMutationVariables,
+        void,
         TContext
       > => {
-      return useMutation(getPostPPaymentsWebhooksStripeByAccountIdMutationOptions(options));
+      return useMutation(getPostPPaymentsWebhooksStripeMutationOptions(options));
     }
     export type getPFeedByTokenResponse200 = {
   data: string
