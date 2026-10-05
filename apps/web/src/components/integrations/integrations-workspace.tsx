@@ -220,7 +220,7 @@ export function IntegrationsWorkspace({
                   ? "Google Sheets & Excel"
                   : "Webhooks"}
             </SheetTitle>
-            <SheetDescription className={cn(panel === "webhooks" && "sr-only")}>
+            <SheetDescription className={cn((panel === "webhooks" || panel === "spreadsheet") && "sr-only")}>
               {paymentProvider
                 ? PAYMENT_SHEET_COPY[paymentProvider].description
                 : panel === "ai"

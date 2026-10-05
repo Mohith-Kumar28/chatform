@@ -61,6 +61,7 @@ const IntegrationRow = z.object({
   includePartials: z.boolean().optional(),
   /** Present only for Google Sheets. */
   spreadsheetUrl: z.string().optional(),
+  spreadsheetTitle: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
   lastSyncedAt: z.number().nullable().optional(),
   lastError: z.string().nullable().optional(),

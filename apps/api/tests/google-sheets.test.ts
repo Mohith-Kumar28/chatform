@@ -62,6 +62,7 @@ function meta(ss: FakeSpreadsheet) {
   return {
     spreadsheetId: ss.id,
     spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${ss.id}/edit`,
+    properties: { title: ss.title },
     sheets: ss.tabs.map((t) => ({
       properties: {
         // Google leaves a zero out of its JSON.
@@ -370,6 +371,7 @@ describe("connecting Google Sheets", () => {
     expect(row.status).toBe("connected");
     expect(row.email).toBe("ada@gmail.com");
     expect(row.spreadsheetUrl).toContain("docs.google.com/spreadsheets/d/");
+    expect(row.spreadsheetTitle).toContain("(Chatform responses)");
     expect(row.partialsLocked).toBe(true);
     expect(typeof row.lastSyncedAt).toBe("number");
     expect(JSON.stringify(row)).not.toMatch(/rt_first|at_first|TokenEnc/);

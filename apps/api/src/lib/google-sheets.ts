@@ -65,6 +65,8 @@ const SYNCED_EVENTS = new Set([
 export interface SheetsConfig {
   spreadsheetId: string;
   spreadsheetUrl: string;
+  /** The spreadsheet's name in Drive as of the last rebuild. The author can rename it. */
+  spreadsheetTitle?: string | null;
   /** The tabs by Google's own id, so renaming one in the sheet breaks nothing. */
   completedSheetId: number;
   partialSheetId: number;
@@ -244,10 +246,11 @@ interface SheetProps {
 interface SpreadsheetMeta {
   spreadsheetId?: string;
   spreadsheetUrl?: string;
+  properties?: { title?: string };
   sheets?: { properties?: SheetProps }[];
 }
 
-const META_FIELDS = "spreadsheetId,spreadsheetUrl,sheets.properties(sheetId,title,gridProperties(rowCount,columnCount))";
+const META_FIELDS = "spreadsheetId,spreadsheetUrl,properties.title,sheets.properties(sheetId,title,gridProperties(rowCount,columnCount))";
 
 function readMeta(token: string, spreadsheetId: string): Promise<SpreadsheetMeta> {
   return google<SpreadsheetMeta>(token, "GET", `${API}/${spreadsheetId}?fields=${encodeURIComponent(META_FIELDS)}`);
@@ -293,6 +296,7 @@ export function projectSheets(row: SheetsRow) {
     status: row.status,
     createdAt: row.created_at,
     spreadsheetUrl: row.config.spreadsheetUrl,
+    spreadsheetTitle: row.config.spreadsheetTitle ?? null,
     email: row.config.email,
     lastSyncedAt: row.config.lastSyncedAt ?? null,
     lastError: row.last_error,
@@ -375,6 +379,7 @@ export async function connectSheets(
   const config: SheetsConfig = {
     spreadsheetId: meta.spreadsheetId,
     spreadsheetUrl: meta.spreadsheetUrl ?? `https://docs.google.com/spreadsheets/d/${meta.spreadsheetId}/edit`,
+    spreadsheetTitle: meta.properties?.title ?? kept?.spreadsheetTitle ?? null,
     // A tab that has gone missing is put back by the rebuild that follows.
     completedSheetId: kept?.completedSheetId ?? tabs[0]?.properties?.sheetId ?? 0,
     partialSheetId: kept?.partialSheetId ?? tabs[1]?.properties?.sheetId ?? -1,
@@ -532,7 +537,9 @@ async function ensureTabs(token: string, cfg: SheetsConfig, meta: SpreadsheetMet
  */
 async function rebuildSheet(env: Bindings, row: SheetsRow, token: string, partialsOpen: boolean): Promise<void> {
   const cfg = row.config;
-  const props = await ensureTabs(token, cfg, await readMeta(token, cfg.spreadsheetId));
+  const meta = await readMeta(token, cfg.spreadsheetId);
+  if (meta.properties?.title) cfg.spreadsheetTitle = meta.properties.title;
+  const props = await ensureTabs(token, cfg, meta);
   const table = await buildResponseTable(env, row.form_id, { includePartials: partialsOpen, raw: true, limit: REBUILD_CAP });
   if (!table) throw new GoogleError(404, "This form no longer exists");
   const split = splitByCompletion(table);
@@ -877,6 +884,7 @@ export async function syncSheets(
           completedSheetId: cfg.completedSheetId,
           partialSheetId: cfg.partialSheetId,
           partialsLocked: cfg.partialsLocked,
+          ...(cfg.spreadsheetTitle ? { spreadsheetTitle: cfg.spreadsheetTitle } : {}),
           lastSyncedAt: Date.now(),
         },
         { status: "connected", lastError: null },

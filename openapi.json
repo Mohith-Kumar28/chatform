@@ -42971,6 +42971,16 @@
                       "spreadsheetUrl": {
                         "type": "string"
                       },
+                      "spreadsheetTitle": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "email": {
                         "anyOf": [
                           {
@@ -43272,6 +43282,16 @@
                     },
                     "spreadsheetUrl": {
                       "type": "string"
+                    },
+                    "spreadsheetTitle": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "email": {
                       "anyOf": [
@@ -43603,6 +43623,16 @@
                     },
                     "spreadsheetUrl": {
                       "type": "string"
+                    },
+                    "spreadsheetTitle": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "email": {
                       "anyOf": [
