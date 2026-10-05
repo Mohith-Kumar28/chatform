@@ -19,6 +19,11 @@ const MARKS: Partial<Record<PaymentProviderName, { color: string; path: string }
   },
 };
 
+/** The gateway's own colour, where it has a mark here. For tinting what belongs to that gateway. */
+export function providerColor(provider: PaymentProviderName | null | undefined): string | null {
+  return (provider && MARKS[provider]?.color) || null;
+}
+
 /** The bare mark in the gateway's colour, for a trust line. Null where there is none. */
 export function ProviderMark({ provider, className }: { provider: PaymentProviderName; className?: string }) {
   const mark = MARKS[provider];

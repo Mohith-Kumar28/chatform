@@ -39,6 +39,7 @@ export const INTERFACE_TEXT: readonly string[] = [
   "Confirm starting over. This clears your answers",
   "Confirm your email",
   "Confirm your number",
+  "Confirming your payment…",
   "Connection failed",
   "Continue",
   "Continue as {name}",

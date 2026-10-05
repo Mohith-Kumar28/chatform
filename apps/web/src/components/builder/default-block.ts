@@ -80,8 +80,13 @@ export function defaultBlock(type: Block["type"], existingRefs: Set<string>): Bl
       return BlockSchema.parse({ ...base, type, title: "Upload a file", accept: [ANY_FILE], maxFiles: 1, maxSizeMB: 10 });
     case "signature":
       return BlockSchema.parse({ ...base, type, title: "Please sign here" });
+    /*
+     * Verified checkout, not a link. It is the method that proves a payment happened, and an
+     * author who is handed the manual one first has no reason to go looking for the other.
+     * The account is filled in by `useDefaultPaymentAccount` once one is connected.
+     */
     case "payment":
-      return BlockSchema.parse({ ...base, type, title: "Complete your payment", method: "link", amountMode: "fixed", amount: 0, currency: "USD" });
+      return BlockSchema.parse({ ...base, type, title: "Complete your payment", method: "gateway", amountMode: "fixed", amount: 0, currency: "USD" });
     case "scheduling":
       return BlockSchema.parse({ ...base, type, title: "Book a time", provider: "external", url: "https://cal.com/your-handle" });
     /**

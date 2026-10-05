@@ -501,6 +501,27 @@ export function ChatSurface({
   // Rich text — links, a video, an image — drawn under the question rather than
   // put in the agent's mouth, so it reads exactly as written in AI mode too.
   const description = chat.question?.block.description;
+  /**
+   * Which message each payment receipt sits under: the answer to its own question.
+   *
+   * It used to be "whatever was last on screen when the payment settled", which is only known
+   * to a form that was open at that moment. A gateway that takes the whole window (Stripe)
+   * settles while the respondent is away, the event comes back as part of a replayed
+   * transcript with no "last message" yet, and the receipt had nowhere to go: paid, and not a
+   * word of it on screen. The answer bubble is there however the transcript arrived. The old
+   * anchor stays as the fallback, for the moment between settling and that bubble landing.
+   */
+  const receiptAnchors = useMemo(() => {
+    const anchors = new Map<string, string>();
+    for (const r of chat.paymentReceipts) {
+      const answer = chat.messages.findLast((m) => m.answeredRef === r.ref);
+      const fallback = chat.messages.find((m) => m.id === r.afterMessageId || (m.serverId && m.serverId === r.afterMessageId));
+      const anchor = answer ?? fallback ?? null;
+      if (anchor) anchors.set(r.recordId, anchor.id);
+    }
+    return anchors;
+  }, [chat.paymentReceipts, chat.messages]);
+
   const mediaMessageId = useMemo(
     () =>
       media || imageKey || description
@@ -716,9 +737,9 @@ export function ChatSurface({
               {m.answeredRef && chat.pollResults[m.answeredRef] && (
                 <PollResultCard result={chat.pollResults[m.answeredRef]!} />
               )}
-              {/* A verified payment's receipt, under the message it arrived after. */}
+              {/* A verified payment's receipt, under the answer it paid for. */}
               {chat.paymentReceipts
-                .filter((r) => r.afterMessageId === m.id || (m.serverId && r.afterMessageId === m.serverId))
+                .filter((r) => receiptAnchors.get(r.recordId) === m.id)
                 .map((r) => (
                   <PaymentReceiptCard key={r.recordId} receipt={r} />
                 ))}

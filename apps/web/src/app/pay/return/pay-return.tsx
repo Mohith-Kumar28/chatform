@@ -2,11 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { findStoredSession, storedEmbedQuery } from "@/components/chat/session-store";
-import { API_ORIGIN } from "@/lib/api/mutator";
 
 /**
  * Where a gateway that takes the whole window (Stripe Checkout) sends the
@@ -18,9 +16,9 @@ import { API_ORIGIN } from "@/lib/api/mutator";
  * apart is whether this browser can find the conversation:
  *
  *   - The form was open in this tab and checkout took it over. The session is
- *     in storage under the form's slug. We nudge the server to check the
- *     payment and go straight back to the form, which resumes where it was and
- *     moves on once `payment_settled` arrives.
+ *     in storage under the form's slug. We go straight back to the form, which
+ *     resumes where it was, asks the server to check the payment, and moves on
+ *     once `payment_settled` arrives.
  *   - Checkout was opened in a new tab, because the form is embedded in
  *     someone else's page or is the builder's preview. That form keeps its
  *     storage partitioned under the host page, so this tab finds nothing, and
@@ -34,7 +32,6 @@ import { API_ORIGIN } from "@/lib/api/mutator";
  */
 type View =
   | { kind: "working" }
-  | { kind: "back"; href: string; paid: boolean }
   | { kind: "elsewhere" }
   | { kind: "incomplete" };
 
@@ -63,24 +60,14 @@ export function PayReturn() {
         return;
       }
 
-      let paid = false;
-      if (!cancelled) {
-        try {
-          const res = await fetch(
-            `${API_ORIGIN}/p/sessions/${ours.sessionId}/payments/${encodeURIComponent(recordId)}/confirm`,
-            {
-              method: "POST",
-              headers: { "x-respondent-token": ours.token },
-              signal: AbortSignal.timeout(15000),
-            },
-          );
-          const body = res.ok ? ((await res.json().catch(() => null)) as { status?: string } | null) : null;
-          paid = body?.status === "paid";
-        } catch {
-          // The form asks again when it loads (`cf_pay`), and the webhook does
-          // not depend on either.
-        }
-      }
+      /*
+       * Straight back, without checking the payment from here first. The form checks it the
+       * moment its stream is up (`cf_pay`), and the gateway's webhook does not depend on either.
+       * Checking here as well kept the respondent on this page for the length of a round trip
+       * to the gateway, looking at a card with a "Back to the form" button on it: a second step
+       * between paying and the form, for a result the form was about to fetch anyway. It also
+       * settled the payment while nobody was on the form to see it happen.
+       */
       if (!live) return;
 
       // `cf_pay` rides along so the form nudges once more when its stream is
@@ -94,8 +81,7 @@ export function PayReturn() {
       // somebody's panel, and a host page that never hears another word from it.
       const embed = storedEmbedQuery(slug);
       const href = `/f/${encodeURIComponent(slug)}?${cancelled ? "cf_pay_cancelled" : "cf_pay"}=${encodeURIComponent(recordId)}${embed ? `&${embed}` : ""}`;
-      setView({ kind: "back", href, paid });
-      // `replace`, so Back from the form does not land here and confirm again.
+      // `replace`, so Back from the form does not land here again.
       window.location.replace(href);
     })();
     return () => {
@@ -103,30 +89,12 @@ export function PayReturn() {
     };
   }, [recordId, slug, sessionHint, cancelled]);
 
+  // On its way to the form: nothing to read and nothing to press, so nothing but the wait.
   if (view.kind === "working") {
     return (
-      <Shell title={cancelled ? "Payment cancelled" : "Checking your payment"} description="One moment.">
-        <div className="flex justify-center">
-          <Spinner className="size-5 opacity-60" />
-        </div>
-      </Shell>
-    );
-  }
-
-  if (view.kind === "back") {
-    return (
-      <Shell
-        title={view.paid ? "Payment received" : cancelled ? "Payment cancelled" : "Payment submitted"}
-        description={
-          view.paid || cancelled
-            ? "Taking you back to the form…"
-            : "Taking you back to the form. It moves on once the payment is confirmed."
-        }
-      >
-        <Button asChild variant="outline" className="w-full rounded-full">
-          <a href={view.href}>Back to the form</a>
-        </Button>
-      </Shell>
+      <main className="flex min-h-svh items-center justify-center" aria-busy="true">
+        <Spinner className="size-5 opacity-60" />
+      </main>
     );
   }
 

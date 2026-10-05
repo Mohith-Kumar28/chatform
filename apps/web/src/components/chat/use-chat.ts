@@ -231,6 +231,12 @@ export interface PaymentState {
    * which settles the payment on the stream either way).
    */
   interrupted: boolean;
+  /**
+   * `awaiting`, straight back from a checkout that took the whole window (`?cf_pay=`), while
+   * the form asks the gateway what happened. The card says so and offers nothing: a moment
+   * later it is either gone, or `interrupted`.
+   */
+  returning?: boolean;
 }
 
 /**
@@ -669,6 +675,8 @@ export function useChat({
   const paymentStartingRef = useRef(false);
   /** A checkout is being put on screen, or is on screen as a modal. See `openCheckout`. */
   const checkoutOpeningRef = useRef(false);
+  /** The record a gateway redirect has just come back from, until the form has asked about it. */
+  const returningRecordRef = useRef(paymentReturn ?? null);
   /**
    * Which attempt the checkout being opened belongs to.
    *
@@ -1235,10 +1243,12 @@ export function useChat({
           message: null,
           blocked: prev?.recordId === data.recordId ? prev.blocked : false,
           // A new record with no tap behind it is a replay after a reload: nothing is open.
+          // Unless this is the record a gateway redirect has just come back from.
           interrupted:
             prev?.recordId === data.recordId
               ? prev.interrupted
-              : !(paymentStartingRef.current || checkoutOpeningRef.current),
+              : !(paymentStartingRef.current || checkoutOpeningRef.current) && returningRecordRef.current !== data.recordId,
+          returning: returningRecordRef.current === data.recordId,
         }));
         setValidationHint(null);
         settleTurn();
@@ -1260,6 +1270,9 @@ export function useChat({
         const data = JSON.parse((e as MessageEvent).data) as PaymentSettledEvent;
         const sessionId = sessionRef.current?.sessionId;
         const last = messagesRef.current[messagesRef.current.length - 1];
+        // Already on this device's record of the session: this is a reload replaying the event,
+        // not the payment landing, and the celebration has had its turn.
+        const seen = sessionId ? loadReceipts(sessionId).some((r) => r.recordId === data.recordId) : false;
         setPaymentReceipts((prev) => {
           if (prev.some((r) => r.recordId === data.recordId)) return prev;
           const next = [
@@ -1274,7 +1287,7 @@ export function useChat({
               testMode: data.testMode === true,
               simulated: data.simulated === true,
               afterMessageId: last ? (last.serverId ?? last.id) : null,
-              fresh: true,
+              fresh: !seen,
             },
           ];
           if (sessionId) saveReceipts(sessionId, next);
@@ -2868,7 +2881,13 @@ export function useChat({
     const recordId = paymentReturnRef.current;
     if (!recordId) return;
     paymentReturnRef.current = null;
-    void confirmPayment(recordId);
+    void confirmPayment(recordId).then((result) => {
+      returningRecordRef.current = null;
+      // Paid: `payment_settled` takes the card away. Anything else, and the card stops
+      // saying it is checking and offers Pay again.
+      if (result === "paid") return;
+      setPendingPayment((p) => (p?.recordId === recordId && p.returning ? { ...p, returning: false, interrupted: true } : p));
+    });
     try {
       const url = new URL(window.location.href);
       if (url.searchParams.has("cf_pay")) {

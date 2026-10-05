@@ -8,13 +8,14 @@ import {
   formatAmount,
   PAYMENT_PROVIDER_LABELS,
   paymentReference,
+  type PaymentProviderName,
   type PublicBlock,
 } from "@repo/form-schema";
 import { PhoneInput } from "./composers/phone";
 import { Chip } from "./composers/primitives";
 import type { PaymentState } from "./use-chat";
 import { qrSvg } from "@/lib/qr";
-import { ProviderMark } from "@/components/integrations/provider-logo";
+import { ProviderMark, providerColor } from "@/components/integrations/provider-logo";
 import { useT } from "./i18n";
 
 /**
@@ -145,7 +146,7 @@ export function GatewayPaymentAffordance({
 
   if (phase === "phone") {
     return (
-      <PaymentCard price={price} breakdown={block.amountBreakdown}>
+      <PaymentCard provider={provider} price={price} breakdown={block.amountBreakdown}>
         <form
           className="space-y-3"
           onSubmit={(e) => {
@@ -178,7 +179,7 @@ export function GatewayPaymentAffordance({
 
   if (phase === "awaiting" && payment?.preview) {
     return (
-      <PaymentCard price={price} breakdown={block.amountBreakdown} note={t("Preview · no real payment is taken")}>
+      <PaymentCard provider={provider} price={price} breakdown={block.amountBreakdown} note={t("Preview · no real payment is taken")}>
         <PayButton disabled={!canAct} onClick={() => actions?.simulate()}>
           {t("Simulate payment")}
         </PayButton>
@@ -197,6 +198,22 @@ export function GatewayPaymentAffordance({
   }
 
   /*
+   * Just back from a checkout that took the whole window. The form is asking the gateway
+   * about it right now, so there is nothing to press and nothing to apologise for yet.
+   */
+  if (phase === "awaiting" && payment?.returning) {
+    return (
+      <PaymentCard provider={provider} price={price} breakdown={block.amountBreakdown}>
+        <div className="flex items-center justify-center gap-2.5 rounded-xl bg-[var(--cf-bg)] px-3 py-2.5 text-sm">
+          <Loader2 className="size-4 shrink-0 animate-spin opacity-70" aria-hidden />
+          <span>{t("Confirming your payment…")}</span>
+        </div>
+        <CardFooter secureLine={secureLine} skip={null} />
+      </PaymentCard>
+    );
+  }
+
+  /*
    * The checkout was closed, gave up, or is not open after a reload. Nothing is
    * pending on our side, so this is the Pay card again with one line saying
    * what happened. A payment that did go through still settles on the stream
@@ -204,7 +221,7 @@ export function GatewayPaymentAffordance({
    */
   if (phase === "awaiting" && payment?.interrupted && !payment.blocked) {
     return (
-      <PaymentCard price={price} breakdown={block.amountBreakdown}>
+      <PaymentCard provider={provider} price={price} breakdown={block.amountBreakdown}>
         <div className="flex gap-2 rounded-xl bg-[var(--cf-bg)] px-3 py-2.5 text-sm">
           <CircleAlert className="mt-0.5 size-4 shrink-0 opacity-60" aria-hidden />
           <div className="min-w-0 space-y-0.5">
@@ -244,7 +261,7 @@ export function GatewayPaymentAffordance({
   if (phase === "awaiting") {
     const blocked = payment?.blocked === true;
     return (
-      <PaymentCard price={price} breakdown={block.amountBreakdown}>
+      <PaymentCard provider={provider} price={price} breakdown={block.amountBreakdown}>
         {blocked ? (
           <p className="text-sm">{t("Your browser didn't open the checkout. Tap below to open it.")}</p>
         ) : (
@@ -289,6 +306,7 @@ export function GatewayPaymentAffordance({
     const previewRefusal = payment?.preview === true;
     return (
       <PaymentCard
+        provider={provider}
         price={price}
         note={previewRefusal ? t("Preview · no real payment is taken") : undefined}
       >
@@ -313,7 +331,7 @@ export function GatewayPaymentAffordance({
   // nothing else moves.
   const starting = phase === "starting";
   return (
-    <PaymentCard price={price} breakdown={block.amountBreakdown}>
+    <PaymentCard provider={provider} price={price} breakdown={block.amountBreakdown}>
       <PayButton disabled={!canAct || starting} onClick={() => actions?.start(block.ref)}>
         {starting ? (
           <>
@@ -335,19 +353,34 @@ export function GatewayPaymentAffordance({
  * one thing a person looks for before they tap anything that takes money.
  */
 function PaymentCard({
+  provider,
   price,
   breakdown,
   note,
   children,
 }: {
+  /** Whose checkout this opens. The card takes a wash of that gateway's colour. */
+  provider?: PaymentProviderName | null;
   price: string | null;
   /** "₹1,000 × 3", when the amount is per person or item. */
   breakdown?: string;
   note?: string;
   children: React.ReactNode;
 }) {
+  /*
+   * The gateway's colour, mixed into the form's own surface rather than laid over it, so it
+   * reads as a tint in a light form and a dark one alike. A gateway with no colour of its own
+   * here keeps the form's accent, as every card did before.
+   */
+  const tint = providerColor(provider) ?? "var(--cf-accent)";
   return (
-    <div className="animate-message-in w-full max-w-md space-y-3 rounded-[var(--cf-radius-card)] border border-[color-mix(in_oklab,var(--cf-accent)_25%,var(--cf-chip-border))] bg-[color-mix(in_oklab,var(--cf-accent)_7%,var(--cf-chip-bg))] p-4">
+    <div
+      style={{
+        borderColor: `color-mix(in oklab, ${tint} 28%, var(--cf-chip-border))`,
+        backgroundImage: `linear-gradient(140deg, color-mix(in oklab, ${tint} 16%, var(--cf-chip-bg)) 0%, color-mix(in oklab, ${tint} 6%, var(--cf-chip-bg)) 55%, var(--cf-chip-bg) 100%)`,
+      }}
+      className="animate-message-in w-full max-w-md space-y-3 rounded-[var(--cf-radius-card)] border bg-[var(--cf-chip-bg)] p-4"
+    >
       {note && <p className="text-center text-xs font-medium opacity-60">{note}</p>}
       {/* Centred like a receipt: one figure, and the question above already says what it is for. */}
       {price && (

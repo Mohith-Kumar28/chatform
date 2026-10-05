@@ -750,14 +750,14 @@ const NO_ACCOUNT = "__none";
  * one currency the API lists for it is only that default — so a block moving
  * onto Stripe keeps the currency it already had.
  */
-function currencyFor(account: PaymentAccount | undefined, current: string): string | undefined {
+export function currencyFor(account: PaymentAccount | undefined, current: string): string | undefined {
   if (!account) return undefined;
   const want = INR_ONLY_PROVIDERS.has(account.provider) ? "INR" : account.currencies[0]?.toUpperCase();
   return want && want !== current.toUpperCase() ? want : undefined;
 }
 
 /** The account a new verified-checkout question starts on: the one marked default, else the first connected. */
-function defaultAccount(accounts: PaymentAccount[]): PaymentAccount | undefined {
+export function defaultAccount(accounts: PaymentAccount[]): PaymentAccount | undefined {
   const usable = accounts.filter((a) => a.status === "active");
   return usable.find((a) => a.isDefault) ?? usable[usable.length - 1];
 }

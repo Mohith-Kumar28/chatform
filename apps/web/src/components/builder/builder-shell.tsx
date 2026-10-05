@@ -31,6 +31,7 @@ import { firstBlockingIssue } from "./attention";
 import { ShortcutsDialog } from "@/components/ui/shortcuts-dialog";
 import { FeedbackLauncher } from "@/components/feedback/feedback-launcher";
 import { useBuilderShortcuts } from "./use-builder-shortcuts";
+import { useDefaultPaymentAccount } from "./use-default-payment-account";
 import { ImportNotice } from "@/components/import/import-notice";
 import { SettingRevealListener } from "./setting-reveal";
 
@@ -68,6 +69,8 @@ export function BuilderShell({
   const permissions = (form as { permissions?: Record<string, string[]> } | undefined)?.permissions;
   const readOnly = permissions !== undefined && !(permissions.form ?? []).includes("update");
   const { flush, retry } = useAutosave(formId, { enabled: !readOnly });
+  // Only on the document that belongs to this form: the store still holds the last one while a new one loads.
+  useDefaultPaymentAccount({ enabled: !readOnly && loadedId === formId });
   const [publishing, setPublishing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   /**
