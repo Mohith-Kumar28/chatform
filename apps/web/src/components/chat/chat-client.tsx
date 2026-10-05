@@ -2370,6 +2370,23 @@ const Composer = memo(function Composer({
   const canSkip = Boolean(block) && config.allowSkip && !block?.required;
 
   /**
+   * On a phone, a question answered by tapping keeps the keyboard down.
+   *
+   * The box takes the caret on every question so a keyboard user can just
+   * type, and on a touch screen the caret is the keyboard: it rose over the
+   * very options the question was offering, for an answer that is one tap.
+   * So there the box is left alone, and a keyboard still up from the last
+   * typed answer is put away. Tapping the box brings it back, as anywhere.
+   */
+  const tapOnly = Boolean(block) && answeredByTap(block!.type) && onTouchScreen();
+  const composerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!tapOnly) return;
+    const el = document.activeElement;
+    if (el instanceof HTMLElement && composerRef.current?.contains(el)) el.blur();
+  }, [tapOnly, block?.ref]);
+
+  /**
    * Escape skips, wherever the focus happens to be.
    *
    * Above the early return because hooks cannot be conditional, and bound to
@@ -2430,7 +2447,7 @@ const Composer = memo(function Composer({
   }
 
   return (
-    <div className="space-y-2">
+    <div ref={composerRef} className="space-y-2">
       {validationHint && <p className="px-1 text-sm opacity-70">{validationHint}</p>}
       {micError?.ref === block.ref && <p className="px-1 text-sm opacity-70">{micError.message}</p>}
 
@@ -2539,7 +2556,7 @@ const Composer = memo(function Composer({
             value={text}
             onChange={setText}
             onSubmit={submit}
-            autoFocus
+            autoFocus={!tapOnly}
             multiline={block.type === "long_text"}
             placeholder={block.placeholder || placeholderFor(block.type, t)}
             /*
@@ -2573,6 +2590,36 @@ const Composer = memo(function Composer({
     </div>
   );
 });
+
+/** Whether the question draws something to tap above the box, so typing is the exception. */
+function answeredByTap(type: PublicBlock["type"]): boolean {
+  switch (type) {
+    case "single_select":
+    case "multi_select":
+    case "dropdown":
+    case "picture_choice":
+    case "yes_no":
+    case "poll":
+    case "rating":
+    case "nps":
+    case "opinion_scale":
+    case "ranking":
+    case "matrix":
+    case "date":
+    case "scheduling":
+    case "file_upload":
+    case "signature":
+    case "payment":
+    case "legal_consent":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function onTouchScreen(): boolean {
+  return typeof window !== "undefined" && Boolean(window.matchMedia?.("(pointer: coarse)").matches);
+}
 
 /** Nudges people that typing is allowed even when chips are on offer. */
 function placeholderFor(type: PublicBlock["type"], t: Translate): string {

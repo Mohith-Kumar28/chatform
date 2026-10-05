@@ -10,8 +10,9 @@ import { useState } from "react";
  *
  * Typeform's figures are read off typeform.com/pricing and dated; they are a
  * competitor's prices and will change, so re-check the page and move the date
- * when they do. The slider stops at 10,000 because that is the largest volume
- * Typeform publishes a price for, so every number shown is a published one.
+ * when they do. The slider runs to 50,000, as Youform's does. Typeform
+ * publishes no price past 10,000 responses, so above that the panel shows an
+ * estimate, says so, and keeps it out of the rate card.
  */
 const REVIEWED = "4 October 2026";
 const TYPEFORM = [
@@ -19,14 +20,19 @@ const TYPEFORM = [
   { plan: "Plus", upTo: 1_000, price: 79 },
   { plan: "Business", upTo: 10_000, price: 129 },
 ] as const;
-const MAX = 10_000;
+const MAX = 50_000;
+const PUBLISHED_MAX = TYPEFORM[TYPEFORM.length - 1].upTo;
+/* Past the last published plan Typeform quotes on request. Our own floor for
+   the illustration, the same one Youform uses; never a Typeform rate. */
+const HIGH_VOLUME_ESTIMATE = 500;
 /* Typeform's face, getting worse as the count (and the bill) climbs. */
 const FACES = [
   { upTo: 100, face: "\u{1F642}" },
   { upTo: 1_000, face: "\u{1F615}" },
   { upTo: 4_000, face: "\u{1F61F}" },
   { upTo: 7_000, face: "\u{1F630}" },
-  { upTo: MAX, face: "\u{1F631}" },
+  { upTo: PUBLISHED_MAX, face: "\u{1F631}" },
+  { upTo: MAX, face: "\u{1F62D}" },
 ] as const;
 const INK = "var(--family-choice-ink)";
 
@@ -40,6 +46,8 @@ export function PricingCalculator({ proPrice }: { proPrice: number }) {
   const byVolume = TYPEFORM.find((t) => count <= t.upTo) ?? TYPEFORM[TYPEFORM.length - 1]!;
   const theirs = needsPro && byVolume.plan === "Basic" ? TYPEFORM[1]! : byVolume;
   const ours = needsPro ? proPrice : 0;
+  const estimated = count > PUBLISHED_MAX;
+  const theirPrice = estimated ? HIGH_VOLUME_ESTIMATE : theirs.price;
   const theirFace = (FACES.find((f) => count <= f.upTo) ?? FACES[FACES.length - 1]!).face;
 
   return (
@@ -90,8 +98,22 @@ export function PricingCalculator({ proPrice }: { proPrice: number }) {
 
         <div className="mt-8 grid sm:grid-cols-2">
           {[
-            { name: "chatform", face: "\u{1F601}", price: ours, note: `${needsPro ? "Pro" : "Free"} plan · unlimited responses*` },
-            { name: "Typeform", face: theirFace, price: theirs.price, note: `${theirs.plan} published base plan` },
+            { name: "chatform", face: "\u{1F601}", price: `$${ours}`, note: `${needsPro ? "Pro" : "Free"} plan · unlimited responses*` },
+            {
+              name: "Typeform",
+              face: theirFace,
+              price: estimated ? `$${theirPrice}+` : `$${theirPrice}`,
+              note: estimated ? (
+                <>
+                  Estimate ·{" "}
+                  <a href="https://www.typeform.com/pricing/" rel="noopener nofollow" className="underline underline-offset-4">
+                    Check pricing
+                  </a>
+                </>
+              ) : (
+                `${theirs.plan} published base plan`
+              ),
+            },
           ].map((side, i) => (
             <div key={side.name} className={i === 1 ? "max-sm:mt-8 max-sm:border-t max-sm:pt-8 sm:border-l sm:pl-8" : "sm:pr-8"} style={{ borderColor: INK }}>
               <p className="font-display flex items-center gap-3 text-2xl font-semibold tracking-tight">
@@ -102,7 +124,7 @@ export function PricingCalculator({ proPrice }: { proPrice: number }) {
                 </span>
               </p>
               <p className="mt-6 flex items-baseline gap-2" style={{ color: INK }}>
-                <span className="font-display tabular text-[4.5rem] leading-none font-bold tracking-[-0.045em]">${side.price}</span>
+                <span className="font-display tabular text-[4.5rem] leading-none font-bold tracking-[-0.045em]">{side.price}</span>
                 <span className="text-sm">/ month</span>
               </p>
               <p className="mt-4 text-sm" style={{ color: INK }}>
@@ -122,8 +144,14 @@ export function PricingCalculator({ proPrice }: { proPrice: number }) {
             Monthly base-price difference
           </p>
           <p className="font-display mt-2.5 text-[1.75rem] leading-tight font-semibold tracking-[-0.02em] sm:text-[2rem]" style={{ color: INK }}>
-            chatform is ${theirs.price - ours} less per month.
+            chatform is ${theirPrice - ours}
+            {estimated ? "+" : ""} less per month.
           </p>
+          {estimated && (
+            <p className="mt-2 text-sm" style={{ color: INK }}>
+              Exact savings depend on your Typeform quote.
+            </p>
+          )}
         </div>
       </div>
 
@@ -131,7 +159,9 @@ export function PricingCalculator({ proPrice }: { proPrice: number }) {
         <p>
           <strong className="text-foreground font-semibold">A response-volume illustration, not a like-for-like feature comparison.</strong>{" "}
           These are published base plans, not the cheapest possible combination of add-ons. Features, response
-          add-ons, account offers, promotions, taxes and annual billing can change what you pay.
+          add-ons, account offers, promotions, taxes and annual billing can change what you pay. Above{" "}
+          {PUBLISHED_MAX.toLocaleString("en-US")} responses, ${HIGH_VOLUME_ESTIMATE}+ is chatform&apos;s illustrative
+          estimate, not a published Typeform rate or quote.
         </p>
         <p>
           * chatform&apos;s unlimited responses are subject to{" "}
@@ -162,6 +192,7 @@ export function PricingCalculator({ proPrice }: { proPrice: number }) {
                 ["chatform Free", "Unlimited, subject to fair use", "$0"],
                 ["chatform Pro", "Unlimited, subject to fair use", `$${proPrice}`],
                 ...TYPEFORM.map((t) => [`Typeform ${t.plan}`, t.upTo.toLocaleString("en-US"), `$${t.price}`]),
+                ["Typeform Enterprise", `Over ${PUBLISHED_MAX.toLocaleString("en-US")}`, "On request"],
               ].map(([plan, volume, price]) => (
                 <tr key={plan} className="border-border/60 border-b last:border-b-0">
                   <td className="py-2.5 pr-4">{plan}</td>

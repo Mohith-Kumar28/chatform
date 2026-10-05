@@ -9,7 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "cf:build": "opennextjs-cloudflare build",
+    "cf:build": "opennextjs-cloudflare build && node scripts/minify-embed.mjs",
     "cf:preview": "opennextjs-cloudflare preview",
     "cf:deploy": "opennextjs-cloudflare deploy && node edge/deploy.mjs",
     "og:image": "tsx scripts/og-image.mts",
@@ -95,6 +95,7 @@
     "fumadocs-mdx": "15.4.0",
     "jsqr": "^1.4.0",
     "tailwindcss": "^4",
+    "terser": "^5.16.9",
     "typescript": "^5",
     "wrangler": "^4.127.0"
   },

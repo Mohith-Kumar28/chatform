@@ -11,7 +11,8 @@
  * How it looks and when it opens are published with the form and fetched from
  * `/p/forms/:slug/embed` before anything is drawn, so a change made in the
  * builder reaches this page on Publish. Every attribute below still works and
- * overrides the published value on this page.
+ * overrides the published value on this page. The one thing that does not wait
+ * for them is a click: see `early`.
  *
  * There is no API key here and there never will be. A published form is public
  * — the loader points a frame at its URL, and the frame talks to the API on its
@@ -224,7 +225,26 @@
     return app;
   }
 
-  /** The published settings, or `{}` after 2.5s or any failure: the attributes and defaults take over. */
+  /**
+   * The published settings as this browser last saw them, kept in the host
+   * page's storage. Never used in place of a fetch that answers in time: they
+   * are what a click that will not wait is drawn with (see `early`), and what
+   * a fetch that is slow or fails falls back to.
+   */
+  var settingsKey = "chatform:settings:" + slug;
+  function remembered() {
+    try {
+      var value = JSON.parse(window.localStorage.getItem(settingsKey));
+      return value && typeof value === "object" ? value : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * The published settings. After 2.5s or a failed request, the remembered
+   * ones, or `{}`: the attributes and defaults take over.
+   */
   function loadPublished(done) {
     var settled = false;
     function finish(value) {
@@ -232,19 +252,26 @@
       settled = true;
       done(value && typeof value === "object" ? value : {});
     }
-    setTimeout(function () {
-      finish({});
-    }, 2500);
+    function fallback() {
+      finish(remembered() || {});
+    }
+    setTimeout(fallback, 2500);
     try {
       fetch(apiOrigin() + "/p/forms/" + encodeURIComponent(slug) + "/embed", { credentials: "omit" })
         .then(function (res) {
           return res.ok ? res.json() : {};
         })
-        .then(finish, function () {
-          finish({});
-        });
+        .then(function (value) {
+          // Kept even when it arrives after the timeout or an early click.
+          try {
+            if (value && typeof value === "object") window.localStorage.setItem(settingsKey, JSON.stringify(value));
+          } catch (e) {
+            /* storage blocked: the next early click draws with the defaults */
+          }
+          finish(value);
+        }, fallback);
     } catch (e) {
-      finish({});
+      fallback();
     }
   }
 
@@ -329,12 +356,13 @@
   }
 
   function addStyle(id, css) {
-    if (id && document.getElementById(id)) return;
+    if (id && document.getElementById(id)) return null;
     var style = document.createElement("style");
     if (id) style.id = id;
     if (nonce) style.setAttribute("nonce", nonce);
     style.textContent = css;
     document.head.appendChild(style);
+    return style;
   }
 
   /** Shared look. Placement is deliberately not here — see `injectPlacement`. */
@@ -447,7 +475,10 @@
    * pinned 20px from the corner of a phone is a form nobody can fill in. A rule
    * can be overridden by a media query; `style.bottom` cannot.
    */
+  var placement = null;
   function injectPlacement() {
+    // Drawn twice when a click came before the settings: the second replaces the first.
+    if (placement && placement.parentNode) placement.parentNode.removeChild(placement);
     var launcherRule =
       ".cf-l-" + uid + "{" + vertical + ":" + offset + "px;" + horizontal + ":" + offset + "px}";
 
@@ -482,7 +513,7 @@
     var fallbackRule =
       mode === "popup" && showLauncher ? "@media (min-width:521px){.cf-p-" + uid + ">.cf-close{display:none}}" : "";
 
-    addStyle(null, launcherRule + panelRule + motionRule + mobileRule + fallbackRule);
+    placement = addStyle(null, launcherRule + panelRule + motionRule + mobileRule + fallbackRule);
   }
 
   function buildFrame() {
@@ -610,15 +641,55 @@
     isOpen = true;
   }
 
+  /** The panel and its loading dots. Kept, and restyled, when `early` already drew it. */
+  function drawPanel() {
+    var fresh = !panel;
+    if (fresh) {
+      panel = document.createElement("div");
+      panel.appendChild(skeleton());
+    }
+    panel.className =
+      "cf-panel cf-p-" + uid + hostClass() + (mode === "fullpage" ? " cf-fullpage" : "") + (shell ? " cf-open" : "");
+    skin(panel);
+    if (fresh) document.body.appendChild(panel);
+  }
+
+  /**
+   * Asked to open before the settings have arrived.
+   *
+   * A click is answered on the click. The loader used to hold it until the
+   * settings request came back, which on a slow connection was a button that
+   * did nothing for a second or two, and a page that only adds this script
+   * when its own button is pressed paid that wait on every first open.
+   *
+   * So with settings remembered from an earlier visit it mounts on them at
+   * once, frame and all. With none, it draws the panel and its loading dots
+   * from the tag's attributes and the defaults, and the real settings restyle
+   * it and start the frame when they land.
+   */
+  var shell = false;
+  function early() {
+    if (mounted || destroyed || shell || !document.body) return;
+    var known = remembered();
+    if (known) {
+      settle(known);
+      return;
+    }
+    configure({});
+    // Not the published settings yet, so not what `Chatform.settings()` reports.
+    settings = null;
+    if (mode === "inline") return;
+    shell = true;
+    injectStyles();
+    injectPlacement();
+    drawPanel();
+  }
+
   function mountOverlay() {
     injectStyles();
     injectPlacement();
-    panel = document.createElement("div");
-    panel.className = "cf-panel cf-p-" + uid + hostClass() + (mode === "fullpage" ? " cf-fullpage" : "");
-    skin(panel);
-    panel.appendChild(skeleton());
+    drawPanel();
     if (!lazy) panel.appendChild(buildFrame());
-    document.body.appendChild(panel);
 
     if (mode !== "fullpage" && showLauncher) {
       launcher = document.createElement("button");
@@ -809,10 +880,16 @@
     return which && which !== "true" ? which === slug : window.Chatform === api;
   }
   function onPageClick(event) {
-    if (destroyed || !mounted || !event.target || !event.target.closest) return;
+    if (destroyed || !event.target || !event.target.closest) return;
     var el = event.target.closest("[data-chatform-open]");
     if (!el || !claims(el)) return;
     event.preventDefault();
+    // Before the settings: answer the click now, and open properly on mount.
+    if (!mounted) early();
+    if (!mounted) {
+      pending.push(open);
+      return;
+    }
     // Inline is already open, so the most a button can do is bring it into view.
     if (mode === "inline" && panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
     else open();
@@ -1030,15 +1107,18 @@
     // here is one the frame gets to use too.
     preconnect(app);
     preconnect(apiOrigin());
-    loadPublished(function (published) {
-      if (destroyed) return;
-      configure(published);
-      emit("settings", api.settings());
-      build();
-      mounted = true;
-      for (var p = 0; p < pending.length; p++) pending[p]();
-      pending = [];
-    });
+    loadPublished(settle);
+  }
+
+  /** Mounts on the settings, once: the fetched ones, or the remembered ones `early` could not wait for. */
+  function settle(published) {
+    if (destroyed || mounted) return;
+    configure(published);
+    emit("settings", api.settings());
+    build();
+    mounted = true;
+    for (var p = 0; p < pending.length; p++) pending[p]();
+    pending = [];
   }
 
   /**
@@ -1068,8 +1148,12 @@
       if (narrow.addEventListener) narrow.addEventListener("change", onNarrowChange);
       else if (narrow.addListener) narrow.addListener(onNarrowChange);
     }
-    if (mode === "inline") mountInline();
-    else {
+    if (mode === "inline") {
+      // A panel `early` drew for a form that turned out to be inline.
+      if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
+      panel = null;
+      mountInline();
+    } else {
       mountOverlay();
       if (mode === "fullpage") open();
       else {
@@ -1085,9 +1169,10 @@
     mount();
   }
 
-  /** Runs now if mounted, or once the settings have arrived. */
-  function whenMounted(fn) {
+  /** Runs now if mounted, or once the settings have arrived. An open draws the panel meanwhile; see `early`. */
+  function whenMounted(fn, opens) {
     return function () {
+      if (!mounted && opens) early();
       if (mounted) fn();
       else pending.push(fn);
     };
@@ -1095,9 +1180,9 @@
 
   var api = {
     slug: slug,
-    open: whenMounted(open),
+    open: whenMounted(open, true),
     close: whenMounted(close),
-    toggle: whenMounted(toggle),
+    toggle: whenMounted(toggle, true),
     prefill: prefill,
     destroy: destroy,
     /** A copy, or null until the settings have arrived; `on("settings")` fires then. */
