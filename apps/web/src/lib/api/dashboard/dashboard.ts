@@ -102,6 +102,14 @@ import type {
   PostApiForms200,
   PostApiForms403,
   PostApiFormsBody,
+  PostApiFormsByIdIntegrationsGoogleSheetsStart200,
+  PostApiFormsByIdIntegrationsGoogleSheetsStart403,
+  PostApiFormsByIdIntegrationsGoogleSheetsStart503,
+  PostApiFormsByIdIntegrationsGoogleSheetsStartBody,
+  PostApiFormsByIdIntegrationsGoogleSheetsSync200,
+  PostApiFormsByIdIntegrationsGoogleSheetsSync404,
+  PostApiFormsByIdIntegrationsGoogleSheetsSync409,
+  PostApiFormsByIdIntegrationsGoogleSheetsSync502,
   PostApiFormsByIdIntegrationsSpreadsheet200,
   PostApiFormsByIdIntegrationsSpreadsheetBody,
   PostApiFormsByIdKnowledgeCrawl200,
@@ -288,6 +296,95 @@ export function useGetApiPaymentAccountsOauthByProviderCallback<TData = Awaited<
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetApiPaymentAccountsOauthByProviderCallbackQueryOptions(provider,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiIntegrationsGoogleSheetsCallbackResponse302 = {
+  data: void
+  status: 302
+}
+
+;
+export type getApiIntegrationsGoogleSheetsCallbackResponseError = (getApiIntegrationsGoogleSheetsCallbackResponse302) & {
+  headers: Headers;
+};
+
+export type getApiIntegrationsGoogleSheetsCallbackResponse = (getApiIntegrationsGoogleSheetsCallbackResponseError)
+
+export const getGetApiIntegrationsGoogleSheetsCallbackUrl = () => {
+
+
+
+
+  return `/api/integrations/google-sheets/callback`
+}
+
+/**
+ * A browser redirect, not an API. Redirects to the returnTo page with `?sheets=connected` or `?sheets=error&reason=…`.
+ * @summary OAuth callback from Google for a Sheets connection
+ */
+export const getApiIntegrationsGoogleSheetsCallback = async ( options?: Parameters<typeof customFetch>[1]): Promise<getApiIntegrationsGoogleSheetsCallbackResponse> => {
+
+  return customFetch<getApiIntegrationsGoogleSheetsCallbackResponse>(getGetApiIntegrationsGoogleSheetsCallbackUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiIntegrationsGoogleSheetsCallbackQueryKey = () => {
+    return [
+    `/api/integrations/google-sheets/callback`
+    ] as const;
+    }
+
+
+export const getGetApiIntegrationsGoogleSheetsCallbackQueryOptions = <TData = Awaited<ReturnType<typeof getApiIntegrationsGoogleSheetsCallback>>, TError = void>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiIntegrationsGoogleSheetsCallback>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiIntegrationsGoogleSheetsCallbackQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiIntegrationsGoogleSheetsCallback>>> = ({ signal }) => getApiIntegrationsGoogleSheetsCallback({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiIntegrationsGoogleSheetsCallback>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiIntegrationsGoogleSheetsCallbackQueryResult = NonNullable<Awaited<ReturnType<typeof getApiIntegrationsGoogleSheetsCallback>>>
+export type GetApiIntegrationsGoogleSheetsCallbackQueryError = void
+
+
+/**
+ * @summary OAuth callback from Google for a Sheets connection
+ */
+
+export function useGetApiIntegrationsGoogleSheetsCallback<TData = Awaited<ReturnType<typeof getApiIntegrationsGoogleSheetsCallback>>, TError = void>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiIntegrationsGoogleSheetsCallback>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiIntegrationsGoogleSheetsCallbackQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -7487,7 +7584,294 @@ export function useGetApiFormsByIdIntegrations<TData = Awaited<ReturnType<typeof
 
 
 
-export type postApiFormsByIdIntegrationsSpreadsheetResponse200 = {
+export type postApiFormsByIdIntegrationsGoogleSheetsStartResponse200 = {
+  data: PostApiFormsByIdIntegrationsGoogleSheetsStart200
+  status: 200
+}
+
+export type postApiFormsByIdIntegrationsGoogleSheetsStartResponse403 = {
+  data: PostApiFormsByIdIntegrationsGoogleSheetsStart403
+  status: 403
+}
+
+export type postApiFormsByIdIntegrationsGoogleSheetsStartResponse503 = {
+  data: PostApiFormsByIdIntegrationsGoogleSheetsStart503
+  status: 503
+}
+
+export type postApiFormsByIdIntegrationsGoogleSheetsStartResponseSuccess = (postApiFormsByIdIntegrationsGoogleSheetsStartResponse200) & {
+  headers: Headers;
+};
+export type postApiFormsByIdIntegrationsGoogleSheetsStartResponseError = (postApiFormsByIdIntegrationsGoogleSheetsStartResponse403 | postApiFormsByIdIntegrationsGoogleSheetsStartResponse503) & {
+  headers: Headers;
+};
+
+export type postApiFormsByIdIntegrationsGoogleSheetsStartResponse = (postApiFormsByIdIntegrationsGoogleSheetsStartResponseSuccess | postApiFormsByIdIntegrationsGoogleSheetsStartResponseError)
+
+export const getPostApiFormsByIdIntegrationsGoogleSheetsStartUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/integrations/google-sheets/start`
+}
+
+/**
+ * Returns Google's consent URL, or `connected` when this person has already approved for another form and the sheet was created straight away.
+ * @summary Start connecting a Google Sheet
+ */
+export const postApiFormsByIdIntegrationsGoogleSheetsStart = async (id: string,
+    postApiFormsByIdIntegrationsGoogleSheetsStartBody: PostApiFormsByIdIntegrationsGoogleSheetsStartBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiFormsByIdIntegrationsGoogleSheetsStartResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiFormsByIdIntegrationsGoogleSheetsStartResponse>(getPostApiFormsByIdIntegrationsGoogleSheetsStartUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiFormsByIdIntegrationsGoogleSheetsStartBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiFormsByIdIntegrationsGoogleSheetsStartMutationOptions = <TError = PostApiFormsByIdIntegrationsGoogleSheetsStart403 | PostApiFormsByIdIntegrationsGoogleSheetsStart503,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsGoogleSheetsStart>>, TError,PostApiFormsByIdIntegrationsGoogleSheetsStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsGoogleSheetsStart>>, TError,PostApiFormsByIdIntegrationsGoogleSheetsStartMutationVariables, TContext> => {
+
+const mutationKey = ['postApiFormsByIdIntegrationsGoogleSheetsStart'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsGoogleSheetsStart>>, PostApiFormsByIdIntegrationsGoogleSheetsStartMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postApiFormsByIdIntegrationsGoogleSheetsStart(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFormsByIdIntegrationsGoogleSheetsStartMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsGoogleSheetsStart>>>
+    export type PostApiFormsByIdIntegrationsGoogleSheetsStartMutationBody = PostApiFormsByIdIntegrationsGoogleSheetsStartBody
+    export type PostApiFormsByIdIntegrationsGoogleSheetsStartMutationError = PostApiFormsByIdIntegrationsGoogleSheetsStart403 | PostApiFormsByIdIntegrationsGoogleSheetsStart503
+    export type PostApiFormsByIdIntegrationsGoogleSheetsStartMutationVariables = {id: string;data: PostApiFormsByIdIntegrationsGoogleSheetsStartBody}
+
+    /**
+ * @summary Start connecting a Google Sheet
+ */
+export const usePostApiFormsByIdIntegrationsGoogleSheetsStart = <TError = PostApiFormsByIdIntegrationsGoogleSheetsStart403 | PostApiFormsByIdIntegrationsGoogleSheetsStart503,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsGoogleSheetsStart>>, TError,PostApiFormsByIdIntegrationsGoogleSheetsStartMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFormsByIdIntegrationsGoogleSheetsStart>>,
+        TError,
+        PostApiFormsByIdIntegrationsGoogleSheetsStartMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFormsByIdIntegrationsGoogleSheetsStartMutationOptions(options));
+    }
+    export type postApiFormsByIdIntegrationsGoogleSheetsSyncResponse200 = {
+  data: PostApiFormsByIdIntegrationsGoogleSheetsSync200
+  status: 200
+}
+
+export type postApiFormsByIdIntegrationsGoogleSheetsSyncResponse404 = {
+  data: PostApiFormsByIdIntegrationsGoogleSheetsSync404
+  status: 404
+}
+
+export type postApiFormsByIdIntegrationsGoogleSheetsSyncResponse409 = {
+  data: PostApiFormsByIdIntegrationsGoogleSheetsSync409
+  status: 409
+}
+
+export type postApiFormsByIdIntegrationsGoogleSheetsSyncResponse502 = {
+  data: PostApiFormsByIdIntegrationsGoogleSheetsSync502
+  status: 502
+}
+
+export type postApiFormsByIdIntegrationsGoogleSheetsSyncResponseSuccess = (postApiFormsByIdIntegrationsGoogleSheetsSyncResponse200) & {
+  headers: Headers;
+};
+export type postApiFormsByIdIntegrationsGoogleSheetsSyncResponseError = (postApiFormsByIdIntegrationsGoogleSheetsSyncResponse404 | postApiFormsByIdIntegrationsGoogleSheetsSyncResponse409 | postApiFormsByIdIntegrationsGoogleSheetsSyncResponse502) & {
+  headers: Headers;
+};
+
+export type postApiFormsByIdIntegrationsGoogleSheetsSyncResponse = (postApiFormsByIdIntegrationsGoogleSheetsSyncResponseSuccess | postApiFormsByIdIntegrationsGoogleSheetsSyncResponseError)
+
+export const getPostApiFormsByIdIntegrationsGoogleSheetsSyncUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/integrations/google-sheets/sync`
+}
+
+/**
+ * @summary Rewrite the Google Sheet from the responses as they are now
+ */
+export const postApiFormsByIdIntegrationsGoogleSheetsSync = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<postApiFormsByIdIntegrationsGoogleSheetsSyncResponse> => {
+
+  return customFetch<postApiFormsByIdIntegrationsGoogleSheetsSyncResponse>(getPostApiFormsByIdIntegrationsGoogleSheetsSyncUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getPostApiFormsByIdIntegrationsGoogleSheetsSyncMutationOptions = <TError = PostApiFormsByIdIntegrationsGoogleSheetsSync404 | PostApiFormsByIdIntegrationsGoogleSheetsSync409 | PostApiFormsByIdIntegrationsGoogleSheetsSync502,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsGoogleSheetsSync>>, TError,PostApiFormsByIdIntegrationsGoogleSheetsSyncMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsGoogleSheetsSync>>, TError,PostApiFormsByIdIntegrationsGoogleSheetsSyncMutationVariables, TContext> => {
+
+const mutationKey = ['postApiFormsByIdIntegrationsGoogleSheetsSync'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsGoogleSheetsSync>>, PostApiFormsByIdIntegrationsGoogleSheetsSyncMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postApiFormsByIdIntegrationsGoogleSheetsSync(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFormsByIdIntegrationsGoogleSheetsSyncMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsGoogleSheetsSync>>>
+
+    export type PostApiFormsByIdIntegrationsGoogleSheetsSyncMutationError = PostApiFormsByIdIntegrationsGoogleSheetsSync404 | PostApiFormsByIdIntegrationsGoogleSheetsSync409 | PostApiFormsByIdIntegrationsGoogleSheetsSync502
+    export type PostApiFormsByIdIntegrationsGoogleSheetsSyncMutationVariables = {id: string}
+
+    /**
+ * @summary Rewrite the Google Sheet from the responses as they are now
+ */
+export const usePostApiFormsByIdIntegrationsGoogleSheetsSync = <TError = PostApiFormsByIdIntegrationsGoogleSheetsSync404 | PostApiFormsByIdIntegrationsGoogleSheetsSync409 | PostApiFormsByIdIntegrationsGoogleSheetsSync502,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFormsByIdIntegrationsGoogleSheetsSync>>, TError,PostApiFormsByIdIntegrationsGoogleSheetsSyncMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFormsByIdIntegrationsGoogleSheetsSync>>,
+        TError,
+        PostApiFormsByIdIntegrationsGoogleSheetsSyncMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFormsByIdIntegrationsGoogleSheetsSyncMutationOptions(options));
+    }
+    export type deleteApiFormsByIdIntegrationsGoogleSheetsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type deleteApiFormsByIdIntegrationsGoogleSheetsResponseSuccess = (deleteApiFormsByIdIntegrationsGoogleSheetsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type deleteApiFormsByIdIntegrationsGoogleSheetsResponse = (deleteApiFormsByIdIntegrationsGoogleSheetsResponseSuccess)
+
+export const getDeleteApiFormsByIdIntegrationsGoogleSheetsUrl = (id: string,) => {
+
+
+
+
+  return `/api/forms/${id}/integrations/google-sheets`
+}
+
+/**
+ * The spreadsheet stays in the owner's Drive. Chatform stops writing to it.
+ * @summary Disconnect the Google Sheet
+ */
+export const deleteApiFormsByIdIntegrationsGoogleSheets = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteApiFormsByIdIntegrationsGoogleSheetsResponse> => {
+
+  return customFetch<deleteApiFormsByIdIntegrationsGoogleSheetsResponse>(getDeleteApiFormsByIdIntegrationsGoogleSheetsUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteApiFormsByIdIntegrationsGoogleSheetsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFormsByIdIntegrationsGoogleSheets>>, TError,DeleteApiFormsByIdIntegrationsGoogleSheetsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiFormsByIdIntegrationsGoogleSheets>>, TError,DeleteApiFormsByIdIntegrationsGoogleSheetsMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiFormsByIdIntegrationsGoogleSheets'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiFormsByIdIntegrationsGoogleSheets>>, DeleteApiFormsByIdIntegrationsGoogleSheetsMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiFormsByIdIntegrationsGoogleSheets(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiFormsByIdIntegrationsGoogleSheetsMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiFormsByIdIntegrationsGoogleSheets>>>
+
+    export type DeleteApiFormsByIdIntegrationsGoogleSheetsMutationError = unknown
+    export type DeleteApiFormsByIdIntegrationsGoogleSheetsMutationVariables = {id: string}
+
+    /**
+ * @summary Disconnect the Google Sheet
+ */
+export const useDeleteApiFormsByIdIntegrationsGoogleSheets = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFormsByIdIntegrationsGoogleSheets>>, TError,DeleteApiFormsByIdIntegrationsGoogleSheetsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiFormsByIdIntegrationsGoogleSheets>>,
+        TError,
+        DeleteApiFormsByIdIntegrationsGoogleSheetsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiFormsByIdIntegrationsGoogleSheetsMutationOptions(options));
+    }
+    export type postApiFormsByIdIntegrationsSpreadsheetResponse200 = {
   data: PostApiFormsByIdIntegrationsSpreadsheet200
   status: 200
 }

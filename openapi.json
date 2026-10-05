@@ -8012,9 +8012,6 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "configured": {
-                      "type": "boolean"
-                    },
                     "range": {
                       "type": "string",
                       "enum": [
@@ -8718,7 +8715,6 @@
                     }
                   },
                   "required": [
-                    "configured",
                     "range",
                     "bucket",
                     "totals",
@@ -8776,9 +8772,6 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "configured": {
-                      "type": "boolean"
-                    },
                     "minutes": {
                       "type": "number"
                     },
@@ -8876,7 +8869,6 @@
                     }
                   },
                   "required": [
-                    "configured",
                     "minutes",
                     "until",
                     "online",
@@ -8894,6 +8886,518 @@
             "description": "Not an admin"
           }
         },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/visitors": {
+      "get": {
+        "operationId": "getApiAdminVisitors",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "schema": {
+              "default": "30d",
+              "type": "string",
+              "enum": [
+                "1d",
+                "7d",
+                "30d",
+                "90d",
+                "365d"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "default": "recent",
+              "type": "string",
+              "enum": [
+                "recent",
+                "views",
+                "visits",
+                "days",
+                "time"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "default": "",
+              "type": "string",
+              "maxLength": 80
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          }
+        ],
+        "tags": [
+          "admin"
+        ],
+        "summary": "Every visitor seen in a period: when they came, how often, from where, and who they are once signed in",
+        "responses": {
+          "200": {
+            "description": "Visitors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total": {
+                      "type": "number"
+                    },
+                    "pageSize": {
+                      "type": "number"
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "visitor": {
+                            "type": "string"
+                          },
+                          "first_seen": {
+                            "type": "number"
+                          },
+                          "last_seen": {
+                            "type": "number"
+                          },
+                          "visits": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          },
+                          "days": {
+                            "type": "number"
+                          },
+                          "engaged_ms": {
+                            "type": "number"
+                          },
+                          "country": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": "string"
+                          },
+                          "city": {
+                            "type": "string"
+                          },
+                          "device": {
+                            "type": "string"
+                          },
+                          "browser": {
+                            "type": "string"
+                          },
+                          "os": {
+                            "type": "string"
+                          },
+                          "language": {
+                            "type": "string"
+                          },
+                          "screen_w": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "channel": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "medium": {
+                            "type": "string"
+                          },
+                          "campaign": {
+                            "type": "string"
+                          },
+                          "referrer_host": {
+                            "type": "string"
+                          },
+                          "landing_area": {
+                            "type": "string"
+                          },
+                          "landing_path": {
+                            "type": "string"
+                          },
+                          "last_area": {
+                            "type": "string"
+                          },
+                          "last_path": {
+                            "type": "string"
+                          },
+                          "user_id": {
+                            "type": "string"
+                          },
+                          "user_email": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "user_name": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "visitor",
+                          "first_seen",
+                          "last_seen",
+                          "visits",
+                          "views",
+                          "days",
+                          "engaged_ms",
+                          "country",
+                          "region",
+                          "city",
+                          "device",
+                          "browser",
+                          "os",
+                          "language",
+                          "screen_w",
+                          "channel",
+                          "source",
+                          "medium",
+                          "campaign",
+                          "referrer_host",
+                          "landing_area",
+                          "landing_path",
+                          "last_area",
+                          "last_path",
+                          "user_id",
+                          "user_email",
+                          "user_name"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "total",
+                    "pageSize",
+                    "rows"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/visitors/{id}": {
+      "get": {
+        "operationId": "getApiAdminVisitorsById",
+        "tags": [
+          "admin"
+        ],
+        "summary": "One visitor: their visits, and the pages of each in order",
+        "responses": {
+          "200": {
+            "description": "Visitor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "visitor": {
+                      "type": "object",
+                      "properties": {
+                        "visitor": {
+                          "type": "string"
+                        },
+                        "first_seen": {
+                          "type": "number"
+                        },
+                        "last_seen": {
+                          "type": "number"
+                        },
+                        "visits": {
+                          "type": "number"
+                        },
+                        "views": {
+                          "type": "number"
+                        },
+                        "days": {
+                          "type": "number"
+                        },
+                        "engaged_ms": {
+                          "type": "number"
+                        },
+                        "country": {
+                          "type": "string"
+                        },
+                        "region": {
+                          "type": "string"
+                        },
+                        "city": {
+                          "type": "string"
+                        },
+                        "device": {
+                          "type": "string"
+                        },
+                        "browser": {
+                          "type": "string"
+                        },
+                        "os": {
+                          "type": "string"
+                        },
+                        "language": {
+                          "type": "string"
+                        },
+                        "screen_w": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "channel": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "string"
+                        },
+                        "medium": {
+                          "type": "string"
+                        },
+                        "campaign": {
+                          "type": "string"
+                        },
+                        "referrer_host": {
+                          "type": "string"
+                        },
+                        "landing_area": {
+                          "type": "string"
+                        },
+                        "landing_path": {
+                          "type": "string"
+                        },
+                        "last_area": {
+                          "type": "string"
+                        },
+                        "last_path": {
+                          "type": "string"
+                        },
+                        "user_id": {
+                          "type": "string"
+                        },
+                        "user_email": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "user_name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "visitor",
+                        "first_seen",
+                        "last_seen",
+                        "visits",
+                        "views",
+                        "days",
+                        "engaged_ms",
+                        "country",
+                        "region",
+                        "city",
+                        "device",
+                        "browser",
+                        "os",
+                        "language",
+                        "screen_w",
+                        "channel",
+                        "source",
+                        "medium",
+                        "campaign",
+                        "referrer_host",
+                        "landing_area",
+                        "landing_path",
+                        "last_area",
+                        "last_path",
+                        "user_id",
+                        "user_email",
+                        "user_name"
+                      ]
+                    },
+                    "visits": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "visit": {
+                            "type": "string"
+                          },
+                          "started_at": {
+                            "type": "number"
+                          },
+                          "last_at": {
+                            "type": "number"
+                          },
+                          "views": {
+                            "type": "number"
+                          },
+                          "engaged_ms": {
+                            "type": "number"
+                          },
+                          "channel": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "campaign": {
+                            "type": "string"
+                          },
+                          "referrer_host": {
+                            "type": "string"
+                          },
+                          "country": {
+                            "type": "string"
+                          },
+                          "city": {
+                            "type": "string"
+                          },
+                          "device": {
+                            "type": "string"
+                          },
+                          "browser": {
+                            "type": "string"
+                          },
+                          "os": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "visit",
+                          "started_at",
+                          "last_at",
+                          "views",
+                          "engaged_ms",
+                          "channel",
+                          "source",
+                          "campaign",
+                          "referrer_host",
+                          "country",
+                          "city",
+                          "device",
+                          "browser",
+                          "os"
+                        ]
+                      }
+                    },
+                    "views": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "number"
+                          },
+                          "visit": {
+                            "type": "string"
+                          },
+                          "area": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "engaged_ms": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "visit",
+                          "area",
+                          "path",
+                          "engaged_ms"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "visitor",
+                    "visits",
+                    "views"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin, or no such visitor"
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
         "x-internal": true,
         "security": [
           {
@@ -8933,9 +9437,6 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "configured": {
-                      "type": "boolean"
-                    },
                     "range": {
                       "type": "string",
                       "enum": [
@@ -9102,7 +9603,6 @@
                     }
                   },
                   "required": [
-                    "configured",
                     "range",
                     "links",
                     "stats",

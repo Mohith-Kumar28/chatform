@@ -6,7 +6,6 @@ import type { Bindings } from "../../env.js";
 import type { PlatformAdminVars } from "../../lib/platform-admin.js";
 import {
   TRAFFIC_RANGES,
-  TrafficNotConfigured,
   cachedJson,
   campaignTraffic,
   emailTraffic,
@@ -14,21 +13,25 @@ import {
   trafficReport,
   type TrafficRange,
 } from "../../lib/traffic-query.js";
+import { trafficStore } from "../../lib/traffic.js";
+import { VISITOR_SORTS, type VisitorRow, type VisitorSort } from "../../do/traffic-do.js";
 import { DAY_MS, FUNNEL_STAGES, STAGE_OF_ORG } from "./shared.js";
 
 /**
  * Traffic and campaigns: who comes, from where, what they look at, and whether
  * they sign up and stay.
  *
- * Traffic reads Analytics Engine (`lib/traffic-query.ts`); sign-ups and what
- * those accounts went on to do read D1. The two meet on the attribution columns
- * `user_sign_ins` carries since migration 0050.
+ * Traffic reads `TrafficDO` (`lib/traffic-query.ts`); sign-ups and what those
+ * accounts went on to do read D1. The two meet on the attribution columns
+ * `user_sign_ins` carries since migration 0050, and on the signed-in user a
+ * visitor's dashboard pages report.
  *
  * Caching, by how fast the answer can change:
  *   - a range report: 60s for a day, 5 minutes for a week or a month, an hour
  *     for a quarter, whose shape a few minutes do not move.
  *   - live: 15 seconds in the isolate only. It is polled every 30 seconds.
  *   - campaigns: 5 minutes, like the overview.
+ *   - visitors: not cached. One admin, one small indexed read.
  */
 
 export const trafficRouter = new Hono<{ Bindings: Bindings; Variables: Partial<PlatformAdminVars> }>();
@@ -64,8 +67,6 @@ const VitalsRow = z.object({
 const SignupsBy = z.object({ channel: z.string(), source: z.string(), signups: z.number() });
 
 const TrafficResponse = z.object({
-  /** False until `CF_ANALYTICS_TOKEN` is set: the page says so instead of failing. */
-  configured: z.boolean(),
   range: z.enum(RANGE_KEYS),
   bucket: z.enum(["hour", "day"]),
   totals: Totals,
@@ -107,8 +108,6 @@ const TrafficResponse = z.object({
   activeUsers: z.object({ day: z.number(), week: z.number(), month: z.number() }),
   generatedAt: z.number(),
 });
-
-const EMPTY_TOTALS = { visitors: 0, visits: 0, views: 0, newVisitors: 0, bounced: 0, engagedMs: 0 };
 
 /** Sign-ups in `[from, to)`, per UTC day or hour, and by where they came from. */
 async function signupFacts(env: Bindings, days: number, bucket: "hour" | "day") {
@@ -154,50 +153,18 @@ trafficRouter.get(
   async (c) => {
     const range = c.req.valid("query").range;
     const days = TRAFFIC_RANGES[range];
-    try {
-      const payload = await cachedJson(c.env, `admin:traffic:${range}`, TTL[range], async () => {
-        const [report, facts] = await Promise.all([
-          trafficReport(c.env, range),
-          signupFacts(c.env, days, days <= 2 ? "hour" : "day"),
-        ]);
-        return { configured: true, ...report, ...facts, generatedAt: Date.now() };
-      });
-      return c.json(payload);
-    } catch (err) {
-      if (!(err instanceof TrafficNotConfigured)) throw err;
-      const facts = await signupFacts(c.env, days, days <= 2 ? "hour" : "day");
-      return c.json({
-        configured: false,
-        range,
-        bucket: days <= 2 ? "hour" : "day",
-        totals: EMPTY_TOTALS,
-        previous: EMPTY_TOTALS,
-        series: [],
-        hourly: null,
-        channels: [],
-        sources: [],
-        referrers: [],
-        campaigns: [],
-        areas: [],
-        pages: [],
-        entries: [],
-        exits: [],
-        geo: [],
-        devices: [],
-        browsers: [],
-        oses: [],
-        languages: [],
-        vitals: { byArea: [], byCountry: [] },
-        activeUsers: { day: 0, week: 0, month: 0 },
-        ...facts,
-        generatedAt: Date.now(),
-      });
-    }
+    const payload = await cachedJson(c.env, `admin:traffic:${range}`, TTL[range], async () => {
+      const [report, facts] = await Promise.all([
+        trafficReport(c.env, range),
+        signupFacts(c.env, days, days <= 2 ? "hour" : "day"),
+      ]);
+      return { ...report, ...facts, generatedAt: Date.now() };
+    });
+    return c.json(payload);
   },
 );
 
 const TrafficLiveResponse = z.object({
-  configured: z.boolean(),
   minutes: z.number(),
   /** End of the newest minute, epoch ms. */
   until: z.number(),
@@ -220,24 +187,153 @@ trafficRouter.get(
       404: { description: "Not an admin" },
     },
   }),
+  async (c) => c.json(await cachedJson(c.env, "admin:traffic:live", 15, () => trafficLive(c.env))),
+);
+
+// ─────────────────────────────── visitors ───────────────────────────────
+
+/** Visitors are kept for 400 days, so this list reaches further back than the Traffic page. */
+const VISITOR_RANGES = { ...TRAFFIC_RANGES, "365d": 365 } as const;
+const VISITOR_RANGE_KEYS = Object.keys(VISITOR_RANGES) as [keyof typeof VISITOR_RANGES, ...(keyof typeof VISITOR_RANGES)[]];
+const VISITOR_SORT_KEYS = Object.keys(VISITOR_SORTS) as [VisitorSort, ...VisitorSort[]];
+const VISITOR_PAGE = 50;
+
+const VisitorsQuery = z.object({
+  range: z.enum(VISITOR_RANGE_KEYS).default("30d"),
+  sort: z.enum(VISITOR_SORT_KEYS).default("recent"),
+  q: z.string().trim().max(80).default(""),
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+});
+
+const Visitor = z.object({
+  visitor: z.string(),
+  first_seen: z.number(),
+  last_seen: z.number(),
+  visits: z.number(),
+  views: z.number(),
+  /** Distinct UTC days they came on. */
+  days: z.number(),
+  /** Visible time on every page, summed. */
+  engaged_ms: z.number(),
+  country: z.string(),
+  region: z.string(),
+  city: z.string(),
+  device: z.string(),
+  browser: z.string(),
+  os: z.string(),
+  language: z.string(),
+  screen_w: z.number().nullable(),
+  /** First touch: what brought them the first time. */
+  channel: z.string(),
+  source: z.string(),
+  medium: z.string(),
+  campaign: z.string(),
+  referrer_host: z.string(),
+  landing_area: z.string(),
+  landing_path: z.string(),
+  last_area: z.string(),
+  last_path: z.string(),
+  /** The account this browser has been signed in to, if it ever opened the dashboard. */
+  user_id: z.string(),
+  user_email: z.string().nullable(),
+  user_name: z.string().nullable(),
+});
+
+const VisitorsResponse = z.object({ total: z.number(), pageSize: z.number(), rows: z.array(Visitor) });
+
+const VisitorDetailResponse = z.object({
+  visitor: Visitor,
+  visits: z.array(
+    z.object({
+      visit: z.string(),
+      started_at: z.number(),
+      last_at: z.number(),
+      views: z.number(),
+      engaged_ms: z.number(),
+      channel: z.string(),
+      source: z.string(),
+      campaign: z.string(),
+      referrer_host: z.string(),
+      country: z.string(),
+      city: z.string(),
+      device: z.string(),
+      browser: z.string(),
+      os: z.string(),
+    }),
+  ),
+  /** The pages of those visits, oldest first. */
+  views: z.array(
+    z.object({ at: z.number(), visit: z.string(), area: z.string(), path: z.string(), engaged_ms: z.number() }),
+  ),
+});
+
+/** Who each signed-in visitor is. One D1 read for the page, none when nobody on it has signed in. */
+async function withUsers(env: Bindings, rows: VisitorRow[]): Promise<z.infer<typeof Visitor>[]> {
+  const ids = [...new Set(rows.map((r) => r.user_id).filter(Boolean))];
+  const users = ids.length
+    ? ((
+        await env.DB.prepare(`SELECT id, email, name FROM users WHERE id IN (${ids.map(() => "?").join(", ")})`)
+          .bind(...ids)
+          .all<{ id: string; email: string; name: string | null }>()
+      ).results ?? [])
+    : [];
+  const byId = new Map(users.map((u) => [u.id, u]));
+  return rows.map((r) => ({
+    ...r,
+    user_email: byId.get(r.user_id)?.email ?? null,
+    user_name: byId.get(r.user_id)?.name ?? null,
+  }));
+}
+
+trafficRouter.get(
+  "/admin/visitors",
+  validator("query", VisitorsQuery),
+  describeRoute({
+    tags: ["admin"],
+    summary: "Every visitor seen in a period: when they came, how often, from where, and who they are once signed in",
+    responses: {
+      200: { description: "Visitors", content: { "application/json": { schema: resolver(VisitorsResponse) } } },
+      404: { description: "Not an admin" },
+    },
+  }),
   async (c) => {
-    try {
-      const live = await cachedJson(c.env, "admin:traffic:live", 15, () => trafficLive(c.env));
-      return c.json({ configured: true, ...live });
-    } catch (err) {
-      if (!(err instanceof TrafficNotConfigured)) throw err;
-      return c.json({
-        configured: false,
-        minutes: 30,
-        until: Date.now(),
-        online: 0,
-        visitors: [],
-        views: [],
-        pages: [],
-        sources: [],
-        countries: [],
-      });
-    }
+    const { range, sort, q, offset } = c.req.valid("query");
+    // A name or an email is on the account, not on the visitor: find the accounts first.
+    const userIds =
+      q.length >= 3
+        ? ((
+            await c.env.DB.prepare(`SELECT id FROM users WHERE email LIKE ?1 OR name LIKE ?1 LIMIT 50`)
+              .bind(`%${q}%`)
+              .all<{ id: string }>()
+          ).results ?? []).map((u) => u.id)
+        : [];
+    const list = await trafficStore(c.env).visitors({
+      since: Date.now() - VISITOR_RANGES[range] * DAY_MS,
+      sort,
+      q,
+      userIds,
+      limit: VISITOR_PAGE,
+      offset,
+    });
+    return c.json({ total: list.total, pageSize: VISITOR_PAGE, rows: await withUsers(c.env, list.rows) });
+  },
+);
+
+trafficRouter.get(
+  "/admin/visitors/:id",
+  describeRoute({
+    tags: ["admin"],
+    summary: "One visitor: their visits, and the pages of each in order",
+    responses: {
+      200: { description: "Visitor", content: { "application/json": { schema: resolver(VisitorDetailResponse) } } },
+      404: { description: "Not an admin, or no such visitor" },
+    },
+  }),
+  async (c) => {
+    const found = await trafficStore(c.env).visitor(c.req.param("id"));
+    if (!found) return c.json({ error: { code: "not_found", message: "Not found" } }, 404);
+    const [visitor] = await withUsers(c.env, [found.visitor]);
+    return c.json({ visitor: visitor!, visits: found.visits, views: found.views });
   },
 );
 
@@ -289,7 +385,6 @@ const CampaignStats = z.object({
 });
 
 const CampaignsResponse = z.object({
-  configured: z.boolean(),
   range: z.enum(RANGE_KEYS),
   links: z.array(CampaignRow),
   stats: z.array(CampaignStats),
@@ -378,15 +473,7 @@ trafficRouter.get(
           .bind(from)
           .first<{ sent: number; clicked: number | null; recovered: number | null }>(),
       ]);
-      let configured = true;
-      let traffic: Awaited<ReturnType<typeof campaignTraffic>> = [];
-      let emailVisits: Awaited<ReturnType<typeof emailTraffic>> = [];
-      try {
-        [traffic, emailVisits] = await Promise.all([campaignTraffic(c.env, days), emailTraffic(c.env, days)]);
-      } catch (err) {
-        if (!(err instanceof TrafficNotConfigured)) throw err;
-        configured = false;
-      }
+      const [traffic, emailVisits] = await Promise.all([campaignTraffic(c.env, days), emailTraffic(c.env, days)]);
       const names = new Set([...traffic.map((t) => t.campaign), ...stages.keys()]);
       const stats = [...names].map((campaign) => {
         const t = traffic.find((x) => x.campaign === campaign);
@@ -412,7 +499,6 @@ trafficRouter.get(
         })
         .sort((a, b) => b.sent - a.sent);
       return {
-        configured,
         stats,
         email,
         followups: {

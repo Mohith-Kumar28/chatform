@@ -36,7 +36,7 @@ import { compact } from "./format";
  * Who comes to chatform, from where, what they look at, and how fast it feels.
  *
  * Every number is first-party: the page-view beacon in `lib/analytics/track.ts`,
- * read back from Analytics Engine by `GET /api/admin/traffic`. Sign-ups come
+ * read back from `TrafficDO` by `GET /api/admin/traffic`. Sign-ups come
  * from the accounts table, so a visitor and a sign-up are never the same guess.
  *
  * Top to bottom in the order the questions get asked: how many, when, right
@@ -62,7 +62,7 @@ export const AREA_LABEL: Record<string, string> = {
 
 const areaLabel = (key: string) => AREA_LABEL[key] ?? key;
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
-const duration = (ms: number) => {
+export const duration = (ms: number) => {
   const s = Math.round(ms / 1000);
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 };
@@ -171,9 +171,7 @@ function LiveCard({ className }: { className?: string }) {
     >
       {isPending ? (
         <Skeleton className="h-40 rounded-lg" />
-      ) : !live?.configured ? (
-        <Empty>Traffic is not connected yet.</Empty>
-      ) : live.visitors.every((v) => v === 0) ? (
+      ) : !live || live.visitors.every((v) => v === 0) ? (
         <Empty>Nobody has opened a page in the last 30 minutes.</Empty>
       ) : (
         <div className="space-y-3">
@@ -425,12 +423,6 @@ function TrafficBody({ report, comparedTo }: { report: Report; comparedTo: strin
 
   return (
     <>
-      {!report.configured && (
-        <p className="bg-muted text-muted-foreground rounded-lg px-4 py-3 text-sm">
-          Visits are being recorded. Set <code>CF_ANALYTICS_TOKEN</code> on the API to read them here.
-        </p>
-      )}
-
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiTile
           label="Visitors"

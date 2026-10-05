@@ -217,11 +217,6 @@ export function CampaignsClient() {
         <Skeleton className="h-64 rounded-xl" />
       ) : (
         <>
-          {!report.configured && (
-            <p className="bg-muted text-muted-foreground rounded-lg px-4 py-3 text-sm">
-              Visitor counts need <code>CF_ANALYTICS_TOKEN</code> on the API. Sign-ups below are counted already.
-            </p>
-          )}
           <ChartCard
             title="What each campaign brought"
             hint="Visitors who arrived on the campaign's link. Sign-ups are credited to the campaign of the visit they signed up on. Each later column is how many of those accounts got that far, at any time since."

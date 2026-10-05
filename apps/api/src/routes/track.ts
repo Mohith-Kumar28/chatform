@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Bindings } from "../env.js";
-import { readBeacon, writeTraffic } from "../lib/traffic.js";
+import { readBeacon, recordTraffic } from "../lib/traffic.js";
+import { deferOn } from "../lib/translations.js";
 
 /**
  * `POST /p/t`: the web app's page-view beacon. See `lib/traffic.ts`.
@@ -18,7 +19,7 @@ trackRouter.post("/t", async (c) => {
     // tab stuck in a navigation loop is the thing to stop, and a crowd behind
     // one address is not.
     const limit = await c.env.RATE_LIMIT_P?.limit({ key: `t:${beacon.v}` }).catch(() => ({ success: true }));
-    if (limit?.success !== false) writeTraffic(c.env, c.req.raw, beacon);
+    if (limit?.success !== false) deferOn(c)(recordTraffic(c.env, c.req.raw, beacon));
   }
   return c.body(null, 204);
 });

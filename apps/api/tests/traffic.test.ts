@@ -3,22 +3,17 @@ import { env } from "cloudflare:test";
 import { applySchema, fetchApi } from "./helpers.js";
 import type { Bindings } from "../src/env.js";
 import { classifySource } from "../src/lib/traffic-source.js";
-import { TRAFFIC_BLOBS, writeTraffic, type TrafficBeacon } from "../src/lib/traffic.js";
+import { trafficHit, trafficStore, type TrafficBeacon } from "../src/lib/traffic.js";
+import type { TrafficHit } from "../src/do/traffic-do.js";
 import { attributionOf } from "../src/lib/user-context.js";
 import { withUtm } from "../src/lib/mail-jobs.js";
-import { sqlText } from "../src/lib/traffic-query.js";
 
 const CHROME_MAC =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 const INSTAGRAM_IOS =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 350.0.0";
 
-/** The dataset binding, recorded. */
-function recorder() {
-  const points: AnalyticsEngineDataPoint[] = [];
-  const dataset = { writeDataPoint: (p?: AnalyticsEngineDataPoint) => void (p && points.push(p)) } as AnalyticsEngineDataset;
-  return { points, env: { ...(env as unknown as Bindings), TRAFFIC: dataset, WEB_ORIGINS: "https://chatform.in" } };
-}
+const e = { ...(env as unknown as Bindings), WEB_ORIGINS: "https://chatform.in" };
 
 const beacon = (over: Partial<TrafficBeacon> = {}): TrafficBeacon => ({
   e: "view",
@@ -31,8 +26,6 @@ const beacon = (over: Partial<TrafficBeacon> = {}): TrafficBeacon => ({
 
 const req = (ua = CHROME_MAC) =>
   new Request("http://localhost/p/t", { method: "POST", headers: { "user-agent": ua, "cf-ipcountry": "IN" } });
-
-const blob = (p: AnalyticsEngineDataPoint, key: keyof typeof TRAFFIC_BLOBS) => p.blobs?.[TRAFFIC_BLOBS[key] - 1];
 
 describe("classifySource", () => {
   it("prefers a tagged link over the referrer", () => {
@@ -62,41 +55,224 @@ describe("classifySource", () => {
   });
 });
 
-describe("writeTraffic", () => {
-  it("writes one row, indexed by the visitor, with source, place and device", () => {
-    const { points, env: e } = recorder();
-    const ok = writeTraffic(e, req(INSTAGRAM_IOS), beacon({ u: { source: "ig", medium: "ugc", campaign: "Oct-UGC" }, en: 1, n: 1 }));
-    expect(ok).toBe(true);
-    expect(points).toHaveLength(1);
-    const p = points[0]!;
-    expect(p.indexes).toEqual(["visitor0001"]);
-    expect(blob(p, "channel")).toBe("Social");
-    expect(blob(p, "source")).toBe("Instagram");
-    expect(blob(p, "campaign")).toBe("oct-ugc");
-    expect(blob(p, "country")).toBe("IN");
-    expect(blob(p, "device")).toBe("mobile");
-    expect(blob(p, "browser")).toBe("Instagram app");
-    expect(blob(p, "isNew")).toBe("1");
-    expect(p.blobs).toHaveLength(20);
+describe("trafficHit", () => {
+  it("fills in source, place and device from the edge", () => {
+    const hit = trafficHit(e, req(INSTAGRAM_IOS), beacon({ u: { source: "ig", medium: "ugc", campaign: "Oct-UGC" }, en: 1, n: 1 }));
+    expect(hit).toMatchObject({
+      visitor: "visitor0001",
+      visit: "visit000001",
+      channel: "Social",
+      source: "Instagram",
+      campaign: "oct-ugc",
+      country: "IN",
+      device: "mobile",
+      browser: "Instagram app",
+    });
   });
 
   it("treats our own site as no referrer", () => {
-    const { points, env: e } = recorder();
-    writeTraffic(e, req(), beacon({ r: "https://chatform.in/blog/x" }));
-    expect(blob(points[0]!, "channel")).toBe("Direct");
+    expect(trafficHit(e, req(), beacon({ r: "https://chatform.in/blog/x" }))?.channel).toBe("Direct");
   });
 
-  it("drops bots, admin pages, and keeps a user id only on the dashboard", () => {
-    const { points, env: e } = recorder();
-    expect(writeTraffic(e, req("Mozilla/5.0 (compatible; Googlebot/2.1)"), beacon())).toBe(false);
-    expect(writeTraffic(e, req("HeadlessChrome/120"), beacon())).toBe(false);
-    expect(writeTraffic(e, req(), beacon({ p: "/admin/traffic" }))).toBe(false);
-    writeTraffic(e, req(), beacon({ uid: "user_1" }));
-    writeTraffic(e, req(), beacon({ a: "app", p: "/dashboard", uid: "user_1" }));
-    expect(points).toHaveLength(2);
-    expect(blob(points[0]!, "userId")).toBe("");
-    expect(blob(points[1]!, "userId")).toBe("user_1");
-    expect(blob(points[1]!, "signedIn")).toBe("1");
+  it("drops bots and admin pages, and keeps a user id only on the dashboard", () => {
+    expect(trafficHit(e, req("Mozilla/5.0 (compatible; Googlebot/2.1)"), beacon())).toBeNull();
+    expect(trafficHit(e, req("HeadlessChrome/120"), beacon())).toBeNull();
+    expect(trafficHit(e, req(), beacon({ p: "/admin/traffic" }))).toBeNull();
+    expect(trafficHit(e, req(), beacon({ uid: "user_1" }))?.userId).toBe("");
+    expect(trafficHit(e, req(), beacon({ a: "app", p: "/dashboard", uid: "user_1" }))?.userId).toBe("user_1");
+  });
+
+  it("reads an unmeasured vital as absent, not as zero", () => {
+    const hit = trafficHit(e, req(), beacon({ e: "leave", ms: 4200, lcp: 0, ttfb: 180.4, cls: 0.0512 }));
+    expect(hit).toMatchObject({ engagedMs: 4200, lcp: null, inp: null, ttfb: 180, cls: 0.051 });
+  });
+});
+
+describe("TrafficDO", () => {
+  const MIN = 60_000;
+  const DAY = 86_400_000;
+  const now = Date.now();
+  const store = trafficStore(env as unknown as Bindings);
+
+  /** A stored hit: a view unless said otherwise, from a tagged Instagram link in India. */
+  const hit = (over: Partial<TrafficHit>): TrafficHit => ({
+    at: now,
+    event: "view",
+    visitor: "ana",
+    visit: "ana-1",
+    area: "marketing",
+    path: "/",
+    referrerHost: "instagram.com",
+    channel: "Social",
+    source: "Instagram",
+    medium: "ugc",
+    campaign: "oct-ugc",
+    content: "",
+    country: "IN",
+    region: "KA",
+    city: "Bengaluru",
+    lat: 12.9,
+    lon: 77.6,
+    device: "mobile",
+    browser: "Chrome",
+    os: "Android",
+    language: "en-IN",
+    screenW: 412,
+    userId: "",
+    engagedMs: 0,
+    lcp: null,
+    inp: null,
+    ttfb: null,
+    cls: null,
+    ...over,
+  });
+
+  beforeAll(async () => {
+    // Ana, three days ago: lands on the home page from Instagram, reads pricing, leaves.
+    await store.record(hit({ at: now - 3 * DAY }));
+    await store.record(hit({ at: now - 3 * DAY + 20_000, event: "leave", engagedMs: 18_000, lcp: 1900, ttfb: 300 }));
+    await store.record(hit({ at: now - 3 * DAY + MIN, path: "/pricing" }));
+    await store.record(hit({ at: now - 3 * DAY + 3 * MIN, event: "leave", path: "/pricing", engagedMs: 90_000 }));
+    // Ana again, ten minutes ago, direct, and this time signed in on the dashboard.
+    const direct = { visit: "ana-2", channel: "Direct", source: "Direct", medium: "", campaign: "", referrerHost: "" };
+    await store.record(hit({ ...direct, at: now - 10 * MIN, area: "app", path: "/dashboard", userId: "user_ana" }));
+    // Ben, two minutes ago: one page from Google, on a desktop in Germany, and gone.
+    await store.record(
+      hit({
+        at: now - 2 * MIN,
+        visitor: "ben",
+        visit: "ben-1",
+        path: "/blog/forms",
+        channel: "Search",
+        source: "Google",
+        medium: "",
+        campaign: "",
+        referrerHost: "google.com",
+        country: "DE",
+        region: "BE",
+        city: "Berlin",
+        device: "desktop",
+        os: "macOS",
+      }),
+    );
+    // A leave whose view never arrived must not invent anybody.
+    await store.record(hit({ visitor: "ghost", visit: "ghost-1", event: "leave", engagedMs: 5_000 }));
+  });
+
+  it("keeps one row per visitor: when they came, how often, how long, and their first source", async () => {
+    const { total, rows } = await store.visitors({ since: now - 30 * DAY, sort: "views", q: "", userIds: [], limit: 50, offset: 0 });
+    expect(total).toBe(2);
+    expect(rows[0]).toMatchObject({
+      visitor: "ana",
+      visits: 2,
+      views: 3,
+      days: 2,
+      engaged_ms: 108_000,
+      first_seen: now - 3 * DAY,
+      last_seen: now - 10 * MIN,
+      // First touch stays; where they are now follows the latest page.
+      source: "Instagram",
+      campaign: "oct-ugc",
+      landing_path: "/",
+      last_path: "/dashboard",
+      user_id: "user_ana",
+    });
+    expect(rows[1]).toMatchObject({ visitor: "ben", visits: 1, views: 1, days: 1, country: "DE" });
+  });
+
+  it("searches visitors by what is on the row, and by the accounts a name matched", async () => {
+    const find = (q: string, userIds: string[] = []) =>
+      store.visitors({ since: 0, sort: "recent", q, userIds, limit: 50, offset: 0 }).then((r) => r.rows.map((v) => v.visitor));
+    expect(await find("berlin")).toEqual(["ben"]);
+    expect(await find("ana@example.com", ["user_ana"])).toEqual(["ana"]);
+    expect(await find("nobody")).toEqual([]);
+  });
+
+  it("lays out a visitor's visits and the pages of each, with the time spent on them", async () => {
+    const found = await store.visitor("ana");
+    expect(found?.visits.map((v) => [v.visit, v.views, v.source])).toEqual([
+      ["ana-2", 1, "Direct"],
+      ["ana-1", 2, "Instagram"],
+    ]);
+    // The first visit ran from its first view to its last leave.
+    expect(found!.visits[1]!.last_at - found!.visits[1]!.started_at).toBe(3 * MIN);
+    expect(found?.views.map((v) => [v.path, v.engaged_ms])).toEqual([
+      ["/", 18_000],
+      ["/pricing", 90_000],
+      ["/dashboard", 0],
+    ]);
+    expect(await store.visitor("ghost")).toBeNull();
+  });
+
+  it("reports a period: totals, sources, pages, entries, exits, places and vitals", async () => {
+    const r = await store.report(7);
+    expect(r.bucket).toBe("day");
+    expect(r.totals).toEqual({ visitors: 2, visits: 3, views: 4, newVisitors: 2, bounced: 2, engagedMs: 108_000 });
+    expect(r.previous.views).toBe(0);
+    expect(r.series.reduce((sum, p) => sum + p.views, 0)).toBe(4);
+    expect(r.series.reduce((sum, p) => sum + p.newVisitors, 0)).toBe(2);
+    expect(r.sources.map((s) => [s.source, s.channel, s.visitors, s.views])).toEqual(
+      expect.arrayContaining([
+        ["Instagram", "Social", 1, 2],
+        ["Direct", "Direct", 1, 1],
+        ["Google", "Search", 1, 1],
+      ]),
+    );
+    expect(r.campaigns).toEqual([{ key: "oct-ugc", visitors: 1, visits: 1, views: 2 }]);
+    expect(r.entries.map((p) => p.path).sort()).toEqual(["/", "/blog/forms", "/dashboard"]);
+    expect(r.exits.map((p) => p.path).sort()).toEqual(["/blog/forms", "/dashboard", "/pricing"]);
+    expect(r.geo.map((g) => [g.country, g.city, g.lat]).sort()).toEqual([
+      ["DE", "Berlin", 12.9],
+      ["IN", "Bengaluru", 12.9],
+    ]);
+    expect(r.devices.map((d) => d.key).sort()).toEqual(["desktop", "mobile"]);
+    expect(r.vitals.byArea).toEqual([{ key: "marketing", samples: 1, lcp: 1900, inp: null, ttfb: 300, cls: null }]);
+    expect(r.activeUsers).toEqual({ day: 1, week: 1, month: 1 });
+    // A one-day range is hourly, and sees only today's two visits.
+    const day = await store.report(1);
+    expect(day.bucket).toBe("hour");
+    expect(day.totals).toMatchObject({ visitors: 2, visits: 2, views: 2, newVisitors: 1 });
+  });
+
+  it("shows who is here now", async () => {
+    const live = await store.live();
+    // Ben was seen two minutes ago; Ana ten.
+    expect(live.online).toBe(1);
+    expect(live.pages).toEqual([{ area: "marketing", path: "/blog/forms", visitors: 1 }]);
+    expect(live.views.reduce((a, b) => a + b, 0)).toBe(2);
+    expect(live.countries.map((c) => c.key)).toEqual(["DE"]);
+  });
+
+  it("answers the campaign page and the daily rollup", async () => {
+    expect(await store.campaigns(7)).toEqual([{ campaign: "oct-ugc", visitors: 1, visits: 1, views: 2, formViews: 0 }]);
+    expect(await store.emailVisits(7)).toEqual([]);
+    const day = new Date(now - 3 * DAY).toISOString().slice(0, 10);
+    const rows = await store.dailyRollup(day);
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { metric: "traffic_visitors", dimension: "", value: 1 },
+        { metric: "traffic_views", dimension: "", value: 2 },
+        { metric: "traffic_visitors_by_channel", dimension: "Social", value: 1 },
+        { metric: "traffic_visitors_by_country", dimension: "IN", value: 1 },
+      ]),
+    );
+  });
+
+  it("lets a late, older hit move a visitor's start back and never their present", async () => {
+    await store.record(hit({ at: now - 20 * DAY, visit: "ana-0", path: "/templates", source: "Reddit", city: "Mysuru" }));
+    const { rows } = await store.visitors({ since: 0, sort: "views", q: "", userIds: [], limit: 50, offset: 0 });
+    expect(rows[0]).toMatchObject({
+      visitor: "ana",
+      visits: 3,
+      views: 4,
+      days: 3,
+      first_seen: now - 20 * DAY,
+      last_seen: now - 10 * MIN,
+      source: "Reddit",
+      landing_path: "/templates",
+      last_path: "/dashboard",
+      city: "Bengaluru",
+    });
   });
 });
 
@@ -166,16 +342,12 @@ describe("sign-up attribution", () => {
   });
 });
 
-describe("mail links and SQL text", () => {
+describe("mail links", () => {
   it("tags a mail link without losing its own parameters", () => {
     const url = new URL(withUtm("https://chatform.in/f/intake?resume=tok&fu=f1", "followup"));
     expect(url.searchParams.get("resume")).toBe("tok");
     expect(url.searchParams.get("fu")).toBe("f1");
     expect(url.searchParams.get("utm_medium")).toBe("email");
     expect(url.searchParams.get("utm_campaign")).toBe("followup");
-  });
-
-  it("cannot carry a quote into SQL", () => {
-    expect(sqlText("x' OR 1=1 --")).toBe("'x or 11 --'");
   });
 });

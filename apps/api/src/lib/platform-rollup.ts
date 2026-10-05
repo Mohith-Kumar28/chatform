@@ -712,21 +712,19 @@ export async function rollupFormStructure(env: Bindings, batchSize = 300): Promi
 }
 
 const TRAFFIC_ROLLED_KEY = "traffic_rollup:last_day";
-/** Analytics Engine keeps about three months; older days cannot be rolled up, only kept. */
+/** How far back a cron that was down can catch up: page-level rows are kept for 180 days. */
 const TRAFFIC_HISTORY_DAYS = 85;
 
 /**
- * Yesterday's traffic, copied out of Analytics Engine before its three months
- * are up, as `traffic_*` metrics beside everything else in `platform_metrics_daily`.
+ * Yesterday's traffic, copied out of `TrafficDO` before it drops the day's
+ * page-level rows, as `traffic_*` metrics beside everything else in `platform_metrics_daily`.
  *
  * Whole UTC days only, and never today: a day is rolled once it is over, and
- * Analytics Engine's rows can land a minute or two late, so nothing before
+ * a beacon sent as the day ended can land a little late, so nothing before
  * 00:10. Up to three days per tick, oldest first, from the last day done, so
  * a cron that was down for a few days catches up.
- * A missing `CF_ANALYTICS_TOKEN` makes this a no-op.
  */
 export async function rollupTrafficDaily(env: Bindings, now = Date.now()): Promise<number> {
-  if (!env.CF_ANALYTICS_TOKEN) return 0;
   const minutesToday = (now % DAY_MS) / 60_000;
   if (minutesToday < 10) return 0;
   const yesterday = utcDay(now - DAY_MS);

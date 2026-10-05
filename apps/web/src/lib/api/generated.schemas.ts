@@ -2079,7 +2079,6 @@ export type GetApiAdminTraffic200ActiveUsers = {
 };
 
 export type GetApiAdminTraffic200 = {
-  configured: boolean;
   range: GetApiAdminTraffic200Range;
   bucket: GetApiAdminTraffic200Bucket;
   totals: GetApiAdminTraffic200Totals;
@@ -2128,7 +2127,6 @@ export type GetApiAdminTrafficLive200CountriesItem = {
 };
 
 export type GetApiAdminTrafficLive200 = {
-  configured: boolean;
   minutes: number;
   until: number;
   online: number;
@@ -2137,6 +2135,139 @@ export type GetApiAdminTrafficLive200 = {
   pages: GetApiAdminTrafficLive200PagesItem[];
   sources: GetApiAdminTrafficLive200SourcesItem[];
   countries: GetApiAdminTrafficLive200CountriesItem[];
+};
+
+export type GetApiAdminVisitorsParams = {
+range?: GetApiAdminVisitorsRange;
+sort?: GetApiAdminVisitorsSort;
+/**
+ * @maxLength 80
+ */
+q?: string;
+/**
+ * @minimum 0
+ * @maximum 1000000
+ */
+offset?: number;
+};
+
+export type GetApiAdminVisitorsRange = typeof GetApiAdminVisitorsRange[keyof typeof GetApiAdminVisitorsRange];
+
+
+export const GetApiAdminVisitorsRange = {
+  '1d': '1d',
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+  '365d': '365d',
+} as const;
+
+export type GetApiAdminVisitorsSort = typeof GetApiAdminVisitorsSort[keyof typeof GetApiAdminVisitorsSort];
+
+
+export const GetApiAdminVisitorsSort = {
+  recent: 'recent',
+  views: 'views',
+  visits: 'visits',
+  days: 'days',
+  time: 'time',
+} as const;
+
+export type GetApiAdminVisitors200RowsItem = {
+  visitor: string;
+  first_seen: number;
+  last_seen: number;
+  visits: number;
+  views: number;
+  days: number;
+  engaged_ms: number;
+  country: string;
+  region: string;
+  city: string;
+  device: string;
+  browser: string;
+  os: string;
+  language: string;
+  screen_w: number | null;
+  channel: string;
+  source: string;
+  medium: string;
+  campaign: string;
+  referrer_host: string;
+  landing_area: string;
+  landing_path: string;
+  last_area: string;
+  last_path: string;
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+};
+
+export type GetApiAdminVisitors200 = {
+  total: number;
+  pageSize: number;
+  rows: GetApiAdminVisitors200RowsItem[];
+};
+
+export type GetApiAdminVisitorsById200Visitor = {
+  visitor: string;
+  first_seen: number;
+  last_seen: number;
+  visits: number;
+  views: number;
+  days: number;
+  engaged_ms: number;
+  country: string;
+  region: string;
+  city: string;
+  device: string;
+  browser: string;
+  os: string;
+  language: string;
+  screen_w: number | null;
+  channel: string;
+  source: string;
+  medium: string;
+  campaign: string;
+  referrer_host: string;
+  landing_area: string;
+  landing_path: string;
+  last_area: string;
+  last_path: string;
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+};
+
+export type GetApiAdminVisitorsById200VisitsItem = {
+  visit: string;
+  started_at: number;
+  last_at: number;
+  views: number;
+  engaged_ms: number;
+  channel: string;
+  source: string;
+  campaign: string;
+  referrer_host: string;
+  country: string;
+  city: string;
+  device: string;
+  browser: string;
+  os: string;
+};
+
+export type GetApiAdminVisitorsById200ViewsItem = {
+  at: number;
+  visit: string;
+  area: string;
+  path: string;
+  engaged_ms: number;
+};
+
+export type GetApiAdminVisitorsById200 = {
+  visitor: GetApiAdminVisitorsById200Visitor;
+  visits: GetApiAdminVisitorsById200VisitsItem[];
+  views: GetApiAdminVisitorsById200ViewsItem[];
 };
 
 export type GetApiAdminCampaignsParams = {
@@ -2204,7 +2335,6 @@ export type GetApiAdminCampaigns200Followups = {
 };
 
 export type GetApiAdminCampaigns200 = {
-  configured: boolean;
   range: GetApiAdminCampaigns200Range;
   links: GetApiAdminCampaigns200LinksItem[];
   stats: GetApiAdminCampaigns200StatsItem[];
@@ -10687,6 +10817,137 @@ export type GetApiFormsByIdIntegrations200Item = {
   createdAt: number;
   feedUrl?: string;
   includePartials?: boolean;
+  spreadsheetUrl?: string;
+  spreadsheetTitle?: string | null;
+  email?: string | null;
+  lastSyncedAt?: number | null;
+  lastError?: string | null;
+  partialsLocked?: boolean;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsStartBody = {
+  returnTo: string;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsStart200 = {
+  url: string;
+} | {
+  connected: true;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsStart403ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsStart403Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdIntegrationsGoogleSheetsStart403ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsStart403 = {
+  error: PostApiFormsByIdIntegrationsGoogleSheetsStart403Error;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsStart503ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsStart503Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdIntegrationsGoogleSheetsStart503ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsStart503 = {
+  error: PostApiFormsByIdIntegrationsGoogleSheetsStart503Error;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsSync200 = {
+  id: string;
+  provider: string;
+  status: string;
+  createdAt: number;
+  feedUrl?: string;
+  includePartials?: boolean;
+  spreadsheetUrl?: string;
+  spreadsheetTitle?: string | null;
+  email?: string | null;
+  lastSyncedAt?: number | null;
+  lastError?: string | null;
+  partialsLocked?: boolean;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsSync404ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsSync404Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdIntegrationsGoogleSheetsSync404ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsSync404 = {
+  error: PostApiFormsByIdIntegrationsGoogleSheetsSync404Error;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsSync409ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsSync409Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdIntegrationsGoogleSheetsSync409ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsSync409 = {
+  error: PostApiFormsByIdIntegrationsGoogleSheetsSync409Error;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsSync502ErrorIssuesItem = {
+  ref?: string;
+  path?: string;
+  code: string;
+  message: string;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsSync502Error = {
+  code: string;
+  message: string;
+  issues?: PostApiFormsByIdIntegrationsGoogleSheetsSync502ErrorIssuesItem[];
+  request_id?: string;
+  doc_url?: string;
+  [key: string]: unknown;
+};
+
+export type PostApiFormsByIdIntegrationsGoogleSheetsSync502 = {
+  error: PostApiFormsByIdIntegrationsGoogleSheetsSync502Error;
 };
 
 export type PostApiFormsByIdIntegrationsSpreadsheetBody = {
@@ -10701,6 +10962,12 @@ export type PostApiFormsByIdIntegrationsSpreadsheet200 = {
   createdAt: number;
   feedUrl?: string;
   includePartials?: boolean;
+  spreadsheetUrl?: string;
+  spreadsheetTitle?: string | null;
+  email?: string | null;
+  lastSyncedAt?: number | null;
+  lastError?: string | null;
+  partialsLocked?: boolean;
 };
 
 export type GetApiPaymentAccounts200AccountsItemProvider = typeof GetApiPaymentAccounts200AccountsItemProvider[keyof typeof GetApiPaymentAccounts200AccountsItemProvider];

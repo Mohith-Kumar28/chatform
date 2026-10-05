@@ -235,6 +235,8 @@ const DASHBOARD_ONLY: Record<string, string> = {
   "/api/admin/live": "see /api/admin/me",
   "/api/admin/traffic": "see /api/admin/me",
   "/api/admin/traffic/live": "see /api/admin/me",
+  "/api/admin/visitors": "see /api/admin/me",
+  "/api/admin/visitors/{id}": "see /api/admin/me",
   "/api/admin/campaigns": "see /api/admin/me",
   "/api/admin/campaigns/{id}": "see /api/admin/me",
   "/api/admin/actions": "see /api/admin/me",

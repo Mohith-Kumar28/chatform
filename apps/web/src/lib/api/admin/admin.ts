@@ -72,6 +72,9 @@ import type {
   GetApiAdminTrafficParams,
   GetApiAdminUsers200,
   GetApiAdminUsersParams,
+  GetApiAdminVisitors200,
+  GetApiAdminVisitorsById200,
+  GetApiAdminVisitorsParams,
   PatchApiAdminFeedbackBuilderIssuesById200,
   PatchApiAdminFeedbackBuilderIssuesByIdBody,
   PatchApiAdminFeedbackBuilderReportsById200,
@@ -5070,6 +5073,203 @@ export function useGetApiAdminTrafficLive<TData = Awaited<ReturnType<typeof getA
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetApiAdminTrafficLiveQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAdminVisitorsResponse200 = {
+  data: GetApiAdminVisitors200
+  status: 200
+}
+
+export type getApiAdminVisitorsResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminVisitorsResponseSuccess = (getApiAdminVisitorsResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminVisitorsResponseError = (getApiAdminVisitorsResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminVisitorsResponse = (getApiAdminVisitorsResponseSuccess | getApiAdminVisitorsResponseError)
+
+export const getGetApiAdminVisitorsUrl = (params?: GetApiAdminVisitorsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/visitors?${stringifiedParams}` : `/api/admin/visitors`
+}
+
+/**
+ * @summary Every visitor seen in a period: when they came, how often, from where, and who they are once signed in
+ */
+export const getApiAdminVisitors = async (params?: GetApiAdminVisitorsParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminVisitorsResponse> => {
+
+  return customFetch<getApiAdminVisitorsResponse>(getGetApiAdminVisitorsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminVisitorsQueryKey = (params?: GetApiAdminVisitorsParams,) => {
+    return [
+    `/api/admin/visitors`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiAdminVisitorsQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminVisitors>>, TError = void>(params?: GetApiAdminVisitorsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminVisitors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminVisitorsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminVisitors>>> = ({ signal }) => getApiAdminVisitors(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminVisitors>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminVisitorsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminVisitors>>>
+export type GetApiAdminVisitorsQueryError = void
+
+
+/**
+ * @summary Every visitor seen in a period: when they came, how often, from where, and who they are once signed in
+ */
+
+export function useGetApiAdminVisitors<TData = Awaited<ReturnType<typeof getApiAdminVisitors>>, TError = void>(
+ params?: GetApiAdminVisitorsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminVisitors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminVisitorsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAdminVisitorsByIdResponse200 = {
+  data: GetApiAdminVisitorsById200
+  status: 200
+}
+
+export type getApiAdminVisitorsByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminVisitorsByIdResponseSuccess = (getApiAdminVisitorsByIdResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminVisitorsByIdResponseError = (getApiAdminVisitorsByIdResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminVisitorsByIdResponse = (getApiAdminVisitorsByIdResponseSuccess | getApiAdminVisitorsByIdResponseError)
+
+export const getGetApiAdminVisitorsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/visitors/${id}`
+}
+
+/**
+ * @summary One visitor: their visits, and the pages of each in order
+ */
+export const getApiAdminVisitorsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminVisitorsByIdResponse> => {
+
+  return customFetch<getApiAdminVisitorsByIdResponse>(getGetApiAdminVisitorsByIdUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminVisitorsByIdQueryKey = (id: string,) => {
+    return [
+    `/api/admin/visitors/${id}`
+    ] as const;
+    }
+
+
+export const getGetApiAdminVisitorsByIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminVisitorsById>>, TError = void>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminVisitorsById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminVisitorsByIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminVisitorsById>>> = ({ signal }) => getApiAdminVisitorsById(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminVisitorsById>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminVisitorsByIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminVisitorsById>>>
+export type GetApiAdminVisitorsByIdQueryError = void
+
+
+/**
+ * @summary One visitor: their visits, and the pages of each in order
+ */
+
+export function useGetApiAdminVisitorsById<TData = Awaited<ReturnType<typeof getApiAdminVisitorsById>>, TError = void>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminVisitorsById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminVisitorsByIdQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

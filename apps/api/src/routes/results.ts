@@ -24,7 +24,8 @@ import { computeAnalytics } from "../lib/analytics-service.js";
 import { computeFollowUpStats } from "../lib/followup-analytics.js";
 import { buildXlsx } from "../lib/xlsx.js";
 import { bindChunks, holesFor } from "../lib/d1-bindings.js";
-import { readBeacon, writeTraffic } from "../lib/traffic.js";
+import { readBeacon, recordTraffic } from "../lib/traffic.js";
+import { deferOn } from "../lib/translations.js";
 
 export const resultsRouter = new Hono<{ Bindings: Bindings; Variables: Partial<AuthzVars & GuardVars> }>();
 
@@ -308,7 +309,7 @@ viewsRouter.post("/forms/:slug/view", async (c) => {
   // and they still count below.
   const beacon = await readBeacon(c.req.raw);
   if (beacon && (beacon.a === "form" || beacon.a === "embed")) {
-    writeTraffic(c.env, c.req.raw, { ...beacon, e: "view", p: `/f/${slug}` });
+    deferOn(c)(recordTraffic(c.env, c.req.raw, { ...beacon, e: "view", p: `/f/${slug}` }));
   }
   const date = new Date().toISOString().slice(0, 10);
   await c.env.DB.prepare(

@@ -3,6 +3,7 @@ import type { Bindings } from "./env.js";
 import { createApp } from "./app.js";
 import { handleRequest } from "./mcp/oauth.js";
 import { SessionDO } from "./do/session-do.js";
+import { TrafficDO } from "./do/traffic-do.js";
 import {
   deliverOne,
   fanOutEvent,
@@ -45,7 +46,7 @@ import {
 import { sweepPlanNotices } from "./lib/plan-notices.js";
 import { rollupPlatformDaily, rollupFormStructure, backfillPlatformDaily, rollupTrafficDaily, utcDay } from "./lib/platform-rollup.js";
 
-export { SessionDO };
+export { SessionDO, TrafficDO };
 
 const app = createApp();
 
@@ -356,8 +357,8 @@ export default {
        */
       await backfillPlatformDaily(env).catch((err) => console.error("platform_backfill_failed", err));
       /**
-       * Traffic history, copied out of Analytics Engine a finished day at a
-       * time before its three months are up. Its own guard skips anything
+       * Traffic history, copied out of `TrafficDO` a finished day at a time
+       * before it drops the day's page-level rows. Its own guard skips anything
        * before 00:10 UTC, which is why the daily cron fires at 00:20.
        */
       await rollupTrafficDaily(env).catch((err) =>

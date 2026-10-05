@@ -3,65 +3,27 @@ import type { Bindings } from "../env.js";
 import { captureRequestContext } from "./respondent-context.js";
 import { classifySource, hostOf } from "./traffic-source.js";
 import { webOrigins } from "./origins.js";
+import { SESSION_LOCATION } from "./session-location.js";
+import type { TrafficDO, TrafficHit } from "../do/traffic-do.js";
 
 /**
- * First-party traffic: one Analytics Engine row per page view, and one more when
+ * First-party traffic: every page view the site has, and one more beacon when
  * the page is left.
  *
- * Every surface the site has reports here: the marketing pages, the docs, sign-in,
- * the dashboard, the builder, and a respondent filling a form. The super admin's
- * Traffic and Campaigns pages read it back through the SQL API (`traffic-query.ts`).
+ * Every surface reports here: the marketing pages, the docs, sign-in, the
+ * dashboard, the builder, and a respondent filling a form. This file decides
+ * what counts and fills in what only the edge knows (place, device, source);
+ * `TrafficDO` stores it, and the super admin's Traffic, Visitors and Campaigns
+ * pages read it back through `traffic-query.ts`.
  *
- * Analytics Engine rather than D1 because a page view must cost nothing: the write
- * is fire-and-forget, has no round trip and no row to contend on, and a busy
- * campaign day is a few hundred thousand of them. D1 keeps what the business is
- * built on (sign-ups, forms, responses, payments); this keeps who looked.
- *
- * The dataset holds exactly one row shape, the one `writeTraffic` builds. The
- * SQL API has no schema, only positions, so a second writer with another layout
- * would make every query below it wrong without an error. The positions are
- * `TRAFFIC_BLOBS` / `TRAFFIC_DOUBLES`, which the query side reads by name.
+ * Our own store rather than D1 or Analytics Engine: a page view is a few local
+ * writes inside one Durable Object, with no database round trip, and the rows
+ * stay ours to join and keep. D1 keeps what the business is built on
+ * (sign-ups, forms, responses, payments); this keeps who looked.
  */
 
 export const TRAFFIC_AREAS = ["marketing", "docs", "auth", "app", "builder", "form", "embed"] as const;
 export type TrafficArea = (typeof TRAFFIC_AREAS)[number];
-
-/** Blob positions, 1-based as the SQL API names them (`blob1`…`blob20`). */
-export const TRAFFIC_BLOBS = {
-  event: 1,
-  area: 2,
-  path: 3,
-  visitId: 4,
-  referrerHost: 5,
-  channel: 6,
-  source: 7,
-  medium: 8,
-  campaign: 9,
-  content: 10,
-  country: 11,
-  region: 12,
-  city: 13,
-  device: 14,
-  browser: 15,
-  os: 16,
-  language: 17,
-  isNew: 18,
-  signedIn: 19,
-  userId: 20,
-} as const;
-
-/** Double positions (`double1`…). */
-export const TRAFFIC_DOUBLES = {
-  engagedMs: 1,
-  lcp: 2,
-  inp: 3,
-  ttfb: 4,
-  cls: 5,
-  lat: 6,
-  lon: 7,
-  isEntry: 8,
-  screenW: 9,
-} as const;
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/);
 const short = (max: number) => z.string().max(max).optional();
@@ -146,68 +108,75 @@ function externalReferrer(env: Bindings, referrer: string | undefined): string |
   return referrer ?? null;
 }
 
+/** The one object that holds all traffic, beside D1 like the worker itself. */
+export function trafficStore(env: Bindings): DurableObjectStub<TrafficDO> {
+  return env.TRAFFIC_DO.get(env.TRAFFIC_DO.idFromName("traffic"), SESSION_LOCATION) as unknown as DurableObjectStub<TrafficDO>;
+}
+
+/** A measurement that was taken: zero and absent both mean it was not. */
+const measured = (value: number | undefined): number | null =>
+  typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : null;
+
+/** One beacon, enriched from the edge, or null when it is not traffic (a bot, an admin page). */
+export function trafficHit(env: Bindings, request: Request, beacon: TrafficBeacon, at = Date.now()): TrafficHit | null {
+  if (isBotAgent(request.headers.get("user-agent"))) return null;
+  if (NEVER.test(beacon.p)) return null;
+
+  const ctx = captureRequestContext(request, { fallbackChannel: "link", client: { language: beacon.l } });
+  if (ctx.device.type === "bot") return null;
+
+  const src = classifySource(externalReferrer(env, beacon.r), {
+    source: beacon.u?.source,
+    medium: beacon.u?.medium,
+    ad: beacon.ad,
+  });
+  const coordinate = (value: number | null | undefined) =>
+    typeof value === "number" && Number.isFinite(value) ? value : null;
+
+  return {
+    at,
+    event: beacon.e,
+    visitor: beacon.v,
+    visit: beacon.s,
+    area: beacon.a,
+    path: clip(beacon.p.split("?")[0], 300),
+    referrerHost: clip(src.host, 120),
+    channel: src.channel,
+    source: clip(src.source, 80),
+    medium: clip(beacon.u?.medium?.toLowerCase(), 80),
+    campaign: clip(beacon.u?.campaign?.toLowerCase(), 150),
+    content: clip(beacon.u?.content, 150),
+    country: clip(ctx.geo.country, 2),
+    region: clip(ctx.geo.region, 100),
+    city: clip(ctx.geo.city, 100),
+    lat: coordinate(ctx.geo.latitude),
+    lon: coordinate(ctx.geo.longitude),
+    device: ctx.device.type ?? "",
+    browser: clip(ctx.device.browser, 40),
+    os: clip(ctx.device.os, 40),
+    language: clip(ctx.language, 35),
+    screenW: beacon.w || null,
+    // Who is signed in is only recorded where being signed in is the point.
+    userId: beacon.a === "app" || beacon.a === "builder" ? clip(beacon.uid, 64) : "",
+    engagedMs: beacon.ms ?? 0,
+    lcp: measured(beacon.lcp),
+    inp: measured(beacon.inp),
+    ttfb: measured(beacon.ttfb),
+    cls: typeof beacon.cls === "number" ? Math.round(beacon.cls * 1000) / 1000 : null,
+  };
+}
+
 /**
- * Enrich one beacon from the edge and write it. Returns whether a row was written.
+ * Enrich one beacon and store it. Resolves to whether it was stored.
  *
- * Never throws: an analytics write is not allowed to fail anything, and every
- * caller discards the result anyway.
+ * Never rejects: an analytics write is not allowed to fail anything. Callers
+ * hand the promise to `waitUntil` and answer without it.
  */
-export function writeTraffic(env: Bindings, request: Request, beacon: TrafficBeacon): boolean {
+export async function recordTraffic(env: Bindings, request: Request, beacon: TrafficBeacon): Promise<boolean> {
   try {
-    if (!env.TRAFFIC) return false;
-    if (isBotAgent(request.headers.get("user-agent"))) return false;
-    if (NEVER.test(beacon.p)) return false;
-
-    const ctx = captureRequestContext(request, { fallbackChannel: "link", client: { language: beacon.l } });
-    if (ctx.device.type === "bot") return false;
-
-    const referrer = externalReferrer(env, beacon.r);
-    const src = classifySource(referrer, { source: beacon.u?.source, medium: beacon.u?.medium, ad: beacon.ad });
-    const signedIn = !!beacon.uid;
-
-    const blobs: string[] = [];
-    const set = (key: keyof typeof TRAFFIC_BLOBS, value: string) => {
-      blobs[TRAFFIC_BLOBS[key] - 1] = value;
-    };
-    set("event", beacon.e);
-    set("area", beacon.a);
-    set("path", clip(beacon.p.split("?")[0], 300));
-    set("visitId", beacon.s);
-    set("referrerHost", clip(src.host, 120));
-    set("channel", src.channel);
-    set("source", clip(src.source, 80));
-    set("medium", clip(beacon.u?.medium?.toLowerCase(), 80));
-    set("campaign", clip(beacon.u?.campaign?.toLowerCase(), 150));
-    set("content", clip(beacon.u?.content, 150));
-    set("country", clip(ctx.geo.country, 2));
-    set("region", clip(ctx.geo.region, 100));
-    set("city", clip(ctx.geo.city, 100));
-    set("device", ctx.device.type ?? "");
-    set("browser", clip(ctx.device.browser, 40));
-    set("os", clip(ctx.device.os, 40));
-    set("language", clip(ctx.language, 35));
-    set("isNew", beacon.n === 1 ? "1" : "0");
-    set("signedIn", signedIn ? "1" : "0");
-    set("userId", beacon.a === "app" || beacon.a === "builder" ? clip(beacon.uid, 64) : "");
-
-    const doubles: number[] = new Array(9).fill(0);
-    const num = (key: keyof typeof TRAFFIC_DOUBLES, value: number | null | undefined) => {
-      doubles[TRAFFIC_DOUBLES[key] - 1] = typeof value === "number" && Number.isFinite(value) ? value : 0;
-    };
-    num("engagedMs", beacon.ms);
-    num("lcp", beacon.lcp);
-    num("inp", beacon.inp);
-    num("ttfb", beacon.ttfb);
-    num("cls", beacon.cls === undefined ? undefined : Math.round(beacon.cls * 1000));
-    num("lat", ctx.geo.latitude);
-    num("lon", ctx.geo.longitude);
-    num("isEntry", beacon.en);
-    num("screenW", beacon.w);
-
-    // The visitor is the index, which is also Analytics Engine's sampling key:
-    // under sampling, a visitor is kept or dropped whole, so uniques and visits
-    // stay consistent with each other.
-    env.TRAFFIC.writeDataPoint({ indexes: [beacon.v], blobs, doubles });
+    const hit = trafficHit(env, request, beacon);
+    if (!hit) return false;
+    await trafficStore(env).record(hit);
     return true;
   } catch (err) {
     console.warn("traffic_write_failed", { message: err instanceof Error ? err.message : String(err) });

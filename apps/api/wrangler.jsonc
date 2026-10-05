@@ -79,6 +79,11 @@
       {
         "name": "SESSION_DO",
         "class_name": "SessionDO"
+      },
+      // Every page view the site has, in one object's own SQLite. See `src/do/traffic-do.ts`.
+      {
+        "name": "TRAFFIC_DO",
+        "class_name": "TrafficDO"
       }
     ]
   },
@@ -86,6 +91,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["SessionDO"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["TrafficDO"]
     }
   ],
   "queues": {
@@ -171,12 +180,6 @@
     {
       "binding": "ANALYTICS_API",
       "dataset": "chatform_api_requests"
-    },
-    // First-party page views from every surface. One row shape, written only by
-    // `lib/traffic.ts` and read back by `lib/traffic-query.ts`.
-    {
-      "binding": "TRAFFIC",
-      "dataset": "chatform_traffic"
     }
   ],
   // Burst protection only. The `simple` config is per-binding and per-colo, so

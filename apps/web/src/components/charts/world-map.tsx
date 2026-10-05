@@ -176,7 +176,7 @@ export function WorldMap({
             const active = (hover?.kind === "dot" && hover.p === p) || p.highlight;
             return (
               <g
-                key={`${p.lat},${p.lon}`}
+                key={`${p.lat},${p.lon},${p.label}`}
                 className={onSelect && !focus && p.country ? "cursor-pointer" : "cursor-default"}
                 onMouseEnter={() => {
                   setHover({ kind: "dot", p });
