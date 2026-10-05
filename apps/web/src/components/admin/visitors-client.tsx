@@ -307,7 +307,9 @@ function VisitorBody({ id }: { id: string }) {
     <>
       <SheetHeader className="border-b px-4 py-3.5 pr-12">
         <SheetTitle className="truncate text-sm">{who(v)}</SheetTitle>
-        <SheetDescription className="truncate font-mono text-xs">{v.visitor}</SheetDescription>
+        <SheetDescription className="truncate text-xs">
+          Fingerprint <span className="font-mono">{v.visitor}</span>
+        </SheetDescription>
       </SheetHeader>
 
       <div className="space-y-8 px-4 py-4">

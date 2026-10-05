@@ -36,8 +36,10 @@ const metric = z.number().finite().min(0).max(600_000).optional();
 export const TrafficBeacon = z.object({
   /** `view` when a page is shown, `leave` when it is hidden for good. */
   e: z.enum(["view", "leave"]),
-  /** Visitor: a random id this browser keeps in `localStorage`. */
+  /** Visitor: the browser's device fingerprint, the one a respondent is known by. */
   v: id,
+  /** The random id this browser was counted under before fingerprints, so its history follows it. */
+  pv: id.optional(),
   /** Visit: a random id this tab keeps until 30 minutes of inactivity. */
   s: id,
   a: z.enum(TRAFFIC_AREAS),
@@ -137,6 +139,7 @@ export function trafficHit(env: Bindings, request: Request, beacon: TrafficBeaco
     at,
     event: beacon.e,
     visitor: beacon.v,
+    previous: beacon.pv && beacon.pv !== beacon.v ? beacon.pv : undefined,
     visit: beacon.s,
     area: beacon.a,
     path: clip(beacon.p.split("?")[0], 300),

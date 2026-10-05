@@ -258,6 +258,17 @@ describe("TrafficDO", () => {
     );
   });
 
+  it("moves a browser's history to its fingerprint the first time it reports one", async () => {
+    await store.record(hit({ visitor: "fp-ben", previous: "ben", visit: "ben-2", path: "/pricing" }));
+    const moved = await store.visitor("fp-ben");
+    expect(moved?.visitor).toMatchObject({ visits: 2, views: 2, landing_path: "/blog/forms", last_path: "/pricing" });
+    expect(moved?.views.map((v) => v.path)).toEqual(["/blog/forms", "/pricing"]);
+    expect(await store.visitor("ben")).toBeNull();
+    // Sent again, or naming an id that never existed, it changes nothing.
+    await store.record(hit({ visitor: "fp-ben", previous: "ben", visit: "ben-2", path: "/" }));
+    expect((await store.visitor("fp-ben"))?.visitor.visits).toBe(2);
+  });
+
   it("lets a late, older hit move a visitor's start back and never their present", async () => {
     await store.record(hit({ at: now - 20 * DAY, visit: "ana-0", path: "/templates", source: "Reddit", city: "Mysuru" }));
     const { rows } = await store.visitors({ since: 0, sort: "views", q: "", userIds: [], limit: 50, offset: 0 });

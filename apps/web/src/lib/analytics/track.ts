@@ -3,8 +3,11 @@
  * platform console's Traffic and Campaigns pages. The server half is
  * `apps/api/src/lib/traffic.ts`, which names every field sent here.
  *
- * Three ids, none of them personal:
- *   - visitor: random, in `localStorage`, for "how many people".
+ * Three ids:
+ *   - visitor: the device fingerprint (`lib/respondent-signal.ts`), the same
+ *     one a respondent is known by, for "how many people". It survives cleared
+ *     storage and private windows. Only a browser that refuses to be
+ *     fingerprinted falls back to a random id in `localStorage`.
  *   - visit: random, in `sessionStorage`, rolled over after 30 idle minutes or
  *     when the tab arrives from somewhere new (another campaign link, another
  *     site). "How many visits", and what each one looked at.
@@ -14,18 +17,21 @@
  * send is dropped rather than retried.
  */
 
+import { getRespondentSignal } from "@/lib/respondent-signal";
+
 export type TrafficArea = "marketing" | "docs" | "auth" | "app" | "builder" | "form" | "embed";
 
 export interface Beacon {
   e: "view" | "leave";
   v: string;
+  /** The random id this browser was counted under before fingerprints, sent once so its history follows it. */
+  pv?: string;
   s: string;
   a: TrafficArea;
   p: string;
   r?: string;
   u?: { source?: string; medium?: string; campaign?: string; content?: string };
   ad?: string;
-  n?: 0 | 1;
   en?: 0 | 1;
   uid?: string;
   l?: string;
@@ -37,7 +43,8 @@ export interface Beacon {
   cls?: number;
 }
 
-const VISITOR_KEY = "cf_vid";
+/** The fallback id, and where the id from before fingerprints may still be. */
+const LEGACY_VISITOR_KEY = "cf_vid";
 const VISIT_KEY = "cf_visit";
 /** Set on a browser that has opened the platform console: its traffic is ours, not a visitor's. */
 const INTERNAL_KEY = "cf_internal";
@@ -61,7 +68,6 @@ interface Visit {
   r?: string;
   u?: Beacon["u"];
   ad?: string;
-  n?: 0 | 1;
   pages: number;
 }
 
@@ -92,17 +98,46 @@ function randomId(): string {
   return crypto.randomUUID().replace(/-/g, "");
 }
 
-function visitorId(): { id: string; created: boolean } {
+function stored(key: string): string | null {
   try {
-    const existing = localStorage.getItem(VISITOR_KEY);
-    if (existing) return { id: existing, created: false };
-    const id = randomId();
-    localStorage.setItem(VISITOR_KEY, id);
-    return { id, created: true };
+    return localStorage.getItem(key);
   } catch {
-    // No storage: a fresh id per page. Visitors are overcounted, never lost.
-    return { id: randomId(), created: true };
+    return null;
   }
+}
+
+interface Visitor {
+  id: string;
+  previous?: string;
+}
+
+/** Resolved once per document; every page after the first has it at hand. */
+let visitor: Visitor | null = null;
+let visitorPending: Promise<Visitor> | null = null;
+
+function resolveVisitor(): Promise<Visitor> {
+  visitorPending ??= getRespondentSignal().then((signal) => {
+    const legacy = stored(LEGACY_VISITOR_KEY);
+    if (signal) {
+      visitor = { id: signal, previous: legacy ?? undefined };
+      return visitor;
+    }
+    // No fingerprint to be had. A random id is overcounted when storage is cleared, never lost.
+    const id = legacy ?? randomId();
+    try {
+      localStorage.setItem(LEGACY_VISITOR_KEY, id);
+    } catch {
+      // No storage either: a fresh id per document.
+    }
+    visitor = { id };
+    return visitor;
+  });
+  return visitorPending;
+}
+
+/** The visitor id sign-up attribution should carry: the one this browser's page views are under. */
+export function knownVisitorId(): string | undefined {
+  return visitor?.id ?? stored("chatform:device") ?? stored(LEGACY_VISITOR_KEY) ?? undefined;
 }
 
 /** The campaign tags and ad click id on the current address, if any. */
@@ -141,7 +176,7 @@ function externalReferrer(): string | undefined {
  * of a document, the only moment the referrer and the address say anything
  * about where the tab came from.
  */
-function currentVisit(hardLoad: boolean, createdVisitor: boolean, referrerOverride?: string): Visit {
+function currentVisit(hardLoad: boolean, referrerOverride?: string): Visit {
   const now = Date.now();
   let visit: Visit | null = null;
   try {
@@ -162,7 +197,6 @@ function currentVisit(hardLoad: boolean, createdVisitor: boolean, referrerOverri
       r: referrer,
       u: tags.u,
       ad: tags.ad,
-      n: createdVisitor ? 1 : 0,
       pages: 0,
     };
   }
@@ -252,30 +286,43 @@ export function startPage(opts: {
   documentLoaded = true;
   if (hardLoad) observeVitals();
 
-  const visitor = visitorId();
-  const visit = currentVisit(hardLoad, visitor.created, opts.referrer);
-  const base = (): Beacon => ({
+  const visit = currentVisit(hardLoad, opts.referrer);
+  const base = (v: string): Beacon => ({
     e: "view",
-    v: visitor.id,
+    v,
     s: visit.id,
     a: opts.area,
     p: opts.path.slice(0, 300),
     r: visit.r,
     u: visit.u,
     ad: visit.ad,
-    n: visit.n,
     uid: opts.area === "app" || opts.area === "builder" ? userId : undefined,
   });
   const beaconUrl = `${opts.apiOrigin}/p/t`;
+  const entry = visit.pages === 1 ? 1 : 0;
 
-  const view: Beacon = {
-    ...base(),
-    en: visit.pages === 1 ? 1 : 0,
-    l: navigator.language?.slice(0, 35),
-    w: window.screen?.width || undefined,
-  };
-  if (opts.sendView) opts.sendView(view);
-  else send(beaconUrl, view);
+  // The view goes out once the fingerprint is known: at once on every page but a browser's very first.
+  let viewSent = false;
+  void resolveVisitor().then((who) => {
+    const view: Beacon = {
+      ...base(who.id),
+      pv: who.previous,
+      en: entry,
+      l: navigator.language?.slice(0, 35),
+      w: window.screen?.width || undefined,
+    };
+    if (opts.sendView) opts.sendView(view);
+    else send(beaconUrl, view);
+    viewSent = true;
+    if (who.previous) {
+      who.previous = undefined;
+      try {
+        localStorage.removeItem(LEGACY_VISITOR_KEY);
+      } catch {
+        // It is sent again next time, and the server has already moved the history.
+      }
+    }
+  });
 
   let visibleSince: number | null = document.visibilityState === "visible" ? Date.now() : null;
   let engaged = 0;
@@ -286,8 +333,10 @@ export function startPage(opts: {
       engaged += Date.now() - visibleSince;
       visibleSince = null;
     }
+    // A page left before its view could be sent has nothing to add time to.
+    if (!viewSent || !visitor) return;
     if (engaged < 500 && vitalsSent) return;
-    const leave: Beacon = { ...base(), e: "leave", ms: Math.round(engaged) };
+    const leave: Beacon = { ...base(visitor.id), e: "leave", ms: Math.round(engaged) };
     // The user id may have arrived after the view (the session loads after the page).
     if (!vitalsSent && vitals) {
       Object.assign(leave, vitals);

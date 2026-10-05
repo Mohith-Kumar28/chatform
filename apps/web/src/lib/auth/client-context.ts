@@ -1,3 +1,4 @@
+import { knownVisitorId } from "@/lib/analytics/track";
 /**
  * What this browser says about itself when its person signs up or in, sent as
  * the `x-chatform-client` header on those auth calls. The API adds geo, network
@@ -70,7 +71,7 @@ export function clientContextHeader(): string | null {
  */
 function trackedTouch(): { visitorId?: string; lastTouch?: { referrer?: string; utm?: Record<string, string>; ad?: string } } {
   try {
-    const visitorId = localStorage.getItem("cf_vid") ?? undefined;
+    const visitorId = knownVisitorId();
     const visit = JSON.parse(sessionStorage.getItem("cf_visit") ?? "null") as {
       r?: string;
       u?: Record<string, string>;

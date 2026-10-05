@@ -28,6 +28,8 @@ export interface TrafficHit {
   at: number;
   event: "view" | "leave";
   visitor: string;
+  /** An id this same browser was counted under before; its rows move to `visitor`. */
+  previous?: string;
   visit: string;
   area: string;
   path: string;
@@ -240,8 +242,22 @@ export class TrafficDO extends DurableObject<Bindings> {
     this.prune(Date.now());
   }
 
+  /**
+   * A browser known by a new id: everything recorded under the old one moves
+   * to it, so a returning visitor keeps their history. Only when the new id
+   * has none of its own yet; two histories are never merged.
+   */
+  private rename(from: string, to: string): void {
+    if (this.all("SELECT 1 FROM visitors WHERE visitor = ?", to).length) return;
+    if (this.sql.exec("UPDATE visitors SET visitor = ? WHERE visitor = ?", to, from).rowsWritten === 0) return;
+    this.sql.exec("UPDATE views SET visitor = ?1 WHERE visit IN (SELECT visit FROM visits WHERE visitor = ?2)", to, from);
+    this.sql.exec("UPDATE visits SET visitor = ? WHERE visitor = ?", to, from);
+    this.sql.exec("UPDATE OR IGNORE seen SET visitor = ? WHERE visitor = ?", to, from);
+  }
+
   private view(h: TrafficHit): void {
     const sql = this.sql;
+    if (h.previous) this.rename(h.previous, h.visitor);
     const newVisit =
       sql.exec(
         `INSERT OR IGNORE INTO visits (visit, visitor, started_at, last_at, views, channel, source, medium, campaign, content, referrer_host,
