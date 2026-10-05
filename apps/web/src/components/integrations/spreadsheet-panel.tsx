@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileSpreadsheet, Link2, RefreshCw, Trash2 } from "lucide-react";
+import { Download, ExternalLink, FileSpreadsheet, Link2, RefreshCw, Sheet, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CopyButton } from "@/components/ui/copy-button";
-import { CodeBlock } from "@/components/ui/code-block";
+import { InfoHint } from "@/components/ui/info-hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -19,15 +19,12 @@ import { apiDownloadClick } from "@/lib/api/download";
 /**
  * Spreadsheets.
  *
- * Two different requests wear the same word. "Give me the responses in Excel"
- * wants a file; "keep a sheet up to date" wants a subscription. A download
- * answers the first and quietly fails the second — someone has to remember to
- * take it again, and the version in the shared drive is always yesterday's.
+ * Google Sheets first: one Connect button, Google's own consent screen, and a
+ * sheet in the author's Drive that every response is written to as it arrives.
+ * Completed responses on one tab, unfinished ones on another.
  *
- * So: real `.xlsx` and `.csv` downloads, and one feed URL that Google Sheets
- * and Excel refresh on their own. No Google account, no OAuth consent screen,
- * no connector to authorise — the URL is the whole integration, and it can be
- * rotated or revoked from this panel.
+ * Under it, what serves everything else: real `.xlsx` and `.csv` downloads, and
+ * a feed URL that Excel refreshes on its own.
  */
 
 interface FeedRow {
@@ -36,6 +33,152 @@ interface FeedRow {
   status: string;
   feedUrl?: string;
   includePartials?: boolean;
+  spreadsheetUrl?: string;
+  email?: string | null;
+  lastSyncedAt?: number | null;
+  lastError?: string | null;
+  partialsLocked?: boolean;
+}
+
+/**
+ * The Google Sheets connection: connect, open, sync, disconnect.
+ *
+ * Connecting leaves this page for Google and comes back to it with `?sheets=…`,
+ * which `IntegrationsWorkspace` reads. A second form of the same person skips
+ * Google entirely, so the answer can also be "connected" straight away.
+ */
+function GoogleSheetsSection({ formId, row, loading }: { formId: string; row?: FeedRow; loading: boolean }) {
+  const queryClient = useQueryClient();
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const queryKey = ["integrations", formId];
+  const base = `/api/forms/${formId}/integrations/google-sheets`;
+
+  const connect = useMutation({
+    mutationFn: () =>
+      customFetch<{ url?: string; connected?: boolean }>(`${base}/start`, {
+        method: "POST",
+        body: JSON.stringify({ returnTo: `${window.location.origin}/forms/${formId}/integrate` }),
+      }),
+    onSuccess: (res) => {
+      if (res.url) {
+        window.location.assign(res.url);
+        return;
+      }
+      toast.success("Google Sheet created. New responses will appear in it.");
+      void queryClient.invalidateQueries({ queryKey });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const sync = useMutation({
+    mutationFn: () => customFetch<FeedRow>(`${base}/sync`, { method: "POST" }),
+    onSuccess: () => toast.success("Sheet updated."),
+    onError: (err: Error) => toast.error(err.message),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey }),
+  });
+
+  const disconnect = useMutation({
+    mutationFn: () => customFetch(base, { method: "DELETE" }),
+    onSuccess: () => {
+      setConfirmDisconnect(false);
+      toast.success("Disconnected. The sheet stays in your Google Drive.");
+      void queryClient.invalidateQueries({ queryKey });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const broken = row?.status === "needs_reconnect";
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-1.5">
+        <h3 className="text-h3">Google Sheets</h3>
+        <InfoHint label="About Google Sheets" align="start">
+          Every response is added to a sheet in your Google Drive as it arrives: finished ones on the
+          Completed tab, unfinished ones on the Partial tab. Chatform can only open sheets it created.
+          Sync now rewrites both tabs, so keep your own notes on a separate tab.
+        </InfoHint>
+      </div>
+
+      {loading ? (
+        <div className="bg-muted h-10 animate-pulse rounded-xl" />
+      ) : !row ? (
+        <Button size="sm" shape="pill" disabled={connect.isPending} onClick={() => connect.mutate()}>
+          <Sheet className="size-3.5" />
+          {connect.isPending ? "Connecting…" : "Connect Google Sheets"}
+        </Button>
+      ) : (
+        <div className="space-y-3">
+          <dl className="text-caption grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+            {row.email && (
+              <>
+                <dt className="text-muted-foreground">Google account</dt>
+                <dd className="truncate">{row.email}</dd>
+              </>
+            )}
+            <dt className="text-muted-foreground">Last updated</dt>
+            <dd>{row.lastSyncedAt ? new Date(row.lastSyncedAt).toLocaleString() : "Not yet"}</dd>
+            {row.partialsLocked && !broken && (
+              <>
+                <dt className="text-muted-foreground">Partial responses</dt>
+                <dd>
+                  <LockChip reason={{ feature: "export_partials" }} />
+                </dd>
+              </>
+            )}
+          </dl>
+
+          {broken && (
+            <p className="text-caption text-[var(--warning-soft-foreground)]">
+              {row.lastError ?? "Google access was removed."} Reconnect to keep the sheet updating.
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            {broken ? (
+              <Button size="sm" shape="pill" disabled={connect.isPending} onClick={() => connect.mutate()}>
+                <RefreshCw className="size-3.5" />
+                {connect.isPending ? "Connecting…" : "Reconnect"}
+              </Button>
+            ) : (
+              <>
+                <Button size="sm" shape="pill" asChild>
+                  <a href={row.spreadsheetUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink className="size-3.5" />
+                    Open sheet
+                  </a>
+                </Button>
+                <Button variant="outline" size="sm" shape="pill" disabled={sync.isPending} onClick={() => sync.mutate()}>
+                  <RefreshCw className={sync.isPending ? "size-3.5 animate-spin" : "size-3.5"} />
+                  {sync.isPending ? "Syncing…" : "Sync now"}
+                </Button>
+              </>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              shape="pill"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setConfirmDisconnect(true)}
+            >
+              <Trash2 className="size-3.5" />
+              Disconnect
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={confirmDisconnect}
+        onOpenChange={setConfirmDisconnect}
+        title="Disconnect Google Sheets?"
+        description="New responses stop being added. The sheet and everything in it stays in your Google Drive."
+        confirmLabel="Disconnect"
+        destructive
+        onConfirm={() => disconnect.mutate()}
+      />
+    </section>
+  );
 }
 
 export function SpreadsheetPanel({ formId }: { formId: string }) {
@@ -49,7 +192,9 @@ export function SpreadsheetPanel({ formId }: { formId: string }) {
     queryKey,
     queryFn: () => customFetch<FeedRow[]>(`/api/forms/${formId}/integrations`),
   });
-  const feed = (Array.isArray(data) ? data : []).find((row) => row.provider === "spreadsheet_feed");
+  const rows = Array.isArray(data) ? data : [];
+  const feed = rows.find((row) => row.provider === "spreadsheet_feed");
+  const sheets = rows.find((row) => row.provider === "google_sheets");
 
   const save = useMutation({
     mutationFn: (body: { includePartials?: boolean; rotate?: boolean }) =>
@@ -74,6 +219,10 @@ export function SpreadsheetPanel({ formId }: { formId: string }) {
 
   return (
     <div className="space-y-5">
+      <GoogleSheetsSection formId={formId} row={sheets} loading={isLoading} />
+
+      <hr className="border-border" />
+
       <section className="space-y-3">
         <div>
           <h3 className="text-h3">Download a file</h3>
@@ -106,10 +255,9 @@ export function SpreadsheetPanel({ formId }: { formId: string }) {
 
       <section className="space-y-3">
         <div>
-          <h3 className="text-h3">Live feed</h3>
+          <h3 className="text-h3">Live link for Excel</h3>
           <p className="text-muted-foreground text-caption">
-            One URL your spreadsheet re-reads on its own. New responses appear without anyone
-            exporting anything.
+            One URL Excel re-reads on its own.
           </p>
         </div>
 
@@ -134,16 +282,9 @@ export function SpreadsheetPanel({ formId }: { formId: string }) {
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-muted-foreground text-caption font-normal">
-                Paste into cell A1 of a Google Sheet
-              </Label>
-              <CodeBlock code={`=IMPORTDATA("${feed.feedUrl}")`} />
-              <p className="text-muted-foreground text-micro">
-                In Excel: <strong>Data → From Web</strong>, paste the same URL. Both refresh on
-                their own schedule — roughly hourly in Sheets.
-              </p>
-            </div>
+            <p className="text-muted-foreground text-micro">
+              In Excel: <strong>Data → From Web</strong>, then paste the URL.
+            </p>
 
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
@@ -199,8 +340,7 @@ export function SpreadsheetPanel({ formId }: { formId: string }) {
         ) : (
           <div className="bg-muted/30 space-y-3 rounded-xl px-5 py-6 text-center">
             <p className="text-muted-foreground text-body text-balance">
-              Create a link and paste it into Google Sheets or Excel once. It stays current
-              after that.
+              Create a link and paste it into Excel once. It stays current after that.
             </p>
             <Button
               size="sm"

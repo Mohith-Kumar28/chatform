@@ -1,3 +1,4 @@
+import { isSheetsMessage, queueSheetsSync, syncSheets, type SheetsMessage } from "./lib/google-sheets.js";
 import type { Bindings } from "./env.js";
 import { createApp } from "./app.js";
 import { handleRequest } from "./mcp/oauth.js";
@@ -67,14 +68,22 @@ export default {
     if (batch.queue === "q-webhooks") {
       await Promise.all(
         batch.messages.map(async (msg) => {
-          const body = msg.body as WebhookMessage;
+          const body = msg.body as WebhookMessage | SheetsMessage;
           try {
-            if (isDeliveryMessage(body)) await deliverOne(env, body.deliveryId);
-            else if (body.event) await fanOutEvent(env, body, msg.id);
+            if (isSheetsMessage(body)) {
+              // `busy` needs nothing more: whoever is writing the sheet has this response on their list.
+              await syncSheets(env, body.formId, { submissionId: body.submissionId });
+            } else if (isDeliveryMessage(body)) await deliverOne(env, body.deliveryId);
+            else if (body.event) {
+              await fanOutEvent(env, body, msg.id);
+              await queueSheetsSync(env, body);
+            }
             msg.ack();
           } catch (err) {
             console.error("webhook_message_failed", { error: err instanceof Error ? err.message : String(err) });
-            msg.retry();
+            // Google asking us to slow down is not helped by an immediate second try.
+            if (isSheetsMessage(body)) msg.retry({ delaySeconds: 30 });
+            else msg.retry();
           }
         }),
       );

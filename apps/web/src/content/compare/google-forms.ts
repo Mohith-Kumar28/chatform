@@ -53,7 +53,7 @@ export default defineComparison({
     {
       label: "Google Sheets output",
       hint: "Answers landing in a sheet without wiring anything.",
-      us: { partial: "Pull-based CSV feed via IMPORTDATA" },
+      us: "One-click connect, each response added as it arrives",
       them: "Native, instant",
     },
     { label: "Costs nothing, ever", us: { partial: "Free plan, fair-use ceiling" }, them: true },
@@ -78,7 +78,7 @@ export default defineComparison({
     {
       question: "Can I send Google Forms responses to a spreadsheet from chatform?",
       answer:
-        "Yes, but by a different mechanism, and it is worth understanding the difference. Google Forms writes into a Sheet natively and instantly. chatform gives you a stable, revocable CSV URL that Google Sheets pulls with IMPORTDATA, or Excel pulls on its own schedule, up to 5,000 rows. It is a pull, not a push, and it is one of the honest reasons to stay on Google Forms if a live sheet is the whole point.",
+        "Yes. Press Connect Google Sheets in the form's Integrate tab, approve once at Google, and chatform creates a sheet in your Drive and adds each response as it arrives, with finished responses on one tab and unfinished ones on another. It can only open the sheets it creates. For Excel there is a CSV link it refreshes on its own schedule.",
     },
     {
       question: "Why do people abandon long Google Forms?",

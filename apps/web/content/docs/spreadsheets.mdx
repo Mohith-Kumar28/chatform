@@ -1,10 +1,51 @@
 ---
 title: Google Sheets & Excel
-description: A file when you want a snapshot, a URL when you want a sheet that stays right.
+description: Connect Google Sheets in one click, download a file, or give Excel a link that stays current.
 ---
 
-"Put the responses in a spreadsheet" is two different requests, and answering
-only the first is why exported data is always a week old.
+## Google Sheets
+
+Open a form, go to **Integrate → Google Sheets & Excel** and press **Connect
+Google Sheets**. Google asks you to approve once, and a new sheet appears in your
+Drive with two tabs:
+
+- **Completed** holds every finished response, one row each.
+- **Partial** holds responses people started and did not finish. A response
+  moves to Completed when it is finished.
+
+Responses already collected are written straight away, and each new one is added
+within a few seconds of arriving. Unfinished responses reach the sheet a few
+minutes after the respondent goes quiet.
+
+### What Chatform can see
+
+Only the sheets it creates. The permission Google shows is "See, edit, create
+and delete only the specific Google Drive files you use with this app": Chatform
+cannot open anything else in your Drive.
+
+### Your own columns and tabs
+
+A response is found by its id in column A and written under the matching column
+headings, so a column you add for your own notes is left alone. A question you
+add to the form becomes a new column at the end.
+
+**Sync now** rewrites both tabs from scratch, in the form's question order. It
+also removes responses you deleted in Chatform. Keep anything you would not want
+rewritten on a tab of your own in the same sheet.
+
+### Partial responses and your plan
+
+<Callout>
+The Partial tab needs a plan that includes exporting unfinished responses. On
+other plans the tab holds a link to upgrade, and fills in on its own once you
+do. Completed responses are yours on every plan.
+</Callout>
+
+### Disconnecting
+
+**Disconnect** stops new responses being added. The sheet stays in your Drive.
+If you remove Chatform's access from your Google account instead, the card shows
+**Needs reconnect**, and reconnecting carries on with the same sheet.
 
 ## A file
 
@@ -32,20 +73,18 @@ header, filters, and columns sized to their contents. It also keeps the leading
 zeros on things that look like numbers and are not — `007`, `0044 7700 900123` —
 which is the single most common way an exported phone column is destroyed.
 
-## A sheet that stays right
+## A live link for Excel
 
-Create a feed URL in **Integrations → Google Sheets & Excel → Create feed URL**,
-then in Google Sheets put this in cell A1:
+Create a feed URL in **Integrate → Google Sheets & Excel → Create feed URL**.
+In Excel: **Data → From Web**, paste the URL, and set the refresh interval in
+the query properties. New responses appear on their own.
+
+Anything else that can import a CSV from a URL works the same way. In a Google
+Sheet you would rather not connect, that is one cell:
 
 ```
 =IMPORTDATA("https://api.chatform.in/p/feed/cff_…​.csv")
 ```
-
-Sheets re-reads it about hourly. New responses appear on their own; nobody has
-to remember to export anything.
-
-In Excel: **Data → From Web**, paste the same URL, and set the refresh interval
-in the query properties.
 
 ### What the feed is
 
@@ -75,15 +114,3 @@ The feed serves the 5,000 most recent responses. Past that, use the
 Unfinished responses in the feed need the same plan as unfinished responses in
 the CSV. What you finished collecting is yours on every plan.
 </Callout>
-
-## Why there is no "Connect Google account"
-
-Appending rows through the Sheets API needs an OAuth consent screen, refresh
-tokens held on your behalf, a sync worker and a reconciliation story for every
-row someone edits by hand — and it would still only serve people who use Google
-Sheets.
-
-`=IMPORTDATA(url)` is one cell, works the same in Excel, keeps no credential of
-yours on our side, and you can revoke it without going near an account settings
-page. If you need rows pushed into something the moment they arrive, that is
-what [webhooks](/docs/webhooks) are for.

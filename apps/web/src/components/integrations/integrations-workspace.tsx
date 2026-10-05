@@ -86,16 +86,17 @@ export function IntegrationsWorkspace({
 
   const { data: integrations } = useQuery({
     queryKey: ["integrations", formId],
-    queryFn: () => customFetch<{ provider: string }[]>(`/api/forms/${formId}/integrations`),
+    queryFn: () => customFetch<{ provider: string; status: string }[]>(`/api/forms/${formId}/integrations`),
   });
   const { data: webhooks } = useQuery({
     queryKey: ["webhooks", formId],
     queryFn: () => customFetch<{ formId?: string | null; health?: string }[]>("/api/webhooks"),
   });
 
-  const feedConnected = (Array.isArray(integrations) ? integrations : []).some(
-    (row) => row.provider === "spreadsheet_feed",
-  );
+  const sheetRows = Array.isArray(integrations) ? integrations : [];
+  const sheetsRow = sheetRows.find((row) => row.provider === "google_sheets");
+  const sheetConnected = sheetsRow?.status === "connected" || sheetRows.some((row) => row.provider === "spreadsheet_feed");
+  const sheetBroken = sheetsRow?.status === "needs_reconnect";
   const formHooks = (Array.isArray(webhooks) ? webhooks : []).filter((h) => !h.formId || h.formId === formId);
   const webhookCount = formHooks.length;
   // Green only for an endpoint that has actually answered; "1 endpoint" in
@@ -140,8 +141,9 @@ export function IntegrationsWorkspace({
             icon={SheetIcon}
             accent="var(--family-choice, var(--primary))"
             name="Google Sheets & Excel"
-            blurb="A live feed URL your spreadsheet refreshes itself, plus .xlsx and .csv downloads."
-            state={feedConnected ? "connected" : "available"}
+            blurb="Connect Google Sheets and every response lands in your sheet. Plus .xlsx and .csv downloads."
+            state={sheetBroken ? "attention" : sheetConnected ? "connected" : "available"}
+            detail={sheetBroken ? "Needs reconnect" : undefined}
             onClick={() => setPanel("spreadsheet")}
           />
           <DestinationCard
@@ -193,6 +195,8 @@ export function IntegrationsWorkspace({
         </div>
       </section>
 
+      <SheetsOAuthResult onOpen={() => setPanel("spreadsheet")} />
+
       <PaymentsOAuthResult
         ready={payments.isFetched}
         canOpenSheet={Boolean(payments.data && (payments.data.enabled || payments.data.accounts.length > 0))}
@@ -222,7 +226,7 @@ export function IntegrationsWorkspace({
                 : panel === "ai"
                   ? "Ask about your responses, or build and edit forms, from Claude, ChatGPT or any MCP app."
                   : panel === "spreadsheet"
-                  ? "Download the responses, or keep a sheet pointed at them."
+                  ? "Send every response to a Google Sheet, or download them."
                   : "Signed HTTP callbacks from a delivery queue, retried for about ten hours."}
             </SheetDescription>
           </SheetHeader>
@@ -292,6 +296,51 @@ function PaymentsOAuthResult({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, canOpenSheet]);
   return null;
+}
+
+/**
+ * What came back from Google after Connect Google Sheets: `?sheets=connected`, or
+ * `?sheets=error&reason=…`. Said once, with the spreadsheet panel opened behind it, and then
+ * taken off the address so a reload does not say it again.
+ */
+function SheetsOAuthResult({ onOpen }: { onOpen: () => void }) {
+  const handled = useRef(false);
+  useEffect(() => {
+    if (handled.current) return;
+    const url = new URL(window.location.href);
+    const outcome = url.searchParams.get("sheets");
+    if (outcome !== "connected" && outcome !== "error") return;
+    handled.current = true;
+    if (outcome === "connected") {
+      toast.success("Google Sheets connected. Your responses are in the sheet, and new ones will follow.");
+    } else {
+      toast.error(`Couldn't connect Google Sheets: ${sheetsReason(url.searchParams.get("reason"))}`);
+    }
+    onOpen();
+    for (const key of ["sheets", "reason"]) url.searchParams.delete(key);
+    window.history.replaceState(window.history.state, "", url);
+    // `onOpen` is a fresh closure every render; `handled` makes this once whatever re-runs it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
+}
+
+/** The `reason` values `GET /api/integrations/google-sheets/callback` redirects with, in words. */
+function sheetsReason(reason: string | null): string {
+  switch (reason) {
+    case "access_denied":
+      return "the request was cancelled on Google's page.";
+    case "permission_not_granted":
+      return "the permission to create the sheet was left unticked on Google's page. Try again and allow it.";
+    case "session_mismatch":
+      return "finish connecting in the same browser, signed in as the person who started it.";
+    case "not_a_member":
+      return "you no longer have access to this form.";
+    case "exchange_failed":
+      return "Google didn't finish the handover. Try again in a minute.";
+    default:
+      return reason?.startsWith("state_") ? "the link expired. Try connecting again." : "something went wrong. Try again.";
+  }
 }
 
 /**

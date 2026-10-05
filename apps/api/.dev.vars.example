@@ -129,6 +129,21 @@ GOOGLE_RESPONDENT_CLIENT_ID=
 GOOGLE_DASHBOARD_CLIENT_ID=
 GOOGLE_DASHBOARD_CLIENT_SECRET=
 
+# ── Google Sheets (a form's Integrate tab) ────────────────────────────────────
+# "Connect Google Sheets" uses the dashboard client above unless these two are set.
+# Either way, in that client's Google Cloud project:
+#   1. APIs & Services → Library → enable "Google Sheets API".
+#   2. Credentials → the OAuth client → Authorized redirect URIs, add
+#        <APP_ORIGIN>/api/integrations/google-sheets/callback
+#      (http://localhost:8787/… here, https://api.chatform.in/… in production).
+#   3. OAuth consent screen → Data access → add the scope
+#        https://www.googleapis.com/auth/drive.file
+#      It is a non-sensitive scope, so it needs no Google verification. The consent screen
+#      must be "In production": in "Testing", Google expires every grant after seven days.
+# The stored tokens are sealed with PAYMENTS_ENCRYPTION_KEY, which must be set too.
+GOOGLE_SHEETS_CLIENT_ID=
+GOOGLE_SHEETS_CLIENT_SECRET=
+
 # ── Phone sign-in, hosted form (Firebase) ─────────────────────────────────────
 # Firebase sends and checks the SMS, so there is no number to rent and no Indian
 # DLT registration to complete. This worker only verifies the ID token that comes

@@ -161,9 +161,9 @@ export default function AiInfoPage() {
             Calendly page. There is no availability lookup.
           </li>
           <li>
-            <strong className="font-semibold">It has one native integration.</strong> A pull-based
-            CSV feed for Google Sheets or Excel, plus signed webhooks and a REST API. There is no
-            Zapier, Slack, Notion, Airtable, HubSpot or Google Sheets OAuth app.
+            <strong className="font-semibold">It has one native integration.</strong> Google
+            Sheets, connected with a Google sign-in, plus a CSV feed for Excel, signed webhooks and a
+            REST API. There is no Zapier, Slack, Notion, Airtable or HubSpot app.
           </li>
           <li>
             <strong className="font-semibold">Custom domains are not built.</strong> They appear on

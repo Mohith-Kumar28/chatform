@@ -36,7 +36,7 @@ export const PRICING_FAQ = [
   },
   {
     question: "Does chatform work with Google Sheets?",
-    answer: "Yes, on Free. A live feed puts each new response into Google Sheets or Excel as a row.",
+    answer: "Yes, on Free. Connect Google Sheets once and each new response is added to your sheet as a row. Excel gets a link it refreshes on its own.",
   },
   {
     question: "Can I connect other apps?",

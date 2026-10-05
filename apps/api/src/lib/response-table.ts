@@ -39,22 +39,30 @@ export interface TableOptions {
   includePartials: boolean;
   /** Hard ceiling on rows. The exports allow more than the always-on feed does. */
   limit?: number;
+  /** Only these responses. What the Google Sheets sync asks for when one response changed. */
+  submissionIds?: string[];
+  /**
+   * Cells exactly as answered, without the apostrophe that stops a spreadsheet running them.
+   * Only for a writer that stores every cell as text itself, as the Sheets API does with `RAW`.
+   */
+  raw?: boolean;
 }
-
-/**
- * `csvCell` from `@repo/guard` is the de-fanger that used to live here as
- * `deFang`. Moved rather than copied: two of the three export paths did not
- * have it, so the same answer came out safe through this one and live through
- * the others. The `-40` carve-out went with it — mangling an ordinary negative
- * number to defend against `-1+cmd|…` costs more data than it saves.
- */
-const deFang = csvCell;
 
 export async function buildResponseTable(
   env: Bindings,
   formId: string,
-  { includePartials, limit = 10_000 }: TableOptions,
+  { includePartials, limit = 10_000, submissionIds, raw = false }: TableOptions,
 ): Promise<ResponseTable | null> {
+  /*
+   * `csvCell` from `@repo/guard` is the de-fanger that used to live here as
+   * `deFang`. Moved rather than copied: two of the three export paths did not
+   * have it, so the same answer came out safe through this one and live through
+   * the others. The `-40` carve-out went with it — mangling an ordinary negative
+   * number to defend against `-1+cmd|…` costs more data than it saves.
+   */
+  const deFang = raw ? (value: string) => value : csvCell;
+  // A JSON list rather than one hole per id, so all three statements keep the same bindings.
+  const only = submissionIds ? JSON.stringify(submissionIds) : null;
   /**
    * Document, responses and answers in one round trip.
    *
@@ -83,9 +91,10 @@ export async function buildResponseTable(
                 json_extract(meta, '$.userAgent') AS meta_user_agent
            FROM submissions
           WHERE form_id = ?1 AND status != 'spam' AND (?2 = 1 OR status = 'completed')
+            AND (?4 IS NULL OR id IN (SELECT value FROM json_each(?4)))
           ORDER BY COALESCE(completed_at, started_at) DESC, id DESC LIMIT ?3`,
       )
-      .bind(formId, includePartials ? 1 : 0, limit + 1),
+      .bind(formId, includePartials ? 1 : 0, limit + 1, only),
     /**
      * One read for every answer in the window — not for every answer on the form.
      *
@@ -103,10 +112,11 @@ export async function buildResponseTable(
           WHERE a.submission_id IN (
                   SELECT id FROM submissions
                    WHERE form_id = ?1 AND status != 'spam' AND (?2 = 1 OR status = 'completed')
+                     AND (?4 IS NULL OR id IN (SELECT value FROM json_each(?4)))
                    ORDER BY COALESCE(completed_at, started_at) DESC, id DESC LIMIT ?3
                 )`,
       )
-      .bind(formId, includePartials ? 1 : 0, limit),
+      .bind(formId, includePartials ? 1 : 0, limit, only),
   ])) as [
     D1Result<{ working_schema: string }>,
     D1Result<{

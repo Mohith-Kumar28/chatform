@@ -149,7 +149,15 @@ export function MarketingFooter() {
       </div>
 
       <div className="border-border/60 text-micro text-muted-foreground mx-auto mt-12 flex max-w-6xl flex-col gap-2 border-t pt-6 sm:flex-row sm:items-center sm:justify-between">
-        <p>© {new Date().getFullYear()} chatform</p>
+        <p className="flex flex-wrap gap-x-4 gap-y-1">
+          <span>© {new Date().getFullYear()} chatform</span>
+          <Link prefetch={false} href="/privacy" className="hover:text-foreground">
+            Privacy policy
+          </Link>
+          <Link prefetch={false} href="/terms" className="hover:text-foreground">
+            Terms of service
+          </Link>
+        </p>
         {/*
           This said "Built on Cloudflare Workers · D1 · Durable Objects · R2".
           Four proper nouns, at the very bottom of the page, aimed at nobody

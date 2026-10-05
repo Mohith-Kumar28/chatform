@@ -52,6 +52,10 @@ DODO_WEBHOOK_SECRET=
 GOOGLE_RESPONDENT_CLIENT_ID=
 GOOGLE_DASHBOARD_CLIENT_ID=
 GOOGLE_DASHBOARD_CLIENT_SECRET=
+# Google Sheets in the Integrate tab. Optional: absent, the dashboard client is used. See
+# .dev.vars.example for the three Google Cloud steps either client needs.
+GOOGLE_SHEETS_CLIENT_ID=
+GOOGLE_SHEETS_CLIENT_SECRET=
 
 # ── email ──────────────────────────────────────────────────────────────────
 # Which transport carries transactional mail: auto (default) | resend | cloudflare.

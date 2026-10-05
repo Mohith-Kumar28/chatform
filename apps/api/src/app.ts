@@ -27,7 +27,7 @@ import { mcpAuthorizeRouter, mcpConnectRouter } from "./routes/mcp-connect.js";
 import { setDispatchTarget } from "./mcp/dispatch.js";
 import { keysRouter } from "./routes/keys.js";
 import { webhooksRouter } from "./routes/webhook-admin.js";
-import { integrationsRouter, feedRouter } from "./routes/integrations.js";
+import { integrationsRouter, feedRouter, sheetsPublicRouter } from "./routes/integrations.js";
 import { billingRouter, billingPublicRouter } from "./routes/billing.js";
 import { paymentAccountsRouter, paymentAccountsPublicRouter } from "./routes/payment-accounts.js";
 import { paymentWebhooksRouter } from "./routes/payment-webhooks.js";
@@ -346,6 +346,8 @@ export function createApp() {
    * demand before it could be read.
    */
   app.route("/api", paymentAccountsPublicRouter);
+  /** Google's redirect for a Sheets connection, for the same reason again. */
+  app.route("/api", sheetsPublicRouter);
 
   /**
    * The platform console, mounted early for exactly the reason above.

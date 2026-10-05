@@ -43,10 +43,17 @@ const TOKEN_RE = new RegExp(`^[0-9a-f]{${NONCE_HEX}}\\.[A-Za-z0-9_-]{${MAC_CHARS
 
 export type OAuthProvider = "cashfree" | "razorpay" | "stripe";
 
-export interface OAuthStatePayload {
+/**
+ * `P` is who the consent screen belongs to. The gateways are the default; Google Sheets
+ * (`lib/google-sheets.ts`) signs its own states through the same single-use row, and each
+ * callback refuses a state whose provider is not its own.
+ */
+export interface OAuthStatePayload<P extends string = OAuthProvider> {
   orgId: string;
   userId: string;
-  provider: OAuthProvider;
+  provider: P;
+  /** The form a per-form connection is for. Absent for a gateway account, which is the organization's. */
+  formId?: string;
   nonce: string;
   /** Validated against `WEB_ORIGINS` before it was signed. */
   returnTo: string;
@@ -108,14 +115,14 @@ export function validateReturnTo(env: Bindings, returnTo: unknown): string | nul
 }
 
 /** Sign a new state and record its nonce. Returns the compact token the gateway will echo back. */
-export async function signOAuthState(
+export async function signOAuthState<P extends string = OAuthProvider>(
   env: Bindings,
-  input: { orgId: string; userId: string; provider: OAuthProvider; returnTo: string },
+  input: { orgId: string; userId: string; provider: P; returnTo: string; formId?: string },
   now = Date.now(),
-): Promise<{ state: string; payload: OAuthStatePayload }> {
+): Promise<{ state: string; payload: OAuthStatePayload<P> }> {
   const nonceBytes = crypto.getRandomValues(new Uint8Array(NONCE_HEX / 2));
   const nonce = Array.from(nonceBytes, (b) => b.toString(16).padStart(2, "0")).join("");
-  const payload: OAuthStatePayload = { ...input, nonce, exp: now + OAUTH_STATE_TTL_MS };
+  const payload: OAuthStatePayload<P> = { ...input, nonce, exp: now + OAUTH_STATE_TTL_MS };
   const payloadB64 = b64urlJson(payload);
 
   await env.DB.prepare(
@@ -143,13 +150,13 @@ export type OAuthStateFailure = "malformed" | "unknown" | "bad_signature" | "exp
  * callbacks racing with the same state both pass the signature check and exactly one of them
  * wins the write.
  */
-export async function verifyOAuthState(
+export async function verifyOAuthState<P extends string = OAuthProvider>(
   env: Bindings,
   token: string | null | undefined,
   now = Date.now(),
 ): Promise<
-  | { ok: true; payload: OAuthStatePayload }
-  | { ok: false; reason: OAuthStateFailure; returnTo?: string; provider?: OAuthProvider }
+  | { ok: true; payload: OAuthStatePayload<P> }
+  | { ok: false; reason: OAuthStateFailure; returnTo?: string; provider?: P }
 > {
   if (!token || !TOKEN_RE.test(token)) return { ok: false, reason: "malformed" };
   const [nonce, presented] = token.split(".") as [string, string];
@@ -165,9 +172,9 @@ export async function verifyOAuthState(
     return { ok: false, reason: "bad_signature" };
   }
 
-  let payload: OAuthStatePayload;
+  let payload: OAuthStatePayload<P>;
   try {
-    payload = fromB64urlJson(row.response_body) as OAuthStatePayload;
+    payload = fromB64urlJson(row.response_body) as OAuthStatePayload<P>;
   } catch {
     return { ok: false, reason: "malformed" };
   }

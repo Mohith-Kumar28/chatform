@@ -224,6 +224,15 @@ export interface Bindings {
   GOOGLE_DASHBOARD_CLIENT_ID?: string;
   GOOGLE_DASHBOARD_CLIENT_SECRET?: string;
   /**
+   * Google client for the Sheets connection in a form's Integrate tab (`lib/google-sheets.ts`).
+   *
+   * Optional: absent, the dashboard pair above is used, which only needs the Sheets callback
+   * added to its redirect URIs and the Google Sheets API switched on in the same project. The
+   * stored tokens are sealed with `PAYMENTS_ENCRYPTION_KEY`, so that has to be set as well.
+   */
+  GOOGLE_SHEETS_CLIENT_ID?: string;
+  GOOGLE_SHEETS_CLIENT_SECRET?: string;
+  /**
    * Firebase project that carries every SMS in the product — phone sign-in at
    * the gate, and the code that confirms a `verify` phone answer. Firebase
    * sends and checks the message itself, which is why there is no number to

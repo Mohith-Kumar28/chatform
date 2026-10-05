@@ -66,7 +66,7 @@ export function GET() {
     limitations: [
       "Does not process or verify payments. A payment question shows your own checkout link or a UPI QR code and records that the respondent said they paid.",
       "No calendar sync or availability lookup. Booking is a date question with a time, or a link out to Cal.com or Calendly.",
-      "One native integration: a pull-based CSV feed. No Zapier, Slack, Notion, Airtable, HubSpot or Google Sheets OAuth.",
+      "One native integration: Google Sheets, connected with a Google sign-in, plus a CSV feed for Excel. No Zapier, Slack, Notion, Airtable or HubSpot.",
       "Custom domains are not built; the feature is listed as coming soon.",
       "Multi-language forms are not built. The interviewer mirrors a respondent's language within a conversation, but there is no translation layer.",
       "No HIPAA offering, no BAA, no SOC 2 report, no SSO or SAML.",
