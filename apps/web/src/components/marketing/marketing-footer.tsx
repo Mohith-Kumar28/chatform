@@ -127,6 +127,21 @@ export function MarketingFooter() {
           <div className="mt-4">
             <ThemeToggle />
           </div>
+          <a
+            href="https://wired.business"
+            target="_blank"
+            rel="noopener"
+            className="mt-5 inline-block"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="https://wired.business/badge0-white.svg"
+              alt="Featured on Wired Business"
+              width={200}
+              height={54}
+              loading="lazy"
+            />
+          </a>
         </div>
 
         {COLUMNS.map((col) => (
