@@ -1,3 +1,4 @@
+import { trafficLive } from "../../lib/traffic-query.js";
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
@@ -319,11 +320,15 @@ coreRouter.get(
     const until = Math.floor(Date.now() / MINUTE_MS) * MINUTE_MS + MINUTE_MS;
     const from = until - LIVE_MINUTES * MINUTE_MS;
 
-    const counted = await Promise.all(LIVE_EVENTS.map((e) => liveBuckets(c.env, e, from, until)));
-    const events = LIVE_EVENTS.map((e, i) => {
-      const counts = counted[i]!;
-      return { key: e.key, label: e.label, total: counts.reduce((a, b) => a + b, 0), counts };
-    });
+    const [counted, site] = await Promise.all([
+      Promise.all(LIVE_EVENTS.map((e) => liveBuckets(c.env, e, from, until))),
+      // Pages opened on chatform itself, from the traffic store: the same minutes, snapped the same way.
+      trafficLive(c.env, "site").then((live) => (live.until === until ? live.views : null)).catch(() => null),
+    ]);
+    const events = [
+      { key: "site_views", label: "Site page views", counts: site ?? new Array<number>(LIVE_MINUTES).fill(0) },
+      ...LIVE_EVENTS.map((e, i) => ({ key: e.key, label: e.label, counts: counted[i]! })),
+    ].map((e) => ({ ...e, total: e.counts.reduce((a, b) => a + b, 0) }));
 
     return c.json({
       minutes: LIVE_MINUTES,

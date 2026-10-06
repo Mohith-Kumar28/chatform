@@ -749,6 +749,8 @@ describe("live activity", () => {
     const body = (await res.json()) as { events: { key: string }[] };
     expect(body.events.map((e) => e.key)).not.toContain("responses_started");
     expect(body.events.map((e) => e.key)).toContain("responses_completed");
+    // Pages opened on the site come from the traffic store, beside what D1 counts.
+    expect(body.events[0]?.key).toBe("site_views");
   });
 
   it("does not count test-mode traffic", async () => {

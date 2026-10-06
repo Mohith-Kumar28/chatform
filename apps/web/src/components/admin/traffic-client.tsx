@@ -3,14 +3,16 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { keepPreviousData } from "@tanstack/react-query";
-import { Bar, BarChart, XAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
+  getGetApiAdminLiveQueryKey,
   getGetApiAdminTrafficLiveQueryKey,
   getGetApiAdminTrafficQueryKey,
+  useGetApiAdminLive,
   useGetApiAdminTraffic,
   useGetApiAdminTrafficLive,
 } from "@/lib/api/admin/admin";
-import type { GetApiAdminTrafficLive200 } from "@/lib/api/generated.schemas";
+import type { GetApiAdminLive200, GetApiAdminTrafficLive200 } from "@/lib/api/generated.schemas";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { apiData } from "@/lib/api/payload";
 import { RANGE_DAYS, useRange, type Range } from "./range-picker";
@@ -395,57 +397,89 @@ function VitalsTable({ rows, first }: { rows: VitalRow[]; first: string }) {
   return <DataTable columns={columns} data={rows} getRowId={(r) => r.key} empty="Fills in as pages finish loading." />;
 }
 
-/** Who is here now: page views a minute at a time for the last half hour, and the pages open right now. */
+/** What the bars of the last half hour are made of, in stacking order. Six kinds at most: one per chart colour. */
+const LIVE_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)"];
+
+/**
+ * Everything that happened in the last half hour, a minute at a time and split by what it was
+ * (pages opened on the site, forms opened, responses finished, sign-ups, forms created), then who
+ * is here now and on which page. The activity is the whole platform's, whichever audience is
+ * picked: it is the same request the Overview's live tile makes. Who is here follows the audience.
+ */
 function LivePanel({ audience }: { audience: Audience }) {
   const mounted = useMounted();
   const params = { audience };
-  const { data, isPending } = useGetApiAdminTrafficLive(params, {
+  const { data } = useGetApiAdminTrafficLive(params, {
     query: { queryKey: getGetApiAdminTrafficLiveQueryKey(params), refetchInterval: 30_000, staleTime: 15_000 },
   });
-  const live = apiData<Live | undefined>(data);
-  const bars = useMemo(() => {
-    if (!live) return [];
-    return live.views.map((views, i) => ({ ago: live.minutes - 1 - i, views, visitors: live.visitors[i] ?? 0 }));
-  }, [live]);
+  const here = apiData<Live | undefined>(data);
+  const activity = useGetApiAdminLive({
+    query: { queryKey: getGetApiAdminLiveQueryKey(), refetchInterval: 20_000, refetchOnWindowFocus: true, placeholderData: (prev) => prev },
+  });
+  const live = apiData<GetApiAdminLive200 | undefined>(activity.data);
+  const events = useMemo(() => live?.events ?? [], [live?.events]);
+  const minutes = live?.minutes ?? 30;
+  // Series keys become CSS variables, so each kind is e0, e1, … rather than its own name.
+  const bars = useMemo(
+    () =>
+      Array.from({ length: minutes }, (_, i) => {
+        const row: Record<string, number> = { ago: minutes - 1 - i };
+        events.forEach((e, k) => (row[`e${k}`] = e.counts[i] ?? 0));
+        return row;
+      }),
+    [events, minutes],
+  );
+  const config = Object.fromEntries(events.map((e, k) => [`e${k}`, { label: e.label, color: LIVE_COLORS[k % LIVE_COLORS.length] }]));
 
   return (
     <Panel
       title="Last 30 minutes"
-      description="Page views a minute at a time"
+      description="Everything that happened, a minute at a time"
       actions={
-        live ? (
+        here ? (
           <span className="inline-flex items-center gap-1.5 text-xs font-medium">
             <span className="relative flex size-2">
-              {live.online > 0 && <span className="absolute inline-flex size-full animate-ping rounded-full bg-good opacity-60" />}
-              <span className={`relative inline-flex size-2 rounded-full ${live.online > 0 ? "bg-good" : "bg-muted-foreground/40"}`} />
+              {here.online > 0 && <span className="absolute inline-flex size-full animate-ping rounded-full bg-good opacity-60" />}
+              <span className={`relative inline-flex size-2 rounded-full ${here.online > 0 ? "bg-good" : "bg-muted-foreground/40"}`} />
             </span>
-            <span className="num">{fmt(live.online)}</span> here now
+            <span className="num">{fmt(here.online)}</span> here now
           </span>
         ) : null
       }
     >
-      {isPending || !mounted || !live ? (
-        <ChartPlaceholder height={120} />
+      {!mounted || !live ? (
+        <ChartPlaceholder height={150} />
       ) : (
-        <ChartContainer
-          config={{ views: { label: "Views", color: "var(--chart-1)" }, visitors: { label: "Visitors", color: "var(--chart-2)" } }}
-          className="aspect-auto w-full"
-          style={{ height: 120 }}
-          initialDimension={{ width: 400, height: 120 }}
-        >
-          <BarChart data={bars} margin={{ top: 4, right: 0, bottom: 0, left: 0 }} barCategoryGap="22%">
-            <XAxis dataKey="ago" tickLine={false} axisLine={false} tickMargin={6} interval={4} tickFormatter={(m: number) => (m === 0 ? "now" : `-${m}m`)} />
-            <ChartTooltip
-              cursor={{ fill: "var(--muted)", opacity: 0.5 }}
-              content={<ChartTooltipContent indicator="dot" labelFormatter={(_, p) => minutesAgo(Number(p?.[0]?.payload?.ago ?? 0))} />}
-            />
-            <Bar dataKey="views" fill="var(--color-views)" radius={[3, 3, 0, 0]} maxBarSize={14} isAnimationActive={false} />
-          </BarChart>
-        </ChartContainer>
+        <>
+          {/* Quiet kinds stay listed, dimmed: a legend that changes shape has to be re-read every time. */}
+          <ul className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            {events.map((e, k) => (
+              <li key={e.key} className="flex items-center gap-1.5">
+                <span className="size-2 rounded-[2px]" style={{ background: LIVE_COLORS[k % LIVE_COLORS.length], opacity: e.total > 0 ? 1 : 0.35 }} aria-hidden />
+                {e.label}
+                <span className={`num font-medium ${e.total > 0 ? "text-foreground" : ""}`}>{fmt(e.total)}</span>
+              </li>
+            ))}
+          </ul>
+          <ChartContainer config={config} className="aspect-auto w-full" style={{ height: 150 }} initialDimension={{ width: 400, height: 150 }}>
+            <BarChart data={bars} margin={{ top: 4, right: 0, bottom: 0, left: 0 }} barCategoryGap="22%">
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="ago" tickLine={false} axisLine={false} tickMargin={6} interval={4} tickFormatter={(m: number) => (m === 0 ? "now" : `-${m}m`)} />
+              <YAxis tickLine={false} axisLine={false} width={24} tickMargin={4} allowDecimals={false} />
+              <ChartTooltip
+                cursor={{ fill: "var(--muted)", opacity: 0.5 }}
+                content={<ChartTooltipContent indicator="dot" labelFormatter={(_, p) => minutesAgo(Number(p?.[0]?.payload?.ago ?? 0))} />}
+              />
+              {events.map((e, k) => (
+                <Bar key={e.key} dataKey={`e${k}`} stackId="live" fill={`var(--color-e${k})`} maxBarSize={14} isAnimationActive={false} />
+              ))}
+            </BarChart>
+          </ChartContainer>
+        </>
       )}
       <p className="mt-4 mb-1 px-2 text-xs font-medium">Open right now</p>
       <RankedList
-        rows={(live?.pages ?? []).map((p) => ({ key: p.path, n: p.visitors }))}
+        rows={(here?.pages ?? []).map((p) => ({ key: p.path, n: p.visitors }))}
         valueLabel="People"
         limit={5}
         empty="Nobody has a page open right now."
