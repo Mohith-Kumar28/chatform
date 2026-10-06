@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LockChip } from "@/components/billing/gate";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { usePlansDialog } from "@/stores/paywall-store";
 import { API_ORIGIN, apiHeaders, customFetch, isPlanDenial } from "@/lib/api/mutator";
@@ -203,7 +204,10 @@ export function LanguageSettings({
 
       <div data-setting="form.languages" className="space-y-4 rounded-xl border px-5 py-4">
         <div className="min-w-0">
-          <p className="text-sm font-medium">Add multiple languages</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium">Add multiple languages</p>
+            {!canAdd && <LockChip reason={{ feature: "multi_language" }} />}
+          </div>
           <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
             Translations are made from the default language above. Translate each language with AI, or by hand:
             download the file, fill in its third column and upload it back.
@@ -211,10 +215,10 @@ export function LanguageSettings({
         </div>
 
         {/*
-          No lock and no plan chip. On a plan without languages the control
-          looks exactly as it does on one with them, and pressing it opens the
-          plans: the moment somebody reaches for a second language is the
-          moment to say what it takes.
+          The chip beside the title names the plan, and the card is not made
+          inert: an account that had languages and then downgraded still has
+          to be able to remove them. On a plan without languages the control
+          looks as it does on one with them, and pressing it opens the plans.
         */}
         {!canAdd ? (
           <button
