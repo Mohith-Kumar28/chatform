@@ -6,10 +6,13 @@
   "name": "chatform-edge",
   "main": "edge.ts",
   "compatibility_date": "2026-08-01",
-  // Apex domain. `www` is deliberately not a second custom domain: one canonical
-  // host keeps the session cookie, the OAuth origins and the CORS allow-list to
-  // a single value.
-  "routes": [{ "pattern": "chatform.in", "custom_domain": true }],
+  // Apex domain. `www` is here only so that it resolves: `edge.ts` redirects it
+  // to the apex before anything is served, so there is still one canonical host
+  // for the session cookie, the OAuth origins and the CORS allow-list.
+  "routes": [
+    { "pattern": "chatform.in", "custom_domain": true },
+    { "pattern": "www.chatform.in", "custom_domain": true }
+  ],
   "workers_dev": false,
   "services": [
     { "binding": "WEB", "service": "chatform-web" },

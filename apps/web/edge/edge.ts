@@ -39,6 +39,14 @@
 // the code's target (a path on this site with its tags, written to KV by the API
 // when the link is saved) is read and the visitor is redirected to it. See
 // `redirectFor` below and `apps/api/src/routes/admin/campaigns.ts`.
+//
+// And it is where a visit over plain http, or to `www`, is sent to
+// https://chatform.in. Cloudflare answers http on a custom domain unless told
+// not to, and the page it serves there cannot work: api.chatform.in only allows
+// the https origin, so every call from it is refused and the visitor gets
+// "Could not reach chatform". Desktop browsers upgrade a typed `chatform.in` to
+// https on their own; the in-app browsers of LinkedIn, Instagram and X do not,
+// which is where this was seen (2026-10-07).
 
 import { linkDestination } from "./short-link";
 
@@ -50,6 +58,9 @@ interface Env {
   /** The API worker, asked only for a code KV has not heard of. */
   API?: { fetch(request: Request): Promise<Response> };
 }
+
+/** The one address the site is served from. */
+const CANONICAL_HOST = "chatform.in";
 
 const SHORT_LINK = /^\/r\/([A-Za-z0-9-]{3,40})\/?$/;
 /** How long a code nobody has saved is remembered as such, so guessing codes costs one lookup each. */
@@ -144,6 +155,13 @@ function served(res: Response, cache: "HIT" | "MISS" | "BYPASS"): Response {
 export default {
   async fetch(request: Request, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
     const url = new URL(request.url);
+    if (url.protocol === "http:" || url.hostname !== CANONICAL_HOST) {
+      url.protocol = "https:";
+      url.hostname = CANONICAL_HOST;
+      // 308 keeps the method and body of anything that is not a plain page load.
+      const status = request.method === "GET" || request.method === "HEAD" ? 301 : 308;
+      return new Response(null, { status, headers: { location: url.toString() } });
+    }
     const path = url.pathname;
     const short = request.method === "GET" || request.method === "HEAD" ? SHORT_LINK.exec(path) : null;
     if (short) return redirectFor(short[1]!.toLowerCase(), url, env, ctx);
