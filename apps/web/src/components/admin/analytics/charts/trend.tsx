@@ -4,7 +4,7 @@ import { useId, type ReactNode } from 'react'
 import { Area, Bar, CartesianGrid, ComposedChart, Line, LineChart, XAxis, YAxis } from 'recharts'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { cn } from '@/lib/utils'
-import { bucketTick, bucketTitle, compact, useMounted } from '../kit/format'
+import { bucketTick, bucketTitle, compact, fmt, useMounted } from '../kit/format'
 import { Legend } from '../kit/ui'
 
 // Time series on the admin's buckets (epoch hours in 24h mode, UTC days otherwise). One y-axis for
@@ -155,7 +155,8 @@ export function TrendChart({ data, series, kind = 'area', stacked = false, range
         <Legend
           className="mb-2"
           items={[
-            ...all.map((s) => ({ label: s.label, color: s.color })),
+            // Each series with its total over the chart, so the legend answers "how many" without a hover.
+            ...all.map((s) => ({ label: s.label, color: s.color, value: fmt(data.reduce((n, r) => n + (Number(r[s.key]) || 0), 0)) })),
             ...(compare ? [{ label: compare.label, color: 'var(--chart-other)' }] : []),
           ]}
         />
