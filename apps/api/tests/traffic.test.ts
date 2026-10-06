@@ -265,6 +265,8 @@ describe("TrafficDO", () => {
     expect(r.series.reduce((sum, p) => sum + p.newViews, 0)).toBe(3);
     expect(r.hourly.reduce((sum, p) => sum + p.views, 0)).toBe(4);
     expect(r.allTime).toBe(2);
+    // Both were seen within the hour; only Ben within the live card's five minutes.
+    expect(r.online).toBe(2);
     // A one-day range is hourly, and sees only today's two visits.
     const day = await store.report(1, "site");
     expect(day.bucket).toBe("hour");

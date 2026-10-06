@@ -145,7 +145,7 @@ function TrafficBody({ report, a, days, audience }: { report: Report; a: Analyti
       sub: `${pct(now.bounced, now.visits)}% left after one page · ${duration(now.visits ? now.engagedMs / now.visits : 0)} per visit`,
       to: "/admin/visitors",
     },
-    { label: "Active now", value: fmt(t.online), sub: "seen in the last 5 minutes", to: "/admin/visitors", search: { sort: "recent" } },
+    { label: "Active last hour", value: fmt(t.online), sub: "seen in the last hour", to: "/admin/visitors", search: { sort: "recent" } },
     ...(site
       ? [
           {
@@ -480,7 +480,7 @@ export function TrafficSummary({ range }: { range: Range }) {
                 spark: a.buckets.map((b) => b.views),
                 to: "/admin/traffic",
               },
-              { label: "Active now", value: fmt(a.totals.online), sub: `${fmt(a.totals.allTime)} visitors all time`, to: "/admin/visitors", search: { sort: "recent" } },
+              { label: "Active last hour", value: fmt(a.totals.online), sub: `${fmt(a.totals.allTime)} visitors all time`, to: "/admin/visitors", search: { sort: "recent" } },
             ]}
           />
         </div>

@@ -95,7 +95,7 @@ const TrafficResponse = z.object({
   signupSeries: z.array(z.object({ at: z.number(), signups: z.number() })),
   /** Every hour of the period, thirty days at most: the hour-of-day clock, the weekday grid, the last 24 hours. */
   hourly: z.array(z.object({ at: z.number(), visitors: z.number(), views: z.number(), newViews: z.number() })),
-  /** Seen in the last five minutes. */
+  /** Seen in the last hour. */
   online: z.number(),
   /** Everyone this audience has ever had. */
   allTime: z.number(),

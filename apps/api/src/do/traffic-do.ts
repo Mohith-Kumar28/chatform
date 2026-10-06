@@ -456,8 +456,8 @@ export class TrafficDO extends DurableObject<Bindings> {
            FROM views w JOIN visitors v ON v.visitor = w.visitor WHERE w.at >= ? ${W} GROUP BY 1 ORDER BY 1`,
         now - Math.min(Math.max(days, 1), 30) * DAY,
       ),
-      // Seen in the last five minutes, and everyone this audience has ever had.
-      online: one(`SELECT COUNT(*) AS n FROM visitors WHERE last_seen >= ? ${inAudience("last_area", audience)}`, now - ONLINE_MS),
+      // Seen in the last hour, and everyone this audience has ever had.
+      online: one(`SELECT COUNT(*) AS n FROM visitors WHERE last_seen >= ? ${inAudience("last_area", audience)}`, now - HOUR),
       allTime: one(`SELECT COUNT(*) AS n FROM visitors WHERE 1 = 1 ${inAudience("landing_area", audience)}`),
       channels: this.breakdown("s.channel", from, to, 10, "", audience),
       sources: this.all<{ source: string; channel: string; visitors: number; visits: number; views: number }>(
