@@ -80,7 +80,12 @@ const TrafficResponse = z.object({
   bucket: z.enum(["hour", "day"]),
   totals: Totals,
   previous: Totals,
-  signups: z.object({ value: z.number(), previous: z.number() }),
+  signups: z.object({
+    value: z.number(),
+    previous: z.number(),
+    /** When each sign-up of the last 24 hours happened, so the reader's own "today" can be counted. */
+    recent: z.array(z.number()),
+  }),
   series: z.array(
     z.object({
       at: z.number(),
@@ -141,7 +146,7 @@ async function signupFacts(env: Bindings, days: number, bucket: "hour" | "day") 
   const now = Date.now();
   const from = now - days * DAY_MS;
   const size = bucket === "hour" ? 3_600_000 : DAY_MS;
-  const [counts, bySource, series] = await env.DB.batch([
+  const [counts, bySource, series, recent] = await env.DB.batch([
     env.DB.prepare(
       `SELECT SUM(CASE WHEN created_at >= ?1 THEN 1 ELSE 0 END) AS value,
               SUM(CASE WHEN created_at < ?1 THEN 1 ELSE 0 END) AS previous
@@ -157,10 +162,17 @@ async function signupFacts(env: Bindings, days: number, bucket: "hour" | "day") 
          FROM user_sign_ins WHERE kind = 'sign_up' AND created_at >= ?1
         GROUP BY 1 ORDER BY 1`,
     ).bind(from, size),
+    env.DB.prepare(
+      `SELECT created_at AS at FROM user_sign_ins WHERE kind = 'sign_up' AND created_at >= ?1 ORDER BY created_at DESC LIMIT 500`,
+    ).bind(now - DAY_MS),
   ]);
   const c = (counts!.results[0] ?? {}) as { value?: number | null; previous?: number | null };
   return {
-    signups: { value: c.value ?? 0, previous: c.previous ?? 0 },
+    signups: {
+      value: c.value ?? 0,
+      previous: c.previous ?? 0,
+      recent: ((recent!.results ?? []) as { at: number }[]).map((r) => Number(r.at)),
+    },
     signupsBySource: (bySource!.results ?? []) as z.infer<typeof SignupsBy>[],
     signupSeries: (series!.results ?? []) as { at: number; signups: number }[],
   };
@@ -193,7 +205,7 @@ trafficRouter.get(
   },
 );
 
-const NO_SIGNUPS = { signups: { value: 0, previous: 0 }, signupsBySource: [], signupSeries: [] };
+const NO_SIGNUPS = { signups: { value: 0, previous: 0, recent: [] as number[] }, signupsBySource: [], signupSeries: [] };
 
 const TrafficLiveResponse = z.object({
   minutes: z.number(),

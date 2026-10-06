@@ -1944,6 +1944,7 @@ export type GetApiAdminTraffic200Previous = {
 export type GetApiAdminTraffic200Signups = {
   value: number;
   previous: number;
+  recent: number[];
 };
 
 export type GetApiAdminTraffic200SeriesItem = {

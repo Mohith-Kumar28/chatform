@@ -8117,11 +8117,18 @@
                         },
                         "previous": {
                           "type": "number"
+                        },
+                        "recent": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          }
                         }
                       },
                       "required": [
                         "value",
-                        "previous"
+                        "previous",
+                        "recent"
                       ]
                     },
                     "series": {

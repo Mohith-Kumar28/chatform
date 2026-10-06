@@ -122,6 +122,13 @@ function TrafficBody({ report, a, days, audience }: { report: Report; a: Analyti
   const unit = unitLabel(days);
   const short = hourly ? "24h" : `${days}d`;
   const site = audience === "site";
+  // Today is the reader's own day, from their midnight; unknown until the page is in the browser.
+  const today = useMemo(() => {
+    if (!mounted) return 0;
+    const midnight = new Date().setHours(0, 0, 0, 0);
+    // A report cached before this field existed has none.
+    return (report.signups.recent ?? []).filter((at) => at >= midnight).length;
+  }, [mounted, report.signups.recent]);
 
   const stats: StatProps[] = [
     {
@@ -152,7 +159,12 @@ function TrafficBody({ report, a, days, audience }: { report: Report; a: Analyti
             label: `Sign-ups · ${short}`,
             value: fmt(report.signups.value),
             delta: { now: report.signups.value, prev: report.signups.previous },
-            sub: `${pct(report.signups.value, t.visitors)}% of visitors`,
+            sub: (
+              <>
+                {today > 0 && <span className="num font-medium text-good">+{fmt(today)} today · </span>}
+                {pct(report.signups.value, t.visitors)}% of visitors
+              </>
+            ),
             spark: signupSpark(report, a),
           } satisfies StatProps,
         ]
