@@ -54,6 +54,8 @@ export const TrafficBeacon = z.object({
       medium: short(100),
       campaign: short(150),
       content: short(150),
+      /** `utm_id`: the saved campaign link's id, put there by the short link's redirect. */
+      id: short(40),
     })
     .optional(),
   /** An ad network's click id was on the landing URL (`gclid` → `google`). */
@@ -149,6 +151,7 @@ export function trafficHit(env: Bindings, request: Request, beacon: TrafficBeaco
     medium: clip(beacon.u?.medium?.toLowerCase(), 80),
     campaign: clip(beacon.u?.campaign?.toLowerCase(), 150),
     content: clip(beacon.u?.content, 150),
+    link: /^cl_[a-z0-9]{1,36}$/.test(beacon.u?.id ?? "") ? beacon.u!.id! : "",
     country: clip(ctx.geo.country, 2),
     region: clip(ctx.geo.region, 100),
     city: clip(ctx.geo.city, 100),

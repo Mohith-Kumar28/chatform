@@ -34,10 +34,61 @@
 // `edge/deploy.mjs` right after each web deploy), so a deploy starts clean and
 // a page can never point at another build's scripts. Never cached: anything
 // but a GET, a non-200, a response that sets a cookie, and the paths in NEVER.
+//
+// It also answers a campaign's short link, `/r/<code>`, without waking anything:
+// the code's target (a path on this site with its tags, written to KV by the API
+// when the link is saved) is read and the visitor is redirected to it. See
+// `redirectFor` below and `apps/api/src/routes/admin/campaigns.ts`.
+
+import { linkDestination } from "./short-link";
 
 interface Env {
   WEB: { fetch(request: Request): Promise<Response> };
   WEB_VERSION?: string;
+  /** The API's config namespace: `link:<code>` holds where a short link leads. */
+  KV_CONFIG?: { get(key: string, options?: { cacheTtl?: number }): Promise<string | null> };
+  /** The API worker, asked only for a code KV has not heard of. */
+  API?: { fetch(request: Request): Promise<Response> };
+}
+
+const SHORT_LINK = /^\/r\/([A-Za-z0-9-]{3,40})\/?$/;
+/** How long a code nobody has saved is remembered as such, so guessing codes costs one lookup each. */
+const UNKNOWN_CODE_SECONDS = 300;
+
+/**
+ * `/r/<code>`: a campaign link's short address. KV first, which is one read at
+ * the edge; the API second, for a link whose entry is missing, and it writes the
+ * entry back. A code that is not a link at all goes to the home page rather than
+ * to an error: whoever followed it wanted chatform.
+ *
+ * Nothing is counted here. Link previews, crawlers and scanners all follow a
+ * redirect, so a count of them would say nothing; the page the visitor lands on
+ * reports the visit, with the link's id in its address.
+ */
+async function redirectFor(code: string, url: URL, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
+  const to = (target: string | null) =>
+    new Response(null, { status: 302, headers: { location: linkDestination(target, url), "cache-control": "no-store" } });
+
+  const stored = await env.KV_CONFIG?.get(`link:${code}`, { cacheTtl: 60 }).catch(() => null);
+  if (stored) return to(stored);
+
+  const cache = (caches as unknown as { default: Cache }).default;
+  const missKey = new Request(`${url.origin}/__link-miss/${code}`);
+  if (await cache.match(missKey)) return to(null);
+  let target: string | null = null;
+  let known = false;
+  try {
+    const res = await env.API?.fetch(new Request(`https://api.chatform.in/p/l/${code}`));
+    if (res?.ok) target = ((await res.json()) as { target?: string }).target ?? null;
+    // Only a definite "no such link" is remembered; an API that is down says nothing about the code.
+    known = !!res && (res.ok || res.status === 404);
+  } catch {
+    target = null;
+  }
+  if (!target && known) {
+    ctx.waitUntil(cache.put(missKey, new Response("", { headers: { "cache-control": `public, s-maxage=${UNKNOWN_CODE_SECONDS}` } })));
+  }
+  return to(target);
 }
 
 /** Route handlers, the respondent runtime, payments and previews: always live. */
@@ -94,6 +145,8 @@ export default {
   async fetch(request: Request, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
+    const short = request.method === "GET" || request.method === "HEAD" ? SHORT_LINK.exec(path) : null;
+    if (short) return redirectFor(short[1]!.toLowerCase(), url, env, ctx);
     if (!env.WEB_VERSION || request.method !== "GET" || NEVER.some((r) => r.test(path))) {
       return env.WEB.fetch(request);
     }

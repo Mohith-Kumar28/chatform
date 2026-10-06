@@ -88,6 +88,16 @@ describe("trafficHit", () => {
   });
 });
 
+describe("a saved link's id", () => {
+  it("rides the beacon as utm_id, and anything that is not one of ours is dropped", () => {
+    const tagged = (id: string) => trafficHit(e, req(), beacon({ u: { source: "x", campaign: "launch", id } }));
+    expect(tagged("cl_0123456789abcdef")?.link).toBe("cl_0123456789abcdef");
+    expect(tagged("12345")?.link).toBe("");
+    expect(tagged("cl_' OR 1=1")?.link).toBe("");
+    expect(trafficHit(e, req(), beacon())?.link).toBe("");
+  });
+});
+
 describe("TrafficDO", () => {
   const MIN = 60_000;
   const DAY = 86_400_000;
@@ -108,6 +118,7 @@ describe("TrafficDO", () => {
     medium: "ugc",
     campaign: "oct-ugc",
     content: "",
+    link: "",
     country: "IN",
     region: "KA",
     city: "Bengaluru",
@@ -304,7 +315,10 @@ describe("TrafficDO", () => {
   });
 
   it("answers the campaign page and the daily rollup", async () => {
-    expect(await store.campaigns(7)).toEqual([{ campaign: "oct-ugc", visitors: 1, visits: 1, views: 2, formViews: 0 }]);
+    const stats = await store.campaignStats(7);
+    expect(stats.campaigns).toEqual([{ campaign: "oct-ugc", visitors: 1, previous: 0, visits: 1, views: 2 }]);
+    expect(stats.totals).toEqual({ visitors: 1, previous: 0 });
+    expect(stats.series).toEqual([{ campaign: "oct-ugc", at: Math.floor((now - 3 * DAY) / DAY) * DAY, visitors: 1 }]);
     expect(await store.emailVisits(7)).toEqual([]);
     const day = new Date(now - 3 * DAY).toISOString().slice(0, 10);
     const rows = await store.dailyRollup(day);
@@ -316,6 +330,63 @@ describe("TrafficDO", () => {
         { metric: "traffic_visitors_by_country", dimension: "IN", value: 1 },
       ]),
     );
+  });
+
+  it("narrows a report to one campaign, and never to another's visitors", async () => {
+    const only = await store.report(7, "site", "oct-ugc");
+    // Ana's Instagram visit, and not her direct one, Ben's search or Rae's form.
+    expect(only.totals).toMatchObject({ visitors: 1, visits: 1, views: 2 });
+    expect(only.pages.map((p) => p.path).sort()).toEqual(["/", "/pricing"]);
+    expect(only.sources.map((x) => x.source)).toEqual(["Instagram"]);
+    expect(only.geo.map((g) => g.country)).toEqual(["IN"]);
+    expect(only.entries.map((p) => p.path)).toEqual(["/"]);
+    expect(only.series.reduce((n, r) => n + r.views, 0)).toBe(2);
+    // A campaign nobody came from, and one whose name is an attempt at SQL, are both simply empty.
+    for (const name of ["nobody", "x' OR '1'='1"]) {
+      const none = await store.report(7, "site", name);
+      expect(none.totals).toMatchObject({ visitors: 0, visits: 0, views: 0, newVisitors: 0 });
+      expect(none.pages).toEqual([]);
+    }
+    expect((await store.report(7, "respondents", "oct-ugc")).totals.visitors).toBe(0);
+
+    const list = await store.visitors({ since: 0, audience: "site", sort: "recent", q: "", userIds: [], limit: 50, offset: 0, campaign: "oct-ugc" });
+    expect(list.rows.map((v) => v.visitor)).toEqual(["ana"]);
+    expect(list.total).toBe(1);
+    // Ana is here now, and she has come through the campaign, so she counts as here for it.
+    expect((await store.live("site", "oct-ugc")).online).toBe(0);
+    expect((await store.report(7, "site", "oct-ugc")).online).toBe(1);
+  });
+
+  it("gives each link of a campaign its own numbers, and leaves mail and customers' forms out", async () => {
+    const launch = { campaign: "launch", source: "X (Twitter)", medium: "social", channel: "Social", referrerHost: "" };
+    await store.record(hit({ ...launch, at: now - 5 * MIN, visitor: "cy", visit: "cy-1", link: "cl_aaaa" }));
+    await store.record(hit({ ...launch, at: now - 4 * MIN, visitor: "dee", visit: "dee-1", link: "cl_bbbb" }));
+    await store.record(hit({ ...launch, at: now - 3 * MIN, visitor: "dee", visit: "dee-1", link: "cl_bbbb", path: "/pricing" }));
+    // A saved link that points at a form still counts: the link is ours even if the page is a form.
+    await store.record(hit({ ...launch, at: now - 3 * MIN, visitor: "eli", visit: "eli-1", link: "cl_bbbb", area: "form", path: "/f/demo" }));
+    // The same campaign name typed by hand, with no link.
+    await store.record(hit({ ...launch, at: now - 2 * MIN, visitor: "fay", visit: "fay-1" }));
+    // A customer's form shared with its own tags, and a mail we sent: neither is a campaign of ours.
+    await store.record(hit({ at: now - 2 * MIN, visitor: "gus", visit: "gus-1", area: "form", path: "/f/intake", campaign: "their-push" }));
+    await store.record(
+      hit({ at: now - 2 * MIN, visitor: "hal", visit: "hal-1", campaign: "followup", source: "Chatform", medium: "email", channel: "Email" }),
+    );
+
+    const stats = await store.campaignStats(7);
+    expect(stats.campaigns.map((x) => x.campaign).sort()).toEqual(["launch", "oct-ugc"]);
+    expect(stats.campaigns.find((x) => x.campaign === "launch")).toMatchObject({ visitors: 4, visits: 4, views: 5 });
+    expect(stats.links.sort((a, b) => a.link.localeCompare(b.link))).toEqual([
+      { link: "cl_aaaa", visitors: 1, visits: 1, views: 1 },
+      { link: "cl_bbbb", visitors: 2, visits: 2, views: 3 },
+    ]);
+    expect(stats.linkLastVisit.find((l) => l.link === "cl_aaaa")?.at).toBe(now - 5 * MIN);
+
+    const detail = await store.campaignDetail("launch", 7);
+    expect(detail.totals).toEqual({ visitors: 4, previous: 0, visits: 4, views: 5 });
+    expect(Object.fromEntries(detail.links.map((l) => [l.key, l.visitors]))).toEqual({ cl_aaaa: 1, cl_bbbb: 2, "": 1 });
+    expect(detail.sources).toEqual([{ key: "X (Twitter)", visitors: 4, visits: 4, views: 5 }]);
+    expect(detail.series.reduce((n, r) => n + r.visitors, 0)).toBe(4);
+    expect((await store.campaignDetail("followup", 7)).totals.visitors).toBe(0);
   });
 
   it("moves a browser's history to its fingerprint the first time it reports one", async () => {
@@ -380,6 +451,16 @@ describe("sign-up attribution", () => {
     });
     // A direct visit is not a touch: the first one still gets the credit.
     expect(attributionOf(first, {})).toMatchObject({ campaign: "sept" });
+    // The saved link the touch came through, and its content, come along; an id that is not ours does not.
+    expect(attributionOf(first, { utm: { source: "x", campaign: "launch", content: "thread-1", id: "cl_0123456789abcdef" } })).toMatchObject({
+      campaign: "launch",
+      content: "thread-1",
+      linkId: "cl_0123456789abcdef",
+    });
+    expect(attributionOf(first, { utm: { source: "x", campaign: "launch", id: "'; DROP TABLE users" } }).linkId).toBeNull();
+    expect(
+      attributionOf({ referrer: null, pageUrl: "https://chatform.in/?utm_source=x&utm_campaign=launch&utm_id=cl_feed", utm: {} }, null).linkId,
+    ).toBe("cl_feed");
   });
 
   it("stamps a sign-up's columns, from the header or the Google cookie", async () => {
@@ -387,7 +468,7 @@ describe("sign-up attribution", () => {
       JSON.stringify({
         pageUrl: "https://chatform.in/",
         visitorId: "visitorabc123",
-        lastTouch: { utm: { source: "youtube", medium: "ugc", campaign: "launch-video" } },
+        lastTouch: { utm: { source: "youtube", medium: "ugc", campaign: "launch-video", content: "ep-1", id: "cl_0123456789abcdef" } },
       }),
     );
     const email = "attributed@example.com";
@@ -404,12 +485,20 @@ describe("sign-up attribution", () => {
     });
     expect(res.status, await res.clone().text()).toBe(200);
     const row = await env.DB.prepare(
-      `SELECT si.visitor_id, si.channel, si.source, si.medium, si.campaign FROM user_sign_ins si
+      `SELECT si.visitor_id, si.channel, si.source, si.medium, si.campaign, si.content, si.link_id FROM user_sign_ins si
          JOIN users u ON u.id = si.user_id WHERE u.email = ? AND si.kind = 'sign_up'`,
     )
       .bind(email)
       .first();
-    expect(row).toEqual({ visitor_id: "visitorabc123", channel: "Social", source: "YouTube", medium: "ugc", campaign: "launch-video" });
+    expect(row).toEqual({
+      visitor_id: "visitorabc123",
+      channel: "Social",
+      source: "YouTube",
+      medium: "ugc",
+      campaign: "launch-video",
+      content: "ep-1",
+      link_id: "cl_0123456789abcdef",
+    });
   });
 });
 

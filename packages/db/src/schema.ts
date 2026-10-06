@@ -69,16 +69,50 @@ export const userSignIns = sqliteTable(
     source: text("source"),
     medium: text("medium"),
     campaign: text("campaign"),
+    /** `utm_content`, and the saved link the visit came through (`utm_id`), when there was one. */
+    content: text("content"),
+    linkId: text("link_id"),
     landingPath: text("landing_path"),
     createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
   },
   (t) => [
     index("idx_user_sign_ins_user").on(t.userId, t.createdAt),
     index("idx_user_sign_ins_kind_created").on(t.kind, t.createdAt),
+    index("idx_user_sign_ins_campaign_created").on(t.campaign, t.createdAt),
+    index("idx_user_sign_ins_link_created").on(t.linkId, t.createdAt),
   ],
 );
 
-/** A link made in the console's campaign builder. The UTMs live on the link; this names it. */
+/**
+ * One marketing effort: a launch, a creator push, an ad set. `key` is what goes
+ * in `utm_campaign`, so it is what traffic and sign-ups are matched on. See
+ * migration 0064 and `apps/api/src/routes/admin/campaigns.ts`.
+ */
+export const campaigns = sqliteTable(
+  "campaigns",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    key: text("key").notNull(),
+    notes: text("notes"),
+    status: text("status", { enum: ["active", "paused", "archived"] }).notNull().default("active"),
+    startsAt: ts("starts_at"),
+    endsAt: ts("ends_at"),
+    /** What it cost, typed in by hand. NULL when nobody said. */
+    spendCents: integer("spend_cents"),
+    spendCurrency: text("spend_currency").notNull().default("USD"),
+    createdBy: text("created_by"),
+    createdAt: ts("created_at").notNull(),
+    updatedAt: ts("updated_at").notNull(),
+  },
+  (t) => [uniqueIndex("uq_campaigns_key").on(t.key)],
+);
+
+/**
+ * One link of a campaign: one place it is posted. `code` is its short address
+ * (`chatform.in/r/<code>`); the id travels as `utm_id` so the link has numbers
+ * of its own. `name` and `campaign` repeat the label and the campaign's key.
+ */
 export const campaignLinks = sqliteTable(
   "campaign_links",
   {
@@ -92,8 +126,18 @@ export const campaignLinks = sqliteTable(
     createdBy: text("created_by"),
     createdAt: ts("created_at").notNull(),
     archivedAt: ts("archived_at"),
+    campaignId: text("campaign_id"),
+    code: text("code"),
+    label: text("label"),
+    /** A key of `CHANNEL_PRESETS` in `apps/api/src/lib/campaign-presets.ts`. */
+    channel: text("channel"),
+    updatedAt: ts("updated_at"),
   },
-  (t) => [index("idx_campaign_links_campaign").on(t.campaign)],
+  (t) => [
+    index("idx_campaign_links_campaign").on(t.campaign),
+    uniqueIndex("uq_campaign_links_code").on(t.code),
+    index("idx_campaign_links_campaign_id").on(t.campaignId),
+  ],
 );
 
 export const accounts = sqliteTable(
@@ -1271,18 +1315,22 @@ export const featureAccessLog = sqliteTable(
   (t) => [uniqueIndex("uq_fal_org_feature").on(t.organizationId, t.feature)],
 );
 
-export const payments = sqliteTable("payments", {
-  id: text("id").primaryKey(),
-  organizationId: text("organization_id").notNull(),
-  subscriptionId: text("subscription_id"),
-  dodoPaymentId: text("dodo_payment_id").notNull().unique(),
-  amountCents: integer("amount_cents").notNull(),
-  currency: text("currency").notNull().default("USD"),
-  status: text("status").notNull(),
-  invoiceUrl: text("invoice_url"),
-  paidAt: ts("paid_at"),
-  createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
-});
+export const payments = sqliteTable(
+  "payments",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    subscriptionId: text("subscription_id"),
+    dodoPaymentId: text("dodo_payment_id").notNull().unique(),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("USD"),
+    status: text("status").notNull(),
+    invoiceUrl: text("invoice_url"),
+    paidAt: ts("paid_at"),
+    createdAt: ts("created_at").notNull().$defaultFn(() => new Date()),
+  },
+  (t) => [index("idx_payments_org").on(t.organizationId, t.status)],
+);
 
 export const dodoEvents = sqliteTable("dodo_events", {
   id: text("id").primaryKey(),

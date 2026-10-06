@@ -30,7 +30,8 @@ export interface Beacon {
   a: TrafficArea;
   p: string;
   r?: string;
-  u?: { source?: string; medium?: string; campaign?: string; content?: string };
+  /** `id` is `utm_id`: the saved campaign link a short link (`/r/<code>`) redirected from. */
+  u?: { source?: string; medium?: string; campaign?: string; content?: string; id?: string };
   ad?: string;
   en?: 0 | 1;
   uid?: string;
@@ -144,7 +145,7 @@ export function knownVisitorId(): string | undefined {
 function landingTags(): { u?: Beacon["u"]; ad?: string } {
   const params = new URLSearchParams(window.location.search);
   const u: NonNullable<Beacon["u"]> = {};
-  for (const key of ["source", "medium", "campaign", "content"] as const) {
+  for (const key of ["source", "medium", "campaign", "content", "id"] as const) {
     const value = params.get(`utm_${key}`) ?? (key === "source" ? params.get("ref") ?? params.get("via") : null);
     if (value) u[key] = value.slice(0, 150);
   }

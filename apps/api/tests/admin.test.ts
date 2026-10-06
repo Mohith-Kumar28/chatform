@@ -153,6 +153,11 @@ const EVERY_ADMIN_ROUTE = [
   "/api/admin/ai",
   "/api/admin/latency",
   "/api/admin/health",
+  "/api/admin/traffic",
+  "/api/admin/traffic/live",
+  "/api/admin/visitors",
+  "/api/admin/campaigns",
+  "/api/admin/mail",
   "/api/admin/users",
   "/api/admin/feedback",
   "/api/admin/feedback/stats",
@@ -185,6 +190,10 @@ describe("every route is behind the one guard", () => {
       ["DELETE", "/api/admin/accounts/org_x/plan"],
       ["POST", "/api/admin/subscriptions/sub_x/grace"],
       ["POST", "/api/admin/billing-events/evt_x/reprocess"],
+      ["POST", "/api/admin/campaigns"],
+      ["PATCH", "/api/admin/campaigns/cmp_x"],
+      ["POST", "/api/admin/campaigns/cmp_x/links"],
+      ["PATCH", "/api/admin/campaign-links/cl_x"],
     ];
     for (const [method, path] of writes) {
       const res = await fetchApi(path, {

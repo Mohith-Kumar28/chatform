@@ -11,6 +11,12 @@
   // a single value.
   "routes": [{ "pattern": "chatform.in", "custom_domain": true }],
   "workers_dev": false,
-  "services": [{ "binding": "WEB", "service": "chatform-web" }],
+  "services": [
+    { "binding": "WEB", "service": "chatform-web" },
+    // Asked where a campaign's short link leads, only when KV below has no entry for it.
+    { "binding": "API", "service": "chatform-api" }
+  ],
+  // The API's config namespace, read-only from here: `link:<code>` is a short link's target.
+  "kv_namespaces": [{ "binding": "KV_CONFIG", "id": "a72116dbd29c4e07b7d887272c1e999e" }],
   "observability": { "enabled": true }
 }

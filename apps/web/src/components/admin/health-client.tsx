@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { apiData } from "@/lib/api/payload";
 import { DataTable } from "./data-table";
 import { KpiTile } from "./kpi-tile";
+import { MailPanels } from "./mail-panels";
 import { RangePicker, useRange } from "./range-picker";
 import { compact, relativeDay } from "./format";
 
@@ -498,6 +499,8 @@ export function HealthClient() {
           )}
         </ChartCard>
       </div>
+
+      <MailPanels range={range} />
 
       {/* Four small breakdowns, one row: each is two or three rows of bars, and
           each used to get a third or a half of the page to say so. */}

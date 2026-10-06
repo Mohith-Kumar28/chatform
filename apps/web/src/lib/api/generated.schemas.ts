@@ -1877,6 +1877,10 @@ export type PostApiAdminImpersonateStop200 = {
 export type GetApiAdminTrafficParams = {
 range?: GetApiAdminTrafficRange;
 audience?: GetApiAdminTrafficAudience;
+/**
+ * @maxLength 150
+ */
+campaign?: string;
 };
 
 export type GetApiAdminTrafficRange = typeof GetApiAdminTrafficRange[keyof typeof GetApiAdminTrafficRange];
@@ -2152,6 +2156,10 @@ export type GetApiAdminTraffic200 = {
 
 export type GetApiAdminTrafficLiveParams = {
 audience?: GetApiAdminTrafficLiveAudience;
+/**
+ * @maxLength 150
+ */
+campaign?: string;
 };
 
 export type GetApiAdminTrafficLiveAudience = typeof GetApiAdminTrafficLiveAudience[keyof typeof GetApiAdminTrafficLiveAudience];
@@ -2206,6 +2214,10 @@ q?: string;
  * @maximum 1000000
  */
 offset?: number;
+/**
+ * @maxLength 150
+ */
+campaign?: string;
 };
 
 export type GetApiAdminVisitorsRange = typeof GetApiAdminVisitorsRange[keyof typeof GetApiAdminVisitorsRange];
@@ -2335,6 +2347,50 @@ export type GetApiAdminVisitorsById200 = {
   views: GetApiAdminVisitorsById200ViewsItem[];
 };
 
+export type GetApiAdminMailParams = {
+range?: GetApiAdminMailRange;
+};
+
+export type GetApiAdminMailRange = typeof GetApiAdminMailRange[keyof typeof GetApiAdminMailRange];
+
+
+export const GetApiAdminMailRange = {
+  '1d': '1d',
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+} as const;
+
+export type GetApiAdminMail200Range = typeof GetApiAdminMail200Range[keyof typeof GetApiAdminMail200Range];
+
+
+export const GetApiAdminMail200Range = {
+  '1d': '1d',
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+} as const;
+
+export type GetApiAdminMail200EmailItem = {
+  kind: string;
+  sent: number;
+  visitors: number;
+  visits: number;
+};
+
+export type GetApiAdminMail200Followups = {
+  sent: number;
+  clicked: number;
+  recovered: number;
+};
+
+export type GetApiAdminMail200 = {
+  range: GetApiAdminMail200Range;
+  email: GetApiAdminMail200EmailItem[];
+  followups: GetApiAdminMail200Followups;
+  generatedAt: number;
+};
+
 export type GetApiAdminCampaignsParams = {
 range?: GetApiAdminCampaignsRange;
 };
@@ -2359,53 +2415,130 @@ export const GetApiAdminCampaigns200Range = {
   '90d': '90d',
 } as const;
 
-export type GetApiAdminCampaigns200LinksItem = {
+export type GetApiAdminCampaigns200TotalsVisitors = {
+  value: number;
+  previous: number;
+};
+
+export type GetApiAdminCampaigns200TotalsSignups = {
+  value: number;
+  previous: number;
+};
+
+export type GetApiAdminCampaigns200TotalsPaid = {
+  value: number;
+  previous: number;
+};
+
+export type GetApiAdminCampaigns200TotalsRevenueItem = {
+  currency: string;
+  cents: number;
+  previous: number;
+};
+
+export type GetApiAdminCampaigns200Totals = {
+  visitors: GetApiAdminCampaigns200TotalsVisitors;
+  signups: GetApiAdminCampaigns200TotalsSignups;
+  paid: GetApiAdminCampaigns200TotalsPaid;
+  revenue: GetApiAdminCampaigns200TotalsRevenueItem[];
+};
+
+export type GetApiAdminCampaigns200CampaignsItemStatus = typeof GetApiAdminCampaigns200CampaignsItemStatus[keyof typeof GetApiAdminCampaigns200CampaignsItemStatus];
+
+
+export const GetApiAdminCampaigns200CampaignsItemStatus = {
+  active: 'active',
+  paused: 'paused',
+  archived: 'archived',
+} as const;
+
+export type GetApiAdminCampaigns200CampaignsItemVisitors = {
+  value: number;
+  previous: number;
+};
+
+export type GetApiAdminCampaigns200CampaignsItemSignups = {
+  value: number;
+  previous: number;
+};
+
+export type GetApiAdminCampaigns200CampaignsItemRevenueItem = {
+  currency: string;
+  cents: number;
+};
+
+export type GetApiAdminCampaigns200CampaignsItem = {
   id: string;
   name: string;
-  destination: string;
-  source: string;
-  medium: string;
-  campaign: string;
-  content: string | null;
+  key: string;
+  notes: string | null;
+  status: GetApiAdminCampaigns200CampaignsItemStatus;
+  startsAt: number | null;
+  endsAt: number | null;
+  spendCents: number | null;
+  spendCurrency: string;
   createdAt: number;
+  updatedAt: number;
+  links: number;
+  channels: string[];
+  visitors: GetApiAdminCampaigns200CampaignsItemVisitors;
+  signups: GetApiAdminCampaigns200CampaignsItemSignups;
+  paid: number;
+  revenue: GetApiAdminCampaigns200CampaignsItemRevenueItem[];
+  costPerSignupCents: number | null;
+  series: number[];
 };
 
-export type GetApiAdminCampaigns200StatsItemStages = {[key: string]: number};
-
-export type GetApiAdminCampaigns200StatsItem = {
-  campaign: string;
+export type GetApiAdminCampaigns200UntrackedItem = {
+  key: string;
   visitors: number;
-  visits: number;
-  views: number;
-  formViews: number;
-  stages: GetApiAdminCampaigns200StatsItemStages;
+  signups: number;
 };
 
-export type GetApiAdminCampaigns200StageLabelsItem = {
+export type GetApiAdminCampaigns200InsightsItemKind = typeof GetApiAdminCampaigns200InsightsItemKind[keyof typeof GetApiAdminCampaigns200InsightsItemKind];
+
+
+export const GetApiAdminCampaigns200InsightsItemKind = {
+  best_signups: 'best_signups',
+  best_rate: 'best_rate',
+  no_signups: 'no_signups',
+  quiet_links: 'quiet_links',
+  cost_per_signup: 'cost_per_signup',
+} as const;
+
+export type GetApiAdminCampaigns200InsightsItemValues = {[key: string]: number | string};
+
+export type GetApiAdminCampaigns200InsightsItem = {
+  kind: GetApiAdminCampaigns200InsightsItemKind;
+  campaignId: string | null;
+  name: string | null;
+  values: GetApiAdminCampaigns200InsightsItemValues;
+};
+
+export type GetApiAdminCampaigns200ChannelsItemSource = typeof GetApiAdminCampaigns200ChannelsItemSource[keyof typeof GetApiAdminCampaigns200ChannelsItemSource];
+
+
+export const GetApiAdminCampaigns200ChannelsItemSource = {
+  fixed: 'fixed',
+  pick: 'pick',
+  label: 'label',
+} as const;
+
+export type GetApiAdminCampaigns200ChannelsItem = {
   key: string;
   label: string;
-};
-
-export type GetApiAdminCampaigns200EmailItem = {
-  kind: string;
-  sent: number;
-  visitors: number;
-  visits: number;
-};
-
-export type GetApiAdminCampaigns200Followups = {
-  sent: number;
-  clicked: number;
-  recovered: number;
+  medium: string;
+  source: GetApiAdminCampaigns200ChannelsItemSource;
+  sources: string[];
 };
 
 export type GetApiAdminCampaigns200 = {
   range: GetApiAdminCampaigns200Range;
-  links: GetApiAdminCampaigns200LinksItem[];
-  stats: GetApiAdminCampaigns200StatsItem[];
-  stageLabels: GetApiAdminCampaigns200StageLabelsItem[];
-  email: GetApiAdminCampaigns200EmailItem[];
-  followups: GetApiAdminCampaigns200Followups;
+  totals: GetApiAdminCampaigns200Totals;
+  campaigns: GetApiAdminCampaigns200CampaignsItem[];
+  untracked: GetApiAdminCampaigns200UntrackedItem[];
+  insights: GetApiAdminCampaigns200InsightsItem[];
+  channels: GetApiAdminCampaigns200ChannelsItem[];
   generatedAt: number;
 };
 
@@ -2416,45 +2549,362 @@ export type PostApiAdminCampaignsBody = {
      */
   name: string;
   /**
+     * @minLength 1
+     * @maxLength 150
+     */
+  key?: string;
+  notes?: string | null;
+  startsAt?: number | null;
+  endsAt?: number | null;
+  spendCents?: number | null;
+  /** @pattern ^[A-Z]{3}$ */
+  spendCurrency?: string;
+};
+
+export type PostApiAdminCampaigns200Status = typeof PostApiAdminCampaigns200Status[keyof typeof PostApiAdminCampaigns200Status];
+
+
+export const PostApiAdminCampaigns200Status = {
+  active: 'active',
+  paused: 'paused',
+  archived: 'archived',
+} as const;
+
+export type PostApiAdminCampaigns200 = {
+  id: string;
+  name: string;
+  key: string;
+  notes: string | null;
+  status: PostApiAdminCampaigns200Status;
+  startsAt: number | null;
+  endsAt: number | null;
+  spendCents: number | null;
+  spendCurrency: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type GetApiAdminCampaignsByIdParams = {
+range?: GetApiAdminCampaignsByIdRange;
+};
+
+export type GetApiAdminCampaignsByIdRange = typeof GetApiAdminCampaignsByIdRange[keyof typeof GetApiAdminCampaignsByIdRange];
+
+
+export const GetApiAdminCampaignsByIdRange = {
+  '1d': '1d',
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+} as const;
+
+export type GetApiAdminCampaignsById200Range = typeof GetApiAdminCampaignsById200Range[keyof typeof GetApiAdminCampaignsById200Range];
+
+
+export const GetApiAdminCampaignsById200Range = {
+  '1d': '1d',
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+} as const;
+
+export type GetApiAdminCampaignsById200CampaignStatus = typeof GetApiAdminCampaignsById200CampaignStatus[keyof typeof GetApiAdminCampaignsById200CampaignStatus];
+
+
+export const GetApiAdminCampaignsById200CampaignStatus = {
+  active: 'active',
+  paused: 'paused',
+  archived: 'archived',
+} as const;
+
+export type GetApiAdminCampaignsById200Campaign = {
+  id: string;
+  name: string;
+  key: string;
+  notes: string | null;
+  status: GetApiAdminCampaignsById200CampaignStatus;
+  startsAt: number | null;
+  endsAt: number | null;
+  spendCents: number | null;
+  spendCurrency: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type GetApiAdminCampaignsById200ChannelsItemSource = typeof GetApiAdminCampaignsById200ChannelsItemSource[keyof typeof GetApiAdminCampaignsById200ChannelsItemSource];
+
+
+export const GetApiAdminCampaignsById200ChannelsItemSource = {
+  fixed: 'fixed',
+  pick: 'pick',
+  label: 'label',
+} as const;
+
+export type GetApiAdminCampaignsById200ChannelsItem = {
+  key: string;
+  label: string;
+  medium: string;
+  source: GetApiAdminCampaignsById200ChannelsItemSource;
+  sources: string[];
+};
+
+export type GetApiAdminCampaignsById200TotalsVisitors = {
+  value: number;
+  previous: number;
+};
+
+export type GetApiAdminCampaignsById200TotalsSignups = {
+  value: number;
+  previous: number;
+};
+
+export type GetApiAdminCampaignsById200TotalsPaid = {
+  value: number;
+  previous: number;
+};
+
+export type GetApiAdminCampaignsById200TotalsRevenueItem = {
+  currency: string;
+  cents: number;
+};
+
+export type GetApiAdminCampaignsById200Totals = {
+  visitors: GetApiAdminCampaignsById200TotalsVisitors;
+  visits: number;
+  signups: GetApiAdminCampaignsById200TotalsSignups;
+  paid: GetApiAdminCampaignsById200TotalsPaid;
+  revenue: GetApiAdminCampaignsById200TotalsRevenueItem[];
+};
+
+export type GetApiAdminCampaignsById200SeriesItem = {
+  at: number;
+  visitors: number;
+  visits: number;
+  signups: number;
+};
+
+export type GetApiAdminCampaignsById200StagesItem = {
+  key: string;
+  label: string;
+  value: number;
+};
+
+export type GetApiAdminCampaignsById200LinksItem = {
+  id: string;
+  campaignId: string;
+  label: string;
+  channel: string;
+  destination: string;
+  source: string;
+  medium: string;
+  content: string | null;
+  code: string;
+  target: string;
+  archived: boolean;
+  createdAt: number;
+  visitors: number;
+  visits: number;
+  signups: number;
+  paid: number;
+  lastVisitAt: number | null;
+};
+
+export type GetApiAdminCampaignsById200Unlinked = {
+  visitors: number;
+  visits: number;
+  signups: number;
+  paid: number;
+};
+
+export type GetApiAdminCampaignsById200PeopleItem = {
+  userId: string;
+  name: string | null;
+  email: string;
+  at: number;
+  linkId: string | null;
+  source: string | null;
+  orgId: string | null;
+  stage: string;
+  plan: string | null;
+};
+
+export type GetApiAdminCampaignsById200BreakdownsSourcesItem = {
+  key: string;
+  visitors: number;
+};
+
+export type GetApiAdminCampaignsById200BreakdownsCountriesItem = {
+  key: string;
+  visitors: number;
+};
+
+export type GetApiAdminCampaignsById200BreakdownsLandingsItem = {
+  key: string;
+  visitors: number;
+};
+
+export type GetApiAdminCampaignsById200Breakdowns = {
+  sources: GetApiAdminCampaignsById200BreakdownsSourcesItem[];
+  countries: GetApiAdminCampaignsById200BreakdownsCountriesItem[];
+  landings: GetApiAdminCampaignsById200BreakdownsLandingsItem[];
+};
+
+export type GetApiAdminCampaignsById200 = {
+  range: GetApiAdminCampaignsById200Range;
+  campaign: GetApiAdminCampaignsById200Campaign;
+  channels: GetApiAdminCampaignsById200ChannelsItem[];
+  totals: GetApiAdminCampaignsById200Totals;
+  costPerSignupCents: number | null;
+  series: GetApiAdminCampaignsById200SeriesItem[];
+  stages: GetApiAdminCampaignsById200StagesItem[];
+  links: GetApiAdminCampaignsById200LinksItem[];
+  unlinked: GetApiAdminCampaignsById200Unlinked;
+  people: GetApiAdminCampaignsById200PeopleItem[];
+  breakdowns: GetApiAdminCampaignsById200Breakdowns;
+  generatedAt: number;
+};
+
+export type PatchApiAdminCampaignsByIdBodyStatus = typeof PatchApiAdminCampaignsByIdBodyStatus[keyof typeof PatchApiAdminCampaignsByIdBodyStatus];
+
+
+export const PatchApiAdminCampaignsByIdBodyStatus = {
+  active: 'active',
+  paused: 'paused',
+  archived: 'archived',
+} as const;
+
+export type PatchApiAdminCampaignsByIdBody = {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name?: string;
+  /**
+     * @minLength 1
+     * @maxLength 150
+     */
+  key?: string;
+  status?: PatchApiAdminCampaignsByIdBodyStatus;
+  notes?: string | null;
+  startsAt?: number | null;
+  endsAt?: number | null;
+  spendCents?: number | null;
+  /** @pattern ^[A-Z]{3}$ */
+  spendCurrency?: string;
+};
+
+export type PatchApiAdminCampaignsById200Status = typeof PatchApiAdminCampaignsById200Status[keyof typeof PatchApiAdminCampaignsById200Status];
+
+
+export const PatchApiAdminCampaignsById200Status = {
+  active: 'active',
+  paused: 'paused',
+  archived: 'archived',
+} as const;
+
+export type PatchApiAdminCampaignsById200 = {
+  id: string;
+  name: string;
+  key: string;
+  notes: string | null;
+  status: PatchApiAdminCampaignsById200Status;
+  startsAt: number | null;
+  endsAt: number | null;
+  spendCents: number | null;
+  spendCurrency: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type PostApiAdminCampaignsByIdLinksBody = {
+  /**
      * @maxLength 300
-     * @pattern ^\/[^\s]*$
+     * @pattern ^\/(?![/\\])[^\s\\]*$
      */
   destination: string;
+  /** @maxLength 40 */
+  channel: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  label: string;
   /**
      * @minLength 1
      * @maxLength 60
      */
-  source: string;
+  source?: string;
   /**
      * @minLength 1
      * @maxLength 60
      */
-  medium: string;
-  /**
-     * @minLength 1
-     * @maxLength 100
-     */
-  campaign: string;
+  medium?: string;
   /**
      * @minLength 1
      * @maxLength 100
      */
   content?: string;
+  /** @pattern ^[a-z0-9][a-z0-9-]{2,39}$ */
+  code?: string;
 };
 
-export type PostApiAdminCampaigns200 = {
+export type PostApiAdminCampaignsByIdLinks200 = {
   id: string;
-  name: string;
+  campaignId: string;
+  label: string;
+  channel: string;
   destination: string;
   source: string;
   medium: string;
-  campaign: string;
   content: string | null;
+  code: string;
+  target: string;
+  archived: boolean;
   createdAt: number;
 };
 
-export type DeleteApiAdminCampaignsById200 = {
-  ok: boolean;
+export type PatchApiAdminCampaignLinksByIdBody = {
+  /**
+     * @maxLength 300
+     * @pattern ^\/(?![/\\])[^\s\\]*$
+     */
+  destination?: string;
+  /** @maxLength 40 */
+  channel?: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  label?: string;
+  /**
+     * @minLength 1
+     * @maxLength 60
+     */
+  source?: string;
+  /**
+     * @minLength 1
+     * @maxLength 60
+     */
+  medium?: string;
+  content?: string | null;
+  /** @pattern ^[a-z0-9][a-z0-9-]{2,39}$ */
+  code?: string;
+  archived?: boolean;
+};
+
+export type PatchApiAdminCampaignLinksById200 = {
+  id: string;
+  campaignId: string;
+  label: string;
+  channel: string;
+  destination: string;
+  source: string;
+  medium: string;
+  content: string | null;
+  code: string;
+  target: string;
+  archived: boolean;
+  createdAt: number;
 };
 
 export type PostApiImportPreviewBody = {

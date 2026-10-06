@@ -22,7 +22,6 @@ import type {
 import type {
   DeleteApiAdminAccountsByOrgIdOverridesByKey200,
   DeleteApiAdminAccountsByOrgIdPlan200,
-  DeleteApiAdminCampaignsById200,
   DeleteApiAdminFeedbackBuilderReportsById200,
   DeleteApiAdminFeedbackReportsById200,
   GetApiAdminAccounts200,
@@ -32,6 +31,8 @@ import type {
   GetApiAdminAi200,
   GetApiAdminAiParams,
   GetApiAdminCampaigns200,
+  GetApiAdminCampaignsById200,
+  GetApiAdminCampaignsByIdParams,
   GetApiAdminCampaignsParams,
   GetApiAdminFeedback200,
   GetApiAdminFeedbackBuilderIssues200,
@@ -60,6 +61,8 @@ import type {
   GetApiAdminLatency200,
   GetApiAdminLatencyParams,
   GetApiAdminLive200,
+  GetApiAdminMail200,
+  GetApiAdminMailParams,
   GetApiAdminMe200,
   GetApiAdminOverview200,
   GetApiAdminOverviewParams,
@@ -76,6 +79,10 @@ import type {
   GetApiAdminVisitors200,
   GetApiAdminVisitorsById200,
   GetApiAdminVisitorsParams,
+  PatchApiAdminCampaignLinksById200,
+  PatchApiAdminCampaignLinksByIdBody,
+  PatchApiAdminCampaignsById200,
+  PatchApiAdminCampaignsByIdBody,
   PatchApiAdminFeedbackBuilderIssuesById200,
   PatchApiAdminFeedbackBuilderIssuesByIdBody,
   PatchApiAdminFeedbackBuilderReportsById200,
@@ -92,6 +99,8 @@ import type {
   PostApiAdminBillingEventsByIdReprocess200,
   PostApiAdminCampaigns200,
   PostApiAdminCampaignsBody,
+  PostApiAdminCampaignsByIdLinks200,
+  PostApiAdminCampaignsByIdLinksBody,
   PostApiAdminFeedbackBuilderIssuesByIdMerge200,
   PostApiAdminFeedbackBuilderIssuesByIdMergeBody,
   PostApiAdminFeedbackBuilderIssuesRebuild200,
@@ -5289,6 +5298,108 @@ export function useGetApiAdminVisitorsById<TData = Awaited<ReturnType<typeof get
 
 
 
+export type getApiAdminMailResponse200 = {
+  data: GetApiAdminMail200
+  status: 200
+}
+
+export type getApiAdminMailResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminMailResponseSuccess = (getApiAdminMailResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminMailResponseError = (getApiAdminMailResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminMailResponse = (getApiAdminMailResponseSuccess | getApiAdminMailResponseError)
+
+export const getGetApiAdminMailUrl = (params?: GetApiAdminMailParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/mail?${stringifiedParams}` : `/api/admin/mail`
+}
+
+/**
+ * @summary Mail we sent, and how much of it brought somebody back
+ */
+export const getApiAdminMail = async (params?: GetApiAdminMailParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminMailResponse> => {
+
+  return customFetch<getApiAdminMailResponse>(getGetApiAdminMailUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminMailQueryKey = (params?: GetApiAdminMailParams,) => {
+    return [
+    `/api/admin/mail`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiAdminMailQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminMail>>, TError = void>(params?: GetApiAdminMailParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminMail>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminMailQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminMail>>> = ({ signal }) => getApiAdminMail(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminMail>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminMailQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminMail>>>
+export type GetApiAdminMailQueryError = void
+
+
+/**
+ * @summary Mail we sent, and how much of it brought somebody back
+ */
+
+export function useGetApiAdminMail<TData = Awaited<ReturnType<typeof getApiAdminMail>>, TError = void>(
+ params?: GetApiAdminMailParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminMail>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminMailQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type getApiAdminCampaignsResponse200 = {
   data: GetApiAdminCampaigns200
   status: 200
@@ -5324,7 +5435,7 @@ export const getGetApiAdminCampaignsUrl = (params?: GetApiAdminCampaignsParams,)
 }
 
 /**
- * @summary Campaign links, their traffic and the accounts they brought, plus mail we sent
+ * @summary Every campaign: its links, visitors, sign-ups, paying accounts and revenue
  */
 export const getApiAdminCampaigns = async (params?: GetApiAdminCampaignsParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminCampaignsResponse> => {
 
@@ -5371,7 +5482,7 @@ export type GetApiAdminCampaignsQueryError = void
 
 
 /**
- * @summary Campaign links, their traffic and the accounts they brought, plus mail we sent
+ * @summary Every campaign: its links, visitors, sign-ups, paying accounts and revenue
  */
 
 export function useGetApiAdminCampaigns<TData = Awaited<ReturnType<typeof getApiAdminCampaigns>>, TError = void>(
@@ -5401,10 +5512,15 @@ export type postApiAdminCampaignsResponse404 = {
   status: 404
 }
 
+export type postApiAdminCampaignsResponse409 = {
+  data: void
+  status: 409
+}
+
 export type postApiAdminCampaignsResponseSuccess = (postApiAdminCampaignsResponse200) & {
   headers: Headers;
 };
-export type postApiAdminCampaignsResponseError = (postApiAdminCampaignsResponse404) & {
+export type postApiAdminCampaignsResponseError = (postApiAdminCampaignsResponse404 | postApiAdminCampaignsResponse409) & {
   headers: Headers;
 };
 
@@ -5419,7 +5535,7 @@ export const getPostApiAdminCampaignsUrl = () => {
 }
 
 /**
- * @summary Save a campaign link
+ * @summary Start a campaign
  */
 export const postApiAdminCampaigns = async (postApiAdminCampaignsBody: PostApiAdminCampaignsBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAdminCampaignsResponse> => {
 
@@ -5475,7 +5591,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type PostApiAdminCampaignsMutationVariables = {data: PostApiAdminCampaignsBody}
 
     /**
- * @summary Save a campaign link
+ * @summary Start a campaign
  */
 export const usePostApiAdminCampaigns = <TError = void,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminCampaigns>>, TError,PostApiAdminCampaignsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -5487,42 +5603,51 @@ export const usePostApiAdminCampaigns = <TError = void,
       > => {
       return useMutation(getPostApiAdminCampaignsMutationOptions(options));
     }
-    export type deleteApiAdminCampaignsByIdResponse200 = {
-  data: DeleteApiAdminCampaignsById200
+    export type getApiAdminCampaignsByIdResponse200 = {
+  data: GetApiAdminCampaignsById200
   status: 200
 }
 
-export type deleteApiAdminCampaignsByIdResponse404 = {
+export type getApiAdminCampaignsByIdResponse404 = {
   data: void
   status: 404
 }
 
-export type deleteApiAdminCampaignsByIdResponseSuccess = (deleteApiAdminCampaignsByIdResponse200) & {
+export type getApiAdminCampaignsByIdResponseSuccess = (getApiAdminCampaignsByIdResponse200) & {
   headers: Headers;
 };
-export type deleteApiAdminCampaignsByIdResponseError = (deleteApiAdminCampaignsByIdResponse404) & {
+export type getApiAdminCampaignsByIdResponseError = (getApiAdminCampaignsByIdResponse404) & {
   headers: Headers;
 };
 
-export type deleteApiAdminCampaignsByIdResponse = (deleteApiAdminCampaignsByIdResponseSuccess | deleteApiAdminCampaignsByIdResponseError)
+export type getApiAdminCampaignsByIdResponse = (getApiAdminCampaignsByIdResponseSuccess | getApiAdminCampaignsByIdResponseError)
 
-export const getDeleteApiAdminCampaignsByIdUrl = (id: string,) => {
+export const getGetApiAdminCampaignsByIdUrl = (id: string,
+    params?: GetApiAdminCampaignsByIdParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/admin/campaigns/${id}`
+  return stringifiedParams.length > 0 ? `/api/admin/campaigns/${id}?${stringifiedParams}` : `/api/admin/campaigns/${id}`
 }
 
 /**
- * @summary Archive a campaign link. Its traffic stays counted.
+ * @summary One campaign: its trend, funnel, links, and the people who signed up from it
  */
-export const deleteApiAdminCampaignsById = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<deleteApiAdminCampaignsByIdResponse> => {
+export const getApiAdminCampaignsById = async (id: string,
+    params?: GetApiAdminCampaignsByIdParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminCampaignsByIdResponse> => {
 
-  return customFetch<deleteApiAdminCampaignsByIdResponse>(getDeleteApiAdminCampaignsByIdUrl(id),
+  return customFetch<getApiAdminCampaignsByIdResponse>(getGetApiAdminCampaignsByIdUrl(id,params),
   {
     ...options,
-    method: 'DELETE'
+    method: 'GET'
 
 
   }
@@ -5532,11 +5657,121 @@ export const deleteApiAdminCampaignsById = async (id: string, options?: Paramete
 
 
 
-export const getDeleteApiAdminCampaignsByIdMutationOptions = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiAdminCampaignsById>>, TError,DeleteApiAdminCampaignsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiAdminCampaignsById>>, TError,DeleteApiAdminCampaignsByIdMutationVariables, TContext> => {
+export const getGetApiAdminCampaignsByIdQueryKey = (id: string,
+    params?: GetApiAdminCampaignsByIdParams,) => {
+    return [
+    `/api/admin/campaigns/${id}`, ...(params ? [params] : [])
+    ] as const;
+    }
 
-const mutationKey = ['deleteApiAdminCampaignsById'];
+
+export const getGetApiAdminCampaignsByIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminCampaignsById>>, TError = void>(id: string,
+    params?: GetApiAdminCampaignsByIdParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminCampaignsById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminCampaignsByIdQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminCampaignsById>>> = ({ signal }) => getApiAdminCampaignsById(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminCampaignsById>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminCampaignsByIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminCampaignsById>>>
+export type GetApiAdminCampaignsByIdQueryError = void
+
+
+/**
+ * @summary One campaign: its trend, funnel, links, and the people who signed up from it
+ */
+
+export function useGetApiAdminCampaignsById<TData = Awaited<ReturnType<typeof getApiAdminCampaignsById>>, TError = void>(
+ id: string,
+    params?: GetApiAdminCampaignsByIdParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminCampaignsById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminCampaignsByIdQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type patchApiAdminCampaignsByIdResponse200 = {
+  data: PatchApiAdminCampaignsById200
+  status: 200
+}
+
+export type patchApiAdminCampaignsByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type patchApiAdminCampaignsByIdResponse409 = {
+  data: void
+  status: 409
+}
+
+export type patchApiAdminCampaignsByIdResponseSuccess = (patchApiAdminCampaignsByIdResponse200) & {
+  headers: Headers;
+};
+export type patchApiAdminCampaignsByIdResponseError = (patchApiAdminCampaignsByIdResponse404 | patchApiAdminCampaignsByIdResponse409) & {
+  headers: Headers;
+};
+
+export type patchApiAdminCampaignsByIdResponse = (patchApiAdminCampaignsByIdResponseSuccess | patchApiAdminCampaignsByIdResponseError)
+
+export const getPatchApiAdminCampaignsByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/campaigns/${id}`
+}
+
+/**
+ * @summary Edit a campaign, pause it, archive it or bring it back
+ */
+export const patchApiAdminCampaignsById = async (id: string,
+    patchApiAdminCampaignsByIdBody: PatchApiAdminCampaignsByIdBody, options?: Parameters<typeof customFetch>[1]): Promise<patchApiAdminCampaignsByIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<patchApiAdminCampaignsByIdResponse>(getPatchApiAdminCampaignsByIdUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(patchApiAdminCampaignsByIdBody)
+  }
+);}
+
+
+
+
+
+export const getPatchApiAdminCampaignsByIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminCampaignsById>>, TError,PatchApiAdminCampaignsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminCampaignsById>>, TError,PatchApiAdminCampaignsByIdMutationVariables, TContext> => {
+
+const mutationKey = ['patchApiAdminCampaignsById'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -5546,10 +5781,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiAdminCampaignsById>>, DeleteApiAdminCampaignsByIdMutationVariables> = (props) => {
-          const {id} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiAdminCampaignsById>>, PatchApiAdminCampaignsByIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
 
-          return  deleteApiAdminCampaignsById(id,requestOptions)
+          return  patchApiAdminCampaignsById(id,data,requestOptions)
         }
 
 
@@ -5559,21 +5794,225 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type DeleteApiAdminCampaignsByIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiAdminCampaignsById>>>
-
-    export type DeleteApiAdminCampaignsByIdMutationError = void
-    export type DeleteApiAdminCampaignsByIdMutationVariables = {id: string}
+    export type PatchApiAdminCampaignsByIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiAdminCampaignsById>>>
+    export type PatchApiAdminCampaignsByIdMutationBody = PatchApiAdminCampaignsByIdBody
+    export type PatchApiAdminCampaignsByIdMutationError = void
+    export type PatchApiAdminCampaignsByIdMutationVariables = {id: string;data: PatchApiAdminCampaignsByIdBody}
 
     /**
- * @summary Archive a campaign link. Its traffic stays counted.
+ * @summary Edit a campaign, pause it, archive it or bring it back
  */
-export const useDeleteApiAdminCampaignsById = <TError = void,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiAdminCampaignsById>>, TError,DeleteApiAdminCampaignsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+export const usePatchApiAdminCampaignsById = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminCampaignsById>>, TError,PatchApiAdminCampaignsByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof deleteApiAdminCampaignsById>>,
+        Awaited<ReturnType<typeof patchApiAdminCampaignsById>>,
         TError,
-        DeleteApiAdminCampaignsByIdMutationVariables,
+        PatchApiAdminCampaignsByIdMutationVariables,
         TContext
       > => {
-      return useMutation(getDeleteApiAdminCampaignsByIdMutationOptions(options));
+      return useMutation(getPatchApiAdminCampaignsByIdMutationOptions(options));
+    }
+    export type postApiAdminCampaignsByIdLinksResponse200 = {
+  data: PostApiAdminCampaignsByIdLinks200
+  status: 200
+}
+
+export type postApiAdminCampaignsByIdLinksResponse404 = {
+  data: void
+  status: 404
+}
+
+export type postApiAdminCampaignsByIdLinksResponse409 = {
+  data: void
+  status: 409
+}
+
+export type postApiAdminCampaignsByIdLinksResponseSuccess = (postApiAdminCampaignsByIdLinksResponse200) & {
+  headers: Headers;
+};
+export type postApiAdminCampaignsByIdLinksResponseError = (postApiAdminCampaignsByIdLinksResponse404 | postApiAdminCampaignsByIdLinksResponse409) & {
+  headers: Headers;
+};
+
+export type postApiAdminCampaignsByIdLinksResponse = (postApiAdminCampaignsByIdLinksResponseSuccess | postApiAdminCampaignsByIdLinksResponseError)
+
+export const getPostApiAdminCampaignsByIdLinksUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/campaigns/${id}/links`
+}
+
+/**
+ * @summary Make a link for a campaign
+ */
+export const postApiAdminCampaignsByIdLinks = async (id: string,
+    postApiAdminCampaignsByIdLinksBody: PostApiAdminCampaignsByIdLinksBody, options?: Parameters<typeof customFetch>[1]): Promise<postApiAdminCampaignsByIdLinksResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<postApiAdminCampaignsByIdLinksResponse>(getPostApiAdminCampaignsByIdLinksUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(postApiAdminCampaignsByIdLinksBody)
+  }
+);}
+
+
+
+
+
+export const getPostApiAdminCampaignsByIdLinksMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminCampaignsByIdLinks>>, TError,PostApiAdminCampaignsByIdLinksMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiAdminCampaignsByIdLinks>>, TError,PostApiAdminCampaignsByIdLinksMutationVariables, TContext> => {
+
+const mutationKey = ['postApiAdminCampaignsByIdLinks'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiAdminCampaignsByIdLinks>>, PostApiAdminCampaignsByIdLinksMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postApiAdminCampaignsByIdLinks(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiAdminCampaignsByIdLinksMutationResult = NonNullable<Awaited<ReturnType<typeof postApiAdminCampaignsByIdLinks>>>
+    export type PostApiAdminCampaignsByIdLinksMutationBody = PostApiAdminCampaignsByIdLinksBody
+    export type PostApiAdminCampaignsByIdLinksMutationError = void
+    export type PostApiAdminCampaignsByIdLinksMutationVariables = {id: string;data: PostApiAdminCampaignsByIdLinksBody}
+
+    /**
+ * @summary Make a link for a campaign
+ */
+export const usePostApiAdminCampaignsByIdLinks = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiAdminCampaignsByIdLinks>>, TError,PostApiAdminCampaignsByIdLinksMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postApiAdminCampaignsByIdLinks>>,
+        TError,
+        PostApiAdminCampaignsByIdLinksMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiAdminCampaignsByIdLinksMutationOptions(options));
+    }
+    export type patchApiAdminCampaignLinksByIdResponse200 = {
+  data: PatchApiAdminCampaignLinksById200
+  status: 200
+}
+
+export type patchApiAdminCampaignLinksByIdResponse404 = {
+  data: void
+  status: 404
+}
+
+export type patchApiAdminCampaignLinksByIdResponse409 = {
+  data: void
+  status: 409
+}
+
+export type patchApiAdminCampaignLinksByIdResponseSuccess = (patchApiAdminCampaignLinksByIdResponse200) & {
+  headers: Headers;
+};
+export type patchApiAdminCampaignLinksByIdResponseError = (patchApiAdminCampaignLinksByIdResponse404 | patchApiAdminCampaignLinksByIdResponse409) & {
+  headers: Headers;
+};
+
+export type patchApiAdminCampaignLinksByIdResponse = (patchApiAdminCampaignLinksByIdResponseSuccess | patchApiAdminCampaignLinksByIdResponseError)
+
+export const getPatchApiAdminCampaignLinksByIdUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/campaign-links/${id}`
+}
+
+/**
+ * @summary Edit a campaign link, archive it or bring it back. An archived link keeps working.
+ */
+export const patchApiAdminCampaignLinksById = async (id: string,
+    patchApiAdminCampaignLinksByIdBody: PatchApiAdminCampaignLinksByIdBody, options?: Parameters<typeof customFetch>[1]): Promise<patchApiAdminCampaignLinksByIdResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<patchApiAdminCampaignLinksByIdResponse>(getPatchApiAdminCampaignLinksByIdUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(patchApiAdminCampaignLinksByIdBody)
+  }
+);}
+
+
+
+
+
+export const getPatchApiAdminCampaignLinksByIdMutationOptions = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminCampaignLinksById>>, TError,PatchApiAdminCampaignLinksByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminCampaignLinksById>>, TError,PatchApiAdminCampaignLinksByIdMutationVariables, TContext> => {
+
+const mutationKey = ['patchApiAdminCampaignLinksById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiAdminCampaignLinksById>>, PatchApiAdminCampaignLinksByIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  patchApiAdminCampaignLinksById(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchApiAdminCampaignLinksByIdMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiAdminCampaignLinksById>>>
+    export type PatchApiAdminCampaignLinksByIdMutationBody = PatchApiAdminCampaignLinksByIdBody
+    export type PatchApiAdminCampaignLinksByIdMutationError = void
+    export type PatchApiAdminCampaignLinksByIdMutationVariables = {id: string;data: PatchApiAdminCampaignLinksByIdBody}
+
+    /**
+ * @summary Edit a campaign link, archive it or bring it back. An archived link keeps working.
+ */
+export const usePatchApiAdminCampaignLinksById = <TError = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiAdminCampaignLinksById>>, TError,PatchApiAdminCampaignLinksByIdMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchApiAdminCampaignLinksById>>,
+        TError,
+        PatchApiAdminCampaignLinksByIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchApiAdminCampaignLinksByIdMutationOptions(options));
     }

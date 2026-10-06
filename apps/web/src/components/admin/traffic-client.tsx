@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
@@ -20,7 +21,7 @@ import { Depth, Loyalty } from "./analytics/audience";
 import { ChartPlaceholder, TrendChart } from "./analytics/charts/trend";
 import { Donut, HoursRadar } from "./analytics/charts/parts";
 import { WeekHourHeatmap } from "./analytics/charts/grids";
-import { AnalyticsFrame, AudiencePills, RangePills, useAudience, type Audience } from "./analytics/controls";
+import { AnalyticsFrame, AudiencePills, CampaignSelect, RangePills, useAudience, useCampaign, type Audience } from "./analytics/controls";
 import { Geography } from "./analytics/geography";
 import { DataTable, type Column } from "./analytics/kit/data-table";
 import { fmt, pct, rangeLabel, unitLabel, useMounted } from "./analytics/kit/format";
@@ -61,10 +62,13 @@ export const duration = (ms: number) => {
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 };
 
-/** One report per audience and period, under one key: every page that shows traffic shares it. */
-export function useTrafficReport(range: Range, audience: Audience) {
+/**
+ * One report per audience, period and campaign, under one key: every page that shows traffic
+ * shares it. With a `campaign`, only the visits that came from it.
+ */
+export function useTrafficReport(range: Range, audience: Audience, campaign?: string) {
   const shown: TrafficRange = (TRAFFIC_RANGES as readonly Range[]).includes(range) ? (range as TrafficRange) : "90d";
-  const params = { range: shown, audience };
+  const params = { range: shown, audience, ...(campaign ? { campaign } : {}) };
   const query = useGetApiAdminTraffic(params, {
     query: {
       queryKey: getGetApiAdminTrafficQueryKey(params),
@@ -81,7 +85,8 @@ export function useTrafficReport(range: Range, audience: Audience) {
 export function TrafficClient() {
   const range = useRange(TRAFFIC_RANGES, "7d");
   const audience = useAudience();
-  const { report, analytics, days, isPending, isError, refetch } = useTrafficReport(range, audience);
+  const campaign = useCampaign();
+  const { report, analytics, days, isPending, isError, refetch } = useTrafficReport(range, audience, campaign);
   const mounted = useMounted();
   const tz = mounted ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
 
@@ -91,13 +96,15 @@ export function TrafficClient() {
         title="Traffic"
         description={
           <>
-            {audience === "site" ? "People on chatform" : "People filling in forms"} · all counts are page views · {rangeLabel(days)}
+            {audience === "site" ? "People on chatform" : "People filling in forms"}
+            {campaign && <> who came from {campaign}</>} · all counts are page views · {rangeLabel(days)}
             {tz && <> · times in {tz}</>}
           </>
         }
         actions={
           <>
             <AudiencePills />
+            <CampaignSelect />
             <RangePills ranges={TRAFFIC_RANGES} />
           </>
         }
@@ -107,13 +114,22 @@ export function TrafficClient() {
       ) : isPending || !report || !analytics ? (
         <PageSkeleton />
       ) : (
-        <TrafficBody report={report} a={analytics} days={days} audience={audience} />
+        <TrafficBody report={report} a={analytics} days={days} audience={audience} campaign={campaign} />
       )}
     </AnalyticsFrame>
   );
 }
 
-function TrafficBody({ report, a, days, audience }: { report: Report; a: Analytics; days: number; audience: Audience }) {
+function TrafficBody({ report, a, days, audience, campaign }: { report: Report; a: Analytics; days: number; audience: Audience; campaign?: string }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const search = useSearchParams();
+  /** Narrow the whole page to one campaign: the same thing the dropdown in the header does. */
+  const pickCampaign = (key: string) => {
+    const q = new URLSearchParams(search.toString());
+    q.set("campaign", key);
+    router.replace(`${pathname}?${q.toString()}`, { scroll: false });
+  };
   const mounted = useMounted();
   const hourly = a.granularity === "hour";
   const t = a.totals;
@@ -179,7 +195,7 @@ function TrafficBody({ report, a, days, audience }: { report: Report; a: Analyti
 
       <div className="grid gap-4 xl:grid-cols-3">
         <TrafficPanel a={a} days={days} className="xl:col-span-2" />
-        <LivePanel audience={audience} />
+        <LivePanel audience={audience} campaign={campaign} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -245,8 +261,14 @@ function TrafficBody({ report, a, days, audience }: { report: Report; a: Analyti
           <Panel title="Referring sites">
             <RankedList rows={a.referrers} valueLabel="Views" empty="Sites that link here show up as people click through." limit={6} />
           </Panel>
-          <Panel title="Campaigns" description="utm_campaign">
-            <RankedList rows={a.campaigns} valueLabel="Views" empty="Add ?utm_campaign=… to a link you share to track it here." limit={6} />
+          <Panel title="Campaigns">
+            <RankedList
+              rows={a.campaigns}
+              valueLabel="Views"
+              empty="Links made in Campaigns show up here."
+              limit={6}
+              onSelect={campaign ? undefined : pickCampaign}
+            />
           </Panel>
         </div>
       </div>
@@ -406,9 +428,9 @@ const LIVE_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(
  * is here now and on which page. The activity is the whole platform's, whichever audience is
  * picked: it is the same request the Overview's live tile makes. Who is here follows the audience.
  */
-function LivePanel({ audience }: { audience: Audience }) {
+function LivePanel({ audience, campaign }: { audience: Audience; campaign?: string }) {
   const mounted = useMounted();
-  const params = { audience };
+  const params = { audience, ...(campaign ? { campaign } : {}) };
   const { data } = useGetApiAdminTrafficLive(params, {
     query: { queryKey: getGetApiAdminTrafficLiveQueryKey(params), refetchInterval: 30_000, staleTime: 15_000 },
   });

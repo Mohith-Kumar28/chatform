@@ -7,7 +7,6 @@ import type { PlatformAdminVars } from "../../lib/platform-admin.js";
 import {
   TRAFFIC_RANGES,
   cachedJson,
-  campaignTraffic,
   emailTraffic,
   trafficLive,
   trafficReport,
@@ -15,11 +14,11 @@ import {
 } from "../../lib/traffic-query.js";
 import { trafficStore } from "../../lib/traffic.js";
 import { AUDIENCES, VISITOR_SORTS, type Audience, type VisitorRow, type VisitorSort } from "../../do/traffic-do.js";
-import { DAY_MS, FUNNEL_STAGES, STAGE_OF_ORG } from "./shared.js";
+import { DAY_MS } from "./shared.js";
 
 /**
- * Traffic and campaigns: who comes, from where, what they look at, and whether
- * they sign up and stay.
+ * Traffic: who comes, from where, what they look at, and whether they sign up.
+ * What each campaign brought is next door, in `campaigns.ts`.
  *
  * Traffic reads `TrafficDO` (`lib/traffic-query.ts`); sign-ups and what those
  * accounts went on to do read D1. The two meet on the attribution columns
@@ -30,7 +29,7 @@ import { DAY_MS, FUNNEL_STAGES, STAGE_OF_ORG } from "./shared.js";
  *   - a range report: 60s for a day, 5 minutes for a week or a month, an hour
  *     for a quarter, whose shape a few minutes do not move.
  *   - live: 15 seconds in the isolate only. It is polled every 30 seconds.
- *   - campaigns: 5 minutes, like the overview.
+ *   - mail: 5 minutes, like the overview.
  *   - visitors: 30 seconds in the isolate.
  *
  * Every read also tells the browser to keep its answer for as long (`private`),
@@ -43,8 +42,20 @@ const RANGE_KEYS = Object.keys(TRAFFIC_RANGES) as [TrafficRange, ...TrafficRange
 const AUDIENCE_KEYS = Object.keys(AUDIENCES) as [Audience, ...Audience[]];
 /** Site by default: the people looking at chatform, not the people filling in a customer's form. */
 const AudienceParam = z.enum(AUDIENCE_KEYS).default("site");
-const TrafficQuery = z.object({ range: z.enum(RANGE_KEYS).default("7d"), audience: AudienceParam });
-const CampaignsQuery = z.object({ range: z.enum(RANGE_KEYS).default("7d") });
+/**
+ * Narrow a report to the visits one campaign brought. Lowercased the way a hit
+ * is stored. Whatever a link carried, so it only ever reaches SQL as a bind.
+ */
+const CampaignParam = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(150)
+  .optional()
+  .transform((v) => v || undefined);
+const TrafficQuery = z.object({ range: z.enum(RANGE_KEYS).default("7d"), audience: AudienceParam, campaign: CampaignParam });
+/** A cache key part for the campaign filter: nothing when there is none, so the unfiltered keys are unchanged. */
+const forKey = (campaign?: string) => (campaign ? `:c=${encodeURIComponent(campaign)}` : "");
 const TTL: Record<TrafficRange, number> = { "1d": 60, "7d": 300, "30d": 300, "90d": 3600 };
 const keepFor = (seconds: number) => `private, max-age=${seconds}`;
 
@@ -142,7 +153,10 @@ const TrafficResponse = z.object({
 });
 
 /** Sign-ups in `[from, to)`, per UTC day or hour, and by where they came from. */
-async function signupFacts(env: Bindings, days: number, bucket: "hour" | "day") {
+async function signupFacts(env: Bindings, days: number, bucket: "hour" | "day", campaign?: string) {
+  // Each statement numbers its own binds, so the campaign takes the next one in each.
+  const only = (n: number) => (campaign ? `AND campaign = ?${n}` : "");
+  const plus = <T,>(binds: T[]): (T | string)[] => (campaign ? [...binds, campaign] : binds);
   const now = Date.now();
   const from = now - days * DAY_MS;
   const size = bucket === "hour" ? 3_600_000 : DAY_MS;
@@ -150,21 +164,21 @@ async function signupFacts(env: Bindings, days: number, bucket: "hour" | "day") 
     env.DB.prepare(
       `SELECT SUM(CASE WHEN created_at >= ?1 THEN 1 ELSE 0 END) AS value,
               SUM(CASE WHEN created_at < ?1 THEN 1 ELSE 0 END) AS previous
-         FROM user_sign_ins WHERE kind = 'sign_up' AND created_at >= ?2`,
-    ).bind(from, from - days * DAY_MS),
+         FROM user_sign_ins WHERE kind = 'sign_up' AND created_at >= ?2 ${only(3)}`,
+    ).bind(...plus([from, from - days * DAY_MS])),
     env.DB.prepare(
       `SELECT COALESCE(channel, 'Direct') AS channel, COALESCE(source, 'Direct') AS source, COUNT(*) AS signups
-         FROM user_sign_ins WHERE kind = 'sign_up' AND created_at >= ?1
+         FROM user_sign_ins WHERE kind = 'sign_up' AND created_at >= ?1 ${only(2)}
         GROUP BY 1, 2 ORDER BY signups DESC LIMIT 50`,
-    ).bind(from),
+    ).bind(...plus([from])),
     env.DB.prepare(
       `SELECT CAST(created_at / ?2 AS INTEGER) * ?2 AS at, COUNT(*) AS signups
-         FROM user_sign_ins WHERE kind = 'sign_up' AND created_at >= ?1
+         FROM user_sign_ins WHERE kind = 'sign_up' AND created_at >= ?1 ${only(3)}
         GROUP BY 1 ORDER BY 1`,
-    ).bind(from, size),
+    ).bind(...plus([from, size])),
     env.DB.prepare(
-      `SELECT created_at AS at FROM user_sign_ins WHERE kind = 'sign_up' AND created_at >= ?1 ORDER BY created_at DESC LIMIT 500`,
-    ).bind(now - DAY_MS),
+      `SELECT created_at AS at FROM user_sign_ins WHERE kind = 'sign_up' AND created_at >= ?1 ${only(2)} ORDER BY created_at DESC LIMIT 500`,
+    ).bind(...plus([now - DAY_MS])),
   ]);
   const c = (counts!.results[0] ?? {}) as { value?: number | null; previous?: number | null };
   return {
@@ -190,13 +204,13 @@ trafficRouter.get(
     },
   }),
   async (c) => {
-    const { range, audience } = c.req.valid("query");
+    const { range, audience, campaign } = c.req.valid("query");
     const days = TRAFFIC_RANGES[range];
-    const payload = await cachedJson(c.env, `admin:traffic:${audience}:${range}`, TTL[range], async () => {
+    const payload = await cachedJson(c.env, `admin:traffic:${audience}:${range}${forKey(campaign)}`, TTL[range], async () => {
       const [report, facts] = await Promise.all([
-        trafficReport(c.env, range, audience),
+        trafficReport(c.env, range, audience, campaign),
         // A sign-up is somebody joining chatform: it belongs to the site, never to a form's respondents.
-        audience === "site" ? signupFacts(c.env, days, days <= 2 ? "hour" : "day") : NO_SIGNUPS,
+        audience === "site" ? signupFacts(c.env, days, days <= 2 ? "hour" : "day", campaign) : NO_SIGNUPS,
       ]);
       return { ...report, ...facts, generatedAt: Date.now() };
     });
@@ -222,7 +236,7 @@ const TrafficLiveResponse = z.object({
 
 trafficRouter.get(
   "/admin/traffic/live",
-  validator("query", z.object({ audience: AudienceParam })),
+  validator("query", z.object({ audience: AudienceParam, campaign: CampaignParam })),
   describeRoute({
     tags: ["admin"],
     summary: "Visitors a minute at a time for the last half hour, and who is here now",
@@ -233,8 +247,10 @@ trafficRouter.get(
   }),
   async (c) => {
     c.header("cache-control", keepFor(15));
-    const { audience } = c.req.valid("query");
-    return c.json(await cachedJson(c.env, `admin:traffic:live:${audience}`, 15, () => trafficLive(c.env, audience)));
+    const { audience, campaign } = c.req.valid("query");
+    return c.json(
+      await cachedJson(c.env, `admin:traffic:live:${audience}${forKey(campaign)}`, 15, () => trafficLive(c.env, audience, campaign)),
+    );
   },
 );
 
@@ -252,6 +268,7 @@ const VisitorsQuery = z.object({
   sort: z.enum(VISITOR_SORT_KEYS).default("recent"),
   q: z.string().trim().max(80).default(""),
   offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+  campaign: CampaignParam,
 });
 
 const Visitor = z.object({
@@ -346,8 +363,8 @@ trafficRouter.get(
     },
   }),
   async (c) => {
-    const { range, audience, sort, q, offset } = c.req.valid("query");
-    const payload = await cachedJson(c.env, `admin:visitors:${audience}:${range}:${sort}:${offset}:${q}`, 30, async () => {
+    const { range, audience, sort, q, offset, campaign } = c.req.valid("query");
+    const payload = await cachedJson(c.env, `admin:visitors:${audience}:${range}:${sort}:${offset}:${q}${forKey(campaign)}`, 30, async () => {
       // A name or an email is on the account, not on the visitor: find the accounts first.
       const userIds =
         q.length >= 3
@@ -365,6 +382,7 @@ trafficRouter.get(
         userIds,
         limit: VISITOR_PAGE,
         offset,
+        campaign,
       });
       return { total: list.total, pageSize: VISITOR_PAGE, rows: await withUsers(c.env, list.rows) };
     });
@@ -397,116 +415,25 @@ trafficRouter.get(
   },
 );
 
-// ─────────────────────────────── campaigns ───────────────────────────────
+// ─────────────────────────────── mail ───────────────────────────────
 
-/** Lowercase, and only what survives a URL and a SQL literal untouched. */
-const slugPart = (max: number) =>
-  z
-    .string()
-    .trim()
-    .min(1)
-    .max(max)
-    .transform((v) => v.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9_.\-+]/g, ""))
-    .refine((v) => v.length > 0, "Letters, numbers, dashes and underscores only");
-
-const CampaignInput = z.object({
-  name: z.string().trim().min(1).max(120),
-  /** A path on the site (`/`, `/pricing`) or a form link (`/f/slug`). Never another host. */
-  destination: z
-    .string()
-    .trim()
-    .max(300)
-    .regex(/^\/[^\s]*$/, "A path on chatform, starting with /"),
-  source: slugPart(60),
-  medium: slugPart(60),
-  campaign: slugPart(100),
-  content: slugPart(100).optional(),
-});
-
-const CampaignRow = z.object({
-  id: z.string(),
-  name: z.string(),
-  destination: z.string(),
-  source: z.string(),
-  medium: z.string(),
-  campaign: z.string(),
-  content: z.string().nullable(),
-  createdAt: z.number(),
-});
-
-const CampaignStats = z.object({
-  campaign: z.string(),
-  visitors: z.number(),
-  visits: z.number(),
-  views: z.number(),
-  formViews: z.number(),
-  /** Accounts that signed up from the campaign in the period, and how far they got. */
-  stages: z.record(z.string(), z.number()),
-});
-
-const CampaignsResponse = z.object({
+const MailResponse = z.object({
   range: z.enum(RANGE_KEYS),
-  links: z.array(CampaignRow),
-  stats: z.array(CampaignStats),
-  stageLabels: z.array(z.object({ key: z.string(), label: z.string() })),
-  email: z.array(
-    z.object({
-      kind: z.string(),
-      sent: z.number(),
-      visitors: z.number(),
-      visits: z.number(),
-    }),
-  ),
+  /** Mail we sent, per kind, and the visits its links brought back. */
+  email: z.array(z.object({ kind: z.string(), sent: z.number(), visitors: z.number(), visits: z.number() })),
+  /** Reminders to respondents who left a form unfinished. */
   followups: z.object({ sent: z.number(), clicked: z.number(), recovered: z.number() }),
   generatedAt: z.number(),
 });
 
-/**
- * Sign-ups per campaign, and how far each account got: the same stages as the
- * overview funnel (`STAGE_OF_ORG`), for the organizations each person belongs to.
- * The furthest one counts, so an invited teammate on a paying account is "paid".
- */
-async function campaignStages(env: Bindings, from: number) {
-  const columns = FUNNEL_STAGES.filter(([, , n]) => n > 0)
-    .map(([key, , n]) => `SUM(CASE WHEN stage >= ${n} THEN 1 ELSE 0 END) AS ${key}`)
-    .join(", ");
-  const res = await env.DB.prepare(
-    `SELECT campaign, COUNT(*) AS signed_up, ${columns} FROM (
-       SELECT si.campaign AS campaign,
-              COALESCE((SELECT MAX(${STAGE_OF_ORG}) FROM organizations o
-                          JOIN members m ON m.organization_id = o.id
-                         WHERE m.user_id = si.user_id), 0) AS stage
-         FROM user_sign_ins si
-        WHERE si.kind = 'sign_up' AND si.created_at >= ?1 AND si.campaign IS NOT NULL
-     ) GROUP BY campaign`,
-  )
-    .bind(from)
-    .all<Record<string, number | string>>();
-  const out = new Map<string, Record<string, number>>();
-  for (const row of res.results ?? []) {
-    const stages: Record<string, number> = {};
-    for (const [key] of FUNNEL_STAGES) stages[key] = Number(row[key] ?? 0);
-    out.set(String(row.campaign), stages);
-  }
-  return out;
-}
-
-async function loadLinks(env: Bindings) {
-  const res = await env.DB.prepare(
-    `SELECT id, name, destination, source, medium, campaign, content, created_at AS createdAt
-       FROM campaign_links WHERE archived_at IS NULL ORDER BY created_at DESC LIMIT 200`,
-  ).all<z.infer<typeof CampaignRow>>();
-  return res.results ?? [];
-}
-
 trafficRouter.get(
-  "/admin/campaigns",
-  validator("query", CampaignsQuery),
+  "/admin/mail",
+  validator("query", z.object({ range: z.enum(RANGE_KEYS).default("30d") })),
   describeRoute({
     tags: ["admin"],
-    summary: "Campaign links, their traffic and the accounts they brought, plus mail we sent",
+    summary: "Mail we sent, and how much of it brought somebody back",
     responses: {
-      200: { description: "Campaigns", content: { "application/json": { schema: resolver(CampaignsResponse) } } },
+      200: { description: "Mail", content: { "application/json": { schema: resolver(MailResponse) } } },
       404: { description: "Not an admin" },
     },
   }),
@@ -514,12 +441,8 @@ trafficRouter.get(
     const range = c.req.valid("query").range;
     const days = TRAFFIC_RANGES[range];
     const from = Date.now() - days * DAY_MS;
-
-    // The links are the one part a person just changed, so they are never cached.
-    const links = await loadLinks(c.env);
-    const cached = await cachedJson(c.env, `admin:campaigns:${range}`, 300, async () => {
-      const [stages, mail, followups] = await Promise.all([
-        campaignStages(c.env, from),
+    const payload = await cachedJson(c.env, `admin:mail:${range}`, 300, async () => {
+      const [mail, followups, emailVisits] = await Promise.all([
         c.env.DB.prepare(
           `SELECT kind, SUM(messages) AS sent FROM mail_deliveries WHERE created_at >= ?1 AND status = 'sent' GROUP BY kind`,
         )
@@ -532,20 +455,8 @@ trafficRouter.get(
         )
           .bind(from)
           .first<{ sent: number; clicked: number | null; recovered: number | null }>(),
+        emailTraffic(c.env, days),
       ]);
-      const [traffic, emailVisits] = await Promise.all([campaignTraffic(c.env, days), emailTraffic(c.env, days)]);
-      const names = new Set([...traffic.map((t) => t.campaign), ...stages.keys()]);
-      const stats = [...names].map((campaign) => {
-        const t = traffic.find((x) => x.campaign === campaign);
-        return {
-          campaign,
-          visitors: t?.visitors ?? 0,
-          visits: t?.visits ?? 0,
-          views: t?.views ?? 0,
-          formViews: t?.formViews ?? 0,
-          stages: stages.get(campaign) ?? Object.fromEntries(FUNNEL_STAGES.map(([key]) => [key, 0])),
-        };
-      });
       const kinds = new Set([...(mail.results ?? []).map((m) => m.kind), ...emailVisits.map((e) => e.kind)]);
       const email = [...kinds]
         .map((kind) => {
@@ -559,7 +470,6 @@ trafficRouter.get(
         })
         .sort((a, b) => b.sent - a.sent);
       return {
-        stats,
         email,
         followups: {
           sent: followups?.sent ?? 0,
@@ -569,73 +479,7 @@ trafficRouter.get(
         generatedAt: Date.now(),
       };
     });
-
-    return c.json({
-      range,
-      links,
-      stageLabels: FUNNEL_STAGES.map(([key, label]) => ({ key, label })),
-      ...cached,
-    });
-  },
-);
-
-trafficRouter.post(
-  "/admin/campaigns",
-  validator("json", CampaignInput),
-  describeRoute({
-    tags: ["admin"],
-    summary: "Save a campaign link",
-    responses: {
-      200: { description: "Saved", content: { "application/json": { schema: resolver(CampaignRow) } } },
-      404: { description: "Not an admin" },
-    },
-  }),
-  async (c) => {
-    const input = c.req.valid("json");
-    const row = {
-      id: `cl_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
-      name: input.name,
-      destination: input.destination,
-      source: input.source,
-      medium: input.medium,
-      campaign: input.campaign,
-      content: input.content ?? null,
-      createdAt: Date.now(),
-    };
-    await c.env.DB.prepare(
-      `INSERT INTO campaign_links (id, name, destination, source, medium, campaign, content, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-      .bind(
-        row.id,
-        row.name,
-        row.destination,
-        row.source,
-        row.medium,
-        row.campaign,
-        row.content,
-        c.get("platformAdminEmail") ?? null,
-        row.createdAt,
-      )
-      .run();
-    return c.json(row);
-  },
-);
-
-trafficRouter.delete(
-  "/admin/campaigns/:id",
-  describeRoute({
-    tags: ["admin"],
-    summary: "Archive a campaign link. Its traffic stays counted.",
-    responses: {
-      200: { description: "Archived", content: { "application/json": { schema: resolver(z.object({ ok: z.boolean() })) } } },
-      404: { description: "Not an admin" },
-    },
-  }),
-  async (c) => {
-    await c.env.DB.prepare(`UPDATE campaign_links SET archived_at = ? WHERE id = ? AND archived_at IS NULL`)
-      .bind(Date.now(), c.req.param("id"))
-      .run();
-    return c.json({ ok: true });
+    c.header("cache-control", keepFor(300));
+    return c.json({ range, ...payload });
   },
 );

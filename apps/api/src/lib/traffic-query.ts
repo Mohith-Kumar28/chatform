@@ -14,20 +14,25 @@ import type { Audience } from "../do/traffic-do.js";
 export const TRAFFIC_RANGES = { "1d": 1, "7d": 7, "30d": 30, "90d": 90 } as const;
 export type TrafficRange = keyof typeof TRAFFIC_RANGES;
 
-export async function trafficReport(env: Bindings, range: TrafficRange, audience: Audience) {
-  return { range, audience, ...(await trafficStore(env).report(TRAFFIC_RANGES[range], audience)) };
+export async function trafficReport(env: Bindings, range: TrafficRange, audience: Audience, campaign?: string) {
+  return { range, audience, ...(await trafficStore(env).report(TRAFFIC_RANGES[range], audience, campaign)) };
 }
 
 export type TrafficReport = Awaited<ReturnType<typeof trafficReport>>;
 
 /** The last half hour a minute at a time, who is here now, and where. */
-export function trafficLive(env: Bindings, audience: Audience) {
-  return trafficStore(env).live(audience);
+export function trafficLive(env: Bindings, audience: Audience, campaign?: string) {
+  return trafficStore(env).live(audience, campaign);
 }
 
-/** Per-campaign traffic, for the Campaigns page. Joined to sign-ups by the caller. */
+/** Every campaign's traffic, for the Campaigns page. Joined to sign-ups by the caller. */
 export function campaignTraffic(env: Bindings, days: number) {
-  return trafficStore(env).campaigns(days);
+  return trafficStore(env).campaignStats(days);
+}
+
+/** One campaign's traffic, by its key (`utm_campaign`). */
+export function campaignDetailTraffic(env: Bindings, key: string, days: number) {
+  return trafficStore(env).campaignDetail(key, days);
 }
 
 /** Visits that arrived from mail we sent, per mail kind (`utm_campaign`). */

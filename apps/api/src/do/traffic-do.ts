@@ -21,6 +21,9 @@ import type { Bindings } from "../env.js";
  *
  * Text columns hold "" rather than NULL when unknown, so a breakdown never has
  * a null key and "known" is always `!= ''`.
+ *
+ * The tables are created here, in the constructor, and so is any column added
+ * since: there is no migration file for a Durable Object's own SQLite.
  */
 
 /** One beacon, already filtered and enriched by `lib/traffic.ts`. */
@@ -39,6 +42,8 @@ export interface TrafficHit {
   medium: string;
   campaign: string;
   content: string;
+  /** The saved campaign link the visit came through (`utm_id`), or "". */
+  link: string;
   country: string;
   region: string;
   city: string;
@@ -170,6 +175,34 @@ export type Audience = keyof typeof AUDIENCES;
 const inAudience = (column: string, audience?: Audience): string =>
   audience ? `AND ${column} IN (${AUDIENCES[audience].map((a) => `'${a}'`).join(", ")})` : "";
 
+/**
+ * Narrowing a report to one campaign (`utm_campaign`, lowercased). The value is
+ * whatever a link carried, so it is always bound, never written into the SQL:
+ * each fragment holds one bare `?`, goes after every other placeholder of its
+ * query, and `binds` is spread after every other bind.
+ */
+function forCampaign(campaign?: string) {
+  const on = !!campaign;
+  return {
+    binds: on ? [campaign!] : [],
+    /** A page view belongs to a campaign when its visit came from it. */
+    views: (column: string) => (on ? `AND ${column} IN (SELECT visit FROM visits WHERE campaign = ?)` : ""),
+    /** On `visits`, and on `visitors` where it reads as "first came from". */
+    own: on ? "AND campaign = ?" : "",
+    /** A visitor who has ever come through it: for who is here now. */
+    visitor: on ? "AND visitor IN (SELECT visitor FROM visits WHERE campaign = ?)" : "",
+  };
+}
+
+/**
+ * What the Campaigns page counts: tagged visits to chatform itself. Mail we send
+ * tags its own links (`lib/mail-jobs.ts`) and a customer's form can be shared
+ * with any tags its author likes; neither is a campaign of ours. A visit that
+ * came through a saved link counts wherever that link pointed, a form included.
+ */
+const MARKETING = `s.campaign != '' AND NOT (s.source = 'Chatform' AND s.medium = 'email')
+  AND (w.area IN ('marketing', 'docs', 'auth', 'app', 'builder') OR s.link != '')`;
+
 const MINUTE = 60_000;
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
@@ -244,6 +277,16 @@ export class TrafficDO extends DurableObject<Bindings> {
       CREATE INDEX IF NOT EXISTS views_visit ON views (visit, at);
       CREATE TABLE IF NOT EXISTS seen (day TEXT NOT NULL, visitor TEXT NOT NULL, PRIMARY KEY (day, visitor)) WITHOUT ROWID;
     `);
+    // Added after the table had rows: the saved link a visit came through. A constant
+    // default, so SQLite adds the column without rewriting a row.
+    if (!this.all<{ name: string }>("SELECT name FROM pragma_table_info('visits')").some((c) => c.name === "link")) {
+      this.sql.exec("ALTER TABLE visits ADD COLUMN link TEXT NOT NULL DEFAULT ''");
+    }
+    this.sql.exec(`
+      CREATE INDEX IF NOT EXISTS visits_campaign ON visits (campaign, last_at);
+      CREATE INDEX IF NOT EXISTS visits_link ON visits (link, last_at);
+      CREATE INDEX IF NOT EXISTS visitors_campaign ON visitors (campaign);
+    `);
   }
 
   private all<T>(query: string, ...binds: (string | number | null)[]): T[] {
@@ -276,10 +319,11 @@ export class TrafficDO extends DurableObject<Bindings> {
     const newVisit =
       sql.exec(
         `INSERT OR IGNORE INTO visits (visit, visitor, started_at, last_at, views, channel, source, medium, campaign, content, referrer_host,
-           entry_area, entry_path, exit_area, exit_path, country, region, city, lat, lon, device, browser, os, language, user_id)
-         VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           entry_area, entry_path, exit_area, exit_path, country, region, city, lat, lon, device, browser, os, language, user_id, link)
+         VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         h.visit, h.visitor, h.at, h.at, h.channel, h.source, h.medium, h.campaign, h.content, h.referrerHost,
         h.area, h.path, h.area, h.path, h.country, h.region, h.city, h.lat, h.lon, h.device, h.browser, h.os, h.language, h.userId,
+        h.link ?? "",
       ).rowsWritten > 0;
     if (!newVisit) {
       sql.exec(
@@ -345,23 +389,25 @@ export class TrafficDO extends DurableObject<Bindings> {
   // ─────────────────────────────── reading ───────────────────────────────
 
   /** Views in `[from, to)` grouped by `expr`, a column of the view (`w`) or of its visit (`s`). */
-  private breakdown(expr: string, from: number, to: number, limit: number, where = "", audience?: Audience): Breakdown[] {
+  private breakdown(expr: string, from: number, to: number, limit: number, where = "", audience?: Audience, campaign?: string): Breakdown[] {
+    const only = forCampaign(campaign);
     return this.all<Breakdown>(
       `SELECT ${expr} AS key, COUNT(DISTINCT w.visitor) AS visitors, COUNT(DISTINCT w.visit) AS visits, COUNT(*) AS views
          FROM views w JOIN visits s ON s.visit = w.visit
-        WHERE w.at >= ? AND w.at < ? ${inAudience("w.area", audience)} ${where}
+        WHERE w.at >= ? AND w.at < ? ${inAudience("w.area", audience)} ${where} ${only.views("w.visit")}
         GROUP BY key ORDER BY views DESC LIMIT ${limit}`,
-      from, to,
+      from, to, ...only.binds,
     );
   }
 
-  private totals(from: number, to: number, audience?: Audience): TrafficTotals {
+  private totals(from: number, to: number, audience?: Audience, campaign?: string): TrafficTotals {
+    const only = forCampaign(campaign);
     const t = this.all<{ visitors: number; visits: number; views: number; engaged: number | null }>(
       `SELECT COUNT(DISTINCT visitor) AS visitors, COUNT(DISTINCT visit) AS visits, COUNT(*) AS views, SUM(engaged_ms) AS engaged
-         FROM views WHERE at >= ? AND at < ? ${inAudience("area", audience)}`,
-      from, to,
+         FROM views WHERE at >= ? AND at < ? ${inAudience("area", audience)} ${only.views("visit")}`,
+      from, to, ...only.binds,
     )[0]!;
-    const one = (query: string, ...binds: number[]) => this.all<{ n: number }>(query, ...binds)[0]!.n;
+    const one = (query: string, ...binds: (string | number)[]) => this.all<{ n: number }>(query, ...binds)[0]!.n;
     return {
       visitors: t.visitors,
       visits: t.visits,
@@ -369,24 +415,26 @@ export class TrafficDO extends DurableObject<Bindings> {
       // `last_seen` is the indexed column, and nobody first seen after `from` was last seen before it.
       // New to an audience means it is where they first landed.
       newVisitors: one(
-        `SELECT COUNT(*) AS n FROM visitors WHERE last_seen >= ?1 AND first_seen >= ?1 AND first_seen < ?2 ${inAudience("landing_area", audience)}`,
-        from, to,
+        `SELECT COUNT(*) AS n FROM visitors WHERE last_seen >= ?1 AND first_seen >= ?1 AND first_seen < ?2 ${inAudience("landing_area", audience)} ${only.own}`,
+        from, to, ...only.binds,
       ),
       bounced: one(
-        `SELECT COUNT(*) AS n FROM (SELECT visit FROM views WHERE at >= ? AND at < ? ${inAudience("area", audience)} GROUP BY visit HAVING COUNT(*) = 1)`,
-        from, to,
+        `SELECT COUNT(*) AS n FROM (SELECT visit FROM views WHERE at >= ? AND at < ? ${inAudience("area", audience)} ${only.views("visit")} GROUP BY visit HAVING COUNT(*) = 1)`,
+        from, to, ...only.binds,
       ),
       engagedMs: t.engaged ?? 0,
     };
   }
 
   /** p75 of each web vital per area and per country, over the newest pages that measured one. */
-  private vitals(from: number, audience?: Audience): { byArea: Vitals[]; byCountry: Vitals[] } {
+  private vitals(from: number, audience?: Audience, campaign?: string): { byArea: Vitals[]; byCountry: Vitals[] } {
+    const only = forCampaign(campaign);
     type Sample = { area: string; country: string; lcp: number | null; inp: number | null; ttfb: number | null; cls: number | null };
     const rows = this.all<Sample>(
       `SELECT w.area, s.country, w.lcp, w.inp, w.ttfb, w.cls FROM views w JOIN visits s ON s.visit = w.visit
-        WHERE w.at >= ? ${inAudience("w.area", audience)} AND (w.lcp IS NOT NULL OR w.ttfb IS NOT NULL) ORDER BY w.at DESC LIMIT 20000`,
-      from,
+        WHERE w.at >= ? ${inAudience("w.area", audience)} AND (w.lcp IS NOT NULL OR w.ttfb IS NOT NULL) ${only.views("w.visit")}
+        ORDER BY w.at DESC LIMIT 20000`,
+      from, ...only.binds,
     );
     const by = (key: "area" | "country", limit: number): Vitals[] => {
       const groups = new Map<string, Sample[]>();
@@ -414,9 +462,12 @@ export class TrafficDO extends DurableObject<Bindings> {
   /**
    * Everything the Traffic page shows for the last `days` days of one audience,
    * and the totals of the period before. The two audiences never share a number:
-   * every query below is bounded to the audience's areas.
+   * every query below is bounded to the audience's areas. With a `campaign`,
+   * every one is also narrowed to the visits that came from it (`forCampaign`).
    */
-  report(days: number, audience: Audience) {
+  report(days: number, audience: Audience, campaign?: string) {
+    const only = forCampaign(campaign);
+    const V = only.views("w.visit");
     const now = Date.now();
     const to = now + MINUTE;
     const from = now - days * DAY;
@@ -429,62 +480,68 @@ export class TrafficDO extends DurableObject<Bindings> {
     const fresh = new Map(
       this.all<{ at: number; n: number }>(
         `SELECT first_seen / ${size} * ${size} AS at, COUNT(*) AS n FROM visitors
-          WHERE last_seen >= ?1 AND first_seen >= ?1 ${inAudience("landing_area", audience)} GROUP BY 1`,
-        from,
+          WHERE last_seen >= ?1 AND first_seen >= ?1 ${inAudience("landing_area", audience)} ${only.own} GROUP BY 1`,
+        from, ...only.binds,
       ).map((r) => [r.at, r.n]),
     );
     const series = this.all<{ at: number; visitors: number; visits: number; views: number; newViews: number }>(
       `SELECT w.at / ${size} * ${size} AS at, COUNT(DISTINCT w.visitor) AS visitors, COUNT(DISTINCT w.visit) AS visits,
               COUNT(*) AS views, ${FIRST_DAY} AS newViews
-         FROM views w JOIN visitors v ON v.visitor = w.visitor WHERE w.at >= ? ${W} GROUP BY 1 ORDER BY 1`,
-      from,
+         FROM views w JOIN visitors v ON v.visitor = w.visitor WHERE w.at >= ? ${W} ${V} GROUP BY 1 ORDER BY 1`,
+      from, ...only.binds,
     ).map((r) => ({ ...r, newVisitors: fresh.get(r.at) ?? 0 }));
 
     const activeUsers = (d: number) =>
-      this.all<{ n: number }>("SELECT COUNT(DISTINCT user_id) AS n FROM visits WHERE last_at >= ? AND user_id != ''", now - d * DAY)[0]!.n;
-    const one = (query: string, ...binds: number[]) => this.all<{ n: number }>(query, ...binds)[0]!.n;
+      this.all<{ n: number }>(
+        `SELECT COUNT(DISTINCT user_id) AS n FROM visits WHERE last_at >= ? AND user_id != '' ${only.own}`,
+        now - d * DAY, ...only.binds,
+      )[0]!.n;
+    const one = (query: string, ...binds: (string | number)[]) => this.all<{ n: number }>(query, ...binds)[0]!.n;
 
     return {
       bucket: hourly ? ("hour" as const) : ("day" as const),
-      totals: this.totals(from, to, audience),
-      previous: this.totals(from - days * DAY, from, audience),
+      totals: this.totals(from, to, audience, campaign),
+      previous: this.totals(from - days * DAY, from, audience, campaign),
       series,
       // Every hour of the period (thirty days at most), for the hour-of-day clock, the weekday
       // grid and the last-24-hours chart, each folded into the reader's zone on the client.
       hourly: this.all<{ at: number; visitors: number; views: number; newViews: number }>(
         `SELECT w.at / ${HOUR} * ${HOUR} AS at, COUNT(DISTINCT w.visitor) AS visitors, COUNT(*) AS views, ${FIRST_DAY} AS newViews
-           FROM views w JOIN visitors v ON v.visitor = w.visitor WHERE w.at >= ? ${W} GROUP BY 1 ORDER BY 1`,
-        now - Math.min(Math.max(days, 1), 30) * DAY,
+           FROM views w JOIN visitors v ON v.visitor = w.visitor WHERE w.at >= ? ${W} ${V} GROUP BY 1 ORDER BY 1`,
+        now - Math.min(Math.max(days, 1), 30) * DAY, ...only.binds,
       ),
       // Seen in the last hour, and everyone this audience has ever had.
-      online: one(`SELECT COUNT(*) AS n FROM visitors WHERE last_seen >= ? ${inAudience("last_area", audience)}`, now - HOUR),
-      allTime: one(`SELECT COUNT(*) AS n FROM visitors WHERE 1 = 1 ${inAudience("landing_area", audience)}`),
-      channels: this.breakdown("s.channel", from, to, 10, "", audience),
+      online: one(
+        `SELECT COUNT(*) AS n FROM visitors WHERE last_seen >= ? ${inAudience("last_area", audience)} ${only.visitor}`,
+        now - HOUR, ...only.binds,
+      ),
+      allTime: one(`SELECT COUNT(*) AS n FROM visitors WHERE 1 = 1 ${inAudience("landing_area", audience)} ${only.own}`, ...only.binds),
+      channels: this.breakdown("s.channel", from, to, 10, "", audience, campaign),
       sources: this.all<{ source: string; channel: string; visitors: number; visits: number; views: number }>(
         `SELECT s.source, s.channel, COUNT(DISTINCT w.visitor) AS visitors, COUNT(DISTINCT w.visit) AS visits, COUNT(*) AS views
-           FROM views w JOIN visits s ON s.visit = w.visit WHERE w.at >= ? ${W}
+           FROM views w JOIN visits s ON s.visit = w.visit WHERE w.at >= ? ${W} ${V}
           GROUP BY s.source, s.channel ORDER BY views DESC LIMIT 25`,
-        from,
+        from, ...only.binds,
       ),
-      referrers: this.breakdown("s.referrer_host", from, to, 25, "AND s.referrer_host != ''", audience),
-      campaigns: this.breakdown("s.campaign", from, to, 25, "AND s.campaign != ''", audience),
-      areas: this.breakdown("w.area", from, to, 10, "", audience),
+      referrers: this.breakdown("s.referrer_host", from, to, 25, "AND s.referrer_host != ''", audience, campaign),
+      campaigns: this.breakdown("s.campaign", from, to, 25, "AND s.campaign != ''", audience, campaign),
+      areas: this.breakdown("w.area", from, to, 10, "", audience, campaign),
       pages: this.all<PageRow>(
         `SELECT w.area, w.path, COUNT(DISTINCT w.visitor) AS visitors, COUNT(DISTINCT w.visit) AS visits, COUNT(*) AS views
-           FROM views w WHERE w.at >= ? ${W} GROUP BY w.area, w.path ORDER BY views DESC LIMIT 40`,
-        from,
+           FROM views w WHERE w.at >= ? ${W} ${V} GROUP BY w.area, w.path ORDER BY views DESC LIMIT 40`,
+        from, ...only.binds,
       ),
       // The page each visit started on, and the one it ended on.
       entries: this.all<PageRow>(
         `SELECT entry_area AS area, entry_path AS path, COUNT(DISTINCT visitor) AS visitors, COUNT(*) AS visits, COUNT(*) AS views
-           FROM visits WHERE last_at >= ?1 AND started_at >= ?1 ${inAudience("entry_area", audience)}
+           FROM visits WHERE last_at >= ?1 AND started_at >= ?1 ${inAudience("entry_area", audience)} ${only.own}
           GROUP BY 1, 2 ORDER BY visits DESC LIMIT 25`,
-        from,
+        from, ...only.binds,
       ),
       exits: this.all<{ area: string; path: string; visits: number }>(
         `SELECT exit_area AS area, exit_path AS path, COUNT(*) AS visits
-           FROM visits WHERE last_at >= ? ${inAudience("exit_area", audience)} GROUP BY 1, 2 ORDER BY visits DESC LIMIT 25`,
-        from,
+           FROM visits WHERE last_at >= ? ${inAudience("exit_area", audience)} ${only.own} GROUP BY 1, 2 ORDER BY visits DESC LIMIT 25`,
+        from, ...only.binds,
       ),
       geo: this.all<{
         country: string; region: string; city: string; lat: number | null; lon: number | null;
@@ -492,31 +549,31 @@ export class TrafficDO extends DurableObject<Bindings> {
       }>(
         `SELECT s.country, s.region, s.city, AVG(s.lat) AS lat, AVG(s.lon) AS lon,
                 COUNT(DISTINCT w.visitor) AS visitors, COUNT(DISTINCT w.visit) AS visits, COUNT(*) AS views
-           FROM views w JOIN visits s ON s.visit = w.visit WHERE w.at >= ? ${W} AND s.country != ''
+           FROM views w JOIN visits s ON s.visit = w.visit WHERE w.at >= ? ${W} AND s.country != '' ${V}
           GROUP BY s.country, s.region, s.city ORDER BY views DESC LIMIT 400`,
-        from,
+        from, ...only.binds,
       ).map((g) => ({ ...g, lat: Math.round((g.lat ?? 0) * 10) / 10, lon: Math.round((g.lon ?? 0) * 10) / 10 })),
-      devices: this.breakdown("s.device", from, to, 5, "AND s.device != ''", audience),
-      browsers: this.breakdown("s.browser", from, to, 10, "AND s.browser != ''", audience),
-      oses: this.breakdown("s.os", from, to, 10, "AND s.os != ''", audience),
-      languages: this.breakdown("substr(s.language, 1, 2)", from, to, 10, "AND s.language != ''", audience),
-      vitals: this.vitals(from, audience),
+      devices: this.breakdown("s.device", from, to, 5, "AND s.device != ''", audience, campaign),
+      browsers: this.breakdown("s.browser", from, to, 10, "AND s.browser != ''", audience, campaign),
+      oses: this.breakdown("s.os", from, to, 10, "AND s.os != ''", audience, campaign),
+      languages: this.breakdown("substr(s.language, 1, 2)", from, to, 10, "AND s.language != ''", audience, campaign),
+      vitals: this.vitals(from, audience, campaign),
       // Page views by how many different days their reader has come, and by how many pages their visit opened.
       loyalty: this.all<{ key: string; n: number }>(
         `SELECT CASE WHEN v.days <= 1 THEN '1 day' WHEN v.days <= 3 THEN '2 to 3 days' WHEN v.days <= 9 THEN '4 to 9 days' ELSE '10+ days' END AS key,
-                COUNT(*) AS n FROM views w JOIN visitors v ON v.visitor = w.visitor WHERE w.at >= ? ${W} GROUP BY key ORDER BY MIN(v.days)`,
-        from,
+                COUNT(*) AS n FROM views w JOIN visitors v ON v.visitor = w.visitor WHERE w.at >= ? ${W} ${V} GROUP BY key ORDER BY MIN(v.days)`,
+        from, ...only.binds,
       ),
       depth: this.all<{ key: string; n: number }>(
         `SELECT CASE WHEN s.views <= 1 THEN '1 page' WHEN s.views <= 3 THEN '2 to 3 pages' WHEN s.views <= 9 THEN '4 to 9 pages' ELSE '10+ pages' END AS key,
-                COUNT(*) AS n FROM views w JOIN visits s ON s.visit = w.visit WHERE w.at >= ? ${W} GROUP BY key ORDER BY MIN(s.views)`,
-        from,
+                COUNT(*) AS n FROM views w JOIN visits s ON s.visit = w.visit WHERE w.at >= ? ${W} ${V} GROUP BY key ORDER BY MIN(s.views)`,
+        from, ...only.binds,
       ),
       // Page views per bucket per source, for the stacked chart; the client keeps the top few and folds the rest.
       sourceSeries: this.all<{ at: number; source: string; views: number }>(
         `SELECT w.at / ${size} * ${size} AS at, s.source, COUNT(*) AS views
-           FROM views w JOIN visits s ON s.visit = w.visit WHERE w.at >= ? ${W} GROUP BY 1, 2`,
-        from,
+           FROM views w JOIN visits s ON s.visit = w.visit WHERE w.at >= ? ${W} ${V} GROUP BY 1, 2`,
+        from, ...only.binds,
       ),
       // People signed in to the dashboard or builder: today, this week, this month.
       activeUsers: { day: activeUsers(1), week: activeUsers(7), month: activeUsers(30) },
@@ -524,7 +581,8 @@ export class TrafficDO extends DurableObject<Bindings> {
   }
 
   /** The last half hour a minute at a time, who is here now, and where, for one audience. */
-  live(audience: Audience) {
+  live(audience: Audience, campaign?: string) {
+    const only = forCampaign(campaign);
     const now = Date.now();
     const until = Math.floor(now / MINUTE) * MINUTE + MINUTE;
     const from = until - LIVE_MINUTES * MINUTE;
@@ -533,8 +591,8 @@ export class TrafficDO extends DurableObject<Bindings> {
     const views = new Array<number>(LIVE_MINUTES).fill(0);
     for (const r of this.all<{ at: number; visitors: number; views: number }>(
       `SELECT at / ${MINUTE} * ${MINUTE} AS at, COUNT(DISTINCT visitor) AS visitors, COUNT(*) AS views
-         FROM views WHERE at >= ? ${inAudience("area", audience)} GROUP BY 1`,
-      from,
+         FROM views WHERE at >= ? ${inAudience("area", audience)} ${only.views("visit")} GROUP BY 1`,
+      from, ...only.binds,
     )) {
       const i = Math.floor((r.at - from) / MINUTE);
       if (i >= 0 && i < LIVE_MINUTES) {
@@ -547,30 +605,101 @@ export class TrafficDO extends DurableObject<Bindings> {
       until,
       // Seen in the last five minutes, on the page they were last on: a leave counts, so someone reading does too.
       online: this.all<{ n: number }>(
-        `SELECT COUNT(*) AS n FROM visitors WHERE last_seen >= ? ${inAudience("last_area", audience)}`,
-        recent,
+        `SELECT COUNT(*) AS n FROM visitors WHERE last_seen >= ? ${inAudience("last_area", audience)} ${only.visitor}`,
+        recent, ...only.binds,
       )[0]!.n,
       visitors,
       views,
       pages: this.all<{ area: string; path: string; visitors: number }>(
         `SELECT last_area AS area, last_path AS path, COUNT(*) AS visitors FROM visitors
-          WHERE last_seen >= ? ${inAudience("last_area", audience)} GROUP BY 1, 2 ORDER BY visitors DESC LIMIT 10`,
-        recent,
+          WHERE last_seen >= ? ${inAudience("last_area", audience)} ${only.visitor} GROUP BY 1, 2 ORDER BY visitors DESC LIMIT 10`,
+        recent, ...only.binds,
       ),
-      sources: this.breakdown("s.source", from, until, 8, "", audience),
-      countries: this.breakdown("s.country", recent, until, 8, "AND s.country != ''", audience),
+      sources: this.breakdown("s.source", from, until, 8, "", audience, campaign),
+      countries: this.breakdown("s.country", recent, until, 8, "AND s.country != ''", audience, campaign),
     };
   }
 
-  /** Per-campaign traffic, for the Campaigns page. */
-  campaigns(days: number) {
-    return this.all<{ campaign: string; visitors: number; visits: number; views: number; formViews: number }>(
-      `SELECT s.campaign, COUNT(DISTINCT w.visitor) AS visitors, COUNT(DISTINCT w.visit) AS visits, COUNT(*) AS views,
-              SUM(w.area IN ('form', 'embed')) AS formViews
-         FROM views w JOIN visits s ON s.visit = w.visit WHERE w.at >= ? AND s.campaign != ''
-        GROUP BY s.campaign ORDER BY visitors DESC LIMIT 200`,
-      Date.now() - days * DAY,
-    );
+  /**
+   * Every campaign's traffic for the last `days` days, for the Campaigns page:
+   * per campaign with the period before, per saved link, and a day at a time.
+   * Visitors are counted, not clicks: a redirect is hit by every link preview
+   * and crawler, a recorded visit is a person who saw the page.
+   */
+  campaignStats(days: number) {
+    const now = Date.now();
+    const from = now - days * DAY;
+    const before = from - days * DAY;
+    const JOINED = `FROM views w JOIN visits s ON s.visit = w.visit`;
+    const everyone = this.all<{ visitors: number; previous: number }>(
+      `SELECT COUNT(DISTINCT CASE WHEN w.at >= ?1 THEN w.visitor END) AS visitors,
+              COUNT(DISTINCT CASE WHEN w.at < ?1 THEN w.visitor END) AS previous
+         ${JOINED} WHERE w.at >= ?2 AND ${MARKETING}`,
+      from, before,
+    )[0]!;
+    return {
+      totals: everyone,
+      campaigns: this.all<{ campaign: string; visitors: number; previous: number; visits: number; views: number }>(
+        `SELECT s.campaign, COUNT(DISTINCT CASE WHEN w.at >= ?1 THEN w.visitor END) AS visitors,
+                COUNT(DISTINCT CASE WHEN w.at < ?1 THEN w.visitor END) AS previous,
+                COUNT(DISTINCT CASE WHEN w.at >= ?1 THEN w.visit END) AS visits,
+                SUM(w.at >= ?1) AS views
+           ${JOINED} WHERE w.at >= ?2 AND ${MARKETING} GROUP BY s.campaign ORDER BY visitors DESC LIMIT 300`,
+        from, before,
+      ),
+      links: this.all<{ link: string; visitors: number; visits: number; views: number }>(
+        `SELECT s.link, COUNT(DISTINCT w.visitor) AS visitors, COUNT(DISTINCT w.visit) AS visits, COUNT(*) AS views
+           ${JOINED} WHERE w.at >= ? AND s.link != '' AND ${MARKETING} GROUP BY s.link LIMIT 2000`,
+        from,
+      ),
+      /** When each saved link last brought anyone, however long ago: what makes a link "quiet". */
+      linkLastVisit: this.all<{ link: string; at: number }>(
+        `SELECT link, MAX(last_at) AS at FROM visits WHERE link != '' GROUP BY link LIMIT 2000`,
+      ),
+      series: this.all<{ campaign: string; at: number; visitors: number }>(
+        `SELECT s.campaign, w.at / ${DAY} * ${DAY} AS at, COUNT(DISTINCT w.visitor) AS visitors
+           ${JOINED} WHERE w.at >= ? AND ${MARKETING} GROUP BY 1, 2 ORDER BY 2`,
+        from,
+      ),
+    };
+  }
+
+  /** One campaign: its totals and the period before, a day at a time, per link, and where its visitors came from and landed. */
+  campaignDetail(key: string, days: number) {
+    const now = Date.now();
+    const from = now - days * DAY;
+    const before = from - days * DAY;
+    const WHERE = `FROM views w JOIN visits s ON s.visit = w.visit WHERE w.at >= ?1 AND ${MARKETING} AND s.campaign = ?2`;
+    const by = (expr: string, extra = "") =>
+      this.all<Breakdown>(
+        `SELECT ${expr} AS key, COUNT(DISTINCT w.visitor) AS visitors, COUNT(DISTINCT w.visit) AS visits, COUNT(*) AS views
+           ${WHERE} ${extra} GROUP BY key ORDER BY visitors DESC LIMIT 12`,
+        from, key,
+      );
+    return {
+      totals: this.all<{ visitors: number; previous: number; visits: number; views: number }>(
+        `SELECT COUNT(DISTINCT CASE WHEN w.at >= ?3 THEN w.visitor END) AS visitors,
+                COUNT(DISTINCT CASE WHEN w.at < ?3 THEN w.visitor END) AS previous,
+                COUNT(DISTINCT CASE WHEN w.at >= ?3 THEN w.visit END) AS visits,
+                SUM(w.at >= ?3) AS views
+           ${WHERE}`,
+        before, key, from,
+      )[0]!,
+      series: this.all<{ at: number; visitors: number; visits: number }>(
+        `SELECT w.at / ${DAY} * ${DAY} AS at, COUNT(DISTINCT w.visitor) AS visitors, COUNT(DISTINCT w.visit) AS visits
+           ${WHERE} GROUP BY 1 ORDER BY 1`,
+        from, key,
+      ),
+      /** `key` is the link id, "" for visits that carried the campaign and no link. */
+      links: by("s.link"),
+      linkLastVisit: this.all<{ link: string; at: number }>(
+        `SELECT link, MAX(last_at) AS at FROM visits WHERE campaign = ? AND link != '' GROUP BY link`,
+        key,
+      ),
+      sources: by("s.source"),
+      countries: by("s.country", "AND s.country != ''"),
+      landings: by("s.entry_path"),
+    };
   }
 
   /** Visits that arrived from mail we sent, per mail kind (`utm_campaign`). */
@@ -607,7 +736,11 @@ export class TrafficDO extends DurableObject<Bindings> {
    * Visitors of one audience seen since `since`, searched and sorted: those with
    * a visit that began in it. `userIds` are accounts the search also matched.
    */
-  visitors(opts: { since: number; audience: Audience; sort: VisitorSort; q: string; userIds: string[]; limit: number; offset: number }) {
+  visitors(opts: {
+    since: number; audience: Audience; sort: VisitorSort; q: string; userIds: string[]; limit: number; offset: number;
+    /** Only those who have come through this campaign. */
+    campaign?: string;
+  }) {
     const binds: (string | number)[] = [opts.since];
     let where = `WHERE last_seen >= ? AND EXISTS (SELECT 1 FROM visits s WHERE s.visitor = visitors.visitor ${inAudience("s.entry_area", opts.audience)})`;
     if (opts.q) {
@@ -617,6 +750,9 @@ export class TrafficDO extends DurableObject<Bindings> {
       })`;
       binds.push(...VISITOR_SEARCH.map(() => `%${opts.q}%`), ...users);
     }
+    const only = forCampaign(opts.campaign);
+    where += ` ${only.visitor}`;
+    binds.push(...only.binds);
     const order = VISITOR_SORTS[opts.sort] ?? VISITOR_SORTS.recent;
     return {
       total: this.all<{ n: number }>(`SELECT COUNT(*) AS n FROM visitors ${where}`, ...binds)[0]!.n,

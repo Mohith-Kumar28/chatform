@@ -23,7 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { apiData } from "@/lib/api/payload";
 import { RANGE_DAYS, useRange } from "./range-picker";
 import { Audience } from "./analytics/audience";
-import { AnalyticsFrame, AudiencePills, RangePills, useAudience } from "./analytics/controls";
+import { AnalyticsFrame, AudiencePills, CampaignSelect, RangePills, useAudience, useCampaign } from "./analytics/controls";
 import { DataTable, type Column } from "./analytics/kit/data-table";
 import { fmt, rangeLabel, useMounted } from "./analytics/kit/format";
 import { Degraded, PageHeader, PageSkeleton, Panel, Segmented } from "./analytics/kit/ui";
@@ -121,6 +121,7 @@ export function VisitorsClient() {
               ]}
             />
             <AudiencePills />
+            <CampaignSelect />
             <RangePills fallback="30d" />
           </>
         }
@@ -140,7 +141,8 @@ export function VisitorsClient() {
 function AudienceTab() {
   const range = useRange(undefined, "30d");
   const audience = useAudience();
-  const { analytics, days, isError, refetch } = useTrafficReport(range, audience);
+  const campaign = useCampaign();
+  const { analytics, days, isError, refetch } = useTrafficReport(range, audience, campaign);
   if (isError) return <Degraded what="Audience stats" onRetry={refetch} />;
   if (!analytics) return <PageSkeleton />;
   return <Audience a={analytics} days={days} />;
@@ -165,7 +167,8 @@ function VisitorLog({ setParam }: { setParam: (patch: Record<string, string>) =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft]);
 
-  const query: GetApiAdminVisitorsParams = { range, audience, sort, offset, ...(q ? { q } : {}) };
+  const campaign = useCampaign();
+  const query: GetApiAdminVisitorsParams = { range, audience, sort, offset, ...(q ? { q } : {}), ...(campaign ? { campaign } : {}) };
   const { data, isPending, isError, refetch } = useGetApiAdminVisitors(query, {
     query: { queryKey: getGetApiAdminVisitorsQueryKey(query), placeholderData: keepPreviousData, staleTime: 30_000 },
   });

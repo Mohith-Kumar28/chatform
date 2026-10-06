@@ -73,6 +73,9 @@ export interface SignupAttribution {
   source: string;
   medium: string | null;
   campaign: string | null;
+  /** `utm_content`, and the saved campaign link the touch came through (`utm_id`). */
+  content: string | null;
+  linkId: string | null;
   landingPath: string | null;
 }
 
@@ -80,7 +83,7 @@ function utmOf(url: string | null | undefined): Record<string, string> {
   try {
     const params = new URL(url ?? "").searchParams;
     const out: Record<string, string> = {};
-    for (const key of ["source", "medium", "campaign"]) {
+    for (const key of ["source", "medium", "campaign", "content", "id"]) {
       const value = params.get(`utm_${key}`);
       if (value) out[key] = value;
     }
@@ -112,6 +115,8 @@ export function attributionOf(context: Pick<RespondentContext, "referrer" | "pag
     source: src.source.slice(0, 80),
     medium: utm.medium?.toLowerCase().slice(0, 80) ?? null,
     campaign: utm.campaign?.toLowerCase().slice(0, 150) ?? null,
+    content: utm.content?.slice(0, 150) ?? null,
+    linkId: utm.id && /^cl_[a-z0-9]{1,36}$/.test(utm.id) ? utm.id : null,
     landingPath,
   };
 }
@@ -149,8 +154,8 @@ export async function recordUserContext(
     const attribution = kind === "sign_up" ? attributionOf(context, client?.lastTouch) : null;
     await env.DB.prepare(
       `INSERT INTO user_sign_ins (id, user_id, kind, method, context_json, created_at,
-         visitor_id, channel, source, medium, campaign, landing_path)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         visitor_id, channel, source, medium, campaign, landing_path, content, link_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         `usi_${crypto.randomUUID().replace(/-/g, "")}`,
@@ -166,6 +171,8 @@ export async function recordUserContext(
         attribution?.medium ?? null,
         attribution?.campaign ?? null,
         attribution?.landingPath ?? null,
+        attribution?.content ?? null,
+        attribution?.linkId ?? null,
       )
       .run();
   } catch (err) {

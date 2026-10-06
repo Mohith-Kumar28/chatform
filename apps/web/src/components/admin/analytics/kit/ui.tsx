@@ -135,7 +135,7 @@ export function Stat({ label, value, delta, sub, spark, to, search, info, tone =
   )
   if (!to) return body
   return (
-    // Keep the time range and the audience when jumping to another admin page.
+    // Keep the time range, the audience and the campaign when jumping to another admin page.
     <Link href={`${to}?${carried(params, search)}`} className="group block h-full">
       {body}
     </Link>
@@ -144,7 +144,7 @@ export function Stat({ label, value, delta, sub, spark, to, search, info, tone =
 
 function carried(params: URLSearchParams, search?: Record<string, string | undefined>) {
   const q = new URLSearchParams()
-  for (const key of ['range', 'audience']) {
+  for (const key of ['range', 'audience', 'campaign']) {
     const v = params.get(key)
     if (v) q.set(key, v)
   }

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../env.js";
 import { readBeacon, recordTraffic } from "../lib/traffic.js";
 import { deferOn } from "../lib/translations.js";
+import { resolveLinkCode } from "./admin/campaigns.js";
 
 /**
  * `POST /p/t`: the web app's page-view beacon. See `lib/traffic.ts`.
@@ -22,4 +23,15 @@ trackRouter.post("/t", async (c) => {
     if (limit?.success !== false) deferOn(c)(recordTraffic(c.env, c.req.raw, beacon));
   }
   return c.body(null, 204);
+});
+
+/**
+ * `GET /p/l/:code`: where a campaign's short link leads. Asked by the edge
+ * worker (`apps/web/edge/edge.ts`) only when KV has no answer for the code, and
+ * it remembers a miss itself, so a made-up code is one read and then none.
+ */
+trackRouter.get("/l/:code", async (c) => {
+  const target = await resolveLinkCode(c.env, c.req.param("code").toLowerCase());
+  if (!target) return c.json({ error: { code: "not_found", message: "Not found" } }, 404);
+  return c.json({ target });
 });
