@@ -60,7 +60,7 @@ const FREE: Plan = {
     responses_ceiling_per_month: 10_000,
     ai_conversations_per_month: 200,
     ai_tokens_per_month: 500_000,
-    ai_generations_per_month: 10,
+    ai_generations_per_month: 20,
     api_requests_per_month: 0,
     // Enough to ask an assistant about your responses most days of the month.
     connector_requests_per_month: 1_000,

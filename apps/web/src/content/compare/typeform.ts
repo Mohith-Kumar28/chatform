@@ -97,7 +97,7 @@ export default defineComparison({
   switching: [
     {
       title: "Rebuild it from a sentence or a link",
-      body: "There is no Typeform importer. Describe the form in a sentence, or paste the URL of the page it lives on, and chatform drafts the questions, wording and branching (10 drafts a month free, 200 on Pro). Under about thirty questions, that is faster than an import.",
+      body: "There is no Typeform importer. Describe the form in a sentence, or paste the URL of the page it lives on, and chatform drafts the questions, wording and branching (20 drafts a month free, 200 on Pro). Under about thirty questions, that is faster than an import.",
     },
     {
       title: "Check the branches before it goes live",

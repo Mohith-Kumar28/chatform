@@ -319,7 +319,7 @@ The single source of truth, shipped as `packages/entitlements`:
 | `responses_ceiling_per_month` | 5,000 | 50,000 | 50,000 | **hard** — form closes, respondent sees the form's closed message |
 | `ai_conversations_per_month` | 200 | 2,000 | 10,000 | **degrade** → template mode |
 | `ai_tokens_per_month` | 500,000 | 6,000,000 | 30,000,000 | **degrade** → template mode |
-| `ai_generations_per_month` | 10 | 200 | 1,000 | **hard** — 402 |
+| `ai_generations_per_month` | 20 | 200 | 1,000 | **hard** — 402 |
 | `forms_count` | 100 | 1,000 | 1,000 | **hard** — 402 |
 | `blocks_per_form` | 100 | 300 | 300 | **hard** — publish rejected |
 | `workspaces_count` | 1 | 10 | 25 | **hard** |
