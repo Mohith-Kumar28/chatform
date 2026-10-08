@@ -12,9 +12,9 @@ type EmbedWindow = Window & {
  * Our own form, on our own site, through the same embed.js a customer pastes.
  *
  * Not `next/script`: it loads a given src once per app and never unloads it, so
- * the landing page's corner button would follow a visitor onto every page they
- * click through to, and `/contact`'s inline tag (same src) would never run. This
- * adds the tag on mount and tears the instance down on unmount instead.
+ * the marketing corner button would follow a visitor onto `/contact` and into
+ * the app, and `/contact`'s inline tag (same src) would never run. This adds
+ * the tag on mount and tears the instance down on unmount instead.
  *
  * A removed script tag still executes once its fetch lands, so an unmount that
  * beats the load (StrictMode's double effect, a quick click away) destroys the

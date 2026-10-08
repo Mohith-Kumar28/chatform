@@ -19,12 +19,13 @@ export const metadata: Metadata = {
  *
  * embed.js sizes its inline box with a px height on the element itself, so the
  * `!h-full` on its `.cf-inline` is what lets this box set the height instead.
+ * The border and shadow are ours too: the form's background is the page's.
  */
 export default function ContactPage() {
   return (
     <div className="h-[calc(100dvh-62px)] px-4 pt-2 pb-4">
       <h1 className="sr-only">{TITLE}</h1>
-      <div id="contact-form" className="mx-auto h-full max-w-3xl [&>.cf-inline]:!h-full" />
+      <div id="contact-form" className="[&>.cf-inline]:border-border mx-auto h-full max-w-3xl [&>.cf-inline]:!h-full [&>.cf-inline]:border [&>.cf-inline]:shadow-sm" />
       <ChatformEmbed
         form="contact-us-673e52"
         attributes={{ mode: "inline", target: "#contact-form", height: "800" }}

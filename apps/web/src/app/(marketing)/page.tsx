@@ -4,7 +4,6 @@ import { Hero } from "@/components/marketing/hero";
 import { Developers } from "@/components/marketing/developers";
 import { SwitchBand } from "@/components/marketing/switch-band";
 import { CtaBand } from "@/components/marketing/cta-band";
-import { ChatformEmbed } from "@/components/marketing/chatform-embed";
 import { Band } from "@/components/marketing/band";
 import { LogoMarquee, StatsRow, TestimonialQuote } from "@/components/marketing/social-proof";
 import { AiBuilderSection } from "@/components/marketing/ai-builder-section";
@@ -146,9 +145,6 @@ export default function LandingPage() {
       <ReviewsCarousel />
       <HomeFaq />
       <CtaBand />
-
-      {/* The contact form as a corner button; the share band's "Try the popup" opens it too. */}
-      <ChatformEmbed form="contact-us-673e52" />
     </>
   );
 }
