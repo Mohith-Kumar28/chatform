@@ -73,7 +73,7 @@ export const DEMO_SLUG = "how-you-use-forms";
  * emit anything if the document has changed and this has not, because the
  * alternative is silently rewriting a version respondents may be mid-answer on.
  */
-export const DEMO_REVISION = 26;
+export const DEMO_REVISION = 27;
 
 /**
  * Whose account it lives in, resolved to an org at apply time.
@@ -434,15 +434,8 @@ export const DEMO_FORM = buildAuthoredDoc({
      */
     allowResubmissions: true,
 
-    /*
-     * Left on, and currently inert: `TURNSTILE_SECRET_KEY` is not deployed, and
-     * `open-session.ts` skips the check entirely without it. Do not read this
-     * as protection that exists — the protection is the sign-in gate above and
-     * the IP limits on `/p`. It stays `true` rather than `false` because the
-     * day the client is wired to solve a challenge, this form should be covered
-     * without anyone having to republish it.
-     */
-    captcha: { enabled: true },
+    /* Off, like every form unless its author switches it on. The sign-in gate above is the protection. */
+    captcha: { enabled: false },
 
     /**
      * The cost ceiling, and the one number to turn down if this gets expensive.
