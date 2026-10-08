@@ -163,11 +163,11 @@ export const SettingsDoc = z.object({
     .default({ enabled: false, value: "" }),
   captcha: z
     .object({
-      enabled: z.boolean().default(true),
+      enabled: z.boolean().default(false),
       provider: z.literal("turnstile").default("turnstile"),
       mode: z.enum(["on_create", "adaptive"]).default("adaptive"),
     })
-    .default({ enabled: true, provider: "turnstile", mode: "adaptive" }),
+    .default({ enabled: false, provider: "turnstile", mode: "adaptive" }),
 
   /**
    * May the same person answer this form more than once?

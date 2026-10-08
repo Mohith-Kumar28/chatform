@@ -75,7 +75,7 @@ async function seedForm(label: string, mode: "ai" | "hybrid"): Promise<{ slug: s
     variables: [],
     hiddenFields: [],
     layout: {},
-    settings: { agent: { mode }, onComplete: { requireSubmit: false } },
+    settings: { agent: { mode }, onComplete: { requireSubmit: false }, captcha: { enabled: true } },
     theme: {},
   });
   const now = Date.now();
