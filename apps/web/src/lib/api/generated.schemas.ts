@@ -1547,6 +1547,23 @@ export type GetApiAdminLatency200TotalsPrev = {
   p99: number;
 };
 
+export type GetApiAdminLatency200TotalsAiPrev = {
+  turns: number;
+  p50: number;
+  p90: number;
+  p95: number;
+  p99: number;
+};
+
+export type GetApiAdminLatency200TotalsAi = {
+  turns: number;
+  p50: number;
+  p90: number;
+  p95: number;
+  p99: number;
+  prev: GetApiAdminLatency200TotalsAiPrev;
+};
+
 export type GetApiAdminLatency200Totals = {
   turns: number;
   p50: number;
@@ -1554,9 +1571,27 @@ export type GetApiAdminLatency200Totals = {
   p95: number;
   p99: number;
   prev: GetApiAdminLatency200TotalsPrev;
+  ai: GetApiAdminLatency200TotalsAi;
   serverP50: number;
   cacheHitRate: number;
   prevCacheHitRate: number;
+};
+
+export type GetApiAdminLatency200PartsItem = {
+  key: string;
+  ms: number;
+  turns: number;
+};
+
+export type GetApiAdminLatency200CallsItem = {
+  model: string;
+  provider: string;
+  calls: number;
+  firstP50: number;
+  firstP90: number;
+  p50: number;
+  p90: number;
+  stalls: number;
 };
 
 export type GetApiAdminLatency200BreakdownsItemRowsItem = {
@@ -1573,6 +1608,16 @@ export type GetApiAdminLatency200BreakdownsItem = {
   rows: GetApiAdminLatency200BreakdownsItemRowsItem[];
 };
 
+export type GetApiAdminLatency200SlowestItemCallsItem = {
+  model: string | null;
+  provider: string | null;
+  firstMs: number | null;
+  ms: number;
+  tools: string[];
+  id: string | null;
+  stalled: boolean;
+};
+
 export type GetApiAdminLatency200SlowestItem = {
   sessionId: string;
   formId: string | null;
@@ -1587,6 +1632,8 @@ export type GetApiAdminLatency200SlowestItem = {
   device: string | null;
   browser: string | null;
   country: string | null;
+  stalls: number;
+  calls: GetApiAdminLatency200SlowestItemCallsItem[];
 };
 
 export type GetApiAdminLatency200 = {
@@ -1594,8 +1641,41 @@ export type GetApiAdminLatency200 = {
   days: string[];
   p50Series: number[];
   p95Series: number[];
+  aiP50Series: number[];
+  parts: GetApiAdminLatency200PartsItem[];
+  calls: GetApiAdminLatency200CallsItem[];
   breakdowns: GetApiAdminLatency200BreakdownsItem[];
   slowest: GetApiAdminLatency200SlowestItem[];
+};
+
+export type GetApiAdminLatencyGenerationParams = {
+/**
+ * @pattern ^gen-[A-Za-z0-9_-]{4,80}$
+ */
+id: string;
+};
+
+export type GetApiAdminLatencyGeneration200GenerationAttemptsItem = {
+  provider: string | null;
+  status: number | null;
+  ms: number | null;
+};
+
+export type GetApiAdminLatencyGeneration200Generation = {
+  id: string;
+  model: string | null;
+  provider: string | null;
+  firstTokenMs: number | null;
+  totalMs: number | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  reasoningTokens: number | null;
+  cachedTokens: number | null;
+  attempts: GetApiAdminLatencyGeneration200GenerationAttemptsItem[];
+} | null;
+
+export type GetApiAdminLatencyGeneration200 = {
+  generation: GetApiAdminLatencyGeneration200Generation;
 };
 
 export type GetApiAdminHealthParams = {
@@ -3217,6 +3297,8 @@ export type PostPFormsBySlugSessionsBody = {
   resumeToken?: string;
   /** @maxLength 128 */
   deviceSignal?: string;
+  /** @maxLength 80 */
+  reserved?: string;
   /** @maxLength 64 */
   timezone?: string;
   /** @maxLength 8 */

@@ -152,6 +152,7 @@ const EVERY_ADMIN_ROUTE = [
   "/api/admin/revenue",
   "/api/admin/ai",
   "/api/admin/latency",
+  "/api/admin/latency/generation?id=gen-test0001",
   "/api/admin/health",
   "/api/admin/traffic",
   "/api/admin/traffic/live",

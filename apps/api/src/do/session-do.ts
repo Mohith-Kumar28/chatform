@@ -83,6 +83,11 @@ import {
   chatModel,
   interviewModel,
   interviewFollowupModel,
+  INTERVIEW_ROUTE,
+  routeAfter,
+  flippedRoute,
+  providerNameOf,
+  type OpenRouterMeta,
   extractAnswer,
   MODELS,
   INTERVIEW_PROVIDER_OPTIONS,
@@ -103,6 +108,7 @@ import {
   answerSteersFlow,
   buildAgentTools,
   settledInOneStep,
+  whyNotSettled,
   nextStepAfter,
   orderEffects,
   resumeAfterChange,
@@ -138,7 +144,7 @@ import { cancelFollowUps, recordFollowUpClick } from "../lib/followups.js";
 import type { RespondentKeySource } from "../lib/respondent-key.js";
 import type { RespondentIdentity, RespondentAuthMethod, FileDescriptor } from "@repo/form-schema";
 import { holesFor } from "../lib/d1-bindings.js";
-import { streamText, stepCountIs } from "ai";
+import { streamText, stepCountIs, type LanguageModel } from "ai";
 
 interface DoSessionMeta {
   sessionId: string;
@@ -480,6 +486,21 @@ const WRITE_STALL_MS = 5000;
  */
 const AI_TURN_TIMEOUT_MS = 45000;
 
+/**
+ * How long one model call may say nothing at all before it is cut off.
+ *
+ * The turn's own limit above is for a turn that is never coming. This one is
+ * for a provider that is merely stuck: an 18s reply was AI Studio holding the
+ * request for 12.7s before giving up, and three more waited 6 to 11s for a
+ * first token. A healthy call starts answering in about 2s (p90 about 3s), so
+ * past this it is quicker to ask the other provider than to keep waiting.
+ * Per model call, not per turn. `AI_STALL_MS` overrides it, for tests.
+ */
+const AI_STALL_MS = 6000;
+
+/** How long a provider that stalled is tried second instead of first. See `startingRoute`. */
+const SLOW_PROVIDER_MS = 60_000;
+
 /** First retry of a failed `finalize`, doubling each time. See `finalizeDurably`. */
 const FINALIZE_RETRY_MS = 30_000;
 const FINALIZE_MAX_ATTEMPTS = 10;
@@ -534,6 +555,36 @@ function writingOnly(steps: ReadonlyArray<{ toolCalls: ReadonlyArray<{ toolName:
   if (steps.length === 0) return false;
   const calls = steps.flatMap((st) => st.toolCalls);
   return calls.length > 0 && calls.every((c) => WRITING_ONLY_AFTER.has(c.toolName));
+}
+
+/** What one finished model call left behind: the slice of the SDK's step this file reads. */
+interface AgentStep {
+  text: string;
+  toolCalls: ReadonlyArray<{ toolName: string }>;
+  usage: {
+    inputTokens?: number;
+    outputTokens?: number;
+    inputTokenDetails?: { cacheReadTokens?: number; cacheWriteTokens?: number };
+    outputTokenDetails?: { reasoningTokens?: number };
+  };
+  performance?: { responseTimeMs?: number; timeToFirstOutputMs?: number };
+  response?: { id?: string; modelId?: string };
+  providerMetadata?: OpenRouterMeta;
+}
+
+/** Token counts of the steps that finished, for a turn cut short before the SDK could total them. */
+function usageOf(steps: readonly AgentStep[]): AgentStep["usage"] {
+  const sum = (pick: (u: AgentStep["usage"]) => number | undefined) =>
+    steps.reduce((n, st) => n + (pick(st.usage) ?? 0), 0);
+  return {
+    inputTokens: sum((u) => u.inputTokens),
+    outputTokens: sum((u) => u.outputTokens),
+    inputTokenDetails: {
+      cacheReadTokens: sum((u) => u.inputTokenDetails?.cacheReadTokens),
+      cacheWriteTokens: sum((u) => u.inputTokenDetails?.cacheWriteTokens),
+    },
+    outputTokenDetails: { reasoningTokens: sum((u) => u.outputTokenDetails?.reasoningTokens) },
+  };
 }
 
 /** What opening a session produced, for the request that opened it. */
@@ -683,6 +734,15 @@ export class SessionDO extends DurableObject<Bindings> {
   private pendingEffects: NonNullable<ToolOutcome["effect"]>[] = [];
   /** True when the agent already asked the next question in this same turn. */
   private suppressNextAsk = false;
+  /**
+   * The agent turn that just ran recorded the answer but did not ask what
+   * comes next, so the author's wording does. Set by `aiStreamMessage` when a
+   * Hybrid turn stops after its one call, or when the call that would have
+   * asked was cut off; read where the next question is armed.
+   */
+  private askInAuthorsWords = false;
+  /** A provider that stalled a moment ago, tried second until `until`. See `startingRoute`. */
+  private slowProvider: { slug: string; until: number } | null = null;
   /** Ending awaiting an explicit submit, when `requireSubmit` is on. */
   private pendingEndingRef: string | null = null;
   /**
@@ -3496,6 +3556,42 @@ export class SessionDO extends DurableObject<Bindings> {
     return this.aiCooldownUntil > Date.now();
   }
 
+  /**
+   * Where the next turn starts: the usual order, unless its first provider
+   * stalled in this session a moment ago. Not the failure cooldown above: a
+   * stall says one provider is slow, not that the model is down, so the
+   * session keeps its agent and only changes who is asked first. In memory
+   * only, like the cooldown.
+   */
+  private startingRoute(): readonly string[] {
+    const slow = this.slowProvider;
+    return slow && slow.until > Date.now() && INTERVIEW_ROUTE[0] === slow.slug
+      ? flippedRoute(INTERVIEW_ROUTE)
+      : INTERVIEW_ROUTE;
+  }
+
+  /** A model call was cut off for saying nothing. Counted on the turn, and remembered for the next one. */
+  private noteStall(slug: string | undefined, model: string | null, waitedMs: number): void {
+    if (slug) this.slowProvider = { slug, until: Date.now() + SLOW_PROVIDER_MS };
+    console.warn("ai_stalled", { sessionId: this.meta?.sessionId, formId: this.meta?.formId, provider: slug, waitedMs });
+    const t = this.turnTiming;
+    if (!t) return;
+    t.stalls += 1;
+    t.modelMs = (t.modelMs ?? 0) + waitedMs;
+    t.calls.push({
+      model,
+      provider: providerNameOf(slug),
+      firstMs: null,
+      ms: waitedMs,
+      tools: [],
+      in: 0,
+      cached: 0,
+      reasoning: 0,
+      id: null,
+      stalled: true,
+    });
+  }
+
   private noteAiFailure(kind: string, failure: AiFailure): void {
     this.aiCooldownUntil = Date.now() + AI_FAILURE_COOLDOWN_MS;
     console.warn("ai_fallback", {
@@ -3526,6 +3622,13 @@ export class SessionDO extends DurableObject<Bindings> {
       announced?: NextStep | null;
       /** What the respondent typed, when this turn is a reply to it. */
       userText?: string;
+      /**
+       * The turn only phrases something: there is no reply of theirs to read
+       * and nothing to decide. Those run on the faster model from the first
+       * step. A typed reply never does: side by side, that model recorded most
+       * replies that did not answer the question, where `interview` asked again.
+       */
+      writer?: boolean;
     } = {},
   ): Promise<boolean> {
     if (!this.aiEnabled() || !this.doc || !this.meta) return false;
@@ -3538,8 +3641,11 @@ export class SessionDO extends DurableObject<Bindings> {
     if (!opts.review && !block) return false;
 
     const started = Date.now();
-    const { model, id: modelId } = interviewModel(this.env, this.doc.settings.agent.model);
-    const followupModel = interviewFollowupModel(this.env);
+    this.askInAuthorsWords = false;
+    const modelId = opts.writer ? MODELS.interviewFollowup : MODELS.interview;
+    const modelOn = (route: readonly string[], lite: boolean): LanguageModel =>
+      lite ? interviewFollowupModel(this.env, route) : interviewModel(this.env, undefined, route).model;
+    const stallMs = Number(this.env.AI_STALL_MS) || AI_STALL_MS;
 
     /**
      * Declared out here so the catch can close a bubble the try opened.
@@ -3564,10 +3670,10 @@ export class SessionDO extends DurableObject<Bindings> {
 
     try {
       const answered = Object.keys(this.state.answers).length;
-      const context = await this.conversationContext();
       const outcomes: ToolOutcome[] = [];
       const formId = this.meta?.formId ?? "";
-      const hasKnowledge = await this.resolveHasKnowledge(formId);
+      // Together: neither needs the other, and the respondent waits on both.
+      const [context, hasKnowledge] = await Promise.all([this.conversationContext(), this.resolveHasKnowledge(formId)]);
       const tools = buildAgentTools(
         {
           doc: this.doc,
@@ -3593,126 +3699,246 @@ export class SessionDO extends DurableObject<Bindings> {
       );
 
       if (this.turnTiming) this.turnTiming.agent = true;
-      const result = streamText({
-        model,
-        /**
-         * `system` is the stable prefix and nothing else. The turn's own
-         * context goes in the user message, below.
-         *
-         * This used to be `prefix + "\n\n" + suffix`, with a comment saying the
-         * prefix came first so the provider's cache could serve it. The intent
-         * was right and the arrangement defeated it: the suffix carries the
-         * running transcript, so the system message changed on every turn and
-         * the identical leading run was only the prefix itself — about 750
-         * tokens, under Gemini's 1,024-token minimum for implicit caching. So
-         * nothing was ever cached. `cacheReadTokens` came back 0 on every one
-         * of the 5,700 turns this form has taken, which is why a 12,000-token
-         * budget bought five answers.
-         *
-         * Split this way the system message is byte-identical for a whole
-         * session, and together with the tool declarations the stable head
-         * clears the threshold. `buildStablePrefix` must stay a pure function
-         * of the document for this to hold — see its own note.
-         */
-        system: buildStablePrefix(this.doc, { hasKnowledge }),
-        prompt: `${
-          block
-            ? buildTurnSuffix(this.doc, block, answered, { ...context, turnCount: this.turnCount })
-            : buildReviewSuffix(context)
-        }\n\n${objective}`,
-        tools,
-        // A tool call ends a step. Without this the model looks something up
-        // (or records an answer) and the turn ends having said nothing, so the
-        // respondent sees the deterministic fallback instead of a reply.
-        //
-        // Four covered look-up → answer → record → ask, which was enough while
-        // the whole knowledge base also sat in the prompt and the look-up was
-        // really a pointer. Retrieval can miss and be worth rephrasing once, and
-        // a turn that spends its last step searching says nothing at all — so
-        // six, which buys exactly one retry without letting a turn wander.
-        // Once the first step has only recorded, skipped or clarified, what is
-        // left is writing the next sentence, on the faster model (see
-        // MODELS.interviewFollowup). After a lookup or a changed answer the main
-        // model keeps the turn: that reply needs the judgement.
-        prepareStep: ({ steps }) => (writingOnly(steps) ? { model: followupModel } : undefined),
-        stopWhen: [
-          stepCountIs(6),
-          ({ steps }) =>
-            settledInOneStep(this.doc!, this.state, block ?? null, steps, outcomes, {
-              ...opts,
-              editing: !!block && this.editingRef === block.ref,
-              walked: this.walkedSet(),
-            }),
-        ],
-        // The author's setting governs the visible reply; reasoning gets its
-        // own headroom on top so it can never starve the answer.
-        maxOutputTokens: this.doc.settings.agent.responseMaxTokens + REASONING_HEADROOM_TOKENS,
-        // Which feature, whose org, which conversation: see `telemetry`.
-        providerOptions: telemetry(this.env, INTERVIEW_PROVIDER_OPTIONS, {
-          kind: "interview_turn",
-          organizationId: this.meta.organizationId,
-          sessionId: this.meta.sessionId,
-          formId: this.meta.formId,
-          source: "chat",
-        }),
-        // A turn that never returns is worse than a turn phrased by template.
-        // See AI_TURN_TIMEOUT_MS.
-        abortSignal: AbortSignal.timeout(AI_TURN_TIMEOUT_MS),
-        // The SDK's default is two retries with backoff, each up to the timeout
-        // above, while the respondent watches the typing dots. One is enough to
-        // ride out a blip; past that the template is the better answer.
-        maxRetries: 1,
-      });
+      const prepMs = Date.now() - started;
+      const doc = this.doc;
+      const meta = this.meta;
+      const settle = {
+        ...opts,
+        editing: !!block && this.editingRef === block.ref,
+        walked: this.walkedSet(),
+      };
+      // Hybrid asks its questions in the author's words, so an accepted answer
+      // ends the turn there. See `SettleOptions.authorAsksNext`.
+      const authorAsksNext = this.mode() === "hybrid";
 
       // Open the bubble lazily, on the first token. A turn that spends itself
       // on tool calls and says nothing used to leave an empty bubble in the
       // transcript, immediately followed by the deterministic fallback.
       let text = "";
       let firstTokenMs: number | null = null;
-      /*
-       * The full stream rather than `textStream`, which is the same text with
-       * the step boundaries thrown away: an acknowledgement written before a
-       * tool call and the question written after it ran together as
-       * "Got it.What is your email?". Only text is read, exactly as
-       * `textStream` does; everything else is left to `result.steps`.
+
+      /**
+       * One pass at the turn, starting on `route`.
+       *
+       * Returns instead of throwing when the stream was cut, because what
+       * happens next depends on where: before anything came back the turn is
+       * simply asked again elsewhere, and after a step had finished that step
+       * is kept. `done` is collected as steps end for exactly that case, where
+       * `result.steps` never resolves.
        */
-      let newStep = false;
-      for await (const part of result.fullStream) {
-        if (part.type === "start-step") {
-          newStep = text.trim().length > 0;
-          continue;
-        }
-        if (part.type === "error") {
-          streamError ??= part.error;
-          continue;
-        }
-        if (part.type !== "text-delta" || !part.text) continue;
-        let delta = part.text;
-        if (newStep) {
-          newStep = false;
-          delta = `\n\n${delta.trimStart()}`;
-          if (delta === "\n\n") {
-            newStep = true;
-            continue;
+      const attempt = async (route: readonly string[]) => {
+        outcomes.length = 0;
+        const done: AgentStep[] = [];
+        let cut: unknown = null;
+        /*
+         * The stall timer: armed while a model call is owed its first piece of
+         * output, and let go the moment one arrives. Ours and not the SDK's
+         * `timeout.firstChunkMs`, which only starts counting once the response
+         * headers are in, and so never fires on a request that is not answered
+         * at all.
+         */
+        const stall = new AbortController();
+        let stallTimer: ReturnType<typeof setTimeout> | null = null;
+        const expectOutput = () => {
+          clearTimeout(stallTimer);
+          stallTimer = setTimeout(() => stall.abort(new Error("ai_stalled")), stallMs);
+        };
+        expectOutput();
+        const result = streamText({
+          model: modelOn(route, !!opts.writer),
+          /**
+           * `system` is the stable prefix and nothing else. The turn's own
+           * context goes in the user message, below.
+           *
+           * This used to be `prefix + "\n\n" + suffix`, with a comment saying the
+           * prefix came first so the provider's cache could serve it. The intent
+           * was right and the arrangement defeated it: the suffix carries the
+           * running transcript, so the system message changed on every turn and
+           * the identical leading run was only the prefix itself — about 750
+           * tokens, under Gemini's 1,024-token minimum for implicit caching. So
+           * nothing was ever cached. `cacheReadTokens` came back 0 on every one
+           * of the 5,700 turns this form has taken, which is why a 12,000-token
+           * budget bought five answers.
+           *
+           * Split this way the system message is byte-identical for a whole
+           * session, and together with the tool declarations the stable head
+           * clears the threshold. `buildStablePrefix` must stay a pure function
+           * of the document for this to hold — see its own note.
+           */
+          system: buildStablePrefix(doc, { hasKnowledge }),
+          prompt: `${
+            block
+              ? buildTurnSuffix(doc, block, answered, { ...context, turnCount: this.turnCount })
+              : buildReviewSuffix(context)
+          }\n\n${objective}`,
+          tools,
+          // A tool call ends a step. Without this the model looks something up
+          // (or records an answer) and the turn ends having said nothing, so the
+          // respondent sees the deterministic fallback instead of a reply.
+          //
+          // Four covered look-up → answer → record → ask, which was enough while
+          // the whole knowledge base also sat in the prompt and the look-up was
+          // really a pointer. Retrieval can miss and be worth rephrasing once, and
+          // a turn that spends its last step searching says nothing at all — so
+          // six, which buys exactly one retry without letting a turn wander.
+          // Once the first step has only recorded, skipped or clarified, what is
+          // left is writing the next sentence, on the faster model (see
+          // MODELS.interviewFollowup). After a lookup or a changed answer the main
+          // model keeps the turn: that reply needs the judgement.
+          //
+          // Every later step also goes to whoever answered the first one, on
+          // either model: Gemini refuses a tool call signed by the other
+          // provider. See `routeAfter`.
+          prepareStep: ({ steps }) =>
+            steps.length === 0
+              ? undefined
+              : {
+                  model: modelOn(
+                    routeAfter((steps[0] as AgentStep).providerMetadata?.openrouter?.provider, route),
+                    !!opts.writer || writingOnly(steps),
+                  ),
+                },
+          stopWhen: [
+            stepCountIs(6),
+            ({ steps }) => settledInOneStep(this.doc!, this.state, block ?? null, steps, outcomes, { ...settle, authorAsksNext }),
+          ],
+          onStepEnd: (step) => {
+            done.push(step as AgentStep);
+          },
+          // The author's setting governs the visible reply; reasoning gets its
+          // own headroom on top so it can never starve the answer.
+          maxOutputTokens: doc.settings.agent.responseMaxTokens + REASONING_HEADROOM_TOKENS,
+          // Which feature, whose org, which conversation: see `telemetry`.
+          providerOptions: telemetry(this.env, INTERVIEW_PROVIDER_OPTIONS, {
+            kind: "interview_turn",
+            organizationId: meta.organizationId,
+            sessionId: meta.sessionId,
+            formId: meta.formId,
+            source: "chat",
+          }),
+          // A turn that never returns is worse than a turn phrased by template.
+          // See AI_TURN_TIMEOUT_MS, and AI_STALL_MS for the shorter one.
+          abortSignal: AbortSignal.any([AbortSignal.timeout(AI_TURN_TIMEOUT_MS), stall.signal]),
+          // The SDK's default is two retries with backoff, each up to the timeout
+          // above, while the respondent watches the typing dots. One is enough to
+          // ride out a blip; past that the template is the better answer.
+          maxRetries: 1,
+        });
+
+        /*
+         * The full stream rather than `textStream`, which is the same text with
+         * the step boundaries thrown away: an acknowledgement written before a
+         * tool call and the question written after it ran together as
+         * "Got it.What is your email?". Only text is read, exactly as
+         * `textStream` does; everything else is left to `result.steps`.
+         */
+        let newStep = false;
+        try {
+          for await (const part of result.fullStream) {
+            if (part.type === "start-step") {
+              newStep = text.trim().length > 0;
+              continue;
+            }
+            if (part.type === "error") {
+              streamError ??= part.error;
+              continue;
+            }
+            if (part.type === "abort") {
+              cut ??= part.reason ?? "aborted";
+              continue;
+            }
+            // The step is answering: a tool call counts as much as a word.
+            if (
+              part.type === "text-delta" ||
+              part.type === "reasoning-delta" ||
+              part.type === "tool-input-start" ||
+              part.type === "tool-call"
+            ) {
+              clearTimeout(stallTimer);
+            }
+            // Its tools have run by now, so the next call, if any, starts here.
+            if (part.type === "finish-step") expectOutput();
+            if (part.type !== "text-delta" || !part.text) continue;
+            let delta = part.text;
+            if (newStep) {
+              newStep = false;
+              delta = `\n\n${delta.trimStart()}`;
+              if (delta === "\n\n") {
+                newStep = true;
+                continue;
+              }
+            }
+            if (!opened) {
+              opened = true;
+              firstTokenMs = Date.now() - started;
+              await this.emit("message_start", { messageId, role: "assistant" });
+            }
+            text += delta;
+            await this.emit("token", { messageId, delta });
           }
+        } catch (err) {
+          cut ??= err;
+        } finally {
+          clearTimeout(stallTimer);
         }
-        if (!opened) {
-          opened = true;
-          firstTokenMs = Date.now() - started;
-          await this.emit("message_start", { messageId, role: "assistant" });
-        }
-        text += delta;
-        await this.emit("token", { messageId, delta });
+        return { result, done, cut, stalled: stall.signal.aborted, route };
+      };
+
+      let pass = await attempt(this.startingRoute());
+      /*
+       * The first call said nothing. Nothing has been shown and nothing was
+       * decided, so the whole turn is asked again, starting with the other
+       * provider. Once: if that one is silent too, the template is quicker.
+       */
+      if (pass.stalled && pass.done.length === 0 && !opened) {
+        this.noteStall(pass.route[0], modelId, stallMs);
+        streamError = null;
+        pass = await attempt(flippedRoute(pass.route));
+      }
+      if (pass.stalled && pass.done.length === 0) {
+        this.noteStall(pass.route[0], modelId, stallMs);
+        throw new Error("ai_stalled: no provider answered in time");
+      }
+      if (pass.cut && !pass.stalled) throw pass.cut;
+      /*
+       * A later call stalled. What the first one decided stands (the answer is
+       * recorded, the lookup is done); only the sentence that call would have
+       * written is missing, and the author's own wording covers it.
+       */
+      const late = pass.stalled;
+      if (late) {
+        const first = pass.done[0]?.providerMetadata?.openrouter?.provider;
+        this.noteStall(routeAfter(first, pass.route)[0], null, stallMs);
+        streamError = null;
       }
       if (opened) await this.emit("message_end", { messageId });
 
-      const usage = await result.usage;
+      const usage: AgentStep["usage"] | undefined = late ? usageOf(pass.done) : await pass.result.usage;
       // Tokens from the SDK, cost from OpenRouter. This turn runs up to six
       // steps and `result.providerMetadata` would carry only the last one, so
       // `reportedUsage` is given the whole step list to add up — reading the
       // top-level value instead under-reports a two-step call by more than half.
-      const steps = await result.steps;
-      turnUsage = reportedUsage({ usage, steps, response: await result.response });
+      const steps: readonly AgentStep[] = late ? pass.done : await pass.result.steps;
+      turnUsage = reportedUsage({
+        usage,
+        steps,
+        response: late ? pass.done[pass.done.length - 1]?.response : await pass.result.response,
+      });
+      // Why this turn could not end on its first call, judged the way the stop
+      // condition judged it. Read back on the latency page.
+      const firstStep = steps.slice(0, 1);
+      const why = whyNotSettled(this.doc, this.state, block ?? null, firstStep, outcomes, { ...settle, authorAsksNext });
+      /*
+       * The turn ended on its one call because the author asks next, and the
+       * model has not already asked: the caller prints the question as written.
+       * Also after a cut, where the call that would have asked never spoke.
+       */
+      this.askInAuthorsWords =
+        late ||
+        (authorAsksNext &&
+          steps.length === 1 &&
+          why === null &&
+          whyNotSettled(this.doc, this.state, block ?? null, firstStep, outcomes, settle) !== null);
       if (this.turnTiming) {
         const t = this.turnTiming;
         t.agent = true;
@@ -3720,6 +3946,24 @@ export class SessionDO extends DurableObject<Bindings> {
         t.tools.push(...steps.flatMap((st) => st.toolCalls.map((c) => c.toolName)));
         t.inputTokens += usage?.inputTokens ?? 0;
         t.cacheReadTokens += usage?.inputTokenDetails?.cacheReadTokens ?? 0;
+        t.prepMs ??= prepMs;
+        if (steps.length > 1) t.secondStep ??= why ?? "unknown";
+        // In the order they ran: a stalled call was noted before these.
+        for (const st of steps) {
+          const ms = Math.round(st.performance?.responseTimeMs ?? 0);
+          t.modelMs = (t.modelMs ?? 0) + ms;
+          t.calls.push({
+            model: st.response?.modelId ?? null,
+            provider: st.providerMetadata?.openrouter?.provider ?? null,
+            firstMs: st.performance?.timeToFirstOutputMs == null ? null : Math.round(st.performance.timeToFirstOutputMs),
+            ms,
+            tools: st.toolCalls.map((c) => c.toolName),
+            in: st.usage.inputTokens ?? 0,
+            cached: st.usage.inputTokenDetails?.cacheReadTokens ?? 0,
+            reasoning: st.usage.outputTokenDetails?.reasoningTokens ?? 0,
+            id: st.response?.id ?? null,
+          });
+        }
       }
       // How long the respondent waited for the first word, and how many model
       // round trips the turn took to get there. The number to watch for speed.
@@ -3729,6 +3973,9 @@ export class SessionDO extends DurableObject<Bindings> {
         totalMs: Date.now() - started,
         steps: steps.length,
         tools: steps.flatMap((st) => st.toolCalls.map((c) => c.toolName)),
+        providers: steps.map((st) => st.providerMetadata?.openrouter?.provider ?? null),
+        stalls: this.turnTiming?.stalls ?? 0,
+        secondStep: steps.length > 1 ? (why ?? "unknown") : null,
       });
       const inTok = usage?.inputTokens ?? 0;
       const outTok = usage?.outputTokens ?? 0;
@@ -3858,6 +4105,7 @@ export class SessionDO extends DurableObject<Bindings> {
       // Metered like everything else, but never charged to the phrasing
       // allowance — see `comprehensionEnabled`.
       this.sessionTokensUsed += out.tokens;
+      if (this.turnTiming) this.turnTiming.extractMs = (this.turnTiming.extractMs ?? 0) + (Date.now() - started);
       this.ctx.waitUntil(this.logAiUsage("extraction", out.usage, MODELS.extraction, Date.now() - started));
       if (!out.confident || out.value === null || out.value === undefined) return null;
       return out.value;
@@ -4494,6 +4742,7 @@ export class SessionDO extends DurableObject<Bindings> {
         this.suppressNextAsk = true;
         await this.applyPendingEffects();
         this.suppressNextAsk = false;
+        this.askInAuthorsWords = false;
         if (this.meta?.currentRef === before) await this.emitQuestion();
         return { accepted: true };
       }
@@ -4703,7 +4952,9 @@ export class SessionDO extends DurableObject<Bindings> {
       // retryHint is folded in by buildRetryObjective, and so is what a
       // half-good contact card already banked — without which the agent asks
       // for the whole card again, having just been given three quarters of it.
-      const ok = await this.aiStreamMessage(buildRetryObjective(block, count, hint, this.keptFields(block)));
+      const ok = await this.aiStreamMessage(buildRetryObjective(block, count, hint, this.keptFields(block)), {
+        writer: true,
+      });
       if (ok) {
         await this.applyPendingEffects();
         // Same rule on a retry: the question text is never reworded. Only for
@@ -5154,6 +5405,12 @@ export class SessionDO extends DurableObject<Bindings> {
       // The agent asked this question already, as part of the turn that
       // recorded the previous answer. Just arm the composer.
       if (this.suppressNextAsk && !verbatim) {
+        // Unless it did not: a Hybrid turn that stopped at recording the answer,
+        // or one whose asking call was cut off. See `askInAuthorsWords`.
+        if (this.askInAuthorsWords) {
+          this.askInAuthorsWords = false;
+          await this.emitMessage(questionText(next.block));
+        }
         await this.emitQuestion();
         await this.persistMeta();
         return;
@@ -5210,6 +5467,7 @@ export class SessionDO extends DurableObject<Bindings> {
             : `The respondent just answered "${answeredBlock?.title ?? fromRef}" with: ${this.lastAnswerDisplay ?? "(see conversation)"}. ` +
                 `Acknowledge it naturally in a few words (reference what they actually said), then ask the question with ref=${next.block.ref}, which is "${next.block.title}" (${next.block.type}), in your own words. Ask ONLY that question.` +
                 (affordance ? ` ${affordance}` : ""),
+          { writer: true },
         );
         if (aiOk) await this.applyPendingEffects();
       } catch (err) {
@@ -5222,7 +5480,9 @@ export class SessionDO extends DurableObject<Bindings> {
       // Verbatim mode: the FSM emits the question itself, so the exact wording
       // is guaranteed rather than merely requested of the model. Also covers
       // the fallback when the AI turn failed entirely.
-      if (verbatim || !aiOk) await this.emitMessage(questionText(next.block));
+      // And a turn whose asking call was cut off before it wrote the question.
+      if (verbatim || !aiOk || this.askInAuthorsWords) await this.emitMessage(questionText(next.block));
+      this.askInAuthorsWords = false;
 
       await this.emitQuestion();
       await this.persistMeta();
@@ -5951,6 +6211,7 @@ export class SessionDO extends DurableObject<Bindings> {
       } else {
         const ok = await this.aiStreamMessage(
           `The respondent wants to change their answer to "${target.title}". Ask it again in one short sentence. Do not comment on the change.`,
+          { writer: true },
         );
         if (ok) await this.applyPendingEffects();
         else await this.emitMessage(questionText(target));

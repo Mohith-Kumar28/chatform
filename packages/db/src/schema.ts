@@ -1190,6 +1190,18 @@ export const chatTurnTimings = sqliteTable(
     os: text("os"),
     country: text("country"),
     clientMs: integer("client_ms"),
+    // Where an agent turn's time went. See `0065_turn_timing_steps.sql`.
+    prepMs: integer("prep_ms"),
+    modelMs: integer("model_ms"),
+    extractMs: integer("extract_ms"),
+    /** Who answered the turn's first model call. */
+    model: text("model"),
+    provider: text("provider"),
+    /** Why a second model call was needed; null when one was enough. See `whyNotSettled`. */
+    secondStep: text("second_step"),
+    stalls: integer("stalls"),
+    /** One entry per model call. See `TurnStep` in `lib/turn-timings.ts`. */
+    stepsJson: text("steps_json"),
   },
   (t) => [primaryKey({ columns: [t.sessionId, t.turnId] }), index("idx_turn_timings_created").on(t.createdAt)],
 );

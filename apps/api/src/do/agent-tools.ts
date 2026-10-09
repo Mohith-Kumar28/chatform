@@ -142,33 +142,71 @@ export function settledInOneStep(
   block: Block | null,
   steps: ReadonlyArray<{ text: string; toolCalls: ReadonlyArray<{ toolName: string }> }>,
   outcomes: ToolOutcome[],
-  opts: { announced?: NextStep | null; userText?: string; editing?: boolean; walked?: ReadonlySet<string> | null },
+  opts: SettleOptions,
 ): boolean {
-  if (steps.length !== 1 || !block) return false;
+  return whyNotSettled(doc, state, block, steps, outcomes, opts) === null;
+}
+
+export interface SettleOptions {
+  announced?: NextStep | null;
+  userText?: string;
+  editing?: boolean;
+  walked?: ReadonlySet<string> | null;
+  /**
+   * The form asks its next question in the author's own words whenever the
+   * agent has not (Hybrid). Then an accepted answer needs nothing more from
+   * the model: a second round trip would only reword a question that is about
+   * to be shown as written.
+   */
+  authorAsksNext?: boolean;
+}
+
+/**
+ * Why a turn needs a second model round trip, or null when its first step was
+ * the whole of it. The code is stored with the turn's timing, so the latency
+ * page can say which of these is costing the second call.
+ */
+export function whyNotSettled(
+  doc: FormDoc,
+  state: EvalState,
+  block: Block | null,
+  steps: ReadonlyArray<{ text: string; toolCalls: ReadonlyArray<{ toolName: string }> }>,
+  outcomes: ToolOutcome[],
+  opts: SettleOptions,
+): string | null {
+  if (steps.length !== 1) return "later_step";
+  if (!block) return "review";
   const step = steps[0]!;
+  if (step.toolCalls.length === 0) return "no_tool";
+  if (step.toolCalls.length > 1) return "several_tools";
   // A follow-up already written beside its clarify call is the whole reply: the
   // tool result would only say "ask again", and it has been asked.
-  if (step.toolCalls.length === 1 && step.toolCalls[0]!.toolName === "clarify") {
-    return !!outcomes.find((o) => o.name === "clarify")?.ok && step.text.includes("?");
+  if (step.toolCalls[0]!.toolName === "clarify") {
+    if (!outcomes.find((o) => o.name === "clarify")?.ok) return "rejected";
+    return step.text.includes("?") ? null : "no_text";
   }
-  if (step.toolCalls.length !== 1 || step.toolCalls[0]!.toolName !== "record_answer") return false;
+  if (step.toolCalls[0]!.toolName !== "record_answer") return "other_tool";
   const recorded = outcomes.find((o) => o.name === "record_answer");
-  if (!recorded?.ok || recorded.effect?.kind !== "record") return false;
+  if (!recorded?.ok || recorded.effect?.kind !== "record") return "rejected";
   const next = nextStepAfter(doc, block, state, recorded.effect.value, { resume: opts.editing, walked: opts.walked });
-  if (!next) return false;
+  if (!next) return "flow_refused";
+  const asked = opts.userText !== undefined && looksLikeQuestion(opts.userText);
+  if (opts.authorAsksNext && next.kind === "block" && !asked) return null;
   const said = step.text.trim();
-  if (doc.settings.agent.rephraseQuestions === false) return said.length > 0;
+  if (doc.settings.agent.rephraseQuestions === false) return said.length > 0 ? null : "no_text";
+  if (asked) return "asked_question";
   const told = opts.announced;
-  if (!told || (opts.userText !== undefined && looksLikeQuestion(opts.userText))) return false;
+  if (!told) return "not_announced";
   if (next.kind === "ending") {
-    if (told.kind !== "ending") return false;
+    if (told.kind !== "ending") return "route_changed";
     // The review step needs its "check and send" line; a plain ending has its own message.
     const review = !next.screenOut && doc.settings.onComplete.requireSubmit;
-    return said.length > 0 || !review;
+    return said.length > 0 || !review ? null : "no_text";
   }
+  if (told.kind !== "block" || told.ref !== next.ref) return "route_changed";
   // Asked, not merely acknowledged. An imperative title without a "?" falls back
   // to the second step, whose tool result says to add nothing if it was asked.
-  return told.kind === "block" && told.ref === next.ref && said.includes("?");
+  return said.includes("?") ? null : "no_text";
 }
 
 /**

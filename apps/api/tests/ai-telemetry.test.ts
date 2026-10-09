@@ -3,7 +3,18 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod";
-import { MODELS, NO_USAGE, addUsage, reportedUsage, telemetry, type TokenUsage } from "../src/lib/ai.js";
+import {
+  INTERVIEW_PROVIDER_OPTIONS,
+  INTERVIEW_ROUTE,
+  MODELS,
+  NO_USAGE,
+  addUsage,
+  flippedRoute,
+  reportedUsage,
+  routeAfter,
+  telemetry,
+  type TokenUsage,
+} from "../src/lib/ai.js";
 import { RATES_KV_KEY, forgetRates, splitCost, type ModelRates } from "../src/lib/ai-cost-split.js";
 import { logAiGeneration } from "../src/lib/ai-usage.js";
 import type { Bindings } from "../src/env.js";
@@ -92,6 +103,22 @@ describe("telemetry", () => {
     });
     expect(body.user).toBe("org_abc");
     expect(body.trace).toMatchObject({ trace_id: "t_9", feature: "clarify", environment: "production" });
+  });
+});
+
+describe("the interview route", () => {
+  it("starts with AI Studio, and moves whoever answered a turn's first call to the front", () => {
+    expect(INTERVIEW_ROUTE).toEqual(["google-ai-studio", "google-vertex"]);
+    expect(routeAfter("Google")).toEqual(["google-vertex", "google-ai-studio"]);
+    expect(routeAfter("Google AI Studio")).toEqual(["google-ai-studio", "google-vertex"]);
+    // The backup model's vendor signs nothing of Gemini's, so the order stands.
+    expect(routeAfter("Anthropic")).toEqual(INTERVIEW_ROUTE);
+    expect(routeAfter(undefined)).toEqual(INTERVIEW_ROUTE);
+    expect(flippedRoute()).toEqual(["google-vertex", "google-ai-studio"]);
+  });
+
+  it("is not set per call, where it would override the order a later step needs", () => {
+    expect(INTERVIEW_PROVIDER_OPTIONS.openrouter).not.toHaveProperty("provider");
   });
 });
 

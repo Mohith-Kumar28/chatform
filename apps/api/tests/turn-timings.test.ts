@@ -150,4 +150,49 @@ describe("/api/admin/latency", () => {
     expect(body.p50Series).toHaveLength(7);
     expect(body.breakdowns.find((b) => b.dimension === "Device")?.rows[0]?.key).toBe("mobile");
   });
+  it("splits an AI reply into its parts and its model calls", async () => {
+    const calls = [
+      { model: "google/gemini-3.7-flash", provider: "Google AI Studio", firstMs: null, ms: 6000, tools: [], id: null, stalled: true },
+      { model: "google/gemini-3.7-flash", provider: "Google", firstMs: 1800, ms: 2000, tools: ["record_answer"], id: "gen-a" },
+      { model: "google/gemini-3.1-flash-lite", provider: "Google", firstMs: 700, ms: 900, tools: [], id: "gen-b" },
+    ];
+    await env.DB.prepare(
+      `INSERT INTO chat_turn_timings
+         (session_id, turn_id, organization_id, form_id, created_at, is_test, kind, mode, path, is_final, gate_ms,
+          first_word_ms, next_card_ms, total_ms, steps, tools, client_ms, prep_ms, model_ms, model, provider,
+          second_step, stalls, steps_json)
+       VALUES ('ses_ai', 'turn_ai_0001', 'org_x', NULL, ?1, 0, 'answer', 'ai', 'agent', 0, 300,
+          9000, 9200, 9200, 2, 'record_answer', 9500, 40, 8900, 'google/gemini-3.7-flash', 'Google AI Studio',
+          'no_text', 1, ?2)`,
+    )
+      .bind(Date.now(), JSON.stringify(calls))
+      .run();
+
+    const res = await fetchApi("/api/admin/latency?range=7d", { headers: { cookie: admin.cookie } });
+    const body = (await res.json()) as {
+      totals: { ai: { turns: number; p50: number } };
+      aiP50Series: number[];
+      parts: { key: string; ms: number; turns: number }[];
+      calls: { model: string; provider: string; calls: number; firstP50: number; p50: number; stalls: number }[];
+      breakdowns: { dimension: string; rows: { key: string }[] }[];
+      slowest: { sessionId: string; stalls: number; calls: { id: string | null; stalled: boolean }[] }[];
+    };
+    // The browser's wait, as everywhere on this page.
+    expect(body.totals.ai).toMatchObject({ turns: 1, p50: 9500 });
+    expect(body.aiP50Series.at(-1)).toBe(9500);
+    const part = Object.fromEntries(body.parts.map((p) => [p.key, p.ms]));
+    // The stalled call was the turn's first, so its wait is the first call's time.
+    expect(part).toMatchObject({ gate: 300, prep: 40, first_call: 6000, later_calls: 2900, network: 500 });
+    expect(body.calls.find((c) => c.provider === "Google AI Studio")).toMatchObject({ calls: 1, stalls: 1, p50: 0 });
+    expect(body.calls.find((c) => c.model === "google/gemini-3.1-flash-lite")).toMatchObject({ calls: 1, firstP50: 700, p50: 900 });
+    expect(body.breakdowns.find((b) => b.dimension === "Why a second call")?.rows.map((r) => r.key)).toContain("no_text");
+    expect(body.breakdowns.find((b) => b.dimension === "Provider")?.rows.map((r) => r.key)).toContain("Google AI Studio");
+    const slow = body.slowest.find((r) => r.sessionId === "ses_ai")!;
+    expect(slow.stalls).toBe(1);
+    expect(slow.calls.map((c) => [c.id, c.stalled])).toEqual([
+      [null, true],
+      ["gen-a", false],
+      ["gen-b", false],
+    ]);
+  });
 });

@@ -128,6 +128,8 @@ export interface Bindings {
 
   BETTER_AUTH_SECRET: string;
   OPENROUTER_API_KEY?: string;
+  /** Overrides how long a silent model call is given before it is cut off. Tests only. */
+  AI_STALL_MS?: string;
   ANTHROPIC_API_KEY?: string;
   AI_GATEWAY_ACCOUNT_ID?: string;
   /**

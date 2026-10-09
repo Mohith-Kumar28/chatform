@@ -15,6 +15,7 @@
     "bench:edit": "tsx scripts/bench-edit.ts",
     "bench:settings": "tsx scripts/bench-settings.ts",
     "bench:create-settings": "tsx scripts/bench-create-settings.ts",
+    "bench:interview": "tsx scripts/bench-interview.ts",
     "eval:gate": "tsx scripts/eval-answer-gate.ts",
     "eval:route": "tsx scripts/eval-edit-route.ts",
     "test:watch": "vitest",

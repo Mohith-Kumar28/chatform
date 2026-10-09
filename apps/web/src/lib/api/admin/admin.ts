@@ -59,6 +59,8 @@ import type {
   GetApiAdminHealth200,
   GetApiAdminHealthParams,
   GetApiAdminLatency200,
+  GetApiAdminLatencyGeneration200,
+  GetApiAdminLatencyGenerationParams,
   GetApiAdminLatencyParams,
   GetApiAdminLive200,
   GetApiAdminMail200,
@@ -3839,6 +3841,108 @@ export function useGetApiAdminLatency<TData = Awaited<ReturnType<typeof getApiAd
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetApiAdminLatencyQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getApiAdminLatencyGenerationResponse200 = {
+  data: GetApiAdminLatencyGeneration200
+  status: 200
+}
+
+export type getApiAdminLatencyGenerationResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getApiAdminLatencyGenerationResponseSuccess = (getApiAdminLatencyGenerationResponse200) & {
+  headers: Headers;
+};
+export type getApiAdminLatencyGenerationResponseError = (getApiAdminLatencyGenerationResponse404) & {
+  headers: Headers;
+};
+
+export type getApiAdminLatencyGenerationResponse = (getApiAdminLatencyGenerationResponseSuccess | getApiAdminLatencyGenerationResponseError)
+
+export const getGetApiAdminLatencyGenerationUrl = (params: GetApiAdminLatencyGenerationParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/latency/generation?${stringifiedParams}` : `/api/admin/latency/generation`
+}
+
+/**
+ * @summary OpenRouter's record of one model call: the providers it tried and how each answered
+ */
+export const getApiAdminLatencyGeneration = async (params: GetApiAdminLatencyGenerationParams, options?: Parameters<typeof customFetch>[1]): Promise<getApiAdminLatencyGenerationResponse> => {
+
+  return customFetch<getApiAdminLatencyGenerationResponse>(getGetApiAdminLatencyGenerationUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetApiAdminLatencyGenerationQueryKey = (params?: GetApiAdminLatencyGenerationParams,) => {
+    return [
+    `/api/admin/latency/generation`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiAdminLatencyGenerationQueryOptions = <TData = Awaited<ReturnType<typeof getApiAdminLatencyGeneration>>, TError = void>(params: GetApiAdminLatencyGenerationParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminLatencyGeneration>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiAdminLatencyGenerationQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiAdminLatencyGeneration>>> = ({ signal }) => getApiAdminLatencyGeneration(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiAdminLatencyGeneration>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetApiAdminLatencyGenerationQueryResult = NonNullable<Awaited<ReturnType<typeof getApiAdminLatencyGeneration>>>
+export type GetApiAdminLatencyGenerationQueryError = void
+
+
+/**
+ * @summary OpenRouter's record of one model call: the providers it tried and how each answered
+ */
+
+export function useGetApiAdminLatencyGeneration<TData = Awaited<ReturnType<typeof getApiAdminLatencyGeneration>>, TError = void>(
+ params: GetApiAdminLatencyGenerationParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getApiAdminLatencyGeneration>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetApiAdminLatencyGenerationQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

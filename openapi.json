@@ -6662,6 +6662,61 @@
                             "p99"
                           ]
                         },
+                        "ai": {
+                          "type": "object",
+                          "properties": {
+                            "turns": {
+                              "type": "number"
+                            },
+                            "p50": {
+                              "type": "number"
+                            },
+                            "p90": {
+                              "type": "number"
+                            },
+                            "p95": {
+                              "type": "number"
+                            },
+                            "p99": {
+                              "type": "number"
+                            },
+                            "prev": {
+                              "type": "object",
+                              "properties": {
+                                "turns": {
+                                  "type": "number"
+                                },
+                                "p50": {
+                                  "type": "number"
+                                },
+                                "p90": {
+                                  "type": "number"
+                                },
+                                "p95": {
+                                  "type": "number"
+                                },
+                                "p99": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "turns",
+                                "p50",
+                                "p90",
+                                "p95",
+                                "p99"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "turns",
+                            "p50",
+                            "p90",
+                            "p95",
+                            "p99",
+                            "prev"
+                          ]
+                        },
                         "serverP50": {
                           "type": "number"
                         },
@@ -6679,6 +6734,7 @@
                         "p95",
                         "p99",
                         "prev",
+                        "ai",
                         "serverP50",
                         "cacheHitRate",
                         "prevCacheHitRate"
@@ -6700,6 +6756,76 @@
                       "type": "array",
                       "items": {
                         "type": "number"
+                      }
+                    },
+                    "aiP50Series": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    "parts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "ms": {
+                            "type": "number"
+                          },
+                          "turns": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "ms",
+                          "turns"
+                        ]
+                      }
+                    },
+                    "calls": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "model": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "calls": {
+                            "type": "number"
+                          },
+                          "firstP50": {
+                            "type": "number"
+                          },
+                          "firstP90": {
+                            "type": "number"
+                          },
+                          "p50": {
+                            "type": "number"
+                          },
+                          "p90": {
+                            "type": "number"
+                          },
+                          "stalls": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "model",
+                          "provider",
+                          "calls",
+                          "firstP50",
+                          "firstP90",
+                          "p50",
+                          "p90",
+                          "stalls"
+                        ]
                       }
                     },
                     "breakdowns": {
@@ -6857,6 +6983,78 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "stalls": {
+                            "type": "number"
+                          },
+                          "calls": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "model": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "provider": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "firstMs": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "ms": {
+                                  "type": "number"
+                                },
+                                "tools": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "id": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "stalled": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "model",
+                                "provider",
+                                "firstMs",
+                                "ms",
+                                "tools",
+                                "id",
+                                "stalled"
+                              ]
+                            }
                           }
                         },
                         "required": [
@@ -6872,7 +7070,9 @@
                           "tools",
                           "device",
                           "browser",
-                          "country"
+                          "country",
+                          "stalls",
+                          "calls"
                         ]
                       }
                     }
@@ -6882,8 +7082,207 @@
                     "days",
                     "p50Series",
                     "p95Series",
+                    "aiP50Series",
+                    "parts",
+                    "calls",
                     "breakdowns",
                     "slowest"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not an admin"
+          }
+        },
+        "x-internal": true,
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/admin/latency/generation": {
+      "get": {
+        "operationId": "getApiAdminLatencyGeneration",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^gen-[A-Za-z0-9_-]{4,80}$"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "admin"
+        ],
+        "summary": "OpenRouter's record of one model call: the providers it tried and how each answered",
+        "responses": {
+          "200": {
+            "description": "The generation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "generation": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "model": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "provider": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "firstTokenMs": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "totalMs": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "promptTokens": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "completionTokens": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reasoningTokens": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "cachedTokens": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "attempts": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "status": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "ms": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "provider",
+                                  "status",
+                                  "ms"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "model",
+                            "provider",
+                            "firstTokenMs",
+                            "totalMs",
+                            "promptTokens",
+                            "completionTokens",
+                            "reasoningTokens",
+                            "cachedTokens",
+                            "attempts"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "generation"
                   ]
                 }
               }
@@ -12583,6 +12982,10 @@
                   "deviceSignal": {
                     "type": "string",
                     "maxLength": 128
+                  },
+                  "reserved": {
+                    "type": "string",
+                    "maxLength": 80
                   },
                   "timezone": {
                     "type": "string",

@@ -34,6 +34,13 @@ export const MODELS = {
    * `interview`, at a third of the price.
    */
   interviewFollowup: "google/gemini-3.1-flash-lite",
+  /**
+   * A second vendor for a conversation turn, used only when Gemini cannot be
+   * reached at all. OpenRouter falls through to it by itself (`models` on the
+   * request); nothing here chooses it. Measured: it can take over a turn that
+   * Gemini started, and Gemini one that it started.
+   */
+  interviewFallback: "anthropic/claude-haiku-4.5",
   /** Free-text → structured answer. Narrow, schema-bound, wants to be cheap. */
   extraction: "google/gemini-3.1-flash-lite",
   /**
@@ -244,15 +251,79 @@ export function chatModel(env: Bindings, model: string = DEFAULT_MODEL): Languag
  * carry `settings.agent.model`; those forms now run on the same tier as
  * everything else rather than quietly billing at their old one.
  */
-export function interviewModel(env: Bindings, override?: string): { model: LanguageModel; id: string } {
+export function interviewModel(
+  env: Bindings,
+  override?: string,
+  route: readonly string[] = INTERVIEW_ROUTE,
+): { model: LanguageModel; id: string } {
   void override;
   const id = MODELS.interview;
-  return { model: openrouter(env).chat(id), id };
+  return { model: routedModel(env, id, route), id };
 }
 
-/** The model for a turn's later steps. See `MODELS.interviewFollowup`. */
-export function interviewFollowupModel(env: Bindings): LanguageModel {
-  return openrouter(env).chat(MODELS.interviewFollowup);
+/** The model for a turn's later steps, and for turns that only write. See `MODELS.interviewFollowup`. */
+export function interviewFollowupModel(env: Bindings, route: readonly string[] = INTERVIEW_ROUTE): LanguageModel {
+  return routedModel(env, MODELS.interviewFollowup, route);
+}
+
+/**
+ * Which provider a conversation turn tries first, and which next.
+ *
+ * Both serve the same Gemini models at the same price. AI Studio goes first
+ * because it answers sooner: measured side by side, 2.1s against 2.6s to the
+ * first token on `interview` and 1.1s against 1.4s on `interviewFollowup`.
+ *
+ * It is an order and not `sort: "latency"`, which is what this used to be,
+ * because a turn must stay on ONE provider. Gemini signs each tool call, and a
+ * signature from Vertex is refused by AI Studio ("Corrupted thought
+ * signature", a 400) and the other way round. Sorting per request sent the
+ * first step of a turn to one and the second to the other: 15 of 38 second
+ * steps failed that way, each costing the respondent a third of a second
+ * before OpenRouter retried. See `routeAfter`.
+ */
+export const INTERVIEW_ROUTE: readonly string[] = ["google-ai-studio", "google-vertex"];
+
+/** OpenRouter's provider names, as they come back on a response, to the slugs a request takes. */
+const PROVIDER_SLUG: Record<string, string> = {
+  "Google AI Studio": "google-ai-studio",
+  Google: "google-vertex",
+};
+
+/**
+ * The route for the rest of a turn: whoever answered its first step, first.
+ *
+ * An unknown name (the backup model's vendor, a provider added later) changes
+ * nothing, which is right: there is no signature of ours it would refuse.
+ */
+export function routeAfter(provider: string | undefined, route: readonly string[] = INTERVIEW_ROUTE): readonly string[] {
+  const slug = provider ? PROVIDER_SLUG[provider] : undefined;
+  if (!slug || !route.includes(slug)) return route;
+  return [slug, ...route.filter((r) => r !== slug)];
+}
+
+/** The name OpenRouter reports for a route's slug, so a call that never answered is filed under the same label. */
+export function providerNameOf(slug: string | undefined): string | null {
+  return Object.entries(PROVIDER_SLUG).find(([, s]) => s === slug)?.[0] ?? null;
+}
+
+/** The same route, starting from its other end. For a provider that has just stalled. */
+export function flippedRoute(route: readonly string[] = INTERVIEW_ROUTE): readonly string[] {
+  return [...route].reverse();
+}
+
+/**
+ * A model with its route and its backup written on the request.
+ *
+ * Set here, on the model, and not in `providerOptions`: the provider spreads
+ * call-time options over these, and a turn's later steps need a different
+ * order from its first (see `routeAfter`) while sharing every other option.
+ * Fallbacks stay on, so a route is where a request starts and never a fence.
+ */
+function routedModel(env: Bindings, id: string, route: readonly string[]): LanguageModel {
+  return openrouter(env).chat(id, {
+    models: [id, MODELS.interviewFallback],
+    provider: { order: [...route] },
+  });
 }
 
 /**
@@ -272,9 +343,8 @@ export function interviewFollowupModel(env: Bindings): LanguageModel {
 export const INTERVIEW_PROVIDER_OPTIONS = {
   openrouter: {
     reasoning: { effort: "minimal" as const, exclude: true },
-    // A respondent is waiting on every turn, so OpenRouter routes to whichever
-    // provider of the same model is answering fastest. Same model, same price.
-    provider: { sort: "latency" as const },
+    // No `provider` here: where a turn is routed is set on the model, because
+    // it changes between a turn's steps. See `INTERVIEW_ROUTE`.
   },
 } as const;
 
@@ -722,7 +792,7 @@ export interface TokenUsage {
 }
 
 /** The slice of `providerMetadata` the OpenRouter provider fills in. */
-type OpenRouterMeta = { openrouter?: { usage?: { cost?: number } } } | undefined;
+export type OpenRouterMeta = { openrouter?: { usage?: { cost?: number }; provider?: string } } | undefined;
 
 /**
  * The shape every AI SDK result shares, once the streaming ones are awaited.
@@ -1517,7 +1587,8 @@ export async function extractAnswer(opts: {
   transcript?: string;
 }): Promise<{ value: unknown; confident: boolean; note?: string; tokens: number; usage: TokenUsage }> {
   const result = await generateObject({
-    model: chatModel(opts.env, MODELS.extraction),
+    // One step, so no signature to keep: the route is only for speed.
+    model: routedModel(opts.env, MODELS.extraction, INTERVIEW_ROUTE),
     schema: opts.schema,
     // A respondent is waiting on this, and the fallback (the plain validator)
     // is always there. One retry for a blip, and a deadline for a hang.

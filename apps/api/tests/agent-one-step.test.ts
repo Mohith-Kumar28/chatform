@@ -6,6 +6,7 @@ import {
   nextStepAfter,
   orderEffects,
   settledInOneStep,
+  whyNotSettled,
   type NextStep,
   type ToolOutcome,
 } from "../src/do/agent-tools.js";
@@ -219,5 +220,45 @@ describe("orderEffects", () => {
       { kind: "record", ref: "q_team", value: "Rocket" },
     ]);
     expect(out.map((e) => e.kind)).toEqual(["record", "revise"]);
+  });
+});
+
+describe("whyNotSettled", () => {
+  const next: NextStep = { kind: "block", ref: "q_team", title: "What's your team called?" };
+  const why = (text: string, opts: Parameters<typeof whyNotSettled>[5], outcomes = recorded("q_name", "Asha"), tools = ["record_answer"]) =>
+    whyNotSettled(doc, empty(), name, step(text, tools), outcomes, opts);
+
+  it("names what the second call is for", () => {
+    expect(why("Thanks, Asha! What's your team called?", { announced: next })).toBeNull();
+    expect(why("", { announced: next })).toBe("no_text");
+    expect(why("Thanks, Asha!", {})).toBe("not_announced");
+    expect(why("Thanks!", { announced: next, userText: "Asha. Is there a prize?" })).toBe("asked_question");
+    expect(why("Thanks!", { announced: { kind: "block", ref: "q_size", title: "x" } })).toBe("route_changed");
+    expect(why("", { announced: next }, [{ name: "record_answer", ok: false, message: "Rejected." }])).toBe("rejected");
+    expect(why("", { announced: next }, [], ["answer_from_knowledge"])).toBe("other_tool");
+    expect(why("", { announced: next }, recorded("q_name", "Asha"), ["record_answer", "clarify"])).toBe("several_tools");
+  });
+
+  describe("where the author asks the next question (Hybrid)", () => {
+    it("is settled by an accepted answer alone, with nothing written and nothing announced", () => {
+      expect(why("", { authorAsksNext: true })).toBeNull();
+      expect(why("Got it.", { authorAsksNext: true })).toBeNull();
+    });
+
+    it("still takes a second call to answer what the respondent asked", () => {
+      expect(why("", { authorAsksNext: true, userText: "Asha. Is there a prize?" })).toBe("asked_question");
+    });
+
+    it("still takes a second call when nothing was recorded", () => {
+      expect(why("", { authorAsksNext: true }, [{ name: "record_answer", ok: false, message: "Rejected." }])).toBe("rejected");
+      expect(why("", { authorAsksNext: true }, [], ["answer_from_knowledge"])).toBe("other_tool");
+    });
+
+    it("leaves the last question to the usual rule, which wants its closing line", () => {
+      const last = FormDoc.parse({ ...doc, logic: [], settings: { onComplete: { requireSubmit: true } } });
+      const state: EvalState = { answers: { q_name: "a", q_team: "b", q_size: 2 }, variables: {}, hidden: {} };
+      const outcome = recorded("q_idea", "a bot");
+      expect(whyNotSettled(last, state, idea, step(""), outcome, { authorAsksNext: true })).toBe("not_announced");
+    });
   });
 });

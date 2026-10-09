@@ -250,6 +250,7 @@ const DASHBOARD_ONLY: Record<string, string> = {
   "/api/admin/revenue": "see /api/admin/me",
   "/api/admin/ai": "see /api/admin/me",
   "/api/admin/latency": "see /api/admin/me",
+  "/api/admin/latency/generation": "see /api/admin/me",
   "/api/admin/health": "see /api/admin/me",
   "/api/admin/users": "see /api/admin/me",
   "/api/admin/feedback": "see /api/admin/me — and doubly so: it is respondent-written text addressed to us",
