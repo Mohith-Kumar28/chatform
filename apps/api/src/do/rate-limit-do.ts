@@ -14,19 +14,28 @@ import type { Bindings } from "../env.js";
  * object is dropped and the counts go with it, which is right: there is no
  * flood to remember.
  *
- * Reaching it costs a call (a few ms warm, most of a second after it has been
- * idle), so it is for requests nobody is waiting on. See `reserveLimited`.
+ * Reaching it costs a call: a few ms warm, most of a second after it has been
+ * idle. Callers that somebody is waiting on do not wait that long; see
+ * `PATIENCE_MS` in `lib/ratelimit.ts`.
  */
 export class RateLimitDO extends DurableObject<Bindings> {
   private windows = new Map<string, { started: number; count: number }>();
 
-  /** Count one against every key given. False if any of them is past its limit. */
-  async take(asks: { key: string; limit: number; periodMs: number }[]): Promise<boolean> {
+  /**
+   * Count one against every key given.
+   *
+   * Null when all of them are within their limit. Otherwise the first that is
+   * not, and how long until its window ends, so the caller can refuse that key
+   * until then without asking again.
+   */
+  async take(
+    asks: { key: string; limit: number; periodMs: number }[],
+  ): Promise<{ key: string; retryMs: number } | null> {
     const now = Date.now();
     if (this.windows.size > 50_000) {
       for (const [key, w] of this.windows) if (now - w.started >= 60_000) this.windows.delete(key);
     }
-    let allowed = true;
+    let refused: { key: string; retryMs: number } | null = null;
     for (const { key, limit, periodMs } of asks) {
       const current = this.windows.get(key);
       if (!current || now - current.started >= periodMs) {
@@ -34,8 +43,8 @@ export class RateLimitDO extends DurableObject<Bindings> {
         continue;
       }
       current.count += 1;
-      if (current.count > limit) allowed = false;
+      if (current.count > limit && !refused) refused = { key, retryMs: current.started + periodMs - now };
     }
-    return allowed;
+    return refused;
   }
 }

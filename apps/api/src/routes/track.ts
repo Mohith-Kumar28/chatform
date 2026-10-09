@@ -17,10 +17,10 @@ export const trackRouter = new Hono<{ Bindings: Bindings }>();
 trackRouter.post("/t", async (c) => {
   const beacon = await readBeacon(c.req.raw);
   if (beacon) {
-    // Per visitor, on the respondent limiter's binding under its own prefix: a
+    // Per visitor, on the conversation limit under its own prefix: a
     // tab stuck in a navigation loop is the thing to stop, and a crowd behind
     // one address is not.
-    if (await withinLimit(c.env, "RATE_LIMIT_P", `t:${beacon.v}`)) deferOn(c)(recordTraffic(c.env, c.req.raw, beacon));
+    if (await withinLimit(c, "conversation", `t:${beacon.v}`, { patienceMs: 40 })) deferOn(c)(recordTraffic(c.env, c.req.raw, beacon));
   }
   return c.body(null, 204);
 });

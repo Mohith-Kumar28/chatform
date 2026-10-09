@@ -119,30 +119,38 @@ describe("edge burst layer", () => {
 });
 
 /**
- * A binding that never says no.
+ * One count, wherever the request lands.
  *
- * That is what Cloudflare's rate limit binding does from a worker with a
- * placement, which this API has: measured in production, a thousand calls on
- * one key in a minute all came back `success: true`. The count kept in the
- * isolate is what refuses then.
+ * These limits were Cloudflare rate limit bindings, which refuse nothing from
+ * a worker with a placement: its requests are spread over many isolates and
+ * each sees a fraction of one caller. They are counted in `RateLimitDO` now,
+ * a single object every isolate asks.
  */
-describe("a rate limit binding that always allows", () => {
-  it("is still held to the declared limit, per key", async () => {
-    const { withinLimit } = await import("../src/lib/ratelimit.js");
-    const always = { limit: async () => ({ success: true }) };
-    const inert = { RATE_LIMIT_P_AUTH: always } as never;
+describe("the shared counter", () => {
+  const ctx = { env };
 
+  it("holds a key to its limit and leaves another key alone", async () => {
+    const { withinLimit } = await import("../src/lib/ratelimit.js");
     const results: boolean[] = [];
-    // Declared in wrangler.jsonc as 12 a minute.
-    for (let i = 0; i < 15; i++) results.push(await withinLimit(inert, "RATE_LIMIT_P_AUTH", "inert:one"));
+    // `attempt` is 12 a minute.
+    for (let i = 0; i < 15; i++) results.push(await withinLimit(ctx, "attempt", "shared:one"));
     expect(results.slice(0, 12).every(Boolean)).toBe(true);
     expect(results.slice(12).some(Boolean)).toBe(false);
-    // Another key has its own count.
-    expect(await withinLimit(inert, "RATE_LIMIT_P_AUTH", "inert:two")).toBe(true);
+    expect(await withinLimit(ctx, "attempt", "shared:two")).toBe(true);
   });
 
-  it("limits nothing where there is no binding at all", async () => {
+  it("answers the same when it is not waited on for long", async () => {
     const { withinLimit } = await import("../src/lib/ratelimit.js");
-    for (let i = 0; i < 20; i++) expect(await withinLimit({} as never, "RATE_LIMIT_P_AUTH", "unbound")).toBe(true);
+    const results: boolean[] = [];
+    for (let i = 0; i < 15; i++) results.push(await withinLimit(ctx, "attempt", "shared:impatient", { patienceMs: 40 }));
+    expect(results.slice(0, 12).every(Boolean)).toBe(true);
+    expect(results.at(-1)).toBe(false);
+  });
+
+  it("allows when the counter cannot be reached", async () => {
+    const { withinLimit } = await import("../src/lib/ratelimit.js");
+    const broken = { env: { RATE_LIMIT_DO: { idFromName: () => ({}), get: () => ({ take: async () => { throw new Error("down"); } }) } } as never };
+    for (let i = 0; i < 20; i++) expect(await withinLimit(broken, "attempt", "shared:broken")).toBe(true);
+    for (let i = 0; i < 20; i++) expect(await withinLimit({ env: {} as never }, "attempt", "shared:unbound")).toBe(true);
   });
 });

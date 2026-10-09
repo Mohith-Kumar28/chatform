@@ -14,14 +14,14 @@ import { isInternalCall } from "./internal-call.js";
  * should never reach D1. It is keyed by the digest of whatever was presented,
  * because at this stage there is no key id yet — same bytes, one hash, no read.
  *
- * The binding is per-colo and eventually consistent, so "20 per 10s" is really
- * "20 per 10s per Cloudflare location". That is fine for absorbing abuse and
- * useless as a product promise, which is why the number a customer is told
- * lives on the key row itself and is enforced inside `verifyApiKey`.
+ * It absorbs abuse and is not a product promise, which is why the number a
+ * customer is told lives on the key row itself and is enforced inside
+ * `verifyApiKey`.
  *
- * The whole thing degrades to a no-op when the binding is absent, rather than
- * failing closed: a local runtime without `ratelimits` should still serve
- * requests.
+ * Counted in `RateLimitDO` like every limit here (see `LIMITS`), and never
+ * waited on for long: an API call does not sit behind its own rate limiter.
+ * The whole thing degrades to a no-op when the counter is absent or fails,
+ * rather than failing closed.
  */
 
 async function bucketFor(presented: string): Promise<string> {
@@ -60,11 +60,123 @@ export const burstLimit: MiddlewareHandler<{
 
   // Publishable keys legitimately burst — one window per respondent on a busy
   // page — so they get their own, roomier binding.
-  const name: LimitName = presented.startsWith("pk_") ? "RATE_LIMIT_PK" : "RATE_LIMIT";
-  const success = await withinLimit(c.env, name, `k:${await bucketFor(presented)}`);
+  const name: LimitName = presented.startsWith("pk_") ? "apiPublishable" : "api";
+  const success = await withinLimit(c, name, `k:${await bucketFor(presented)}`, { patienceMs: PATIENCE_MS });
   if (!success) return tooMany(c, { seconds: 10, scope: "burst", policy: "100;w=10" });
   await next();
 };
+
+/**
+ * Every limit there is, and the one place they are counted.
+ *
+ * These were Cloudflare rate limit bindings, and from this worker a binding
+ * refuses nothing. The worker has a placement (it runs beside the database),
+ * and a placed worker's requests are spread over many isolates: two hundred
+ * down one connection were answered by more than fifteen, a dozen or so each.
+ * The binding counts per machine, so no machine ever saw enough of one caller.
+ * Measured on 2026-10-09: two otherwise identical workers at 20 a minute, the
+ * unplaced one refused 59 of 150 requests and the placed one none; this API
+ * answered a thousand calls on one key in a minute, all allowed. Every limit
+ * here had been inert since the placement went in on 28 Sep. A count kept in
+ * the isolate's own memory has the same flaw and was tried the same day.
+ *
+ * So the count lives in `RateLimitDO`, a Durable Object, of which there is
+ * exactly one: every isolate asks the same object, and its count is the count.
+ * In its memory only; nothing is written to D1 or KV.
+ */
+const LIMITS = {
+  /** A secret API key, before it is verified. */
+  api: { limit: 100, periodMs: 10_000 },
+  /** A publishable key: one window per respondent on a page that may be busy. */
+  apiPublishable: { limit: 600, periodMs: 10_000 },
+  /** One conversation, or one visitor's page views. Two a second sustained. */
+  conversation: { limit: 120, periodMs: 60_000 },
+  /** Proving an identity or opening a checkout, per respondent; password and code attempts, per account. */
+  attempt: { limit: 12, periodMs: 60_000 },
+  /** Asset uploads, per author. */
+  asset: { limit: 60, periodMs: 60_000 },
+  /** The builder's autosave, per author. */
+  save: { limit: 120, periodMs: 60_000 },
+  /** A session object started ahead of a click, per device. See `reserveLimited`. */
+  reserve: { limit: 20, periodMs: 60_000 },
+  /** Every reservation there is, together. */
+  reserveAll: { limit: 1200, periodMs: 60_000 },
+} as const;
+export type LimitName = keyof typeof LIMITS;
+
+/**
+ * How long a request that somebody is waiting on waits for the counter.
+ *
+ * The counter answers in a few ms while it is in memory and takes most of a
+ * second to start after half a minute of nothing. An answer in a chat or a
+ * call on the API does not wait that out: past this it goes ahead, and the
+ * verdict, when it lands, is remembered for the caller's next request.
+ */
+const PATIENCE_MS = 40;
+
+/** Keys this isolate has been told are over their limit, and until when. */
+const refusedUntil = new Map<string, number>();
+
+type LimitContext = { env: Bindings; executionCtx?: { waitUntil(p: Promise<unknown>): void } };
+
+/**
+ * Count one request against one limit. False when it is over.
+ *
+ * With `patienceMs` the count is not waited on past that; see `PATIENCE_MS`.
+ * Without it the answer is exact, at the cost of the call. No counter, or a
+ * counter that fails, allows: a limiter must not be the outage.
+ */
+export async function withinLimit(
+  c: LimitContext,
+  name: LimitName,
+  key: string,
+  opts: { patienceMs?: number } = {},
+): Promise<boolean> {
+  return withinLimits(c, [{ name, key }], opts);
+}
+
+async function withinLimits(
+  c: LimitContext,
+  asks: { name: LimitName; key: string }[],
+  opts: { patienceMs?: number } = {},
+): Promise<boolean> {
+  const ns = c.env.RATE_LIMIT_DO;
+  if (!ns) return true;
+  const now = Date.now();
+  const ids = asks.map((a) => `${a.name}:${a.key}`);
+  for (const id of ids) {
+    const until = refusedUntil.get(id);
+    if (until === undefined) continue;
+    if (until > now) return false;
+    refusedUntil.delete(id);
+  }
+
+  const counter = ns.get(ns.idFromName("limits")) as unknown as DurableObjectStub<RateLimitDO>;
+  const verdict = counter
+    .take(asks.map((a, i) => ({ key: ids[i]!, ...LIMITS[a.name] })))
+    .then((refused) => {
+      if (!refused) return true;
+      // Bounded: a flood of distinct keys must not become a flood of memory.
+      if (refusedUntil.size > 10_000) refusedUntil.clear();
+      refusedUntil.set(refused.key, Date.now() + refused.retryMs);
+      return false;
+    })
+    .catch(() => true);
+
+  const patienceMs = opts.patienceMs;
+  if (patienceMs === undefined) return verdict;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const impatient = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => resolve(true), patienceMs);
+  });
+  // Still wanted after this request has gone ahead: it is what refuses the next one.
+  try {
+    c.executionCtx?.waitUntil(verdict);
+  } catch {
+    /* No execution context (a test calling this directly): the race below still settles. */
+  }
+  return Promise.race([verdict, impatient]).finally(() => clearTimeout(timer));
+}
 
 /**
  * Count a request against each key, on Cloudflare's edge only.
@@ -73,96 +185,19 @@ export const burstLimit: MiddlewareHandler<{
  * address: an address is a campus, an office or a mobile carrier, and counting
  * it counts a crowd. Nothing here reads the address at all.
  *
- * Three rules, and each one is load-bearing rather than defensive:
- *
- * 1. **Off the edge, no limit.** Miniflare, the test suite and a direct request
- *    to `wrangler dev` carry no `cf-ray`, the request id Cloudflare stamps on
- *    everything it forwards. `vitest.config.ts` points Miniflare at this same
- *    `wrangler.jsonc`, so without this rule the suite's own fixtures would
- *    start meeting 429s. In production the header is always there.
- * 2. **No binding, no limit** — as `burstLimit` already does.
- * 3. **A throwing limiter is not an outage.** `burstLimit` does not catch, and
- *    on `/v1` that is arguable. Here it is not: a limiter exception would turn a
- *    live form into a 500 for a respondent halfway through answering it, which
- *    is strictly worse than a request that went uncounted.
+ * Off the edge, no limit. Miniflare, the test suite and a direct request to
+ * `wrangler dev` carry no `cf-ray`, the request id Cloudflare stamps on
+ * everything it forwards, so the suite's own fixtures do not meet 429s. In
+ * production the header is always there.
  */
-/**
- * The limits, as `wrangler.jsonc` declares them, for the counter kept here.
- *
- * Cloudflare's rate limit binding does not refuse anything from a worker with
- * a placement, and this one is placed beside the database. Measured on
- * 2026-10-09 with two otherwise identical workers and a limit of 20 a minute:
- * the unplaced one refused 59 of 150 requests, the placed one none of 150,
- * and this API answered a thousand calls on one key in a minute with
- * `success: true` every time. So every limit in this file had been inert
- * since the placement went in.
- *
- * The cause is how a placed worker is run: its requests are spread over many
- * isolates (two hundred down one connection reached more than fifteen), and
- * the binding counts per machine.
- *
- * The binding is still asked, and still obeyed if it ever answers no. Beside
- * it sits a plain count per key held in this isolate's memory, which has the
- * same weakness: each isolate sees a fraction of one caller, so in practice
- * this refuses at something like fifteen times the declared number. It stops
- * a client stuck in a tight loop and little else. A limit that has to hold
- * needs a count in one place; `reserveLimited` below has one.
- */
-const LIMITS = {
-  RATE_LIMIT: { limit: 100, periodMs: 10_000 },
-  RATE_LIMIT_PK: { limit: 600, periodMs: 10_000 },
-  RATE_LIMIT_P: { limit: 120, periodMs: 60_000 },
-  RATE_LIMIT_P_AUTH: { limit: 12, periodMs: 60_000 },
-  RATE_LIMIT_ASSET: { limit: 60, periodMs: 60_000 },
-  RATE_LIMIT_SAVE: { limit: 120, periodMs: 60_000 },
-} as const;
-export type LimitName = keyof typeof LIMITS;
-
-const windows = new Map<string, { started: number; count: number }>();
-const MAX_WINDOWS = 20_000;
-
-/** Count one against `key` in this isolate. False once the window is spent. */
-function countLocally(name: LimitName, key: string): boolean {
-  const { limit, periodMs } = LIMITS[name];
-  const now = Date.now();
-  const id = `${name}:${key}`;
-  const current = windows.get(id);
-  if (!current || now - current.started >= periodMs) {
-    // Bounded: a flood of distinct keys must not become a flood of memory.
-    if (windows.size >= MAX_WINDOWS) {
-      for (const [k, w] of windows) if (now - w.started >= 60_000) windows.delete(k);
-      if (windows.size >= MAX_WINDOWS) windows.clear();
-    }
-    windows.set(id, { started: now, count: 1 });
-    return true;
-  }
-  current.count += 1;
-  return current.count <= limit;
-}
-
-/** One request against one limit: the binding's verdict, and this isolate's own count. */
-export async function withinLimit(env: Bindings, name: LimitName, key: string): Promise<boolean> {
-  const binding = env[name];
-  if (!binding) return true;
-  const local = countLocally(name, key);
-  try {
-    const { success } = await binding.limit({ key });
-    return success && local;
-  } catch {
-    return local;
-  }
-}
-
 async function limited(
   c: Parameters<MiddlewareHandler>[0],
   name: LimitName,
   keys: string[],
+  opts: { patienceMs?: number } = {},
 ): Promise<boolean> {
   if (!c.req.header("cf-ray")) return false;
-  for (const key of keys) {
-    if (!(await withinLimit(c.env as Bindings, name, key))) return true;
-  }
-  return false;
+  return !(await withinLimits(c as LimitContext, keys.map((key) => ({ name, key })), opts));
 }
 
 /**
@@ -174,30 +209,18 @@ async function limited(
  * caller's own word, so the second limit does not depend on it: one bucket
  * for every reservation there is.
  *
- * Counted in `RateLimitDO`, not by a binding: see `LIMITS` for why a binding
- * counts nothing here. The extra call is on a request nobody is waiting for.
- * Being refused costs a respondent nothing they can see (the form opens
- * without a reservation), and so does this failing, which allows.
+ * Waited on in full, because nobody is waiting on a reservation. Being refused
+ * costs a respondent nothing they can see: the form opens without one.
  */
-const RESERVE_PER_DEVICE = { limit: 20, periodMs: 60_000 };
-const RESERVE_ALL = { limit: 1200, periodMs: 60_000 };
-
 export async function reserveLimited(
   c: Parameters<MiddlewareHandler<{ Bindings: Bindings }>>[0],
   device: string | null,
 ): Promise<boolean> {
-  const ns = c.env.RATE_LIMIT_DO;
-  if (!ns || !c.req.header("cf-ray")) return false;
-  try {
-    const counter = ns.get(ns.idFromName("reserve")) as unknown as DurableObjectStub<RateLimitDO>;
-    const allowed = await counter.take([
-      ...(device ? [{ key: `d:${device.slice(0, 64)}`, ...RESERVE_PER_DEVICE }] : []),
-      { key: "all", ...RESERVE_ALL },
-    ]);
-    return !allowed;
-  } catch {
-    return false;
-  }
+  if (!c.req.header("cf-ray")) return false;
+  return !(await withinLimits(c as LimitContext, [
+    ...(device ? [{ name: "reserve" as const, key: device.slice(0, 64) }] : []),
+    { name: "reserveAll" as const, key: "all" },
+  ]));
 }
 
 /**
@@ -215,10 +238,13 @@ export async function reserveLimited(
  * bounded to two requests a second sustained, which no person answering
  * questions comes near. Keeping bots out is Turnstile's job at session start
  * (`open-session.ts`), and a flood from one machine is Cloudflare's edge's.
+ *
+ * Not waited on past `PATIENCE_MS`: this sits in front of every answer a
+ * respondent sends, and the chat does not slow down for its own limiter.
  */
 export const publicSessionLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
   const sessionId = c.req.path.match(/^\/p\/sessions\/([^/]+)/)?.[1];
-  if (sessionId && (await limited(c, "RATE_LIMIT_P", [`ps:${sessionId}`]))) {
+  if (sessionId && (await limited(c, "conversation", [`ps:${sessionId}`], { patienceMs: PATIENCE_MS }))) {
     return tooMany(c, { seconds: 60, scope: "user", policy: "120;w=60" });
   }
   await next();
@@ -234,7 +260,7 @@ export const publicSessionLimit: MiddlewareHandler<{ Bindings: Bindings }> = asy
  */
 export const respondentAuthLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
   const token = respondentToken(c);
-  if (token && (await limited(c, "RATE_LIMIT_P_AUTH", [`pa:t:${await bucketFor(token)}`]))) {
+  if (token && (await limited(c, "attempt", [`pa:t:${await bucketFor(token)}`]))) {
     return tooMany(c, { seconds: 60, scope: "user", policy: "12;w=60" });
   }
   await next();
@@ -260,12 +286,11 @@ export const respondentAuthLimit: MiddlewareHandler<{ Bindings: Bindings }> = as
  * is not a place to put a secret. A request with no token has nothing to own a bucket with, so it
  * is not counted, and is answered 401 a moment later by `requireRespondent`.
  *
- * The same binding as sign-in, under its own key prefix, so the two never share a count and no
- * new binding has to be provisioned.
+ * The same limit as sign-in, under its own key prefix, so the two never share a count.
  */
 export const respondentPaymentLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
   const token = respondentToken(c);
-  if (token && (await limited(c, "RATE_LIMIT_P_AUTH", [`pay:t:${await bucketFor(token)}`]))) {
+  if (token && (await limited(c, "attempt", [`pay:t:${await bucketFor(token)}`]))) {
     return tooMany(c, { seconds: 60, scope: "user", policy: "12;w=60" });
   }
   await next();
@@ -283,20 +308,17 @@ export const respondentPaymentLimit: MiddlewareHandler<{ Bindings: Bindings }> =
  * 120 a minute is deliberately far above the ceiling the editor itself imposes:
  * autosave checkpoints at most every ten seconds per tab, so a person with five
  * forms open still sits at a quarter of this. It is a bound on a bug, not a
- * budget for a user, and — like every binding here — it is per-colo and
- * eventually consistent, so it is not a number to state as a promise.
+ * budget for a user.
  *
- * Keyed through `limited`, which is what keeps it inert off the Cloudflare edge:
- * `vitest.config.ts` points Miniflare at this same `wrangler.jsonc`, so a
- * limiter that counted off the edge (no `cf-ray`) would start failing the test
- * suite on its own fixtures.
+ * Keyed through `limited`, which is what keeps it inert off the Cloudflare edge,
+ * so the test suite's own fixtures do not meet it.
  */
 export const saveLimit: MiddlewareHandler<{
   Bindings: Bindings;
   Variables: Partial<GuardVars>;
 }> = async (c, next) => {
   const userId = c.get("userId");
-  if (userId && (await limited(c, "RATE_LIMIT_SAVE", [`save:${userId}`]))) {
+  if (userId && (await limited(c, "save", [`save:${userId}`]))) {
     return tooMany(c, { seconds: 60, scope: "user", policy: "120;w=60" });
   }
   await next();
@@ -307,16 +329,15 @@ export const saveLimit: MiddlewareHandler<{
  *
  * Same reasoning as `saveLimit`: an office behind one address is many authors
  * who must not exhaust each other. Sixty a minute is far above adding images
- * to a form by hand and far below anything that could fill a bucket, and like
- * every binding here it is per-colo and eventually consistent — a bound on a
- * loop, not a quota to state.
+ * to a form by hand and far below anything that could fill a bucket: a bound
+ * on a loop, not a quota to state.
  */
 export const assetLimit: MiddlewareHandler<{
   Bindings: Bindings;
   Variables: Partial<GuardVars>;
 }> = async (c, next) => {
   const userId = c.get("userId");
-  if (userId && (await limited(c, "RATE_LIMIT_ASSET", [`asset:${userId}`]))) {
+  if (userId && (await limited(c, "asset", [`asset:${userId}`]))) {
     return tooMany(c, { seconds: 60, scope: "user", policy: "60;w=60" });
   }
   await next();
@@ -343,7 +364,7 @@ export async function authAttemptLimited(c: Parameters<MiddlewareHandler>[0], en
   }
   if (typeof email !== "string" || !email.includes("@")) return false;
   const bucket = (await hashApiKey(`auth:${email.trim().toLowerCase()}`)).slice(0, 24);
-  return limited(c, "RATE_LIMIT_P_AUTH", [`au:${bucket}`]);
+  return limited(c, "attempt", [`au:${bucket}`]);
 }
 
 export function authAttemptRefused(c: Parameters<MiddlewareHandler>[0]) {

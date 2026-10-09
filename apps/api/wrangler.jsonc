@@ -191,76 +191,9 @@
       "dataset": "chatform_api_requests"
     }
   ],
-  // Burst protection only. The `simple` config is per-binding and per-colo, so
-  // per-plan limits come from a second binding rather than from logic: the plan
-  // is not known until after the verification this layer exists to avoid.
-  "ratelimits": [
-    {
-      "name": "RATE_LIMIT",
-      "namespace_id": "1001",
-      // 10/s. A server integration writing a batch of responses legitimately
-      // bursts well past two per second — the sustained per-key window on the
-      // key row is where a customer-visible limit belongs, not here.
-      "simple": {
-        "limit": 100,
-        "period": 10
-      }
-    },
-    {
-      "name": "RATE_LIMIT_PK",
-      "namespace_id": "1002",
-      // Browser traffic is one window per respondent on a page that may be busy.
-      "simple": {
-        "limit": 600,
-        "period": 10
-      }
-    },
-    // The respondent surface. Never keyed by address: a campus or a mobile
-    // carrier puts thousands of respondents behind one. See `ratelimit.ts`.
-    {
-      "name": "RATE_LIMIT_P",
-      "namespace_id": "1003",
-      // Per conversation. Two a second sustained is far above a person
-      // answering questions; it bounds a runaway tab, not a crowd.
-      "simple": {
-        "limit": 120,
-        "period": 60
-      }
-    },
-    {
-      "name": "RATE_LIMIT_P_AUTH",
-      "namespace_id": "1005",
-      // Sign-in and Pay, per respondent token. Each sign-in fetches a JWKS
-      // document before it can fail.
-      "simple": {
-        "limit": 12,
-        "period": 60
-      }
-    },
-    {
-      // Asset uploads, keyed by author. Generous, because a builder session
-      // legitimately adds a handful of images in a row and each one is a
-      // separate request; low enough that a loop cannot fill a bucket.
-      "name": "RATE_LIMIT_ASSET",
-      "namespace_id": "1007",
-      "simple": {
-        "limit": 60,
-        "period": 60
-      }
-    },
-    {
-      "name": "RATE_LIMIT_SAVE",
-      "namespace_id": "1006",
-      // The builder's autosave, keyed by author. The editor checkpoints at most
-      // every ten seconds per tab, so someone with five forms open still sits at
-      // a quarter of this — it bounds a client stuck in a loop, not a person
-      // working. `period` may only be 10 or 60; a minute is the useful one here.
-      "simple": {
-        "limit": 120,
-        "period": 60
-      }
-    }
-  ],
+  // No `ratelimits`: a rate limit binding refuses nothing from a worker with a
+  // placement, which this one has. Limits are counted in `RateLimitDO`; see
+  // `src/lib/ratelimit.ts`.
   // The running deploy's id, tagged onto every AI call as `trace.release` (see `lib/ai.ts`
   // `telemetry`). A binding rather than a var because only Cloudflare knows the value.
   "version_metadata": {

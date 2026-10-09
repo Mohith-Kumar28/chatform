@@ -30,45 +30,6 @@ export interface Bindings {
   ANALYTICS: AnalyticsEngineDataset;
   /** Per-request API telemetry. Optional: Miniflare does not always provide it. */
   ANALYTICS_API?: AnalyticsEngineDataset;
-  /**
-   * Burst limiters, keyed by the presented key's digest and by IP.
-   *
-   * Optional because the `ratelimits` binding is not implemented by every local
-   * runtime — a hard dependency here would fail the whole test suite rather than
-   * degrade.
-   */
-  RATE_LIMIT?: RateLimit;
-  RATE_LIMIT_PK?: RateLimit;
-  /**
-   * The respondent surface, keyed by address rather than by key.
-   *
-   * `/p` has no API key to key on — that is the whole point of it — so these
-   * three are the only limiters that surface has. Split by cost rather than by
-   * route: a message turn may call a model, opening a session writes rows and
-   * meters a response, and a sign-in fetches a JWKS document over the network.
-   * One shared counter would have to be set for the most expensive of them.
-   */
-  RATE_LIMIT_P?: RateLimit;
-  RATE_LIMIT_P_AUTH?: RateLimit;
-  /**
-   * The builder's autosave, keyed by the author.
-   *
-   * The dashboard save path is the one write in the product that a client is
-   * expected to call unprompted and repeatedly, and it was the only one with no
-   * ceiling at all — `/v1`'s twin of it is burst-limited and metered, so the
-   * cheaper path to the same row was the unmetered one. This bounds a runaway
-   * client rather than a person: nobody editing a form reaches it.
-   */
-  RATE_LIMIT_SAVE?: RateLimit;
-  /**
-   * Asset uploads, keyed by the author.
-   *
-   * `POST /api/assets` was the one write on the dashboard with no ceiling of
-   * any kind: it streams to R2, it is reachable by every member of an
-   * organization, and the only thing bounding it was the plan's storage quota
-   * — which is to say, nothing until the bill arrived.
-   */
-  RATE_LIMIT_ASSET?: RateLimit;
   WORKERS_AI?: Ai;
   /**
    * The knowledge base's vector index, one namespace per form.
