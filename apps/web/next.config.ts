@@ -45,6 +45,16 @@ const nextConfig: NextConfig = {
    * Two entries because `/docs` itself is a page too, and `:path*` needs at
    * least one segment to match.
    */
+  /**
+   * One template gallery and one template page, the public ones. The app's
+   * own copies are gone; `/templates/:slug/use` is the only route left there.
+   */
+  async redirects() {
+    return [
+      { source: "/templates", destination: "/form-templates", permanent: false },
+      { source: "/templates/:slug", destination: "/form-templates/:slug", permanent: false },
+    ];
+  },
   async rewrites() {
     return [
       { source: "/docs.md", destination: "/docs-md" },

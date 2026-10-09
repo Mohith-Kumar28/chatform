@@ -658,7 +658,7 @@ export function DashboardContent() {
                 <Button
                   shape="pill"
                   variant="outline"
-                  onClick={() => router.push("/templates")}
+                  onClick={() => router.push("/form-templates")}
                 >
                   Browse templates
                 </Button>

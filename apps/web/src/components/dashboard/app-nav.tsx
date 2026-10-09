@@ -14,5 +14,5 @@ import { FileStack, LayoutGrid } from "lucide-react";
  */
 export const APP_NAV = [
   { href: "/dashboard", label: "Forms", icon: LayoutGrid },
-  { href: "/templates", label: "Templates", icon: FileStack },
+  { href: "/form-templates", label: "Templates", icon: FileStack },
 ] as const;

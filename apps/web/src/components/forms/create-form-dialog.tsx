@@ -425,7 +425,7 @@ export function CreateFormDialog({
         {!drafting && !clarify && !importing && (
           <div className="border-border text-muted-foreground flex shrink-0 items-center justify-end gap-3 border-t px-6 py-3 text-xs">
             <Link
-              href="/templates"
+              href="/form-templates"
               onClick={() => onOpenChange(false)}
               className="hover:text-foreground inline-flex items-center gap-1 transition-colors"
             >

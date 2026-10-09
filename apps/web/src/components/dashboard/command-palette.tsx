@@ -399,7 +399,7 @@ export function CommandPalette() {
                     key={t.slug}
                     value={itemValue("template", t.slug)}
                     keywords={[t.title, t.category, ...(t.tags ?? [])]}
-                    onSelect={() => go(`/templates/${t.slug}`)}
+                    onSelect={() => go(`/form-templates/${t.slug}`)}
                   >
                     <Icon className="size-3.5 opacity-60" />
                     <span className="min-w-0 flex-1 truncate">{t.title}</span>

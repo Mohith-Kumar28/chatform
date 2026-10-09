@@ -278,7 +278,7 @@ export default async function UseCasePage({ params }: { params: Promise<{ slug: 
             </div>
             <div className="flex flex-wrap gap-3">
               <Button asChild size="lg" shape="pill" className="h-12 px-7">
-                <Link href={`/templates/${template.slug}`}>
+                <Link href={`/templates/${template.slug}/use`}>
                   Use this template
                   <ArrowRight />
                 </Link>

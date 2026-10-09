@@ -4,11 +4,11 @@ import { notFound } from "next/navigation";
 import { ArrowRight, Check, ChevronRight, Clock, Flag, GitBranch, ListChecks } from "lucide-react";
 import { BLOCK_PRESENTATION, type BlockType } from "@repo/form-schema";
 import { CtaBand } from "@/components/marketing/cta-band";
-import { GradientField } from "@/components/brand/gradient-field";
 import { JsonLd } from "@/components/seo/json-ld";
 import { FaqList } from "@/components/templates/gallery/faq-list";
 import { TemplateTile } from "@/components/templates/gallery/template-tile";
 import { TemplatePanes } from "@/components/templates/template-detail";
+import { Button } from "@/components/ui/button";
 import { toneOf } from "@/lib/block-tone";
 import { TemplateTryLive } from "@/components/templates/template-try-live";
 import { BackLink } from "@/components/templates/back-link";
@@ -147,16 +147,12 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ s
             </div>
           </div>
           <div className="flex flex-col items-start gap-2.5 lg:items-end">
-            <Link prefetch={false}
-              href={useHref}
-              // The hero's own wash, drifting: soft colour moving inside the
-              // button rather than a hard two-stop sweep sliding across it.
-              className="relative isolate inline-flex h-12 items-center gap-2 overflow-hidden rounded-md px-6 text-base font-semibold text-[var(--on-band-vivid)] shadow-xs ring-1 ring-black/5 transition-transform duration-200 hover:-translate-y-px active:translate-y-0 motion-reduce:hover:translate-y-0"
-            >
-              <GradientField tier="vivid" size="160%" interactive={false} className="-z-10" />
-              Use this template
-              <ArrowRight className="size-4" />
-            </Link>
+            <Button asChild size="lg" className="h-12 px-6 text-base has-[>svg]:px-6">
+              <Link prefetch={false} href={useHref}>
+                Use this template
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
             <p className="text-foreground/70 inline-flex items-center gap-1.5 text-sm">
               <Check className="size-4 text-emerald-600" />
               Free to customize. No code needed.

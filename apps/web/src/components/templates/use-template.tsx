@@ -43,7 +43,7 @@ export function UseTemplate({ slug }: { slug: string }) {
         <div className="flex gap-2">
           <Button onClick={() => use.mutate({ slug })}>Try again</Button>
           <Button asChild variant="outline">
-            <Link href="/templates">Browse templates</Link>
+            <Link href="/form-templates">Browse templates</Link>
           </Button>
         </div>
       </div>

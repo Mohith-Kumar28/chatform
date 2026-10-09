@@ -1,142 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Blocks,
-  ChevronRight,
-  Clock,
-  CornerDownRight,
-  Flag,
-  GitBranch,
-  Loader2,
-  Maximize2,
-  ShieldAlert,
-} from "lucide-react";
-import { toast } from "sonner";
+import { CornerDownRight, Flag, GitBranch, Maximize2, ShieldAlert } from "lucide-react";
 import type { FormDoc } from "@repo/form-schema";
 import { toneOf } from "@/lib/block-tone";
-import { CACHE_MAX_AGE } from "@/lib/api/persist";
 import { computeQuestionFlow } from "@/components/builder/branch-layout";
 import { isGoto } from "@/components/builder/flow-graph";
 import { blockMeta } from "@/components/builder/block-library";
 import { PannableFlow, TemplateFlow } from "@/components/templates/template-flow";
-import { TemplateCard } from "@/components/templates/template-card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/empty-state";
-import {
-  getGetApiTemplatesBySlugQueryKey,
-  useGetApiTemplatesBySlug,
-  usePostApiTemplatesBySlugUse,
-} from "@/lib/api/dashboard/dashboard";
-import { apiData } from "@/lib/api/payload";
-import { templateAccent } from "@/lib/category-accent";
-import { invalidateForms } from "@/lib/query-keys";
-import { useTemplates, type TemplateDetailPayload } from "@/lib/templates";
 import { cn } from "@/lib/utils";
-
-/**
- * One template, in full, before anybody commits to it.
- *
- * Clicking a template used to create a form — thirty seconds later you were in
- * the builder looking at eleven questions you had not asked for, and the way
- * out was to delete the form. A template is a decision, and a decision needs
- * something to decide on: what it asks, in what order, and — the part a list
- * of questions cannot show — where the answers take people.
- *
- * Hence two panes. The left is the conversation a respondent has. The right is
- * the same thing as a graph, drawn by the builder's own derivation, because
- * "this one screens people out and that one doesn't" is visible in a diagram
- * in a second and invisible in a list at any length.
- */
-export function TemplateDetail({ slug }: { slug: string }) {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-
-  const { data, isLoading, error } = useGetApiTemplatesBySlug(slug, {
-    // Templates change on deploy, not by the minute: fresh for a day, and
-    // restored from disk on reload, so reopening one costs no request.
-    query: { queryKey: getGetApiTemplatesBySlugQueryKey(slug), staleTime: CACHE_MAX_AGE, gcTime: CACHE_MAX_AGE },
-  });
-  const detail = apiData<TemplateDetailPayload | undefined>(data);
-
-  const use = usePostApiTemplatesBySlugUse<Error>({
-    mutation: {
-      onSuccess: async (created) => {
-        await invalidateForms(queryClient);
-        router.push(`/forms/${apiData<{ id: string }>(created).id}/build`);
-      },
-      // Said out loud — a form-count limit or a role that cannot create used to
-      // do nothing at all and explain nothing. (A plan denial still opens the
-      // global paywall; this is for the rest.)
-      onError: (err) => toast.error("Couldn't start from this template", { description: err.message }),
-    },
-  });
-
-  if (isLoading) return <DetailSkeleton />;
-
-  if (error || !detail) {
-    return (
-      <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
-        <EmptyState
-          icon={Blocks}
-          title="This template isn't available"
-          description="It may have been renamed or retired. The gallery has the current catalogue."
-          action={
-            <Button shape="pill" onClick={() => router.push("/templates")}>
-              Browse templates
-            </Button>
-          }
-        />
-      </div>
-    );
-  }
-
-  // The endpoint parses the stored document with `FormDoc` and 404s when it no
-  // longer satisfies the schema, so what arrives here is already valid. Parsing
-  // it a second time in the browser would buy nothing and cost every visitor
-  // the schema.
-  const doc = detail.doc as FormDoc;
-  const onUse = () => use.mutate({ slug });
-
-  return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-      <Link
-        href="/templates"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors duration-[var(--duration-micro)]"
-      >
-        <ArrowLeft className="size-3.5" />
-        All templates
-      </Link>
-
-      <TemplateHero detail={detail} doc={doc} action={<UseButton pending={use.isPending} onUse={onUse} />} />
-
-      <TemplatePanes doc={doc} title={detail.title} className="mt-8" />
-
-      <div className="border-border mt-8 flex flex-wrap items-center justify-between gap-4 border-t pt-6">
-        <p className="text-muted-foreground text-sm">
-          Start from this and change anything — questions, wording, routes, endings.
-        </p>
-        <UseButton pending={use.isPending} onUse={onUse} />
-      </div>
-
-      <Related category={detail.category} slug={slug} />
-    </div>
-  );
-}
 
 /**
  * The two panes — the conversation and the flow — with the full-screen flow
  * dialog behind "Expand".
  *
- * Exported on its own because the public template pages and the use-case
- * guides show exactly this, and a second drawing of "what this template asks"
- * would drift from the one the app shows the moment a template changed.
+ * Shared by the template pages and the use-case guides, so "what this
+ * template asks" is drawn once.
  */
 export function TemplatePanes({
   doc,
@@ -192,103 +73,6 @@ export function TemplatePanes({
         </DialogContent>
       </Dialog>
     </>
-  );
-}
-
-/**
- * The header: icon, title, blurb, what it costs to answer, and one action.
- *
- * `heading` overrides the h1 for the public page, where the title has to be
- * the phrase somebody searched ("Client intake form template") rather than
- * the catalogue's own short name. `action` is whatever that surface can do —
- * create the form in the app, sign up first on the marketing site.
- */
-export function TemplateHero({
-  detail,
-  doc,
-  action,
-  heading,
-}: {
-  detail: TemplateDetailPayload;
-  doc: FormDoc;
-  action: React.ReactNode;
-  heading?: string;
-}) {
-  const accent = templateAccent(detail.category, detail.accent, detail.icon);
-  const Icon = accent.icon;
-
-  const branchPoints = new Set(
-    doc.logic.filter(isGoto).filter((r) => (r.when?.conditions.length ?? 0) > 0).map((r) => r.from),
-  ).size;
-
-  const meta = [
-    { icon: Blocks, label: `${detail.blockCount} questions` },
-    { icon: Clock, label: `~${detail.estMinutes} min to answer` },
-    branchPoints > 0
-      ? { icon: GitBranch, label: `${branchPoints} branch${branchPoints === 1 ? "" : "es"}` }
-      : null,
-    doc.endings.length > 1 ? { icon: Flag, label: `${doc.endings.length} endings` } : null,
-  ].filter(Boolean) as { icon: typeof Blocks; label: string }[];
-
-  return (
-    <div className="mt-4 flex flex-wrap items-start justify-between gap-6">
-      <div className="flex min-w-0 max-w-2xl items-start gap-4">
-        <span className={cn("grid size-12 shrink-0 place-items-center rounded-xl", accent.tile)}>
-          <Icon className="size-6" strokeWidth={1.75} />
-        </span>
-        <div className="min-w-0">
-          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            {detail.category}
-          </p>
-          <h1 className="text-h1 font-display mt-0.5">{heading ?? detail.title}</h1>
-          <p className="text-muted-foreground text-body mt-2 leading-relaxed">
-            {detail.blurb || detail.description}
-          </p>
-
-          <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
-            {meta.map((m) => (
-              <span key={m.label} className="tabular inline-flex items-center gap-1">
-                <m.icon className="size-3.5" strokeWidth={1.75} />
-                {m.label}
-              </span>
-            ))}
-          </div>
-
-          {detail.tags.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {detail.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[0.6875rem]"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {action}
-    </div>
-  );
-}
-
-function UseButton({ pending, onUse }: { pending: boolean; onUse: () => void }) {
-  return (
-    <Button shape="pill" size="lg" disabled={pending} onClick={onUse}>
-      {pending ? (
-        <>
-          <Loader2 className="size-4 animate-spin" />
-          Creating your form…
-        </>
-      ) : (
-        <>
-          Use this template
-          <ArrowRight className="size-4" />
-        </>
-      )}
-    </Button>
   );
 }
 
@@ -455,62 +239,5 @@ function Panel({
       </div>
       {scroll ? <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2">{children}</div> : children}
     </section>
-  );
-}
-
-/** Other templates for the same job, for the reader who is still choosing. */
-function Related({ category, slug }: { category: string; slug: string }) {
-  const { templates } = useTemplates();
-  const related = templates.filter((t) => t.category === category && t.slug !== slug).slice(0, 3);
-  if (related.length === 0) return null;
-
-  return (
-    <div className="mt-10">
-      <div className="mb-4 flex items-baseline justify-between gap-3">
-        <h2 className="font-display text-base font-semibold">More in {category}</h2>
-        <Link
-          href="/templates"
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5 text-sm transition-colors duration-[var(--duration-micro)]"
-        >
-          All templates
-          <ChevronRight className="size-3.5" />
-        </Link>
-      </div>
-      <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {related.map((t) => (
-          <li key={t.slug} className="flex">
-            <TemplateCard template={t} />
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function DetailSkeleton() {
-  return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
-      <div className="flex items-start gap-4">
-        <div className="shimmer size-12 rounded-xl" />
-        <div className="flex-1 space-y-2.5 pt-1">
-          <div className="shimmer h-3 w-24 rounded" />
-          <div className="shimmer h-5 w-64 rounded" />
-          <div className="shimmer h-3 w-full max-w-xl rounded" />
-        </div>
-        <div className="shimmer h-10 w-44 rounded-full" />
-      </div>
-      <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-        <div className="border-border h-96 rounded-2xl border p-5">
-          <div className="space-y-3">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <div key={i} className="shimmer h-9 rounded-2xl" style={{ width: `${88 - i * 7}%` }} />
-            ))}
-          </div>
-        </div>
-        <div className="border-border h-96 rounded-2xl border p-5">
-          <div className="shimmer h-full rounded-xl" />
-        </div>
-      </div>
-    </div>
   );
 }

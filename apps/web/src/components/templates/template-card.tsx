@@ -31,16 +31,17 @@ export function TemplateCard({
   disabled?: boolean;
   /** Fired when the card is followed; the create dialog closes itself on it. */
   onOpen?: () => void;
-  /** Where the card leads. The app's own detail page unless the public gallery says otherwise. */
+  /** Where the card leads. The template's public page unless told otherwise. */
   href?: string;
 }) {
   const info = TILES[template.slug];
   const compact = variant === "compact";
+  const path = href ?? `/form-templates/${template.slug}`;
 
   return (
     <article className={cn("flex h-full w-full flex-col", disabled && "pointer-events-none opacity-60")}>
       <Link prefetch={false}
-        href={href ?? `/templates/${template.slug}`}
+        href={path}
         onClick={onOpen}
         className="group focus-visible:ring-ring/50 rounded-2xl focus-visible:ring-[3px] focus-visible:outline-none"
       >
@@ -48,7 +49,7 @@ export function TemplateCard({
           <TemplateThumb
             tile={{
               slug: template.slug,
-              path: href ?? `/templates/${template.slug}`,
+              path,
               name: template.title,
               kind: info.kind,
               description: template.description,
