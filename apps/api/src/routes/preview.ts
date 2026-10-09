@@ -5,7 +5,7 @@ import { sha256Hex, readFormDoc, type FormDoc } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
 import { SessionDO } from "../do/session-do.js";
 import { requireSession, requireOrg, requireFormAccess, type GuardVars } from "../lib/guards.js";
-import { SESSION_LOCATION } from "../lib/session-location.js";
+import { SESSION_LOCATION, sessionObjectId, mintSessionId } from "../lib/session-location.js";
 import { deferOn, previewLanguage } from "../lib/translations.js";
 
 /**
@@ -69,7 +69,7 @@ previewRouter.post(
       defer: deferOn(c),
     });
 
-    const sessionId = `chs_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
+    const sessionId = mintSessionId(c.env.SESSION_DO);
     const respondentToken = crypto.randomUUID().replace(/-/g, "");
 
     await c.env.DB.prepare(
@@ -79,7 +79,7 @@ previewRouter.post(
       .bind(sessionId, row.id, row.organization_id, sha256Hex(respondentToken), Date.now(), Date.now())
       .run();
 
-    const stub = c.env.SESSION_DO.get(c.env.SESSION_DO.idFromName(sessionId), SESSION_LOCATION) as unknown as InstanceType<typeof SessionDO>;
+    const stub = c.env.SESSION_DO.get(sessionObjectId(c.env.SESSION_DO, sessionId), SESSION_LOCATION) as unknown as InstanceType<typeof SessionDO>;
     const init = await stub.init({
       sessionId,
       formId: row.id,

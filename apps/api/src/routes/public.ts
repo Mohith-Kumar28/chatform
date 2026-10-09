@@ -1,4 +1,4 @@
-import { Hono, type Context } from "hono";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { describeRoute, resolver } from "hono-openapi";
 import { validator } from "../lib/validator.js";
@@ -32,7 +32,7 @@ import { recordClientTiming } from "../lib/turn-timings.js";
 import { cancelFollowUps, cancelFollowUpsForAddress, recordFollowUpClick, suppress } from "../lib/followups.js";
 import type { RespondentIdentity } from "@repo/form-schema";
 import { confirmPaymentForSession, providersForAccounts, startPaymentForSession } from "../lib/payments/service.js";
-import { SESSION_LOCATION } from "../lib/session-location.js";
+import { SESSION_LOCATION, isReservableSessionId, mintSessionId, sessionObjectId } from "../lib/session-location.js";
 import { orgClosedSql } from "../lib/account-deletion.js";
 
 const sessionsRouter = new Hono<{ Bindings: Bindings }>();
@@ -79,6 +79,8 @@ const createSessionSchema = z.object({
    * existed.
    */
   deviceSignal: z.string().max(128).optional(),
+  /** A session id from `POST /p/reserve`, whose object is already started. */
+  reserved: z.string().max(80).optional(),
   /**
    * The respondent's own clock, as their browser reports it.
    *
@@ -208,7 +210,7 @@ function assetIdFromKey(key: string): string {
 }
 
 function stub(env: Bindings, sessionId: string): DurableObjectStub<SessionDO> {
-  return env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId), SESSION_LOCATION) as unknown as DurableObjectStub<SessionDO>;
+  return env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sessionId), SESSION_LOCATION) as unknown as DurableObjectStub<SessionDO>;
 }
 
 /**
@@ -381,6 +383,43 @@ sessionsRouter.get(
   return c.json(config);
 });
 
+/**
+ * A JSON body sent as `text/plain`, read as the JSON it is.
+ *
+ * `application/json` from another origin is not a "simple" request, so the
+ * browser asks permission first: an OPTIONS round trip to Singapore in front
+ * of the request that opens the session, on every first visit. Plain text is
+ * sent straight away. Nothing is trusted because of the header either way; the
+ * body goes through the same schema.
+ */
+const plainTextAsJson: MiddlewareHandler = async (c, next) => {
+  if ((c.req.header("content-type") ?? "").toLowerCase().startsWith("text/plain")) {
+    const headers = new Headers(c.req.raw.headers);
+    headers.set("content-type", "application/json");
+    c.req.raw = new Request(c.req.raw, { headers });
+  }
+  await next();
+};
+
+/**
+ * Start a session object before the session that will use it.
+ *
+ * Called by a form that is loaded and about to be opened (see `warmSession`
+ * in the web's `use-chat`). Answers with the id to open the session on. With
+ * an id it was given before, it keeps that same object in memory, which
+ * otherwise lapses after about twenty seconds of nothing. Touches no database
+ * and stores nothing, so one of these per visitor is not a response, a
+ * session, or a row of anything.
+ */
+// Not under `/sessions/`: that prefix is rate limited per session id, and this would be one id for everybody.
+sessionsRouter.post("/reserve", async (c) => {
+  const given = (await c.req.json<{ id?: unknown }>().catch(() => null))?.id;
+  const id =
+    typeof given === "string" && isReservableSessionId(c.env.SESSION_DO, given) ? given : mintSessionId(c.env.SESSION_DO);
+  await stub(c.env, id).warm();
+  return c.json({ id });
+});
+
 sessionsRouter.post(
   "/forms/:slug/sessions",
   describeRoute({
@@ -392,6 +431,7 @@ sessionsRouter.post(
       404: { description: "Form not found", content: { "application/json": { schema: resolver(ErrorEnvelope) } } },
     },
   }),
+  plainTextAsJson,
   validator("json", createSessionSchema),
   async (c) => {
     const { slug } = c.req.param();
@@ -408,6 +448,16 @@ sessionsRouter.post(
       timings.push(`${name};dur=${now - lap}`);
       lap = now;
     };
+
+    /*
+     * Start the session's object now, alongside the reads below, not after them.
+     * A browser that reserved one (`/p/reserve`) has this done already; for one
+     * that did not, the object's start is the longest single step of opening a
+     * session and nothing below has to finish before it can begin.
+     */
+    const reservedId =
+      body.reserved && isReservableSessionId(c.env.SESSION_DO, body.reserved) ? body.reserved : mintSessionId(c.env.SESSION_DO);
+    if (reservedId !== body.reserved) void stub(c.env, reservedId).warm().catch(() => {});
 
     const formRow = await c.env.DB.prepare(
       `SELECT f.id, f.slug, f.status, f.close_at, f.organization_id, f.fingerprint_salt, fv.id AS version_id, fv.schema_json
@@ -494,6 +544,7 @@ sessionsRouter.post(
        */
       embedOrigin: c.req.header("origin") ?? null,
       deviceSignal: body.deviceSignal ?? null,
+      reservedSessionId: reservedId,
       timezone,
       /**
        * Carried onto the session, not just used here.
@@ -618,6 +669,7 @@ sessionsRouter.post(
       slug: formRow.slug,
       brandingHidden: opened.brandingHidden,
       aiDegraded: opened.aiDegraded,
+      meterOnResponse: opened.meterOnResponse,
       docJson: sessionDoc,
       respondentToken: opened.respondentToken,
       hiddenFields: body.hiddenFields ?? {},

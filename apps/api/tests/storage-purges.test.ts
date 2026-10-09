@@ -3,6 +3,7 @@ import { env, runInDurableObject } from "cloudflare:test";
 import { applySchema, fetchApi, seedTenant } from "./helpers.js";
 import { drainStoragePurges, pruneOrphanRespondents, prunePendingUploads, sweepUnusedAssets } from "../src/lib/storage-purges.js";
 import { SESSION_LOCATION } from "../src/lib/session-location.js";
+import { sessionObjectId } from "../src/lib/session-location.js";
 
 /**
  * Deleting a row must take what it pointed at outside D1 with it.
@@ -248,7 +249,7 @@ describe("storage purges", () => {
     await addSession(t, "chs_purgedo_live");
     const old = Date.now() - 3 * 86_400_000;
     const seed = async (name: string, sessionId: string, startedAt: number) => {
-      const id = env.SESSION_DO.idFromName(name);
+      const id = sessionObjectId(env.SESSION_DO, name);
       const stub = env.SESSION_DO.get(id, SESSION_LOCATION);
       await runInDurableObject(stub, async (_instance, state) => {
         await state.storage.put("session", { meta: { sessionId, startedAt } });

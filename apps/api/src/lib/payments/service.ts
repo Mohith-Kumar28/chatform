@@ -16,7 +16,7 @@ import {
   type RespondentPaymentRow,
   type WebhookEvent,
 } from "./types.js";
-import { SESSION_LOCATION } from "../session-location.js";
+import { SESSION_LOCATION, sessionObjectId } from "../session-location.js";
 
 /**
  * The respondent side of verified payments: one checkout attempt, from the
@@ -589,7 +589,7 @@ export type SettleOutcome =
   | "not_paid";
 
 function sessionStub(env: Bindings, sessionId: string): DurableObjectStub<SessionDO> {
-  return env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId), SESSION_LOCATION) as unknown as DurableObjectStub<SessionDO>;
+  return env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sessionId), SESSION_LOCATION) as unknown as DurableObjectStub<SessionDO>;
 }
 
 export async function markDuplicate(env: Bindings, record: Pick<RespondentPaymentRow, "id" | "sessionId" | "blockRef" | "provider">): Promise<void> {

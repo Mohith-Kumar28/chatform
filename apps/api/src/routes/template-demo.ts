@@ -7,7 +7,7 @@ import { SessionDO } from "../do/session-do.js";
 import { getAuth } from "../lib/auth-instance.js";
 import { validator } from "../lib/validator.js";
 import { ErrorEnvelope } from "../lib/openapi.js";
-import { SESSION_LOCATION } from "../lib/session-location.js";
+import { SESSION_LOCATION, sessionObjectId, mintSessionId } from "../lib/session-location.js";
 import { verifyTurnstile } from "../lib/open-session.js";
 import {
   ANON_DAILY_LIMIT,
@@ -136,7 +136,7 @@ templateDemoRouter.post(
     const doc: FormDoc = readFormDoc(JSON.parse(template.schema_json));
     doc.settings.agent.sessionTokenBudget = Math.min(doc.settings.agent.sessionTokenBudget ?? DEMO_TOKEN_BUDGET, DEMO_TOKEN_BUDGET);
 
-    const sessionId = `chs_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
+    const sessionId = mintSessionId(c.env.SESSION_DO);
     const respondentToken = crypto.randomUUID().replace(/-/g, "");
     const now = Date.now();
     await c.env.DB.prepare(
@@ -146,7 +146,7 @@ templateDemoRouter.post(
       .bind(sessionId, TEMPLATE_DEMO_FORM, TEMPLATE_DEMO_ORG, sha256Hex(respondentToken), now, now)
       .run();
 
-    const stub = c.env.SESSION_DO.get(c.env.SESSION_DO.idFromName(sessionId), SESSION_LOCATION) as unknown as InstanceType<typeof SessionDO>;
+    const stub = c.env.SESSION_DO.get(sessionObjectId(c.env.SESSION_DO, sessionId), SESSION_LOCATION) as unknown as InstanceType<typeof SessionDO>;
     const init = await stub.init({
       sessionId,
       formId: TEMPLATE_DEMO_FORM,

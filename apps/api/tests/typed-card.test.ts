@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:test";
 import { applySchema, seedTenant, fetchApi } from "./helpers.js";
 import type { SessionDO } from "../src/do/session-do.js";
+import { sessionObjectId } from "../src/lib/session-location.js";
 
 /**
  * A contact card typed out as a message instead of filled in.
@@ -111,7 +112,7 @@ async function seedForm(label: string): Promise<string> {
   return slug;
 }
 
-const stubFor = (sid: string) => env.SESSION_DO.get(env.SESSION_DO.idFromName(sid)) as unknown as DurableObjectStub<SessionDO>;
+const stubFor = (sid: string) => env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sid)) as unknown as DurableObjectStub<SessionDO>;
 
 async function open(slug: string) {
   const res = await fetchApi(`/p/forms/${slug}/sessions`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });

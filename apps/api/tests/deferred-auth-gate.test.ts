@@ -4,6 +4,7 @@ import { applySchema, seedTenant, seedKey, fetchApi, type Tenant } from "./helpe
 import type { SessionDO } from "../src/do/session-do.js";
 import { PLANS } from "@repo/entitlements";
 import { invalidateEntitlements } from "../src/lib/entitlements.js";
+import { sessionObjectId } from "../src/lib/session-location.js";
 
 /**
  * A sign-in gate that waits a few questions.
@@ -95,7 +96,7 @@ const answer = async (sessionId: string, ref: string, value: unknown): Promise<T
   ).json()) as TurnBody;
 
 const stubFor = (sid: string) =>
-  env.SESSION_DO.get(env.SESSION_DO.idFromName(sid)) as unknown as DurableObjectStub<SessionDO>;
+  env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sid)) as unknown as DurableObjectStub<SessionDO>;
 
 /**
  * Attached directly rather than through a minted Google credential: the token

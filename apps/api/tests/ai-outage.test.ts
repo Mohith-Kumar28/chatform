@@ -6,6 +6,7 @@ import { classifyAiError } from "../src/lib/ai-failure.js";
 import { verifyTurnstile } from "../src/lib/open-session.js";
 import { finalizeResponse, openResponse, type ResponseOwner } from "../src/lib/submissions.js";
 import { computeAnalytics } from "../src/lib/analytics-service.js";
+import { sessionObjectId } from "../src/lib/session-location.js";
 
 /**
  * A form keeps working when the AI does not.
@@ -94,7 +95,7 @@ async function seedForm(label: string, mode: "ai" | "hybrid"): Promise<{ slug: s
   return { slug, formId: t.formId };
 }
 
-const stubFor = (sid: string) => env.SESSION_DO.get(env.SESSION_DO.idFromName(sid)) as unknown as DurableObjectStub<SessionDO>;
+const stubFor = (sid: string) => env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sid)) as unknown as DurableObjectStub<SessionDO>;
 
 async function open(slug: string) {
   const res = await fetchApi(`/p/forms/${slug}/sessions`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });

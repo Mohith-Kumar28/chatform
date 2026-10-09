@@ -4,6 +4,7 @@ import { applySchema, seedTenant, seedKey, fetchApi, type Tenant } from "./helpe
 import type { SessionDO } from "../src/do/session-do.js";
 import { PLANS } from "@repo/entitlements";
 import { invalidateEntitlements } from "../src/lib/entitlements.js";
+import { sessionObjectId } from "../src/lib/session-location.js";
 
 /**
  * How a conversation opens, counted in the record rather than in the stream.
@@ -89,7 +90,7 @@ const open = async (): Promise<string> =>
   }).sessionId;
 
 const stubFor = (sid: string) =>
-  env.SESSION_DO.get(env.SESSION_DO.idFromName(sid)) as unknown as DurableObjectStub<SessionDO>;
+  env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sid)) as unknown as DurableObjectStub<SessionDO>;
 
 const signIn = (sid: string) =>
   stubFor(sid).attachIdentity({
@@ -204,5 +205,60 @@ describe("the response to opening a session", () => {
     expect(body.events.some((e) => e.type === "message_end" && e.data.text?.includes("Campus Catalyst"))).toBe(true);
     // In order and from the start, so the stream's replay of them is a repeat the client drops.
     expect(body.events.map((e) => e.seq)).toEqual(body.events.map((_, i) => i + 1));
+  });
+});
+
+/**
+ * A session object can be started before the session that will use it.
+ *
+ * Starting one is most of a second in production, and it was spent between a
+ * respondent's click and their first question. `POST /p/reserve` starts one
+ * and names it; opening a session with that name uses it.
+ */
+describe("a reserved session", () => {
+  const slugOf = async () =>
+    (await env.DB.prepare(`SELECT slug FROM forms WHERE id = ?1`).bind(t.formId).first<{ slug: string }>())!.slug;
+  // As the browser sends it: plain text, so no preflight goes ahead of it.
+  const openWith = async (body: object) =>
+    fetchApi(`/p/forms/${await slugOf()}/sessions`, {
+      method: "POST",
+      headers: { "content-type": "text/plain;charset=UTF-8" },
+      body: JSON.stringify(body),
+    });
+  const reserve = async (id?: string) =>
+    ((await (await fetchApi(`/p/reserve`, { method: "POST", body: JSON.stringify(id ? { id } : {}) })).json()) as { id: string }).id;
+
+  it("is the session that opens, and writes nothing until it does", async () => {
+    await publish({ welcome: true, gate: false });
+    const before = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM chat_sessions`).first<{ n: number }>())!.n;
+    const id = await reserve();
+    expect(id).toMatch(/^chs_[0-9a-f]{64}$/);
+    // Asking again with the id keeps the same one.
+    expect(await reserve(id)).toBe(id);
+    expect((await env.DB.prepare(`SELECT COUNT(*) AS n FROM chat_sessions`).first<{ n: number }>())!.n).toBe(before);
+
+    const res = await openWith({ reserved: id });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { sessionId: string; events: unknown[] };
+    expect(body.sessionId).toBe(id);
+    expect(body.events.length).toBeGreaterThan(0);
+  });
+
+  it("cannot be opened twice, or name somebody else's session", async () => {
+    await publish({ welcome: true, gate: false });
+    const id = await reserve();
+    const first = (await (await openWith({ reserved: id })).json()) as { sessionId: string };
+    const second = (await (await openWith({ reserved: id })).json()) as { sessionId: string; events: unknown[] };
+    expect(first.sessionId).toBe(id);
+    expect(second.sessionId).not.toBe(id);
+    // And the second is a whole session of its own, not an empty reply from the first one's object.
+    expect(second.events.length).toBeGreaterThan(0);
+  });
+
+  it("ignores an id it did not mint", async () => {
+    await publish({ welcome: true, gate: false });
+    const res = await openWith({ reserved: "chs_notanobjectid" });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { sessionId: string }).sessionId).toMatch(/^chs_[0-9a-f]{64}$/);
   });
 });

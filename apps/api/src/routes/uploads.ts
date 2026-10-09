@@ -18,7 +18,7 @@ import { assetLimit } from "../lib/ratelimit.js";
 import { contentLength } from "../lib/inputs.js";
 import { getEntitlements, storageBytes } from "../lib/entitlements.js";
 import { PLAN_LIST } from "@repo/entitlements";
-import { SESSION_LOCATION } from "../lib/session-location.js";
+import { SESSION_LOCATION, sessionObjectId } from "../lib/session-location.js";
 
 /**
  * File uploads — R2 binding based (no S3 credentials needed).
@@ -387,7 +387,7 @@ uploadsRouter.post(
 
     // notify the session DO so it can emit upload_received + proceed
     const { SessionDO } = await import("../do/session-do.js");
-    const stub = c.env.SESSION_DO.get(c.env.SESSION_DO.idFromName(sessionId), SESSION_LOCATION) as unknown as InstanceType<typeof SessionDO>;
+    const stub = c.env.SESSION_DO.get(sessionObjectId(c.env.SESSION_DO, sessionId), SESSION_LOCATION) as unknown as InstanceType<typeof SessionDO>;
     await stub.notifyUpload(fileId, {
       fileId,
       filename: file.filename,

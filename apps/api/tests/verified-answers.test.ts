@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:test";
 import { applySchema, seedTenant, seedKey, fetchApi, type Tenant } from "./helpers.js";
 import type { SessionDO } from "../src/do/session-do.js";
+import { sessionObjectId } from "../src/lib/session-location.js";
 
 /**
  * An answer that has to prove itself.
@@ -237,7 +238,7 @@ describe("a question that verifies its answer", () => {
      * would accept is `respondent-auth.test.ts`'s job, and what is under test
      * here is what the *answer* does once one exists.
      */
-    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sid)) as unknown as DurableObjectStub<SessionDO>;
+    const stub = env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sid)) as unknown as DurableObjectStub<SessionDO>;
     await stub.attachIdentity({
       provider: "google",
       subject: "google-sub-verans",
@@ -255,7 +256,7 @@ describe("a question that verifies its answer", () => {
 
   it("still asks when they type a different address from the one they signed in with", async () => {
     const sid = await open();
-    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sid)) as unknown as DurableObjectStub<SessionDO>;
+    const stub = env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sid)) as unknown as DurableObjectStub<SessionDO>;
     await stub.attachIdentity({
       provider: "google",
       subject: "google-sub-verans2",
@@ -274,7 +275,7 @@ describe("a question that verifies its answer", () => {
 
 describe("a number, proved by Firebase", () => {
   const stubFor = (sid: string) =>
-    env.SESSION_DO.get(env.SESSION_DO.idFromName(sid)) as unknown as DurableObjectStub<SessionDO>;
+    env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sid)) as unknown as DurableObjectStub<SessionDO>;
 
   /** Get past the email question so the phone one is current. */
   async function reachPhone(sid: string): Promise<void> {

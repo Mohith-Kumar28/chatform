@@ -179,6 +179,8 @@ interface DoSessionMeta {
    * which only needs to be long enough to get through the template.
    */
   turnLimit?: number;
+  /** Usage is counted by this session when its response is created, not by whoever opened it. See `meterNewResponse`. */
+  meterOnResponse?: boolean;
   /** Salted device key, from `lib/respondent-key.ts`. Null when nothing identified the device. */
   fingerprint?: string | null;
   /**
@@ -716,6 +718,18 @@ export class SessionDO extends DurableObject<Bindings> {
 
   // ────────────────────────── lifecycle ──────────────────────────
 
+  /**
+   * Start this object, and nothing else.
+   *
+   * A new object takes most of a second to start, which used to be spent in
+   * front of the respondent, between their click and the first question. A
+   * form that is on screen and about to be opened calls this first, so the
+   * object is already running when the session is opened on it. It reads and
+   * writes nothing: an object nobody opens holds no storage and is simply
+   * dropped from memory a little later.
+   */
+  async warm(): Promise<void> {}
+
   async init(params: {
     sessionId: string;
     formId: string;
@@ -729,6 +743,8 @@ export class SessionDO extends DurableObject<Bindings> {
      * questions instead of a conversation, and nothing about their experience fails.
      */
     aiDegraded?: boolean;
+    /** Opened through `openSession`, which no longer counts usage itself. See `meterNewResponse`. */
+    meterOnResponse?: boolean;
     docJson: unknown;
     respondentToken: string;
     hiddenFields: Record<string, string>;
@@ -821,6 +837,7 @@ export class SessionDO extends DurableObject<Bindings> {
       context: params.context ?? null,
       source: params.source ?? "chat",
       isTest: params.isTest === true,
+      ...(params.meterOnResponse && params.isTest !== true ? { meterOnResponse: true } : {}),
       ...(params.turnLimit ? { turnLimit: params.turnLimit } : {}),
       ...(params.heldResume ? { heldResume: params.heldResume } : {}),
     };
@@ -6444,6 +6461,30 @@ export class SessionDO extends DurableObject<Bindings> {
   }
 
   /**
+   * Count this conversation against the plan: one response, one AI conversation.
+   *
+   * Called when the session creates its response row, never when it adopts a
+   * draft that was already there (that one was counted when it was created).
+   * Opening a session used to be the moment, which charged a form's owner for
+   * everybody who opened it and left, and meant a form could not be made ready
+   * ahead of a click without spending quota on people who never clicked.
+   *
+   * The stored flag is written first, so a retried insert or a second caller
+   * cannot count twice; a count lost to a failed write is the cheaper mistake.
+   */
+  private async meterNewResponse(): Promise<void> {
+    if (!this.meta?.meterOnResponse) return;
+    if (await this.ctx.storage.get<boolean>("metered")) return;
+    await this.ctx.storage.put("metered", true);
+    try {
+      await meter(this.env, this.meta.organizationId, "ai_conversations", 1);
+      await meter(this.env, this.meta.organizationId, "responses", 1);
+    } catch (err) {
+      console.error("meter_new_response_failed", { sessionId: this.meta.sessionId, ...errorInfo(err) });
+    }
+  }
+
+  /**
    * In flight, so two callers in one turn cannot open two rows.
    *
    * The storage key alone was not enough, and the gap is not theoretical: the
@@ -6545,6 +6586,8 @@ export class SessionDO extends DurableObject<Bindings> {
       });
       await this.ctx.storage.put("submission_id", id);
       if (id !== wanted) await this.reopenAdopted(id);
+      // A response exists that did not before: this is what the plan counts.
+      else await this.meterNewResponse();
       return id;
     })();
     /*

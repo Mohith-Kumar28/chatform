@@ -3,6 +3,7 @@ import { env } from "cloudflare:test";
 import { applySchema, seedTenant, fetchApi, type Tenant } from "./helpers.js";
 import type { Bindings } from "../src/env.js";
 import type { SessionDO } from "../src/do/session-do.js";
+import { sessionObjectId } from "../src/lib/session-location.js";
 
 /**
  * The webhook routes with their real signature checks.
@@ -180,7 +181,7 @@ afterAll(() => {
   mutableEnv.STRIPE_CONNECT_WEBHOOK_SECRET = savedStripeSecret;
 });
 
-const stubFor = (sid: string) => env.SESSION_DO.get(env.SESSION_DO.idFromName(sid)) as unknown as DurableObjectStub<SessionDO>;
+const stubFor = (sid: string) => env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sid)) as unknown as DurableObjectStub<SessionDO>;
 
 /** A signed-in respondent with a checkout open on the payment question. Returns the record id. */
 async function openCheckout(slug: string): Promise<{ sid: string; recordId: string }> {

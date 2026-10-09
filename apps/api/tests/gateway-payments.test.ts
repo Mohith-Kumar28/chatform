@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from "vitest";
 import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { applySchema, seedTenant, seedKey, fetchApi, type Tenant } from "./helpers.js";
 import type { SessionDO } from "../src/do/session-do.js";
+import { sessionObjectId } from "../src/lib/session-location.js";
 
 /**
  * A payment question that only moves on when the admin's own gateway says so.
@@ -314,7 +315,7 @@ interface Session {
 }
 
 const stubFor = (sid: string) =>
-  env.SESSION_DO.get(env.SESSION_DO.idFromName(sid)) as unknown as DurableObjectStub<SessionDO>;
+  env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sid)) as unknown as DurableObjectStub<SessionDO>;
 
 let identities = 0;
 async function signIn(sid: string): Promise<void> {

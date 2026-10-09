@@ -6,6 +6,7 @@ import { RESUME_TTL_DAYS } from "../src/lib/followups.js";
 import { sha256Hex } from "@repo/form-schema";
 import type { Bindings } from "../src/env.js";
 import type { SessionDO } from "../src/do/session-do.js";
+import { sessionObjectId } from "../src/lib/session-location.js";
 
 /**
  * Coming back to a response you abandoned.
@@ -211,7 +212,7 @@ describe("resuming a response the form has since outgrown", () => {
     expect(res.status).toBe(200);
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+    const stub = env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sessionId)) as unknown as DurableObjectStub<SessionDO>;
     const status = await stub.getStatus();
     // Three orphaned answers, a gate set to close after three: counted raw,
     // this is a sign-in card in front of question one.
@@ -249,7 +250,7 @@ describe("resuming a response the form has since outgrown", () => {
     expect(res.status).toBe(200);
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+    const stub = env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sessionId)) as unknown as DurableObjectStub<SessionDO>;
     const ready = await readReady(await stub.stream());
     expect(ready.identity).toEqual({
       provider: "google",
@@ -274,7 +275,7 @@ describe("resuming a response the form has since outgrown", () => {
     await seedAbandoned("sbm_resume23");
     const res = await open({ resumeToken: await token("sbm_resume23") });
     const { sessionId } = (await res.json()) as { sessionId: string };
-    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+    const stub = env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sessionId)) as unknown as DurableObjectStub<SessionDO>;
     const frames = await readFrames(await stub.stream());
 
     // The thread reads exactly as it did before they left, with the question
@@ -304,7 +305,7 @@ describe("resuming a response the form has since outgrown", () => {
     await seedStale("sbm_resume21");
     const res = await open({ resumeToken: await token("sbm_resume21") });
     const { sessionId } = (await res.json()) as { sessionId: string };
-    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+    const stub = env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sessionId)) as unknown as DurableObjectStub<SessionDO>;
     // The opening line lives in the transcript, not in the event stream: it is
     // written by `appendMessage` before the first question is put.
     const said = (await stub.getTranscript()).map((m) => m.content).join("\n");
@@ -342,7 +343,7 @@ describe("resuming a response started on an older version", () => {
     const res = await open({ resumeToken: await token("sbm_resume30") });
     expect(res.status).toBe(200);
     const { sessionId } = (await res.json()) as { sessionId: string };
-    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+    const stub = env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sessionId)) as unknown as DurableObjectStub<SessionDO>;
 
     const status = await stub.getStatus();
     expect(status?.answers).toEqual({});
@@ -376,7 +377,7 @@ describe("resuming a response started on an older version", () => {
     const res = await open({ resumeToken: await token("sbm_resume32") });
     expect(res.status).toBe(200);
     const { sessionId } = (await res.json()) as { sessionId: string };
-    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+    const stub = env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sessionId)) as unknown as DurableObjectStub<SessionDO>;
 
     const status = await stub.getStatus();
     expect(status?.currentRef).toBe("q_team");
@@ -405,7 +406,7 @@ describe("resuming a response started on an older version", () => {
     await seedOnOldVersion("sbm_resume33");
     const res = await open({ resumeToken: await token("sbm_resume33") });
     const { sessionId } = (await res.json()) as { sessionId: string };
-    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+    const stub = env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sessionId)) as unknown as DurableObjectStub<SessionDO>;
     const transcript = await stub.getTranscript();
     expect(transcript.length).toBeGreaterThanOrEqual(3);
     const times = transcript.map((m) => m.createdAt);
@@ -421,7 +422,7 @@ describe("resuming a response started on an older version", () => {
     await seedAbandoned("sbm_resume31");
     const res = await open({ resumeToken: await token("sbm_resume31") });
     const { sessionId } = (await res.json()) as { sessionId: string };
-    const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+    const stub = env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sessionId)) as unknown as DurableObjectStub<SessionDO>;
     const status = await stub.getStatus();
     expect(status?.currentRef).toBe("q_team");
     const said = (await stub.getTranscript()).map((m) => m.content).join("\n");
@@ -535,7 +536,7 @@ describe("a link opened on another device", () => {
       expect(session?.submission_id).toBeNull();
 
       // Nothing of theirs on screen, and the form at its first question.
-      const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(sessionId)) as unknown as DurableObjectStub<SessionDO>;
+      const stub = env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sessionId)) as unknown as DurableObjectStub<SessionDO>;
       const frames = await readFrames(await stub.stream());
       expect(JSON.stringify(frames)).not.toContain("Maya");
       expect(frames.some((f) => f.event === "user_message")).toBe(false);

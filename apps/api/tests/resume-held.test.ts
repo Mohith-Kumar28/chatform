@@ -8,6 +8,7 @@ import { sha256Hex } from "@repo/form-schema";
 import { invalidateEntitlements } from "../src/lib/entitlements.js";
 import type { Bindings } from "../src/env.js";
 import type { SessionDO } from "../src/do/session-do.js";
+import { sessionObjectId } from "../src/lib/session-location.js";
 
 /**
  * A reminder link for a response nobody proved the inbox of.
@@ -174,7 +175,7 @@ async function answer(s: { sessionId: string; respondentToken: string }, ref: st
 }
 
 const stubFor = (sid: string) =>
-  env.SESSION_DO.get(env.SESSION_DO.idFromName(sid)) as unknown as DurableObjectStub<SessionDO>;
+  env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, sid)) as unknown as DurableObjectStub<SessionDO>;
 
 const row = (id: string) =>
   env.DB.prepare(`SELECT status FROM submissions WHERE id = ?`).bind(id).first<{ status: string }>();

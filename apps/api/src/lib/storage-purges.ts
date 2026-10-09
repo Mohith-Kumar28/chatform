@@ -1,6 +1,6 @@
 import type { Bindings } from "../env.js";
 import type { SessionDO } from "../do/session-do.js";
-import { SESSION_LOCATION } from "./session-location.js";
+import { SESSION_LOCATION, sessionObjectId } from "./session-location.js";
 import { bindChunks, holesFor } from "./d1-bindings.js";
 
 /**
@@ -54,7 +54,7 @@ export async function drainStoragePurges(
       await Promise.all(
         refs.map(async (ref) => {
           try {
-            const stub = env.SESSION_DO.get(env.SESSION_DO.idFromName(ref), SESSION_LOCATION) as unknown as DurableObjectStub<SessionDO>;
+            const stub = env.SESSION_DO.get(sessionObjectId(env.SESSION_DO, ref), SESSION_LOCATION) as unknown as DurableObjectStub<SessionDO>;
             await stub.purge();
           } catch {
             failed.push(ref);

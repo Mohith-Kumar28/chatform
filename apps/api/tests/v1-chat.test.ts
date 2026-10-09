@@ -296,19 +296,56 @@ describe("gates", () => {
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("form_closed");
   });
 
-  it("meters a response, so headless traffic counts against the plan", async () => {
-    const before = await env.DB.prepare(
-      `SELECT used FROM usage_counters WHERE organization_id = ? AND metric = 'responses'`,
-    )
-      .bind(t.orgId)
-      .first<{ used: number }>();
-    await openSession();
-    const after = await env.DB.prepare(
-      `SELECT used FROM usage_counters WHERE organization_id = ? AND metric = 'responses'`,
-    )
-      .bind(t.orgId)
-      .first<{ used: number }>();
-    expect(after!.used).toBeGreaterThan(before?.used ?? 0);
+  /**
+   * Counted when the response exists, not when the session opens.
+   *
+   * Opening used to spend one response and one AI conversation, so a visitor
+   * who opened a form and left cost its owner both. The first accepted answer
+   * creates the response row, and that is the moment both are counted, once.
+   */
+  const used = async (metric: string) =>
+    (
+      await env.DB.prepare(`SELECT used FROM usage_counters WHERE organization_id = ? AND metric = ?`)
+        .bind(t.orgId, metric)
+        .first<{ used: number }>()
+    )?.used ?? 0;
+  /** The answer is written after the turn returns, so the count is read once it has landed. */
+  const settled = async (metric: string, from: number) => {
+    for (let i = 0; i < 40 && (await used(metric)) === from; i++) await new Promise((r) => setTimeout(r, 25));
+    return used(metric);
+  };
+
+  it("meters nothing for a session that is opened and left", async () => {
+    const before = [await used("responses"), await used("ai_conversations")];
+    expect((await openSession()).status).toBe(200);
+    await new Promise((r) => setTimeout(r, 150));
+    expect([await used("responses"), await used("ai_conversations")]).toEqual(before);
+  });
+
+  it("meters a response and an AI conversation at the first answer, once", async () => {
+    const { sessionId } = (await (await openSession()).json()) as { sessionId: string };
+    const responses = await used("responses");
+    const conversations = await used("ai_conversations");
+
+    const first = await api(`/v1/sessions/${sessionId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ type: "structured", ref: "q_email", value: "meter@northwind.co" }),
+    });
+    expect(first.status).toBe(200);
+    const next = ((await first.json()) as { question: { ref: string } | null }).question;
+    expect(await settled("responses", responses)).toBe(responses + 1);
+    expect(await settled("ai_conversations", conversations)).toBe(conversations + 1);
+
+    // A second answer belongs to the same response.
+    if (next) {
+      await api(`/v1/sessions/${sessionId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ type: "text", text: "Maya" }),
+      });
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    expect(await used("responses")).toBe(responses + 1);
+    expect(await used("ai_conversations")).toBe(conversations + 1);
   });
 
   it("does not meter a test-mode session", async () => {
@@ -334,6 +371,16 @@ describe("gates", () => {
       .first<{ used: number }>();
     // Rehearsing an integration must not spend the customer's month.
     expect(after!.used).toBe(before?.used ?? 0);
+
+    // Nor does answering in one, which is where a live session is counted.
+    const answered = await fetchApi(`/v1/sessions/${sessionId}/messages`, {
+      method: "POST",
+      headers: { "x-api-key": testKey, "content-type": "application/json" },
+      body: JSON.stringify({ type: "structured", ref: "q_email", value: "rehearsal@northwind.co" }),
+    });
+    expect(answered.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await used("responses")).toBe(before?.used ?? 0);
 
     const row = await env.DB.prepare(`SELECT is_test FROM chat_sessions WHERE id = ?`)
       .bind(sessionId)

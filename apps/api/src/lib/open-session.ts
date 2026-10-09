@@ -1,6 +1,6 @@
 import { readFormDoc, sha256Hex, type FormDoc, type RespondentAuthMethod } from "@repo/form-schema";
 import type { Bindings } from "../env.js";
-import { getEntitlements, meter, checkQuota } from "./entitlements.js";
+import { getEntitlements, checkQuota } from "./entitlements.js";
 import { claimTrialChat } from "./import-quota.js";
 import { IMPORT_TRIAL_ORG } from "./import/types.js";
 import { clampForRuntime, brandingHiddenFor, gatewayPaymentsLapsed } from "./doc-entitlements.js";
@@ -9,6 +9,7 @@ import { deviceKeyFor } from "./respondents.js";
 import { can } from "@repo/entitlements";
 import { isHashedPassword, verifyPassword, timingSafeEqual } from "./crypto.js";
 import type { ResponseSource } from "./submissions.js";
+import { isReservableSessionId, mintSessionId } from "./session-location.js";
 
 /**
  * Opening a chat session, and every gate that decides whether it may be opened.
@@ -38,6 +39,8 @@ export interface FormRow {
 
 export interface OpenSessionInput {
   env: Bindings;
+  /** An id from `reserveSessionId`, whose object is already started. Used if it is free. */
+  reservedSessionId?: string | null;
   form: FormRow;
   source: ResponseSource;
   hiddenFields: Record<string, string>;
@@ -170,6 +173,8 @@ export type OpenSessionResult =
       runtimeDoc: FormDoc;
       brandingHidden: boolean;
       aiDegraded: boolean;
+      /** Count a response and an AI conversation when this session first has a response. Never for a test. */
+      meterOnResponse: boolean;
       /** The salted device key, and how much of it is a real device signal. */
       device: RespondentKey;
       /**
@@ -463,19 +468,29 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
       gate.method === input.resumeSignInProvider,
   );
 
-  const sessionId = `chs_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
+  /*
+   * A session object the browser asked for ahead of time is already running
+   * (see `reserveSessionId`), so this session takes its id and skips the
+   * second or so a new object takes to start. Only an id of the right shape,
+   * and only once: the insert below refuses an id that already has a session,
+   * and a fresh one is minted instead.
+   */
+  const reserved = input.reservedSessionId && isReservableSessionId(env.SESSION_DO, input.reservedSessionId)
+    ? input.reservedSessionId
+    : null;
+  let sessionId = reserved ?? mintSessionId(env.SESSION_DO);
   const respondentToken = crypto.randomUUID().replace(/-/g, "");
   const now = Date.now();
   const expiresAt = now + (input.ttlSeconds ?? DEFAULT_TTL_SECONDS) * 1000;
 
-  await env.DB.prepare(
+  const insertSession = (id: string) => env.DB.prepare(
     `INSERT INTO chat_sessions (id, form_id, form_version_id, organization_id, respondent_token_hash, status,
                                 hidden_fields, ip_hash, fingerprint, country, timezone, source, is_test,
                                 started_over, submission_id, created_at, last_activity_at, expires_at, bot_check)
      VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
-      sessionId,
+      id,
       form.id,
       form.version_id,
       form.organization_id,
@@ -500,6 +515,14 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
       botCheck,
     )
     .run();
+  try {
+    await insertSession(sessionId);
+  } catch (err) {
+    // Somebody's session already: not theirs to take, and not a reason to refuse them one.
+    if (!reserved) throw err;
+    sessionId = mintSessionId(env.SESSION_DO);
+    await insertSession(sessionId);
+  }
 
   /*
    * Where the sign-in gate will look for it. A separate write so the insert
@@ -523,17 +546,18 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
    * Should this interview be a conversation, or scripted questions?
    *
    * The AI cap is `degrade`-mode: past it the form keeps working, it just stops
-   * being a conversation. `responses` is metered here rather than at completion
-   * because an abandoned session still cost us the interview.
+   * being a conversation. Read here, not spent: opening a session used to count
+   * a response and an AI conversation on the spot, so somebody who opened a
+   * form and left cost its owner one of each. Both are counted by the session
+   * itself when a response first exists (see `SessionDO.meterNewResponse`),
+   * which is the first answer, a sign-in, or a payment.
    *
    * Test-mode sessions are metered as neither: rehearsing an integration must
    * not spend the customer's month.
    */
   let aiDegraded = false;
   if (!input.isTest) {
-    const aiBudget = await meter(env, form.organization_id, "ai_conversations", 1, ent);
-    aiDegraded = aiBudget.degraded === true;
-    await meter(env, form.organization_id, "responses", 1, ent);
+    aiDegraded = (await checkQuota(env, form.organization_id, "ai_conversations", ent)).degraded === true;
   }
 
   return {
@@ -545,6 +569,7 @@ export async function openSession(input: OpenSessionInput): Promise<OpenSessionR
     runtimeDoc,
     brandingHidden: brandingHiddenFor(doc, ent),
     aiDegraded,
+    meterOnResponse: !input.isTest,
     device,
     respondentDeviceKey: deviceKeyFor(env, input.deviceSignal),
     resumeHeld,
