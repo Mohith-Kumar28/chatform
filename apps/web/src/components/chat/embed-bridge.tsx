@@ -99,6 +99,24 @@ export function whenEmbedOpened(): Promise<void> {
   return opened;
 }
 
+/** Whether the form is loaded and still waiting for the host page to open it. */
+export function embedOpenPending(): boolean {
+  return releaseOpen !== null;
+}
+
+/**
+ * The host page thinks the form is about to be opened.
+ *
+ * `embed.js` says so when a pointer reaches the launcher, a finger lands on
+ * it, or it takes focus: a few hundred ms before the click. The chat uses it
+ * to have a session object running by then (see `reserveSession` in
+ * `use-chat`). One listener, because there is one chat.
+ */
+let onWarm: (() => void) | null = null;
+export function onEmbedWarm(listener: (() => void) | null): void {
+  onWarm = listener;
+}
+
 function markOpened(): void {
   releaseOpen?.();
   releaseOpen = null;
@@ -248,6 +266,7 @@ export function EmbedBridge({
       };
       if (message?.source !== "chatform") return;
       if (message.type === "open") markOpened();
+      if (message.type === "warm") onWarm?.();
       if (message.type === "prefill" && message.fields) {
         for (const name of hiddenFieldNames) {
           const value = message.fields[name];

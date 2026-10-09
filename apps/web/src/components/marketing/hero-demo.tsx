@@ -80,6 +80,11 @@ export function HeroDemo({ slug }: { slug: string }) {
     };
   }, [place, sendOpen]);
 
+  /** A pointer on the button, a finger down, focus: the frame gets its session ready to start. */
+  const warm = useCallback(() => {
+    frameRef.current?.contentWindow?.postMessage({ source: "chatform", v: 1, type: "warm" }, window.location.origin);
+  }, []);
+
   const start = useCallback(() => {
     place();
     startedRef.current = true;
@@ -191,6 +196,9 @@ export function HeroDemo({ slug }: { slug: string }) {
                 <button
                   type="button"
                   onClick={start}
+                  onPointerEnter={warm}
+                  onPointerDown={warm}
+                  onFocus={warm}
                   className="bg-primary text-primary-foreground mt-5 inline-flex h-11 items-center gap-2 rounded-full px-6 font-medium shadow-md transition-transform hover:-translate-y-0.5 active:translate-y-0"
                 >
                   Start the demo

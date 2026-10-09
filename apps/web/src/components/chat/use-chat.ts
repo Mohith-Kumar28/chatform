@@ -1,6 +1,6 @@
 "use client";
 
-import { embedPrefill, emitEmbedEvent, whenEmbedOpened } from "./embed-bridge";
+import { embedOpenPending, embedPrefill, emitEmbedEvent, onEmbedWarm, whenEmbedOpened } from "./embed-bridge";
 import { stuckTurnStep } from "./stuck-turn";
 import { rememberValue } from "./respondent-profile";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -437,6 +437,9 @@ const STALL_MS = 45000;
  * understand and act on, and a spinner with no end is not.
  */
 const BOOT_MAX_MS = 8000;
+
+/** How long a reserved session object is taken to still be in memory. Measured: warm at 20s, gone by 40s. */
+const RESERVE_FRESH_MS = 15000;
 
 /*
  * Where a respondent's place in a form is remembered: `storageKey` and
@@ -1595,9 +1598,46 @@ export function useChat({
          * the click before the chat replaced it.
          */
         setResolving(false);
+        /*
+         * A session object, started now.
+         *
+         * A new one takes most of a second to start, and that was spent after
+         * the click. A form waiting behind its launcher asks for one as it
+         * finishes loading and again when the host page says a click is
+         * coming, so the session opens on an object that is already running.
+         * It lapses from memory after about twenty seconds, hence the second
+         * ask. Nothing is written anywhere by this, and a form opened directly
+         * needs none of it: the server starts the object alongside its own reads.
+         */
+        const reservation: { id: string | null; at: number; pending: boolean } = { id: null, at: 0, pending: false };
+        const reserveSession = () => {
+          if (reservation.pending || Date.now() - reservation.at < RESERVE_FRESH_MS) return;
+          reservation.pending = true;
+          void fetch(`${apiOrigin}/p/reserve`, {
+            method: "POST",
+            // A string body goes as text/plain: no CORS preflight.
+            body: JSON.stringify(reservation.id ? { id: reservation.id } : {}),
+          })
+            .then((r) => (r.ok ? (r.json() as Promise<{ id?: string }>) : null))
+            .then((body) => {
+              if (body?.id) {
+                reservation.id = body.id;
+                reservation.at = Date.now();
+              }
+            })
+            .catch(() => {})
+            .finally(() => {
+              reservation.pending = false;
+            });
+        };
+        if (embedOpenPending()) {
+          reserveSession();
+          onEmbedWarm(reserveSession);
+        }
         // A popup loaded ahead of its click opens no session until it is
         // opened: a session is a response row. See `whenEmbedOpened`.
         await whenEmbedOpened();
+        onEmbedWarm(null);
         const deviceSignal = await signal;
         let turnstileToken = await bot;
         if (turnstileToken && Date.now() - botStarted > TURNSTILE_TOKEN_TTL_MS) turnstileToken = await getTurnstileToken();
@@ -1648,11 +1688,14 @@ export function useChat({
           ...respondentContext(),
           ...(freshRef.current ? { fresh: true } : {}),
           ...(language ? { language } : {}),
+          ...(reservation.id ? { reserved: reservation.id } : {}),
         };
         const openWith = (token: string | undefined) =>
           fetch(`${apiOrigin}/p/forms/${slug}/sessions`, {
             method: "POST",
-            headers: { "content-type": "application/json" },
+            // A string body with no content type goes as text/plain, which the
+            // browser sends without asking first. As JSON it was a preflight,
+            // a whole round trip, ahead of the request every respondent waits on.
             body: JSON.stringify({ ...payload, ...(token ? { turnstileToken: token } : {}) }),
           });
         let res = await openWith(turnstileToken);

@@ -734,7 +734,22 @@
         launcher.addEventListener("pointerdown", warm, { once: true });
         launcher.addEventListener("focus", warm, { once: true });
       }
+      // And every time, not once: a loaded frame is told a click is coming.
+      launcher.addEventListener("mouseenter", announceIntent);
+      launcher.addEventListener("pointerdown", announceIntent);
+      launcher.addEventListener("focus", announceIntent);
     }
+  }
+
+  /**
+   * Tell a loaded, unopened frame that it is about to be opened.
+   *
+   * The frame uses the few hundred ms between a pointer arriving and the
+   * click to get its session ready to start (it opens none until `open`).
+   * The frame decides how often to act on it; this only reports.
+   */
+  function announceIntent() {
+    if (!isOpen && frameReady) post({ type: "warm" });
   }
 
   /** The X the loader draws only when the frame never offered one of its own. */
@@ -898,10 +913,11 @@
 
   // Hovering or touching your own button starts the frame early, as on the launcher.
   function onPageWarm(event) {
-    if (frame || destroyed || !mounted || mode === "inline" || !panel || !event.target || !event.target.closest) return;
+    if (destroyed || !mounted || mode === "inline" || !panel || !event.target || !event.target.closest) return;
     var el = event.target.closest("[data-chatform-open]");
     if (!el || !claims(el)) return;
-    panel.appendChild(buildFrame());
+    if (frame) announceIntent();
+    else panel.appendChild(buildFrame());
   }
   document.addEventListener("pointerover", onPageWarm);
   document.addEventListener("pointerdown", onPageWarm);
