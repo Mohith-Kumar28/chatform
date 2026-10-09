@@ -33,7 +33,7 @@ const PREVIEW_CHOICES = [
  * Which of the two is decided once, when the frame is built, because moving
  * an iframe in the document reloads it.
  *
- * The window is nearly a screen tall (95dvh, so a phone's collapsing address
+ * The window is most of a screen tall (85dvh, so a phone's collapsing address
  * bar is counted), and a scroll that comes to rest near it settles with the
  * window filling the screen.
  *
@@ -188,7 +188,7 @@ export function HeroDemo({ slug }: { slug: string }) {
       <div
         ref={windowRef}
         data-demo-window=""
-        className="chat-surface relative z-10 flex h-[max(28rem,95dvh)] flex-col overflow-hidden rounded-2xl border border-white/60 shadow-2xl"
+        className="chat-surface relative z-10 flex h-[max(28rem,85dvh)] flex-col overflow-hidden rounded-2xl border border-white/60 shadow-2xl"
       >
         {/* Window chrome. */}
         <div className="border-border/60 bg-card/80 flex items-center gap-3 border-b px-4 py-2.5 backdrop-blur">
