@@ -13,6 +13,11 @@ import { cn } from "@/lib/utils";
  * (which carries the same ask). Someone signed in gets the same bar with the
  * way back to their forms on it, since "start free" is not their button.
  *
+ * A page can say where the bar starts by marking a section `data-cta-from`,
+ * and then it waits until that section is on screen. The landing page marks
+ * the product tour: the demo form above it fills the screen, and a bar there
+ * would sit on the form's own answer box.
+ *
  * Below 1280px it shares the bottom edge with the contact launcher, where the
  * two used to overlap. So while the bar is up it carries Contact itself and
  * the launcher steps aside (`html[data-cta-bar]` in globals.css), and the
@@ -27,7 +32,9 @@ export function StickyCta() {
     const onScroll = () => {
       const y = window.scrollY;
       const nearEnd = y + window.innerHeight > document.documentElement.scrollHeight - 520;
-      setShow(y > 560 && !nearEnd);
+      const from = document.querySelector("[data-cta-from]");
+      const past = from ? from.getBoundingClientRect().top < window.innerHeight - 160 : y > 560;
+      setShow(past && !nearEnd);
       setHasLauncher(document.querySelector(".cf-launcher") !== null);
     };
     onScroll();

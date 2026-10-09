@@ -98,7 +98,7 @@ export function Hero() {
           </ul>
         </div>
 
-        <div id="try-it" className="relative mx-auto mt-14 max-w-[52rem] scroll-mt-24">
+        <div id="try-it" className="relative mx-auto mt-14 max-w-5xl scroll-mt-24">
           <p className="mb-4 text-center">
             <HandNote tilt={-2} className="text-foreground/80">
               A real chatform. Go on, answer it.

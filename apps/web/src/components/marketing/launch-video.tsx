@@ -151,6 +151,8 @@ export function LaunchVideo() {
     <section
       id={LAUNCH_VIDEO_ID}
       aria-label="Launch video"
+      // The bottom bar waits for this section: see sticky-cta.tsx.
+      data-cta-from=""
       className="relative scroll-mt-16 overflow-x-clip px-6 pt-10 pb-16 sm:pt-14 sm:pb-24"
     >
       {/* The dot grid from the hero, carried down so the band reads as the
