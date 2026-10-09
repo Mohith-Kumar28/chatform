@@ -45,8 +45,12 @@ const PREVIEW_CHOICES = [
  * window is somebody leaving, and is left alone.
  */
 const PHONE_QUERY = "(max-width: 639px)";
-/** How near the window a scroll has to stop, in px, to settle on it. */
-const SETTLE_ZONE = 160;
+/**
+ * How near the window a scroll has to stop to settle on it, as a share of the
+ * screen's height. At 160px it was a target people had to aim for; at this
+ * size the window settles once about half of it is showing.
+ */
+const SETTLE_ZONE = 0.4;
 
 export function HeroDemo({ slug }: { slug: string }) {
   const [playing, setPlaying] = useState(false);
@@ -133,13 +137,14 @@ export function HeroDemo({ slug }: { slug: string }) {
       if (touching) return;
       const y = window.scrollY;
       const to = target();
-      const arrived = Math.abs(from - to) > SETTLE_ZONE && Math.abs(y - to) <= SETTLE_ZONE;
+      const zone = window.innerHeight * SETTLE_ZONE;
+      const arrived = Math.abs(from - to) > zone && Math.abs(y - to) <= zone;
       from = arrived ? to : y;
       if (arrived && Math.abs(y - to) > 1) window.scrollTo({ top: to, behavior: "smooth" });
     };
     const onScroll = () => {
       window.clearTimeout(timer);
-      timer = window.setTimeout(rest, 120);
+      timer = window.setTimeout(rest, 100);
     };
     const onTouchStart = () => {
       touching = true;
