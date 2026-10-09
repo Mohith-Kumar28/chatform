@@ -84,6 +84,11 @@
       {
         "name": "TRAFFIC_DO",
         "class_name": "TrafficDO"
+      },
+      // A count shared by every isolate, which the rate limit bindings below are not. See `src/do/rate-limit-do.ts`.
+      {
+        "name": "RATE_LIMIT_DO",
+        "class_name": "RateLimitDO"
       }
     ]
   },
@@ -95,6 +100,10 @@
     {
       "tag": "v2",
       "new_sqlite_classes": ["TrafficDO"]
+    },
+    {
+      "tag": "v3",
+      "new_sqlite_classes": ["RateLimitDO"]
     }
   ],
   "queues": {
@@ -215,18 +224,6 @@
       // answering questions; it bounds a runaway tab, not a crowd.
       "simple": {
         "limit": 120,
-        "period": 60
-      }
-    },
-    {
-      // Session objects started ahead of a click (`POST /p/reserve`), all of
-      // them together. A reservation writes nothing, but each one starts an
-      // object, so the total is capped. Past it a form simply opens without
-      // one, about a second slower, which is how every form opened before.
-      "name": "RATE_LIMIT_RESERVE",
-      "namespace_id": "1008",
-      "simple": {
-        "limit": 1200,
         "period": 60
       }
     },

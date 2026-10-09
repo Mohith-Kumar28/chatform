@@ -4,6 +4,7 @@ import { createApp } from "./app.js";
 import { handleRequest } from "./mcp/oauth.js";
 import { SessionDO } from "./do/session-do.js";
 import { TrafficDO } from "./do/traffic-do.js";
+import { RateLimitDO } from "./do/rate-limit-do.js";
 import {
   deliverOne,
   fanOutEvent,
@@ -46,7 +47,7 @@ import {
 import { sweepPlanNotices } from "./lib/plan-notices.js";
 import { rollupPlatformDaily, rollupFormStructure, backfillPlatformDaily, rollupTrafficDaily, utcDay } from "./lib/platform-rollup.js";
 
-export { SessionDO, TrafficDO };
+export { SessionDO, TrafficDO, RateLimitDO };
 
 const app = createApp();
 

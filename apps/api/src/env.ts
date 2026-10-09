@@ -13,6 +13,8 @@ export interface Bindings {
   SESSION_DO: DurableObjectNamespace;
   /** First-party page views, in one object's own SQLite. See `do/traffic-do.ts`. */
   TRAFFIC_DO: DurableObjectNamespace;
+  /** One shared counter. See `src/do/rate-limit-do.ts`. */
+  RATE_LIMIT_DO?: DurableObjectNamespace;
   Q_WEBHOOKS: Queue;
   Q_EXPORTS: Queue;
   Q_EMAIL: Queue;
@@ -48,8 +50,6 @@ export interface Bindings {
    */
   RATE_LIMIT_P?: RateLimit;
   RATE_LIMIT_P_AUTH?: RateLimit;
-  /** Every `POST /p/reserve` together. See `reserveLimit`. */
-  RATE_LIMIT_RESERVE?: RateLimit;
   /**
    * The builder's autosave, keyed by the author.
    *

@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import type { Bindings } from "../env.js";
+import type { RateLimitDO } from "../do/rate-limit-do.js";
 import { readPresentedKey, hashApiKey } from "./apikeys.js";
 import { respondentToken } from "../routes/helpers.js";
 import type { GuardVars } from "./guards.js";
@@ -96,17 +97,22 @@ export const burstLimit: MiddlewareHandler<{
  * `success: true` every time. So every limit in this file had been inert
  * since the placement went in.
  *
+ * The cause is how a placed worker is run: its requests are spread over many
+ * isolates (two hundred down one connection reached more than fifteen), and
+ * the binding counts per machine.
+ *
  * The binding is still asked, and still obeyed if it ever answers no. Beside
- * it sits a plain count per key held in this isolate's memory. That is per
- * isolate, so it can only ever let through more than the declared limit,
- * never less: a loose bound, which is all the binding promised either.
+ * it sits a plain count per key held in this isolate's memory, which has the
+ * same weakness: each isolate sees a fraction of one caller, so in practice
+ * this refuses at something like fifteen times the declared number. It stops
+ * a client stuck in a tight loop and little else. A limit that has to hold
+ * needs a count in one place; `reserveLimited` below has one.
  */
 const LIMITS = {
   RATE_LIMIT: { limit: 100, periodMs: 10_000 },
   RATE_LIMIT_PK: { limit: 600, periodMs: 10_000 },
   RATE_LIMIT_P: { limit: 120, periodMs: 60_000 },
   RATE_LIMIT_P_AUTH: { limit: 12, periodMs: 60_000 },
-  RATE_LIMIT_RESERVE: { limit: 1200, periodMs: 60_000 },
   RATE_LIMIT_ASSET: { limit: 60, periodMs: 60_000 },
   RATE_LIMIT_SAVE: { limit: 120, periodMs: 60_000 },
 } as const;
@@ -163,17 +169,35 @@ async function limited(
  * Reserving a session object: per device, and all together.
  *
  * Nobody is identified by address here either. A device that sent its signal
- * is held to the per-conversation rate, which bounds a tab stuck in a loop.
- * That signal is the caller's own word, so the second limit does not depend on
- * it: one bucket for every reservation there is. Being refused costs a
- * respondent nothing they can see. The form opens without a reservation.
+ * gets twenty a minute; a form asks for one as it loads and one per hover
+ * after a quiet spell, so that is a tab stuck in a loop. The signal is the
+ * caller's own word, so the second limit does not depend on it: one bucket
+ * for every reservation there is.
+ *
+ * Counted in `RateLimitDO`, not by a binding: see `LIMITS` for why a binding
+ * counts nothing here. The extra call is on a request nobody is waiting for.
+ * Being refused costs a respondent nothing they can see (the form opens
+ * without a reservation), and so does this failing, which allows.
  */
+const RESERVE_PER_DEVICE = { limit: 20, periodMs: 60_000 };
+const RESERVE_ALL = { limit: 1200, periodMs: 60_000 };
+
 export async function reserveLimited(
   c: Parameters<MiddlewareHandler<{ Bindings: Bindings }>>[0],
   device: string | null,
 ): Promise<boolean> {
-  if (device && (await limited(c, "RATE_LIMIT_P", [`rv:${device.slice(0, 64)}`]))) return true;
-  return limited(c, "RATE_LIMIT_RESERVE", ["rv:all"]);
+  const ns = c.env.RATE_LIMIT_DO;
+  if (!ns || !c.req.header("cf-ray")) return false;
+  try {
+    const counter = ns.get(ns.idFromName("reserve")) as unknown as DurableObjectStub<RateLimitDO>;
+    const allowed = await counter.take([
+      ...(device ? [{ key: `d:${device.slice(0, 64)}`, ...RESERVE_PER_DEVICE }] : []),
+      { key: "all", ...RESERVE_ALL },
+    ]);
+    return !allowed;
+  } catch {
+    return false;
+  }
 }
 
 /**

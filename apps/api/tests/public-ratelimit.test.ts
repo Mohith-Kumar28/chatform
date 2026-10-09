@@ -118,10 +118,10 @@ describe("POST /p/reserve", () => {
 
   it("refuses one device past its rate and leaves another alone", async () => {
     const statuses: number[] = [];
-    // The per-conversation binding: 120 a minute.
-    for (let i = 0; i < 125; i++) statuses.push((await reserve("device-in-a-loop")).status);
-    expect(statuses.slice(0, 120).every((s) => s === 200)).toBe(true);
-    expect(statuses.at(-1)).toBe(429);
+    // Twenty a minute for one device.
+    for (let i = 0; i < 24; i++) statuses.push((await reserve("device-in-a-loop")).status);
+    expect(statuses.slice(0, 20).every((s) => s === 200)).toBe(true);
+    expect(statuses.slice(20).every((s) => s === 429)).toBe(true);
     expect((await reserve("somebody-else")).status).toBe(200);
   });
 });
