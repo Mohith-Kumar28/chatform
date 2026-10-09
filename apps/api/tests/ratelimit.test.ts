@@ -117,3 +117,32 @@ describe("edge burst layer", () => {
     30_000,
   );
 });
+
+/**
+ * A binding that never says no.
+ *
+ * That is what Cloudflare's rate limit binding does from a worker with a
+ * placement, which this API has: measured in production, a thousand calls on
+ * one key in a minute all came back `success: true`. The count kept in the
+ * isolate is what refuses then.
+ */
+describe("a rate limit binding that always allows", () => {
+  it("is still held to the declared limit, per key", async () => {
+    const { withinLimit } = await import("../src/lib/ratelimit.js");
+    const always = { limit: async () => ({ success: true }) };
+    const inert = { RATE_LIMIT_P_AUTH: always } as never;
+
+    const results: boolean[] = [];
+    // Declared in wrangler.jsonc as 12 a minute.
+    for (let i = 0; i < 15; i++) results.push(await withinLimit(inert, "RATE_LIMIT_P_AUTH", "inert:one"));
+    expect(results.slice(0, 12).every(Boolean)).toBe(true);
+    expect(results.slice(12).some(Boolean)).toBe(false);
+    // Another key has its own count.
+    expect(await withinLimit(inert, "RATE_LIMIT_P_AUTH", "inert:two")).toBe(true);
+  });
+
+  it("limits nothing where there is no binding at all", async () => {
+    const { withinLimit } = await import("../src/lib/ratelimit.js");
+    for (let i = 0; i < 20; i++) expect(await withinLimit({} as never, "RATE_LIMIT_P_AUTH", "unbound")).toBe(true);
+  });
+});

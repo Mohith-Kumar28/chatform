@@ -59,10 +59,8 @@ export const burstLimit: MiddlewareHandler<{
 
   // Publishable keys legitimately burst — one window per respondent on a busy
   // page — so they get their own, roomier binding.
-  const binding = presented.startsWith("pk_") ? c.env.RATE_LIMIT_PK : c.env.RATE_LIMIT;
-  if (!binding) return next();
-
-  const { success } = await binding.limit({ key: `k:${await bucketFor(presented)}` });
+  const name: LimitName = presented.startsWith("pk_") ? "RATE_LIMIT_PK" : "RATE_LIMIT";
+  const success = await withinLimit(c.env, name, `k:${await bucketFor(presented)}`);
   if (!success) return tooMany(c, { seconds: 10, scope: "burst", policy: "100;w=10" });
   await next();
 };
@@ -87,20 +85,76 @@ export const burstLimit: MiddlewareHandler<{
  *    live form into a 500 for a respondent halfway through answering it, which
  *    is strictly worse than a request that went uncounted.
  */
+/**
+ * The limits, as `wrangler.jsonc` declares them, for the counter kept here.
+ *
+ * Cloudflare's rate limit binding does not refuse anything from a worker with
+ * a placement, and this one is placed beside the database. Measured on
+ * 2026-10-09 with two otherwise identical workers and a limit of 20 a minute:
+ * the unplaced one refused 59 of 150 requests, the placed one none of 150,
+ * and this API answered a thousand calls on one key in a minute with
+ * `success: true` every time. So every limit in this file had been inert
+ * since the placement went in.
+ *
+ * The binding is still asked, and still obeyed if it ever answers no. Beside
+ * it sits a plain count per key held in this isolate's memory. That is per
+ * isolate, so it can only ever let through more than the declared limit,
+ * never less: a loose bound, which is all the binding promised either.
+ */
+const LIMITS = {
+  RATE_LIMIT: { limit: 100, periodMs: 10_000 },
+  RATE_LIMIT_PK: { limit: 600, periodMs: 10_000 },
+  RATE_LIMIT_P: { limit: 120, periodMs: 60_000 },
+  RATE_LIMIT_P_AUTH: { limit: 12, periodMs: 60_000 },
+  RATE_LIMIT_RESERVE: { limit: 1200, periodMs: 60_000 },
+  RATE_LIMIT_ASSET: { limit: 60, periodMs: 60_000 },
+  RATE_LIMIT_SAVE: { limit: 120, periodMs: 60_000 },
+} as const;
+export type LimitName = keyof typeof LIMITS;
+
+const windows = new Map<string, { started: number; count: number }>();
+const MAX_WINDOWS = 20_000;
+
+/** Count one against `key` in this isolate. False once the window is spent. */
+function countLocally(name: LimitName, key: string): boolean {
+  const { limit, periodMs } = LIMITS[name];
+  const now = Date.now();
+  const id = `${name}:${key}`;
+  const current = windows.get(id);
+  if (!current || now - current.started >= periodMs) {
+    // Bounded: a flood of distinct keys must not become a flood of memory.
+    if (windows.size >= MAX_WINDOWS) {
+      for (const [k, w] of windows) if (now - w.started >= 60_000) windows.delete(k);
+      if (windows.size >= MAX_WINDOWS) windows.clear();
+    }
+    windows.set(id, { started: now, count: 1 });
+    return true;
+  }
+  current.count += 1;
+  return current.count <= limit;
+}
+
+/** One request against one limit: the binding's verdict, and this isolate's own count. */
+export async function withinLimit(env: Bindings, name: LimitName, key: string): Promise<boolean> {
+  const binding = env[name];
+  if (!binding) return true;
+  const local = countLocally(name, key);
+  try {
+    const { success } = await binding.limit({ key });
+    return success && local;
+  } catch {
+    return local;
+  }
+}
+
 async function limited(
   c: Parameters<MiddlewareHandler>[0],
-  binding: RateLimit | undefined,
+  name: LimitName,
   keys: string[],
 ): Promise<boolean> {
-  if (!binding) return false;
   if (!c.req.header("cf-ray")) return false;
-  try {
-    for (const key of keys) {
-      const { success } = await binding.limit({ key });
-      if (!success) return true;
-    }
-  } catch {
-    return false;
+  for (const key of keys) {
+    if (!(await withinLimit(c.env as Bindings, name, key))) return true;
   }
   return false;
 }
@@ -118,8 +172,8 @@ export async function reserveLimited(
   c: Parameters<MiddlewareHandler<{ Bindings: Bindings }>>[0],
   device: string | null,
 ): Promise<boolean> {
-  if (device && (await limited(c, c.env.RATE_LIMIT_P, [`rv:${device.slice(0, 64)}`]))) return true;
-  return limited(c, c.env.RATE_LIMIT_RESERVE, ["rv:all"]);
+  if (device && (await limited(c, "RATE_LIMIT_P", [`rv:${device.slice(0, 64)}`]))) return true;
+  return limited(c, "RATE_LIMIT_RESERVE", ["rv:all"]);
 }
 
 /**
@@ -140,7 +194,7 @@ export async function reserveLimited(
  */
 export const publicSessionLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
   const sessionId = c.req.path.match(/^\/p\/sessions\/([^/]+)/)?.[1];
-  if (sessionId && (await limited(c, c.env.RATE_LIMIT_P, [`ps:${sessionId}`]))) {
+  if (sessionId && (await limited(c, "RATE_LIMIT_P", [`ps:${sessionId}`]))) {
     return tooMany(c, { seconds: 60, scope: "user", policy: "120;w=60" });
   }
   await next();
@@ -156,7 +210,7 @@ export const publicSessionLimit: MiddlewareHandler<{ Bindings: Bindings }> = asy
  */
 export const respondentAuthLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
   const token = respondentToken(c);
-  if (token && (await limited(c, c.env.RATE_LIMIT_P_AUTH, [`pa:t:${await bucketFor(token)}`]))) {
+  if (token && (await limited(c, "RATE_LIMIT_P_AUTH", [`pa:t:${await bucketFor(token)}`]))) {
     return tooMany(c, { seconds: 60, scope: "user", policy: "12;w=60" });
   }
   await next();
@@ -187,7 +241,7 @@ export const respondentAuthLimit: MiddlewareHandler<{ Bindings: Bindings }> = as
  */
 export const respondentPaymentLimit: MiddlewareHandler<{ Bindings: Bindings }> = async (c, next) => {
   const token = respondentToken(c);
-  if (token && (await limited(c, c.env.RATE_LIMIT_P_AUTH, [`pay:t:${await bucketFor(token)}`]))) {
+  if (token && (await limited(c, "RATE_LIMIT_P_AUTH", [`pay:t:${await bucketFor(token)}`]))) {
     return tooMany(c, { seconds: 60, scope: "user", policy: "12;w=60" });
   }
   await next();
@@ -218,7 +272,7 @@ export const saveLimit: MiddlewareHandler<{
   Variables: Partial<GuardVars>;
 }> = async (c, next) => {
   const userId = c.get("userId");
-  if (userId && (await limited(c, c.env.RATE_LIMIT_SAVE, [`save:${userId}`]))) {
+  if (userId && (await limited(c, "RATE_LIMIT_SAVE", [`save:${userId}`]))) {
     return tooMany(c, { seconds: 60, scope: "user", policy: "120;w=60" });
   }
   await next();
@@ -238,7 +292,7 @@ export const assetLimit: MiddlewareHandler<{
   Variables: Partial<GuardVars>;
 }> = async (c, next) => {
   const userId = c.get("userId");
-  if (userId && (await limited(c, c.env.RATE_LIMIT_ASSET, [`asset:${userId}`]))) {
+  if (userId && (await limited(c, "RATE_LIMIT_ASSET", [`asset:${userId}`]))) {
     return tooMany(c, { seconds: 60, scope: "user", policy: "60;w=60" });
   }
   await next();
@@ -265,7 +319,7 @@ export async function authAttemptLimited(c: Parameters<MiddlewareHandler>[0], en
   }
   if (typeof email !== "string" || !email.includes("@")) return false;
   const bucket = (await hashApiKey(`auth:${email.trim().toLowerCase()}`)).slice(0, 24);
-  return limited(c, env.RATE_LIMIT_P_AUTH, [`au:${bucket}`]);
+  return limited(c, "RATE_LIMIT_P_AUTH", [`au:${bucket}`]);
 }
 
 export function authAttemptRefused(c: Parameters<MiddlewareHandler>[0]) {

@@ -3,6 +3,7 @@ import type { Bindings } from "../env.js";
 import { readBeacon, recordTraffic } from "../lib/traffic.js";
 import { deferOn } from "../lib/translations.js";
 import { resolveLinkCode } from "./admin/campaigns.js";
+import { withinLimit } from "../lib/ratelimit.js";
 
 /**
  * `POST /p/t`: the web app's page-view beacon. See `lib/traffic.ts`.
@@ -19,8 +20,7 @@ trackRouter.post("/t", async (c) => {
     // Per visitor, on the respondent limiter's binding under its own prefix: a
     // tab stuck in a navigation loop is the thing to stop, and a crowd behind
     // one address is not.
-    const limit = await c.env.RATE_LIMIT_P?.limit({ key: `t:${beacon.v}` }).catch(() => ({ success: true }));
-    if (limit?.success !== false) deferOn(c)(recordTraffic(c.env, c.req.raw, beacon));
+    if (await withinLimit(c.env, "RATE_LIMIT_P", `t:${beacon.v}`)) deferOn(c)(recordTraffic(c.env, c.req.raw, beacon));
   }
   return c.body(null, 204);
 });
