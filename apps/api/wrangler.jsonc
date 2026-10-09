@@ -219,6 +219,18 @@
       }
     },
     {
+      // Session objects started ahead of a click (`POST /p/reserve`), all of
+      // them together. A reservation writes nothing, but each one starts an
+      // object, so the total is capped. Past it a form simply opens without
+      // one, about a second slower, which is how every form opened before.
+      "name": "RATE_LIMIT_RESERVE",
+      "namespace_id": "1008",
+      "simple": {
+        "limit": 1200,
+        "period": 60
+      }
+    },
+    {
       "name": "RATE_LIMIT_P_AUTH",
       "namespace_id": "1005",
       // Sign-in and Pay, per respondent token. Each sign-in fetches a JWKS

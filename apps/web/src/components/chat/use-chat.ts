@@ -1613,11 +1613,17 @@ export function useChat({
         const reserveSession = () => {
           if (reservation.pending || Date.now() - reservation.at < RESERVE_FRESH_MS) return;
           reservation.pending = true;
-          void fetch(`${apiOrigin}/p/reserve`, {
-            method: "POST",
-            // A string body goes as text/plain: no CORS preflight.
-            body: JSON.stringify(reservation.id ? { id: reservation.id } : {}),
-          })
+          // With the device signal, which is what the server limits these by.
+          // It is already being computed above, and is null when it cannot be.
+          void signal
+            .then((device) =>
+              fetch(`${apiOrigin}/p/reserve`, {
+                method: "POST",
+                // A string body goes as text/plain: no CORS preflight.
+                body: JSON.stringify({ ...(reservation.id ? { id: reservation.id } : {}), ...(device ? { device } : {}) }),
+              }),
+            )
+            // Refused or failed is not an error: the session opens without one.
             .then((r) => (r.ok ? (r.json() as Promise<{ id?: string }>) : null))
             .then((body) => {
               if (body?.id) {

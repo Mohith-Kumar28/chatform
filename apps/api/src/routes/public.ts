@@ -23,7 +23,7 @@ import { canonicalZone } from "../lib/quiet-hours.js";
 import { findDeviceResumable } from "../lib/respondent-history.js";
 import { reopenAbandonedResponse } from "../lib/submissions.js";
 import { mountRespondentAuth } from "./respondent-auth.js";
-import { respondentAuthLimit, respondentPaymentLimit } from "../lib/ratelimit.js";
+import { reserveLimited, respondentAuthLimit, respondentPaymentLimit } from "../lib/ratelimit.js";
 import { getEntitlements, meter, checkQuota } from "../lib/entitlements.js";
 import { brandingHiddenFor, clampForRuntime, gatewayPaymentsLapsed } from "../lib/doc-entitlements.js";
 import { verifyEmailToken } from "../lib/signed-url.js";
@@ -413,7 +413,12 @@ const plainTextAsJson: MiddlewareHandler = async (c, next) => {
  */
 // Not under `/sessions/`: that prefix is rate limited per session id, and this would be one id for everybody.
 sessionsRouter.post("/reserve", async (c) => {
-  const given = (await c.req.json<{ id?: unknown }>().catch(() => null))?.id;
+  const body = await c.req.json<{ id?: unknown; device?: unknown }>().catch(() => null);
+  const device = typeof body?.device === "string" && body.device ? body.device : null;
+  if (await reserveLimited(c, device)) {
+    return c.json({ error: { code: "rate_limited", message: "Too many requests" } }, 429);
+  }
+  const given = body?.id;
   const id =
     typeof given === "string" && isReservableSessionId(c.env.SESSION_DO, given) ? given : mintSessionId(c.env.SESSION_DO);
   await stub(c.env, id).warm();

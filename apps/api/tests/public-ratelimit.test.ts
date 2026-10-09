@@ -102,3 +102,26 @@ describe("sign-in attempts", () => {
     expect(await attempt(`someone-else-${n}@example.com`)).not.toBe(429);
   });
 });
+
+/**
+ * Starting a session object ahead of a click is limited too, and still not by
+ * address: by the device that says who it is, with one ceiling over everybody
+ * behind it. See `reserveLimited`.
+ */
+describe("POST /p/reserve", () => {
+  const reserve = (device?: string) =>
+    fetchApi(`/p/reserve`, {
+      method: "POST",
+      headers: { "cf-ray": nextRay() },
+      body: JSON.stringify(device ? { device } : {}),
+    });
+
+  it("refuses one device past its rate and leaves another alone", async () => {
+    const statuses: number[] = [];
+    // The per-conversation binding: 120 a minute.
+    for (let i = 0; i < 125; i++) statuses.push((await reserve("device-in-a-loop")).status);
+    expect(statuses.slice(0, 120).every((s) => s === 200)).toBe(true);
+    expect(statuses.at(-1)).toBe(429);
+    expect((await reserve("somebody-else")).status).toBe(200);
+  });
+});

@@ -106,6 +106,23 @@ async function limited(
 }
 
 /**
+ * Reserving a session object: per device, and all together.
+ *
+ * Nobody is identified by address here either. A device that sent its signal
+ * is held to the per-conversation rate, which bounds a tab stuck in a loop.
+ * That signal is the caller's own word, so the second limit does not depend on
+ * it: one bucket for every reservation there is. Being refused costs a
+ * respondent nothing they can see. The form opens without a reservation.
+ */
+export async function reserveLimited(
+  c: Parameters<MiddlewareHandler<{ Bindings: Bindings }>>[0],
+  device: string | null,
+): Promise<boolean> {
+  if (device && (await limited(c, c.env.RATE_LIMIT_P, [`rv:${device.slice(0, 64)}`]))) return true;
+  return limited(c, c.env.RATE_LIMIT_RESERVE, ["rv:all"]);
+}
+
+/**
  * Inside a conversation, counted per conversation. Never per address.
  *
  * The respondent surface used to count by address as well: 120 requests a

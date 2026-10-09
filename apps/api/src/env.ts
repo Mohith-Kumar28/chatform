@@ -48,6 +48,8 @@ export interface Bindings {
    */
   RATE_LIMIT_P?: RateLimit;
   RATE_LIMIT_P_AUTH?: RateLimit;
+  /** Every `POST /p/reserve` together. See `reserveLimit`. */
+  RATE_LIMIT_RESERVE?: RateLimit;
   /**
    * The builder's autosave, keyed by the author.
    *
