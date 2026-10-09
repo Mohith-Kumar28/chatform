@@ -34,23 +34,9 @@ const PREVIEW_CHOICES = [
  * an iframe in the document reloads it.
  *
  * The window is most of a screen tall (85dvh, so a phone's collapsing address
- * bar is counted), and a scroll that comes to rest near it settles with the
- * window filling the screen.
- *
- * That settling is ours rather than CSS `scroll-snap-type: proximity`, which
- * was tried first: with one snap point on the page it pulls back every scroll
- * that ends near the point, including the one leaving it, so a mouse wheel
- * turned a notch at a time could never get past the window. Here only a
- * scroll that arrives from outside the zone settles; one that starts on the
- * window is somebody leaving, and is left alone.
+ * bar is counted).
  */
 const PHONE_QUERY = "(max-width: 639px)";
-/**
- * How near the window a scroll has to stop to settle on it, as a share of the
- * screen's height. At 160px it was a target people had to aim for; at this
- * size the window settles once about half of it is showing.
- */
-const SETTLE_ZONE = 0.4;
 
 export function HeroDemo({ slug }: { slug: string }) {
   const [playing, setPlaying] = useState(false);
@@ -58,7 +44,6 @@ export function HeroDemo({ slug }: { slug: string }) {
   /** Where the frame was built, or null until it has been. */
   const [placed, setPlaced] = useState<{ phone: boolean; src: string } | null>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const windowRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false);
 
   const href = `/f/${slug}`;
@@ -122,50 +107,6 @@ export function HeroDemo({ slug }: { slug: string }) {
     />
   ) : null;
 
-  useEffect(() => {
-    const el = windowRef.current;
-    if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    /** The scroll position that centres the window on screen. */
-    const target = () =>
-      el.getBoundingClientRect().top + window.scrollY - Math.max(8, (window.innerHeight - el.offsetHeight) / 2);
-    /** Where the scroll now in progress began. */
-    let from = window.scrollY;
-    let touching = false;
-    let timer = 0;
-    const rest = () => {
-      // A finger still on the glass has not finished; its lift asks again.
-      if (touching) return;
-      const y = window.scrollY;
-      const to = target();
-      const zone = window.innerHeight * SETTLE_ZONE;
-      const arrived = Math.abs(from - to) > zone && Math.abs(y - to) <= zone;
-      from = arrived ? to : y;
-      if (arrived && Math.abs(y - to) > 1) window.scrollTo({ top: to, behavior: "smooth" });
-    };
-    const onScroll = () => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(rest, 100);
-    };
-    const onTouchStart = () => {
-      touching = true;
-    };
-    const onTouchEnd = () => {
-      touching = false;
-      onScroll();
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchend", onTouchEnd, { passive: true });
-    window.addEventListener("touchcancel", onTouchEnd, { passive: true });
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("touchstart", onTouchStart);
-      window.removeEventListener("touchend", onTouchEnd);
-      window.removeEventListener("touchcancel", onTouchEnd);
-    };
-  }, []);
-
   // Full screen owns the page: no scrolling behind it, Escape closes it.
   useEffect(() => {
     if (!fullscreen) return;
@@ -190,11 +131,7 @@ export function HeroDemo({ slug }: { slug: string }) {
         className="pointer-events-none absolute inset-0 rounded-[3rem] sm:-inset-4 xl:-inset-10 bg-white/45 blur-3xl dark:bg-white/25"
       />
 
-      <div
-        ref={windowRef}
-        data-demo-window=""
-        className="chat-surface relative z-10 flex h-[max(28rem,85dvh)] flex-col overflow-hidden rounded-2xl border border-white/60 shadow-2xl"
-      >
+      <div className="chat-surface relative z-10 flex h-[max(28rem,85dvh)] flex-col overflow-hidden rounded-2xl border border-white/60 shadow-2xl">
         {/* Window chrome. */}
         <div className="border-border/60 bg-card/80 flex items-center gap-3 border-b px-4 py-2.5 backdrop-blur">
           <span aria-hidden className="flex gap-1.5">
