@@ -1122,25 +1122,27 @@
   }
 
   /**
-   * Load a popup's frame once the page has finished its own work.
+   * Load a popup's frame as soon as the launcher is up.
    *
    * Built on the click, the form was a server render, a bundle and a boot
    * screen, one after another, a few seconds of loading in front of someone
    * who had just asked for it. Built now, hidden, it is already on screen when
-   * they click. It waits for the page's `load` and an idle moment so it never
-   * competes with the host's first paint, and it opens no session until it is
-   * opened (`cf_defer`), so a page view is still not a response.
+   * they click. It opens no session until it is opened (`cf_defer`), so a page
+   * view is still not a response.
+   *
+   * It used to wait for the page's `load` and then an idle moment of up to
+   * four seconds. On a page with pictures or video `load` is seconds away, so
+   * anyone who clicked in their first few seconds got the unloaded form
+   * anyway. The frame is a separate document on another origin, and this
+   * script is already past the host's parse, so it starts at the first idle
+   * moment instead, or after half a second without one.
    */
   function preload() {
     if (lazyAttr === "true" || mode === "inline" || mode === "fullpage") return;
-    function go() {
-      var idle = window.requestIdleCallback || function (fn) { return setTimeout(fn, 1500); };
-      idle(function () {
-        if (!frame && panel && !destroyed) panel.appendChild(buildFrame());
-      }, { timeout: 4000 });
-    }
-    if (document.readyState === "complete") go();
-    else window.addEventListener("load", go, { once: true });
+    var idle = window.requestIdleCallback || function (fn) { return setTimeout(fn, 200); };
+    idle(function () {
+      if (!frame && panel && !destroyed) panel.appendChild(buildFrame());
+    }, { timeout: 500 });
   }
 
   function build() {

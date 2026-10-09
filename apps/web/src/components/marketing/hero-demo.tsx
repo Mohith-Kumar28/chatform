@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, ExternalLink, X } from "lucide-react";
 import { ChatBubble } from "@/components/chat/chat-bubble";
 
@@ -20,26 +20,84 @@ const PREVIEW_CHOICES = [
  * answer it, and the "try the demo" pill that used to sit beside "Start free"
  * is no longer needed.
  *
- * Nothing loads until Start is pressed: no iframe, no session, no view counted
- * for somebody who only scrolled past.
+ * The frame loads behind the preview as soon as the page is idle, the way the
+ * popup embed loads behind its launcher, so Start shows a form that is already
+ * there. It used to load on the press, which was a blank window for the two
+ * seconds the page took to arrive and a boot screen after that. Loaded early
+ * it is held (`cf_defer`): no session and no view counted until Start says
+ * `open`, so somebody who only scrolled past is still nobody.
  *
  * On a desktop the form plays inside the window. On a phone the window is too
  * small to type into comfortably, so Start opens it full screen instead, the
  * way the popup embed does below 520px, with a close button to come back.
+ * Which of the two is decided once, when the frame is built, because moving
+ * an iframe in the document reloads it.
  */
 const PHONE_QUERY = "(max-width: 639px)";
 
 export function HeroDemo({ slug }: { slug: string }) {
   const [playing, setPlaying] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  /** Where the frame was built, or null until it has been. */
+  const [placed, setPlaced] = useState<{ phone: boolean; src: string } | null>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const startedRef = useRef(false);
 
-  const src = `/f/${slug}?embed=1`;
   const href = `/f/${slug}`;
 
-  const start = useCallback(() => {
-    if (window.matchMedia(PHONE_QUERY).matches) setFullscreen(true);
-    else setPlaying(true);
+  const place = useCallback(() => {
+    setPlaced(
+      (current) =>
+        current ?? {
+          phone: window.matchMedia(PHONE_QUERY).matches,
+          // `hostClose`: the frame draws no X of its own; the phone sheet has one.
+          src: `/f/${slug}?embed=1&cf_defer=1&hostClose=1&parentOrigin=${encodeURIComponent(window.location.origin)}`,
+        },
+    );
+  }, [slug]);
+
+  /** The other half of `whenEmbedOpened` in the frame: start the session. */
+  const sendOpen = useCallback(() => {
+    frameRef.current?.contentWindow?.postMessage({ source: "chatform", v: 1, type: "open" }, window.location.origin);
   }, []);
+
+  useEffect(() => {
+    const idle = window.requestIdleCallback
+      ? window.requestIdleCallback(place, { timeout: 500 })
+      : window.setTimeout(place, 200);
+    // A frame still loading when Start was pressed missed that `open`, so it
+    // hears it again when it says it is listening.
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin || event.source !== frameRef.current?.contentWindow) return;
+      const message = event.data as { source?: string; type?: string } | null;
+      if (message?.source === "chatform" && message.type === "ready" && startedRef.current) sendOpen();
+    };
+    window.addEventListener("message", onMessage);
+    return () => {
+      if (window.cancelIdleCallback) window.cancelIdleCallback(idle);
+      else window.clearTimeout(idle);
+      window.removeEventListener("message", onMessage);
+    };
+  }, [place, sendOpen]);
+
+  const start = useCallback(() => {
+    place();
+    startedRef.current = true;
+    sendOpen();
+    if (placed ? placed.phone : window.matchMedia(PHONE_QUERY).matches) setFullscreen(true);
+    else setPlaying(true);
+  }, [place, placed, sendOpen]);
+
+  const frame = placed ? (
+    <iframe
+      ref={frameRef}
+      src={placed.src}
+      title="chatform demo form"
+      allow="clipboard-write; camera; microphone; geolocation"
+      tabIndex={playing || fullscreen ? undefined : -1}
+      className={placed.phone ? "block w-full flex-1 border-0" : "absolute inset-0 block size-full border-0"}
+    />
+  ) : null;
 
   // Full screen owns the page: no scrolling behind it, Escape closes it.
   useEffect(() => {
@@ -89,14 +147,13 @@ export function HeroDemo({ slug }: { slug: string }) {
         </div>
 
         <div className="relative h-[30rem] sm:h-[32rem]">
-          {playing ? (
-            <iframe
-              src={src}
-              title="chatform demo form"
-              allow="clipboard-write; camera; microphone; geolocation"
-              className="absolute inset-0 block size-full border-0"
-            />
-          ) : (
+          {/* Under the preview until Start, loaded and waiting. */}
+          {placed && !placed.phone ? (
+            <div aria-hidden={!playing} className={playing ? "absolute inset-0" : "invisible absolute inset-0"}>
+              {frame}
+            </div>
+          ) : null}
+          {playing ? null : (
             <>
               {/* The form's real opening, faded, so the window shows what is
                   waiting rather than an empty page. Nothing here is live. */}
@@ -145,19 +202,20 @@ export function HeroDemo({ slug }: { slug: string }) {
         </div>
       </div>
 
-      {fullscreen ? (
+      {/* Kept in the document while closed, hidden, so the form in it stays loaded. */}
+      {placed?.phone ? (
         <div
           role="dialog"
           aria-modal="true"
           aria-label="chatform demo form"
-          className="bg-background fixed inset-0 z-[2147483647] flex flex-col"
+          aria-hidden={!fullscreen}
+          className={
+            fullscreen
+              ? "bg-background fixed inset-0 z-[2147483647] flex flex-col"
+              : "invisible pointer-events-none fixed inset-0 flex flex-col"
+          }
         >
-          <iframe
-            src={src}
-            title="chatform demo form"
-            allow="clipboard-write; camera; microphone; geolocation"
-            className="block w-full flex-1 border-0"
-          />
+          {frame}
           <button
             type="button"
             onClick={() => setFullscreen(false)}

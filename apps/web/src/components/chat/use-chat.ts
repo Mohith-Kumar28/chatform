@@ -1569,17 +1569,21 @@ export function useChat({
          */
         const botStarted = Date.now();
         const bot = captcha ? getTurnstileToken() : Promise.resolve(undefined);
-        // A popup loaded ahead of its click opens no session until it is
-        // opened: a session is a response row. See `whenEmbedOpened`.
-        await whenEmbedOpened();
         /*
          * Fresh, now: nothing saved to resume and nothing already answered,
          * so the boot screen has no decision left to hold the frame for. The
          * chat goes up with the typing dots (see `opening` in chat-client)
          * while the session opens, instead of "Getting the conversation
          * ready" followed by an empty thread saying "Connecting".
+         *
+         * Before the gate, not after it: a popup loaded ahead of its click
+         * waits there, and one still on the boot screen showed that screen to
+         * the click before the chat replaced it.
          */
         setResolving(false);
+        // A popup loaded ahead of its click opens no session until it is
+        // opened: a session is a response row. See `whenEmbedOpened`.
+        await whenEmbedOpened();
         const deviceSignal = await signal;
         let turnstileToken = await bot;
         if (turnstileToken && Date.now() - botStarted > TURNSTILE_TOKEN_TTL_MS) turnstileToken = await getTurnstileToken();
