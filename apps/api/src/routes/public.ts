@@ -10,7 +10,7 @@ import { EmbedInput, HiddenFieldsInput, ProviderToken } from "../lib/inputs.js";
 import { respondentToken, hashToken } from "./helpers.js";
 import type { Bindings } from "../env.js";
 import { timingSafeEqual, isHashedPassword, verifyPassword } from "../lib/crypto.js";
-import { SessionDO } from "../do/session-do.js";
+import { SessionDO, type SessionOpening } from "../do/session-do.js";
 import { CreateSessionResponse, ErrorEnvelope } from "../lib/openapi.js";
 import { completedSubmissions, openSession, type FormRow } from "../lib/open-session.js";
 import { localizedForm, offeredLanguages, deferOn } from "../lib/translations.js";
@@ -609,6 +609,7 @@ sessionsRouter.post(
     }
     mark("language");
 
+    const initCalled = Date.now();
     const result = await stub(c.env, opened.sessionId).init({
       sessionId: opened.sessionId,
       formId: formRow.id,
@@ -651,11 +652,19 @@ sessionsRouter.post(
     }
 
     mark("init");
+    // The RPC's own typing cannot carry an event's `data: unknown` across, so it is read back here.
+    const opening = (result as { opening?: SessionOpening }).opening;
+    // Of `init`: reaching the session object (and starting it), then its own work.
+    if (opening) {
+      timings.push(`do-reach;dur=${Math.max(0, opening.enteredAt - initCalled)}`, `do-run;dur=${opening.ranMs}`);
+    }
     c.header("Server-Timing", timings.join(", "));
     return c.json({
       sessionId: opened.sessionId,
       sseUrl: `/p/sessions/${opened.sessionId}/events`,
       respondentToken: opened.respondentToken,
+      // The greeting and first question, so the client need not wait for the stream to read them.
+      events: opening?.events ?? [],
     });
   },
 );

@@ -534,6 +534,15 @@ function writingOnly(steps: ReadonlyArray<{ toolCalls: ReadonlyArray<{ toolName:
   return calls.length > 0 && calls.every((c) => WRITING_ONLY_AFTER.has(c.toolName));
 }
 
+/** What opening a session produced, for the request that opened it. */
+export interface SessionOpening {
+  /** The greeting and first question, exactly as the stream will replay them. */
+  events: SSEEnvelope[];
+  /** This object's clock when the call arrived, and how long the opening ran. */
+  enteredAt: number;
+  ranMs: number;
+}
+
 export class SessionDO extends DurableObject<Bindings> {
   private meta: DoSessionMeta | null = null;
   private doc: FormDoc | null = null;
@@ -759,12 +768,35 @@ export class SessionDO extends DurableObject<Bindings> {
     };
     /** A reminder link held for the sign-in. See `DoSessionMeta.heldResume`. */
     heldResume?: NonNullable<DoSessionMeta["heldResume"]>;
-  }): Promise<{ ok: true } | { ok: false; code: string }> {
+  }): Promise<{ ok: true; opening?: SessionOpening } | { ok: false; code: string }> {
     if (this.loaded) return { ok: true };
+    const entered = Date.now();
 
     const parsed = FormDoc.safeParse(params.docJson);
     if (!parsed.success) return { ok: false, code: "invalid_form" };
     this.doc = parsed.data;
+    /*
+     * Everything the opening emits, handed back to the caller as well.
+     *
+     * No stream is attached yet, so these events were only ever stored, and
+     * the respondent waited for a second request (the stream) to read back a
+     * question that was ready at the end of this one. Returned here, the
+     * request that opens the session also delivers its first question. The
+     * stream still replays them; the client's seq ratchet drops the repeat.
+     */
+    const journal: SSEEnvelope[] = [];
+    this.turnJournal = journal;
+    try {
+      await this.open(params);
+    } finally {
+      this.turnJournal = null;
+    }
+    return { ok: true, opening: { events: journal, enteredAt: entered, ranMs: Date.now() - entered } };
+  }
+
+  /** The body of `init`, once the document has parsed. */
+  private async open(params: Parameters<SessionDO["init"]>[0]): Promise<void> {
+    if (!this.doc) return;
     await this.loadMessages();
     this.state.hidden = { ...params.hiddenFields };
     this.meta = {
@@ -856,12 +888,11 @@ export class SessionDO extends DurableObject<Bindings> {
     // worst possible order.
     if (this.authGateBlocks()) {
       await this.emitAuthRequired();
-      return { ok: true };
+      return;
     }
 
     // seed variables/score rules that apply pre-flow
     await this.beginInterview();
-    return { ok: true };
   }
 
   /**

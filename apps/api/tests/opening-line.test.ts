@@ -175,3 +175,34 @@ describe("a form with no welcome block", () => {
     expect(countOf(lines, `I'll walk you through "Opening line"`)).toBe(1);
   });
 });
+
+/**
+ * The opening rides back on the request that opened the session.
+ *
+ * It used to be stored and nothing else: the respondent's browser then made a
+ * second request, the stream, to read back a question that was ready when the
+ * first one returned. Opening a session on the public route now answers with
+ * the events themselves, the same ones the stream replays.
+ */
+describe("the response to opening a session", () => {
+  it("carries the greeting and the first question", async () => {
+    await publish({ welcome: true, gate: false });
+    const slug = (await env.DB.prepare(`SELECT slug FROM forms WHERE id = ?1`).bind(t.formId).first<{ slug: string }>())!.slug;
+    const res = await fetchApi(`/p/forms/${slug}/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { events: { seq: number; type: string; data: { ref?: string; text?: string } }[] };
+
+    const types = body.events.map((e) => e.type);
+    expect(types).toContain("message_start");
+    expect(types[types.length - 1]).toBe("question");
+    expect(JSON.stringify(body.events.at(-1)!.data)).toContain("q_team");
+    // The welcome's own words, whole, on the frame that closes its bubble.
+    expect(body.events.some((e) => e.type === "message_end" && e.data.text?.includes("Campus Catalyst"))).toBe(true);
+    // In order and from the start, so the stream's replay of them is a repeat the client drops.
+    expect(body.events.map((e) => e.seq)).toEqual(body.events.map((_, i) => i + 1));
+  });
+});

@@ -841,6 +841,12 @@ export function useChat({
   const lastSeqRef = useRef(0);
   /** Which session the current thread was built from. */
   const streamSessionRef = useRef<string | null>(null);
+  /**
+   * Hands one event to the current stream's listeners without it having come
+   * down the stream: the opening, which arrives with the response that opened
+   * the session. Through the same ratchet, so the stream's replay of it is dropped.
+   */
+  const applyEventRef = useRef<((evt: { seq: number; type: string; data: unknown }) => void) | null>(null);
 
   const connectStream = useCallback(
     (sessionId: string, token: string, attempt: number) => {
@@ -881,8 +887,9 @@ export function useChat({
        * SSE is ordered, so a monotonic high-water mark is enough. `session_ready`
        * and `ping` are per-connection and carry seq 0 — they are never skipped.
        */
+      const listeners = new Map<string, (raw: Event) => void>();
       const on = (type: string, handler: (e: MessageEvent) => void) => {
-        es.addEventListener(type, (raw) => {
+        const guarded = (raw: Event) => {
           const e = raw as MessageEvent;
           alive();
           const seq = Number(e.lastEventId);
@@ -891,7 +898,14 @@ export function useChat({
             lastSeqRef.current = seq;
           }
           handler(e);
-        });
+        };
+        es.addEventListener(type, guarded);
+        listeners.set(type, guarded);
+      };
+      applyEventRef.current = (evt) => {
+        if (esRef.current !== es) return;
+        // The two fields a listener reads, shaped as the stream would have delivered them.
+        listeners.get(evt.type)?.({ data: JSON.stringify(evt.data), lastEventId: String(evt.seq) } as unknown as Event);
       };
 
       es.addEventListener("session_ready", (raw) => {
@@ -1712,7 +1726,11 @@ export function useChat({
         }
         // Spent. A later reload is an ordinary visit and should resume again.
         freshRef.current = false;
-        const data = (await res.json()) as { sessionId: string; respondentToken: string };
+        const data = (await res.json()) as {
+          sessionId: string;
+          respondentToken: string;
+          events?: { seq: number; type: string; data: unknown }[];
+        };
         sessionRef.current = { sessionId: data.sessionId, token: data.respondentToken };
         saveSession(slug, sessionRef.current);
         /**
@@ -1738,6 +1756,16 @@ export function useChat({
           }
         }
         connectStream(data.sessionId, data.respondentToken, 0);
+        /*
+         * The greeting and first question came back with the session, so they
+         * go on screen now rather than after the stream has connected and
+         * replayed them: one round trip in front of the first question, not two.
+         */
+        if (data.events?.length) {
+          for (const evt of data.events) applyEventRef.current?.(evt);
+          setStatus("ready");
+          setError(null);
+        }
       } catch (err) {
         setStatus("error");
         setError(err instanceof Error ? err.message : msg("Connection failed"));
