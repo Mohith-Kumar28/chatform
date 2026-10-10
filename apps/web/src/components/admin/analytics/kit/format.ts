@@ -52,7 +52,15 @@ export function langName(k: string) {
   }
 }
 
-export const hh = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:00`
+/** An hour of the day on a 12-hour clock: 0 is "12 AM", 20 is "8 PM". */
+export const hourLabel = (h: number) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`
+
+/** When a bucket starts, on a 12-hour clock in the viewer's zone. Minutes show only where the zone has them: India's hours start at :30. */
+export const hh = (d: Date) => {
+  const h = d.getHours()
+  const m = d.getMinutes()
+  return `${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h < 12 ? 'AM' : 'PM'}`
+}
 
 /**
  * False on the server and during hydration, true once the page runs in the browser. Components that

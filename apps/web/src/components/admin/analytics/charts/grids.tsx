@@ -3,7 +3,7 @@
 import { useMemo, type ReactNode } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { fmt, useMounted } from '../kit/format'
+import { fmt, hourLabel, useMounted } from '../kit/format'
 
 // Grid charts no chart library draws well: weekday × hour, and a GitHub-style calendar. One hue,
 // light → dark (sequential), empty cells in the muted surface so "zero" never looks like "low".
@@ -49,13 +49,13 @@ export function WeekHourHeatmap({ cells, label = 'visitors' }: { cells: number[]
           <div key={d} className="contents">
             <span className="self-center text-[11px] text-muted-foreground">{DOW[d]}</span>
             {row.map((v, h) => (
-              <Cell key={h} wide v={v} max={max} title={<>{DOW[d]} {String(h).padStart(2, '0')}:00 · <span className="num">{fmt(v)}</span> {label}</>} />
+              <Cell key={h} wide v={v} max={max} title={<>{DOW[d]} {hourLabel(h)} · <span className="num">{fmt(v)}</span> {label}</>} />
             ))}
           </div>
         ))}
         <span />
         {Array.from({ length: 24 }, (_, h) => (
-          <span key={h} className="num text-center text-[10px] text-muted-foreground">{h % 3 ? '' : String(h).padStart(2, '0')}</span>
+          <span key={h} className="num flex justify-center text-[10px] whitespace-nowrap text-muted-foreground">{h % 3 ? '' : hourLabel(h)}</span>
         ))}
       </div>
       <Scale max={max} label={`peak ${fmt(max)}`} />

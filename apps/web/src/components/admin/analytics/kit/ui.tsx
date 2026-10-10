@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, ChevronRight, Info, Inbox, RotateCw } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { Spark } from '../charts/spark'
@@ -164,40 +165,19 @@ export function StatStrip({ items, className }: { items: StatProps[]; className?
   )
 }
 
-/** A compact single-choice control (chart metric switches, filters). */
-export function Segmented<T extends string | number>({
+/** A compact single-choice control (chart metric switches, filters): the product's one segmented control. */
+export function Segmented<T extends string>({
   value,
   onChange,
   options,
   label,
-  size = 'sm',
 }: {
   value: T
   onChange: (v: T) => void
-  options: readonly (readonly [T, ReactNode])[]
+  options: readonly (readonly [T, string])[]
   label: string
-  size?: 'sm' | 'xs'
 }) {
-  return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-md border bg-muted/50 p-0.5">
-      {options.map(([v, text]) => (
-        <button
-          key={String(v)}
-          type="button"
-          role="radio"
-          aria-checked={value === v}
-          onClick={() => onChange(v)}
-          className={cn(
-            'rounded-[5px] font-medium transition-colors',
-            size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-2 py-0.5 text-[11px]',
-            value === v ? 'bg-background text-foreground shadow-xs ring-1 ring-border' : 'text-muted-foreground hover:text-foreground',
-          )}
-        >
-          {text}
-        </button>
-      ))}
-    </div>
-  )
+  return <SegmentedControl size="sm" value={value} onChange={onChange} options={options.map(([v, text]) => ({ value: v, label: text }))} ariaLabel={label} />
 }
 
 export function EmptyState({ children, icon: Icon = Inbox, className }: { children: ReactNode; icon?: typeof Inbox; className?: string }) {

@@ -16,12 +16,12 @@ import {
 import type { GetApiAdminLive200, GetApiAdminTrafficLive200 } from "@/lib/api/generated.schemas";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { apiData } from "@/lib/api/payload";
-import { RANGE_DAYS, useRange, type Range } from "./range-picker";
+import { RANGE_DAYS, RangePicker, useRange, type Range } from "./range-picker";
 import { Depth, Loyalty } from "./analytics/audience";
 import { ChartPlaceholder, TrendChart } from "./analytics/charts/trend";
 import { Donut, HoursRadar } from "./analytics/charts/parts";
 import { WeekHourHeatmap } from "./analytics/charts/grids";
-import { AnalyticsFrame, AudiencePills, CampaignSelect, RangePills, useAudience, useCampaign, type Audience } from "./analytics/controls";
+import { AnalyticsFrame, AudiencePills, CampaignSelect, useAudience, useCampaign, type Audience } from "./analytics/controls";
 import { Geography } from "./analytics/geography";
 import { DataTable, type Column } from "./analytics/kit/data-table";
 import { fmt, pct, rangeLabel, unitLabel, useMounted } from "./analytics/kit/format";
@@ -83,7 +83,7 @@ export function useTrafficReport(range: Range, audience: Audience, campaign?: st
 }
 
 export function TrafficClient() {
-  const range = useRange(TRAFFIC_RANGES, "7d");
+  const range = useRange(TRAFFIC_RANGES);
   const audience = useAudience();
   const campaign = useCampaign();
   const { report, analytics, days, isPending, isError, refetch } = useTrafficReport(range, audience, campaign);
@@ -105,7 +105,7 @@ export function TrafficClient() {
           <>
             <AudiencePills />
             <CampaignSelect />
-            <RangePills ranges={TRAFFIC_RANGES} />
+            <RangePicker ranges={TRAFFIC_RANGES} />
           </>
         }
       />
@@ -222,7 +222,7 @@ function TrafficBody({ report, a, days, audience, campaign }: { report: Report; 
         <Panel
           title="Busiest hours"
           description={`Each hour of day added up over the ${rangeLabel(Math.min(days, 30))}`}
-          info="Every day in the range is summed per hour of day (your time), so 20:00 is all views between 20:00 and 21:00 across those days."
+          info="Every day in the range is summed per hour of day (your time), so 8 PM is all views between 8 PM and 9 PM across those days."
         >
           {hours ? <HoursRadar values={hours.byHour} label="Views" height={240} note={`${fmt(hours.byHour.reduce((s, n) => s + n, 0))} views`} /> : <div className="h-60" />}
         </Panel>
@@ -426,9 +426,9 @@ const LIVE_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(
  * Everything that happened in the last half hour, a minute at a time and split by what it was
  * (pages opened on the site, forms opened, responses finished, sign-ups, forms created), then who
  * is here now and on which page. The activity is the whole platform's, whichever audience is
- * picked: it is the same request the Overview's live tile makes. Who is here follows the audience.
+ * picked. Who is here follows the audience. The Overview shows this same panel, for the site.
  */
-function LivePanel({ audience, campaign }: { audience: Audience; campaign?: string }) {
+export function LivePanel({ audience, campaign, className }: { audience: Audience; campaign?: string; className?: string }) {
   const mounted = useMounted();
   const params = { audience, ...(campaign ? { campaign } : {}) };
   const { data } = useGetApiAdminTrafficLive(params, {
@@ -455,6 +455,7 @@ function LivePanel({ audience, campaign }: { audience: Audience; campaign?: stri
 
   return (
     <Panel
+      className={className}
       title="Last 30 minutes"
       description="Everything that happened, a minute at a time"
       actions={

@@ -7,7 +7,6 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { getGetApiAdminCampaignsQueryKey, useGetApiAdminCampaigns } from '@/lib/api/admin/admin'
 import type { GetApiAdminCampaigns200 } from '@/lib/api/generated.schemas'
 import { apiData } from '@/lib/api/payload'
-import { RANGES, useRange, type Range } from '../range-picker'
 import { Segmented } from './kit/ui'
 
 // What the analytics pages share above the fold: the frame that turns on their dense styles, and
@@ -48,14 +47,6 @@ export function AudiencePills() {
       ]}
     />
   )
-}
-
-const RANGE_LABEL: Record<Range, string> = { '1d': '24h', '7d': '7d', '30d': '30d', '90d': '90d', '365d': '12mo' }
-
-export function RangePills({ ranges = RANGES, fallback = '7d' }: { ranges?: readonly Range[]; fallback?: Range }) {
-  const range = useRange(ranges, fallback)
-  const set = useSetParam()
-  return <Segmented<Range> label="Date range" value={range} onChange={(v) => set('range', v)} options={ranges.map((r) => [r, RANGE_LABEL[r]] as const)} />
 }
 
 /** The campaign (`utm_campaign`) the address narrows the page to, or none for everybody. */

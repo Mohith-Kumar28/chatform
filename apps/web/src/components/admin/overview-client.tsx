@@ -10,10 +10,10 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiTile } from "./kpi-tile";
 import { ActionQueue } from "./action-queue";
-import { LiveActivity } from "./live-activity";
 import { FeedbackCard } from "./feedback-card";
 import { COMPARED_TO, RANGE_DAYS, RangePicker, useRange } from "./range-picker";
-import { TrafficSummary } from "./traffic-client";
+import { AnalyticsFrame } from "./analytics/controls";
+import { LivePanel, TrafficSummary } from "./traffic-client";
 import { apiData } from "@/lib/api/payload";
 import { money, usd, relativeDay } from "./format";
 
@@ -213,7 +213,9 @@ export function OverviewClient() {
           />
         </ChartCard>
 
-        <LiveActivity className="lg:col-span-2" />
+        <AnalyticsFrame className="lg:col-span-2">
+          <LivePanel audience="site" className="h-full" />
+        </AnalyticsFrame>
       </div>
 
       <TrafficSummary range={range} />

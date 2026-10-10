@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react'
 import { Bar, BarChart, Cell, Label, LabelList, Pie, PieChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, RadialBar, RadialBarChart, XAxis, YAxis } from 'recharts'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { cn } from '@/lib/utils'
-import { compact, fmt, useMounted } from '../kit/format'
+import { compact, fmt, hourLabel, useMounted } from '../kit/format'
 import { EmptyState } from '../kit/ui'
 import { ChartPlaceholder } from './trend'
 
@@ -171,7 +171,7 @@ export function Gauge({ value, label, sub, color = 'var(--chart-1)', size = 150 
   )
 }
 
-// ---------- 24-hour radar ----------
+// ---------- Hour-of-day radar ----------
 /** Activity by hour of day in the viewer's zone, as a clock face: the busy side bulges. */
 export function HoursRadar({ values, label = 'Visitors', height = 260, note }: { values: number[]; label?: string; height?: number; note?: ReactNode }) {
   const mounted = useMounted()
@@ -179,21 +179,21 @@ export function HoursRadar({ values, label = 'Visitors', height = 260, note }: {
   if (!mounted) return <ChartPlaceholder height={height} />
   const max = Math.max(...values)
   const peak = values.indexOf(max)
-  const data = values.map((n, h) => ({ hour: `${String(h).padStart(2, '0')}:00`, n, h }))
+  const data = values.map((n, h) => ({ hour: hourLabel(h), n, h }))
   return (
     <div>
       <ChartContainer config={{ n: { label, color: 'var(--chart-1)' } }} className="mx-auto aspect-square" style={{ height }} initialDimension={{ width: height, height }}>
-        <RadarChart data={data} outerRadius="78%">
+        <RadarChart data={data} outerRadius="68%">
           <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="line" />} />
           <PolarGrid stroke="var(--chart-grid)" />
           {/* Scale to the peak so the busiest hour touches the outer ring (the default rounds up past it). */}
           <PolarRadiusAxis domain={[0, max]} tick={false} axisLine={false} />
           <PolarAngleAxis dataKey="hour" tick={({ x, y, payload, textAnchor }) => {
-            const h = Number(String(payload.value).slice(0, 2))
+            const h = data.findIndex((d) => d.hour === payload.value)
             if (h % 3) return <g />
             return (
               <text x={x} y={y} textAnchor={textAnchor} dominantBaseline="middle" className={cn('num text-[10px]', h === peak ? 'fill-foreground font-semibold' : 'fill-muted-foreground')}>
-                {String(h).padStart(2, '0')}
+                {hourLabel(h)}
               </text>
             )
           }} />
@@ -201,7 +201,7 @@ export function HoursRadar({ values, label = 'Visitors', height = 260, note }: {
         </RadarChart>
       </ChartContainer>
       <p className="text-center text-xs text-muted-foreground">
-        Busiest around <span className="num font-medium text-foreground">{String(peak).padStart(2, '0')}:00</span> your time
+        Busiest around <span className="num font-medium text-foreground">{hourLabel(peak)}</span> your time
       </p>
       {note && <p className="mt-0.5 text-center text-xs text-muted-foreground">{note}</p>}
     </div>

@@ -16,11 +16,11 @@ import { apiData } from "@/lib/api/payload";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RANGE_DAYS, useRange } from "../range-picker";
+import { RANGE_DAYS, RangePicker, useRange } from "../range-picker";
 import { TRAFFIC_RANGES } from "../traffic-client";
 import { Funnel } from "../analytics/charts/grids";
 import { TrendChart } from "../analytics/charts/trend";
-import { AnalyticsFrame, RangePills } from "../analytics/controls";
+import { AnalyticsFrame } from "../analytics/controls";
 import { DataTable, type Column } from "../analytics/kit/data-table";
 import { ago, countryName, flag, fmt, rangeLabel, useMounted } from "../analytics/kit/format";
 import { Degraded, EmptyState, PageHeader, PageSkeleton, Panel, RankedList, StatStrip, type StatProps } from "../analytics/kit/ui";
@@ -50,7 +50,7 @@ const SERIES = [
 const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
 export function CampaignDetail({ id }: { id: string }) {
-  const range = useRange(TRAFFIC_RANGES, "30d") as (typeof TRAFFIC_RANGES)[number];
+  const range = useRange(TRAFFIC_RANGES) as (typeof TRAFFIC_RANGES)[number];
   const params = { range } as const;
   const { data, isPending, isError, refetch } = useGetApiAdminCampaignsById(id, params, {
     query: { queryKey: getGetApiAdminCampaignsByIdQueryKey(id, params), placeholderData: keepPreviousData, staleTime: 30_000, retry: false },
@@ -209,7 +209,7 @@ function Body({ d, range }: { d: Detail; range: (typeof TRAFFIC_RANGES)[number] 
                 ))}
               </SelectContent>
             </Select>
-            <RangePills ranges={TRAFFIC_RANGES} fallback="30d" />
+            <RangePicker ranges={TRAFFIC_RANGES} />
             <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
               <Pencil /> Edit
             </Button>

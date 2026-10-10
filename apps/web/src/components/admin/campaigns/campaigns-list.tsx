@@ -15,10 +15,10 @@ import type {
 import { apiData } from "@/lib/api/payload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { RANGE_DAYS, useRange } from "../range-picker";
+import { RANGE_DAYS, RangePicker, useRange } from "../range-picker";
 import { TRAFFIC_RANGES } from "../traffic-client";
 import { Spark } from "../analytics/charts/spark";
-import { AnalyticsFrame, RangePills } from "../analytics/controls";
+import { AnalyticsFrame } from "../analytics/controls";
 import { DataTable, type Column } from "../analytics/kit/data-table";
 import { fmt, rangeLabel } from "../analytics/kit/format";
 import { Degraded, EmptyState, PageHeader, PageSkeleton, Panel, Segmented, StatStrip, StatusPill, type StatProps } from "../analytics/kit/ui";
@@ -60,7 +60,7 @@ function sentence(i: GetApiAdminCampaigns200InsightsItem): string {
 
 export function CampaignsList() {
   const router = useRouter();
-  const range = useRange(TRAFFIC_RANGES, "30d") as (typeof TRAFFIC_RANGES)[number];
+  const range = useRange(TRAFFIC_RANGES) as (typeof TRAFFIC_RANGES)[number];
   const params = { range } as const;
   const { data, isPending, isError, refetch } = useGetApiAdminCampaigns(params, {
     query: { queryKey: getGetApiAdminCampaignsQueryKey(params), placeholderData: keepPreviousData, staleTime: 30_000 },
@@ -157,7 +157,7 @@ export function CampaignsList() {
         description={rangeLabel(RANGE_DAYS[range])}
         actions={
           <>
-            <RangePills ranges={TRAFFIC_RANGES} fallback="30d" />
+            <RangePicker ranges={TRAFFIC_RANGES} />
             <Button size="sm" onClick={() => setCreating({})}>
               <Plus /> New campaign
             </Button>

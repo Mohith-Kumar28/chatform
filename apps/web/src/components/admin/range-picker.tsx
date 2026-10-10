@@ -42,8 +42,11 @@ export const COMPARED_TO: Record<Range, string> = {
   "365d": "prev 12mo",
 };
 
+/** The period every page opens on. One constant, so no page drifts back to its own. */
+export const DEFAULT_RANGE: Range = "7d";
+
 /** The range in the URL, defaulted and validated. Never trust a hand-typed param. */
-export function useRange(allowed: readonly Range[] = RANGES, fallback: Range = "30d"): Range {
+export function useRange(allowed: readonly Range[] = RANGES, fallback: Range = DEFAULT_RANGE): Range {
   const value = useSearchParams().get("range");
   return (allowed as readonly string[]).includes(value ?? "") ? (value as Range) : fallback;
 }
@@ -58,7 +61,7 @@ export function useRange(allowed: readonly Range[] = RANGES, fallback: Range = "
  */
 export function RangePicker({
   ranges = RANGES,
-  fallback = "30d",
+  fallback = DEFAULT_RANGE,
 }: {
   /** A page whose data does not reach back a year offers fewer periods (Traffic keeps 90 days). */
   ranges?: readonly Range[];
@@ -76,6 +79,8 @@ export function RangePicker({
       onChange={(next) => {
         const q = new URLSearchParams(params.toString());
         q.set("range", next);
+        // A different period is a different list: start from its first page.
+        q.delete("offset");
         // `scroll: false` — changing the period is not navigating somewhere new,
         // and being thrown back to the top of the page to re-find the chart you
         // were reading is the fastest way to make a control feel broken.

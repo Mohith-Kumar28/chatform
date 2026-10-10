@@ -21,9 +21,9 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiData } from "@/lib/api/payload";
-import { RANGE_DAYS, useRange } from "./range-picker";
+import { RANGE_DAYS, RangePicker, useRange } from "./range-picker";
 import { Audience } from "./analytics/audience";
-import { AnalyticsFrame, AudiencePills, CampaignSelect, RangePills, useAudience, useCampaign } from "./analytics/controls";
+import { AnalyticsFrame, AudiencePills, CampaignSelect, useAudience, useCampaign } from "./analytics/controls";
 import { DataTable, type Column } from "./analytics/kit/data-table";
 import { fmt, rangeLabel, useMounted } from "./analytics/kit/format";
 import { Degraded, PageHeader, PageSkeleton, Panel, Segmented } from "./analytics/kit/ui";
@@ -88,7 +88,7 @@ export function VisitorsClient() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const range = useRange(undefined, "30d");
+  const range = useRange();
   const audience = useAudience();
   const tab: Tab = params.get("tab") === "audience" ? "audience" : "log";
   const open = params.get("v");
@@ -122,7 +122,7 @@ export function VisitorsClient() {
             />
             <AudiencePills />
             <CampaignSelect />
-            <RangePills fallback="30d" />
+            <RangePicker />
           </>
         }
       />
@@ -139,7 +139,7 @@ export function VisitorsClient() {
 
 /** Who they are, from the same report the Traffic page reads (ninety days at most). */
 function AudienceTab() {
-  const range = useRange(undefined, "30d");
+  const range = useRange();
   const audience = useAudience();
   const campaign = useCampaign();
   const { analytics, days, isError, refetch } = useTrafficReport(range, audience, campaign);
@@ -150,7 +150,7 @@ function AudienceTab() {
 
 function VisitorLog({ setParam }: { setParam: (patch: Record<string, string>) => void }) {
   const params = useSearchParams();
-  const range = useRange(undefined, "30d");
+  const range = useRange();
   const audience = useAudience();
   const mounted = useMounted();
   const sort: Sort = SORTS.find(([value]) => value === params.get("sort"))?.[0] ?? "recent";
